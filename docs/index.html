@@ -6,8 +6,10 @@
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
+<meta name="author" content="Brynjólfur Gauti Guðrúnar Jónsson">
+<meta name="author" content="Rafael Daniel Vias">
 
-<title>index</title>
+<title>A Dynamic Generalized Linear Model for Predicting the Icelandic Parliamentary Elections</title>
 <style>
 code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
@@ -70,20 +72,53 @@ window.Quarto = {
 };
 </script>
 
+<meta name="citation_title" content="A Dynamic Generalized Linear Model for Predicting the Icelandic Parliamentary Elections">
+<meta name="citation_author" content="Brynjólfur Gauti Guðrúnar Jónsson">
+<meta name="citation_author" content="Rafael Daniel Vias">
 <meta name="citation_language" content="en">
 </head>
 
 <body>
 
-<div id="quarto-content" class="page-columns page-rows-contents page-layout-article toc-left">
+<header id="title-block-header" class="quarto-title-block default toc-left page-columns page-full">
+  <div class="quarto-title-banner page-columns page-full">
+    <div class="quarto-title column-body">
+      <h1 class="title">A Dynamic Generalized Linear Model for Predicting the Icelandic Parliamentary Elections</h1>
+          </div>
+
+    
+    <div class="quarto-title-meta-container">
+      <div class="quarto-title-meta-column-start">
+        
+        <div class="quarto-title-meta">
+
+                <div>
+            <div class="quarto-title-meta-heading">Authors</div>
+            <div class="quarto-title-meta-contents">
+                        <p>Brynjólfur Gauti Guðrúnar Jónsson </p>
+                        <p>Rafael Daniel Vias </p>
+                      </div>
+          </div>
+                
+          
+                
+              </div>
+      </div>
+      <div class="quarto-title-meta-column-end quarto-other-formats-target">
+      <div class="quarto-alternate-formats"><div class="quarto-title-meta-heading">Other Formats</div><div class="quarto-title-meta-contents"><p><a href="index.docx"><i class="bi bi-file-word"></i>MS Word</a></p></div><div class="quarto-title-meta-contents"><p><a href="index.pdf"><i class="bi bi-file-pdf"></i>PDF</a></p></div><div class="quarto-title-meta-contents"><p><a href="index-meca.zip" data-meca-link="true"><i class="bi bi-archive"></i>MECA Bundle</a></p></div></div></div>
+    </div>
+
+
+
+    <div class="quarto-other-links-text-target">
+    <div class="quarto-code-links"><div class="quarto-title-meta-heading">Code Links</div><div class="quarto-title-meta-contents"><span><a href="undefined"><i class="bi bi-file-code"></i>Stan Model</a></span></div></div></div>  </div>
+</header><div id="quarto-content" class="page-columns page-rows-contents page-layout-article toc-left">
 <div id="quarto-sidebar-toc-left" class="sidebar toc-left">
   <nav id="TOC" role="doc-toc" class="toc-active">
     <h2 id="toc-title">Table of contents</h2>
    
   <ul>
-  <li><a href="#dynamic-linear-election-model-for-icelandic-parliamentary-elections-forecast" id="toc-dynamic-linear-election-model-for-icelandic-parliamentary-elections-forecast" class="nav-link active" data-scroll-target="#dynamic-linear-election-model-for-icelandic-parliamentary-elections-forecast">Dynamic Linear Election Model for Icelandic Parliamentary Elections Forecast</a>
-  <ul class="collapse">
-  <li><a href="#introduction" id="toc-introduction" class="nav-link" data-scroll-target="#introduction">Introduction</a></li>
+  <li><a href="#introduction" id="toc-introduction" class="nav-link active" data-scroll-target="#introduction">Introduction</a></li>
   <li><a href="#model-specification" id="toc-model-specification" class="nav-link" data-scroll-target="#model-specification">Model Specification</a>
   <ul class="collapse">
   <li><a href="#notation" id="toc-notation" class="nav-link" data-scroll-target="#notation">Notation</a></li>
@@ -98,9 +133,8 @@ window.Quarto = {
   <li><a href="#inference" id="toc-inference" class="nav-link" data-scroll-target="#inference">Inference</a></li>
   <li><a href="#posterior-predictive-checks" id="toc-posterior-predictive-checks" class="nav-link" data-scroll-target="#posterior-predictive-checks">Posterior Predictive Checks</a></li>
   <li><a href="#conclusion" id="toc-conclusion" class="nav-link" data-scroll-target="#conclusion">Conclusion</a></li>
-  </ul></li>
   </ul>
-<div class="quarto-alternate-formats"><h2>Other Formats</h2><ul><li><a href="index.docx"><i class="bi bi-file-word"></i>MS Word</a></li><li><a href="index.pdf"><i class="bi bi-file-pdf"></i>PDF</a></li><li><a href="index-meca.zip" data-meca-link="true"><i class="bi bi-archive"></i>MECA Bundle</a></li></ul></div><div class="quarto-code-links"><h2>Code Links</h2><ul><li><a href="undefined"><i class="bi bi-file-code"></i>Stan Model</a></li></ul></div></nav>
+</nav>
 </div>
 <div id="quarto-margin-sidebar" class="sidebar margin-sidebar zindex-bottom">
 </div>
@@ -108,9 +142,9 @@ window.Quarto = {
 
 
 
+  
 
-<section id="dynamic-linear-election-model-for-icelandic-parliamentary-elections-forecast" class="level1">
-<h1>Dynamic Linear Election Model for Icelandic Parliamentary Elections Forecast</h1>
+
 <section id="introduction" class="level2">
 <h2 class="anchored" data-anchor-id="introduction">Introduction</h2>
 <p>This report outlines the methodology behind forecasting the outcome of the upcoming Icelandic Parliamentary Elections scheduled for November 30th. The forecast is based on a dynamic linear model implemented in Stan, incorporating polling data over time, adjusting for polling house effects, accounting for overdispersion, and modeling the impact of significant political events.</p>
@@ -232,7 +266,6 @@ window.Quarto = {
 <section id="conclusion" class="level2">
 <h2 class="anchored" data-anchor-id="conclusion">Conclusion</h2>
 <p>The dynamic linear model effectively captures the temporal evolution of party support, adjusts for polling house biases, accounts for overdispersion in the data, and incorporates the effects of significant political events. By leveraging Bayesian methods, we obtain a comprehensive probabilistic forecast of the election outcomes, accounting for uncertainty in the estimates.</p>
-</section>
 </section>
 
 </main>

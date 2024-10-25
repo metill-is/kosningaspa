@@ -1,5 +1,3 @@
-# Dynamic Linear Election Model for Icelandic Parliamentary Elections Forecast
-
 ## Introduction
 
 This report outlines the methodology behind forecasting the outcome of the upcoming Icelandic Parliamentary Elections scheduled for November 30th. The forecast is based on a dynamic linear model implemented in Stan, incorporating polling data over time, adjusting for polling house effects, accounting for overdispersion, and modeling the impact of significant political events.
