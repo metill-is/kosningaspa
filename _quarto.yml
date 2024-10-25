@@ -1,0 +1,25 @@
+project:
+  type: manuscript
+  output-dir: docs
+
+manuscript:
+  article: index.qmd
+  code-links:
+    - text: Stan Model
+      icon: file-code
+      url: Stan/base_model.stan
+
+
+format:
+  html: 
+    toc: true
+  docx: default
+  jats: default
+  pdf: 
+    keep-tex: true
+ 
+execute:
+  freeze: true
+
+editor: source
+

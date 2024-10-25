@@ -1,0 +1,501 @@
+date,fyrirtaeki,flokkur,n
+2021-09-24,Gallup,Samfylkingin,605.934
+2021-09-24,Gallup,Miðflokkurinn,327.012
+2021-09-24,Gallup,Viðreisn,442.428
+2021-09-24,Gallup,Sjálfstæðisflokkurinn,1125.306
+2021-09-24,Gallup,Framsóknarflokkurinn,716.5409999999999
+2021-09-24,Gallup,Píratar,423.19199999999995
+2021-09-24,Gallup,Flokkur Fólksins,307.776
+2021-09-24,Gallup,Sósíalistaflokkurinn,254.87699999999998
+2021-09-24,Gallup,Vinstri Græn,577.0799999999999
+2021-09-24,Gallup,Annað,28.854
+2021-09-19,Gallup,Samfylkingin,488.315
+2021-09-19,Gallup,Miðflokkurinn,238.39
+2021-09-19,Gallup,Viðreisn,392.19
+2021-09-19,Gallup,Sjálfstæðisflokkurinn,815.14
+2021-09-19,Gallup,Framsóknarflokkurinn,507.54
+2021-09-19,Gallup,Píratar,442.175
+2021-09-19,Gallup,Flokkur Fólksins,269.15000000000003
+2021-09-19,Gallup,Sósíalistaflokkurinn,280.685
+2021-09-19,Gallup,Vinstri Græn,392.19
+2021-09-19,Gallup,Annað,19.225
+2021-09-12,Gallup,Samfylkingin,641.08
+2021-09-12,Gallup,Miðflokkurinn,442.928
+2021-09-12,Gallup,Viðreisn,576.972
+2021-09-12,Gallup,Sjálfstæðisflokkurinn,1282.16
+2021-09-12,Gallup,Framsóknarflokkurinn,751.812
+2021-09-12,Gallup,Píratar,641.08
+2021-09-12,Gallup,Flokkur Fólksins,285.572
+2021-09-12,Gallup,Sósíalistaflokkurinn,454.584
+2021-09-12,Gallup,Vinstri Græn,687.704
+2021-09-12,Gallup,Annað,64.10799999999999
+2021-08-29,Gallup,Samfylkingin,497.83500000000004
+2021-08-29,Gallup,Miðflokkurinn,303.03000000000003
+2021-08-29,Gallup,Viðreisn,458.87399999999997
+2021-08-29,Gallup,Sjálfstæðisflokkurinn,1047.618
+2021-08-29,Gallup,Framsóknarflokkurinn,419.913
+2021-08-29,Gallup,Píratar,471.861
+2021-08-29,Gallup,Flokkur Fólksins,212.121
+2021-08-29,Gallup,Sósíalistaflokkurinn,354.978
+2021-08-29,Gallup,Vinstri Græn,532.467
+2021-08-29,Gallup,Annað,30.303
+2021-08-15,Gallup,Samfylkingin,698.6560000000001
+2021-08-15,Gallup,Miðflokkurinn,417.946
+2021-08-15,Gallup,Viðreisn,567.658
+2021-08-15,Gallup,Sjálfstæðisflokkurinn,1528.31
+2021-08-15,Gallup,Framsóknarflokkurinn,648.752
+2021-08-15,Gallup,Píratar,785.988
+2021-08-15,Gallup,Flokkur Fólksins,255.758
+2021-08-15,Gallup,Sósíalistaflokkurinn,417.946
+2021-08-15,Gallup,Vinstri Græn,879.5579999999999
+2021-08-15,Gallup,Annað,37.428
+2021-07-28,Gallup,Samfylkingin,467.4
+2021-07-28,Gallup,Miðflokkurinn,281.2
+2021-07-28,Gallup,Viðreisn,330.59999999999997
+2021-07-28,Gallup,Sjálfstæðisflokkurinn,915.8
+2021-07-28,Gallup,Framsóknarflokkurinn,452.2
+2021-07-28,Gallup,Píratar,463.59999999999997
+2021-07-28,Gallup,Flokkur Fólksins,152
+2021-07-28,Gallup,Sósíalistaflokkurinn,205.2
+2021-07-28,Gallup,Vinstri Græn,524.4000000000001
+2021-07-28,Gallup,Annað,7.6000000000000005
+2021-06-29,Gallup,Samfylkingin,803.88
+2021-06-29,Gallup,Miðflokkurinn,609
+2021-06-29,Gallup,Viðreisn,885.08
+2021-06-29,Gallup,Sjálfstæðisflokkurinn,1956.9199999999998
+2021-06-29,Gallup,Framsóknarflokkurinn,836.3599999999999
+2021-06-29,Gallup,Píratar,1047.48
+2021-06-29,Gallup,Flokkur Fólksins,341.04
+2021-06-29,Gallup,Sósíalistaflokkurinn,438.48
+2021-06-29,Gallup,Vinstri Græn,1193.6399999999999
+2021-06-29,Gallup,Annað,8.120000000000001
+2021-05-31,Gallup,Samfylkingin,494.884
+2021-05-31,Gallup,Miðflokkurinn,287.352
+2021-05-31,Gallup,Viðreisn,435.019
+2021-05-31,Gallup,Sjálfstæðisflokkurinn,937.885
+2021-05-31,Gallup,Framsóknarflokkurinn,415.06399999999996
+2021-05-31,Gallup,Píratar,439.01
+2021-05-31,Gallup,Flokkur Fólksins,171.613
+2021-05-31,Gallup,Sósíalistaflokkurinn,215.514
+2021-05-31,Gallup,Vinstri Græn,586.677
+2021-05-31,Gallup,Annað,7.982
+2021-04-30,Gallup,Samfylkingin,478.91999999999996
+2021-04-30,Gallup,Miðflokkurinn,327.262
+2021-04-30,Gallup,Viðreisn,383.136
+2021-04-30,Gallup,Sjálfstæðisflokkurinn,949.858
+2021-04-30,Gallup,Framsóknarflokkurinn,403.091
+2021-04-30,Gallup,Píratar,478.91999999999996
+2021-04-30,Gallup,Flokkur Fólksins,187.577
+2021-04-30,Gallup,Sósíalistaflokkurinn,199.55
+2021-04-30,Gallup,Vinstri Græn,570.713
+2021-04-30,Gallup,Annað,11.973
+2021-03-29,Gallup,Samfylkingin,1251.712
+2021-03-29,Gallup,Miðflokkurinn,936.32
+2021-03-29,Gallup,Viðreisn,936.32
+2021-03-29,Gallup,Sjálfstæðisflokkurinn,2266.88
+2021-03-29,Gallup,Framsóknarflokkurinn,1094.016
+2021-03-29,Gallup,Píratar,1133.44
+2021-03-29,Gallup,Flokkur Fólksins,492.8
+2021-03-29,Gallup,Sósíalistaflokkurinn,492.8
+2021-03-29,Gallup,Vinstri Græn,1212.288
+2021-03-29,Gallup,Annað,39.424
+2021-02-28,Gallup,Samfylkingin,1307.232
+2021-02-28,Gallup,Miðflokkurinn,662.694
+2021-02-28,Gallup,Viðreisn,853.332
+2021-02-28,Gallup,Sjálfstæðisflokkurinn,2078.862
+2021-02-28,Gallup,Framsóknarflokkurinn,935.034
+2021-02-28,Gallup,Píratar,1107.516
+2021-02-28,Gallup,Flokkur Fólksins,363.12
+2021-02-28,Gallup,Sósíalistaflokkurinn,526.524
+2021-02-28,Gallup,Vinstri Græn,1216.452
+2021-02-28,Gallup,Annað,27.234
+2021-01-31,Gallup,Samfylkingin,1497.154
+2021-01-31,Gallup,Miðflokkurinn,721.52
+2021-01-31,Gallup,Viðreisn,1055.223
+2021-01-31,Gallup,Sjálfstæðisflokkurinn,2047.313
+2021-01-31,Gallup,Framsóknarflokkurinn,856.8050000000001
+2021-01-31,Gallup,Píratar,1001.109
+2021-01-31,Gallup,Flokkur Fólksins,351.741
+2021-01-31,Gallup,Sósíalistaflokkurinn,342.722
+2021-01-31,Gallup,Vinstri Græn,1154.432
+2021-01-31,Gallup,Annað,0
+2021-01-03,Gallup,Samfylkingin,1862.8600000000001
+2021-01-03,Gallup,Miðflokkurinn,997.178
+2021-01-03,Gallup,Viðreisn,1095.8
+2021-01-03,Gallup,Sjálfstæðisflokkurinn,2597.046
+2021-01-03,Gallup,Framsóknarflokkurinn,909.514
+2021-01-03,Gallup,Píratar,1304.002
+2021-01-03,Gallup,Flokkur Fólksins,471.19399999999996
+2021-01-03,Gallup,Sósíalistaflokkurinn,416.404
+2021-01-03,Gallup,Vinstri Græn,1282.086
+2021-01-03,Gallup,Annað,21.916
+2024-09-01,Gallup,Sjálfstæðisflokkurinn,577
+2024-09-01,Gallup,Framsóknarflokkurinn,256
+2024-09-01,Gallup,Viðreisn,414
+2024-09-01,Gallup,Flokkur Fólksins,300
+2024-09-01,Gallup,Sósíalistaflokkurinn,207
+2024-09-01,Gallup,Miðflokkurinn,759
+2024-09-01,Gallup,Píratar,309
+2024-09-01,Gallup,Samfylkingin,1060
+2024-09-01,Gallup,Vinstri Græn,179
+2024-09-01,Gallup,Annað,0
+2024-08-01,Gallup,Sjálfstæðisflokkurinn,674
+2024-08-01,Gallup,Framsóknarflokkurinn,276
+2024-08-01,Gallup,Viðreisn,398
+2024-08-01,Gallup,Flokkur Fólksins,264
+2024-08-01,Gallup,Sósíalistaflokkurinn,225
+2024-08-01,Gallup,Miðflokkurinn,630
+2024-08-01,Gallup,Píratar,307
+2024-08-01,Gallup,Samfylkingin,1040
+2024-08-01,Gallup,Vinstri Græn,134
+2024-08-01,Gallup,Annað,0
+2024-07-01,Gallup,Sjálfstæðisflokkurinn,571
+2024-07-01,Gallup,Framsóknarflokkurinn,239
+2024-07-01,Gallup,Viðreisn,292
+2024-07-01,Gallup,Flokkur Fólksins,286
+2024-07-01,Gallup,Sósíalistaflokkurinn,156
+2024-07-01,Gallup,Miðflokkurinn,485
+2024-07-01,Gallup,Píratar,259
+2024-07-01,Gallup,Samfylkingin,916
+2024-07-01,Gallup,Vinstri Græn,116
+2024-07-01,Gallup,Annað,0
+2024-06-01,Gallup,Sjálfstæðisflokkurinn,605
+2024-06-01,Gallup,Framsóknarflokkurinn,216
+2024-06-01,Gallup,Viðreisn,307
+2024-06-01,Gallup,Flokkur Fólksins,252
+2024-06-01,Gallup,Sósíalistaflokkurinn,114
+2024-06-01,Gallup,Miðflokkurinn,474
+2024-06-01,Gallup,Píratar,288
+2024-06-01,Gallup,Samfylkingin,880
+2024-06-01,Gallup,Vinstri Græn,131
+2024-06-01,Gallup,Annað,0
+2024-05-01,Gallup,Sjálfstæðisflokkurinn,914
+2024-05-01,Gallup,Framsóknarflokkurinn,462
+2024-05-01,Gallup,Viðreisn,391
+2024-05-01,Gallup,Flokkur Fólksins,310
+2024-05-01,Gallup,Sósíalistaflokkurinn,188
+2024-05-01,Gallup,Miðflokkurinn,686
+2024-05-01,Gallup,Píratar,447
+2024-05-01,Gallup,Samfylkingin,1519
+2024-05-01,Gallup,Vinstri Græn,168
+2024-05-01,Gallup,Annað,0
+2024-04-01,Gallup,Sjálfstæðisflokkurinn,677
+2024-04-01,Gallup,Framsóknarflokkurinn,331
+2024-04-01,Gallup,Viðreisn,282
+2024-04-01,Gallup,Flokkur Fólksins,271
+2024-04-01,Gallup,Sósíalistaflokkurinn,128
+2024-04-01,Gallup,Miðflokkurinn,481
+2024-04-01,Gallup,Píratar,308
+2024-04-01,Gallup,Samfylkingin,1117
+2024-04-01,Gallup,Vinstri Græn,165
+2024-04-01,Gallup,Annað,0
+2024-03-01,Gallup,Sjálfstæðisflokkurinn,697
+2024-03-01,Gallup,Framsóknarflokkurinn,280
+2024-03-01,Gallup,Viðreisn,272
+2024-03-01,Gallup,Flokkur Fólksins,237
+2024-03-01,Gallup,Sósíalistaflokkurinn,149
+2024-03-01,Gallup,Miðflokkurinn,494
+2024-03-01,Gallup,Píratar,299
+2024-03-01,Gallup,Samfylkingin,1183
+2024-03-01,Gallup,Vinstri Græn,214
+2024-03-01,Gallup,Annað,0
+2024-02-01,Gallup,Sjálfstæðisflokkurinn,728
+2024-02-01,Gallup,Framsóknarflokkurinn,322
+2024-02-01,Gallup,Viðreisn,274
+2024-02-01,Gallup,Flokkur Fólksins,249
+2024-02-01,Gallup,Sósíalistaflokkurinn,128
+2024-02-01,Gallup,Miðflokkurinn,468
+2024-02-01,Gallup,Píratar,293
+2024-02-01,Gallup,Samfylkingin,1032
+2024-02-01,Gallup,Vinstri Græn,172
+2024-02-01,Gallup,Annað,0
+2024-01-01,Gallup,Sjálfstæðisflokkurinn,684
+2024-01-01,Gallup,Framsóknarflokkurinn,316
+2024-01-01,Gallup,Viðreisn,263
+2024-01-01,Gallup,Flokkur Fólksins,297
+2024-01-01,Gallup,Sósíalistaflokkurinn,128
+2024-01-01,Gallup,Miðflokkurinn,410
+2024-01-01,Gallup,Píratar,305
+2024-01-01,Gallup,Samfylkingin,1151
+2024-01-01,Gallup,Vinstri Græn,207
+2024-01-01,Gallup,Annað,0
+2023-12-01,Gallup,Sjálfstæðisflokkurinn,641
+2023-12-01,Gallup,Framsóknarflokkurinn,333
+2023-12-01,Gallup,Viðreisn,312
+2023-12-01,Gallup,Flokkur Fólksins,241
+2023-12-01,Gallup,Sósíalistaflokkurinn,127
+2023-12-01,Gallup,Miðflokkurinn,343
+2023-12-01,Gallup,Píratar,322
+2023-12-01,Gallup,Samfylkingin,1005
+2023-12-01,Gallup,Vinstri Græn,212
+2023-12-01,Gallup,Annað,0
+2023-11-01,Gallup,Sjálfstæðisflokkurinn,685
+2023-11-01,Gallup,Framsóknarflokkurinn,298
+2023-11-01,Gallup,Viðreisn,273
+2023-11-01,Gallup,Flokkur Fólksins,239
+2023-11-01,Gallup,Sósíalistaflokkurinn,145
+2023-11-01,Gallup,Miðflokkurinn,325
+2023-11-01,Gallup,Píratar,322
+2023-11-01,Gallup,Samfylkingin,972
+2023-11-01,Gallup,Vinstri Græn,176
+2023-11-01,Gallup,Annað,28
+2023-10-01,Gallup,Sjálfstæðisflokkurinn,804
+2023-10-01,Gallup,Framsóknarflokkurinn,290
+2023-10-01,Gallup,Viðreisn,294
+2023-10-01,Gallup,Flokkur Fólksins,255
+2023-10-01,Gallup,Sósíalistaflokkurinn,161
+2023-10-01,Gallup,Miðflokkurinn,337
+2023-10-01,Gallup,Píratar,400
+2023-10-01,Gallup,Samfylkingin,1141
+2023-10-01,Gallup,Vinstri Græn,235
+2023-10-01,Gallup,Annað,0
+2023-09-01,Gallup,Sjálfstæðisflokkurinn,820
+2023-09-01,Gallup,Framsóknarflokkurinn,326
+2023-09-01,Gallup,Viðreisn,318
+2023-09-01,Gallup,Flokkur Fólksins,229
+2023-09-01,Gallup,Sósíalistaflokkurinn,157
+2023-09-01,Gallup,Miðflokkurinn,346
+2023-09-01,Gallup,Píratar,386
+2023-09-01,Gallup,Samfylkingin,1210
+2023-09-01,Gallup,Vinstri Græn,229
+2023-09-01,Gallup,Annað,0
+2023-08-01,Gallup,Sjálfstæðisflokkurinn,774
+2023-08-01,Gallup,Framsóknarflokkurinn,275
+2023-08-01,Gallup,Viðreisn,264
+2023-08-01,Gallup,Flokkur Fólksins,231
+2023-08-01,Gallup,Sósíalistaflokkurinn,161
+2023-08-01,Gallup,Miðflokkurinn,319
+2023-08-01,Gallup,Píratar,378
+2023-08-01,Gallup,Samfylkingin,1046
+2023-08-01,Gallup,Vinstri Græn,217
+2023-08-01,Gallup,Annað,0
+2023-07-01,Gallup,Sjálfstæðisflokkurinn,764
+2023-07-01,Gallup,Framsóknarflokkurinn,324
+2023-07-01,Gallup,Viðreisn,255
+2023-07-01,Gallup,Flokkur Fólksins,207
+2023-07-01,Gallup,Sósíalistaflokkurinn,131
+2023-07-01,Gallup,Miðflokkurinn,309
+2023-07-01,Gallup,Píratar,382
+2023-07-01,Gallup,Samfylkingin,1041
+2023-07-01,Gallup,Vinstri Græn,222
+2023-07-01,Gallup,Annað,4
+2023-06-01,Gallup,Sjálfstæðisflokkurinn,853
+2023-06-01,Gallup,Framsóknarflokkurinn,357
+2023-06-01,Gallup,Viðreisn,332
+2023-06-01,Gallup,Flokkur Fólksins,234
+2023-06-01,Gallup,Sósíalistaflokkurinn,189
+2023-06-01,Gallup,Miðflokkurinn,320
+2023-06-01,Gallup,Píratar,398
+2023-06-01,Gallup,Samfylkingin,1164
+2023-06-01,Gallup,Vinstri Græn,254
+2023-06-01,Gallup,Annað,0
+2023-05-01,Gallup,Sjálfstæðisflokkurinn,792
+2023-05-01,Gallup,Framsóknarflokkurinn,389
+2023-05-01,Gallup,Viðreisn,290
+2023-05-01,Gallup,Flokkur Fólksins,210
+2023-05-01,Gallup,Sósíalistaflokkurinn,187
+2023-05-01,Gallup,Miðflokkurinn,263
+2023-05-01,Gallup,Píratar,385
+2023-05-01,Gallup,Samfylkingin,1082
+2023-05-01,Gallup,Vinstri Græn,217
+2023-05-01,Gallup,Annað,0
+2023-04-01,Gallup,Sjálfstæðisflokkurinn,802
+2023-04-01,Gallup,Framsóknarflokkurinn,351
+2023-04-01,Gallup,Viðreisn,271
+2023-04-01,Gallup,Flokkur Fólksins,220
+2023-04-01,Gallup,Sósíalistaflokkurinn,161
+2023-04-01,Gallup,Miðflokkurinn,227
+2023-04-01,Gallup,Píratar,366
+2023-04-01,Gallup,Samfylkingin,1017
+2023-04-01,Gallup,Vinstri Græn,242
+2023-04-01,Gallup,Annað,0
+2023-03-01,Gallup,Sjálfstæðisflokkurinn,957
+2023-03-01,Gallup,Framsóknarflokkurinn,425
+2023-03-01,Gallup,Viðreisn,390
+2023-03-01,Gallup,Flokkur Fólksins,240
+2023-03-01,Gallup,Sósíalistaflokkurinn,219
+2023-03-01,Gallup,Miðflokkurinn,270
+2023-03-01,Gallup,Píratar,403
+2023-03-01,Gallup,Samfylkingin,1077
+2023-03-01,Gallup,Vinstri Græn,305
+2023-03-01,Gallup,Annað,0
+2023-02-01,Gallup,Sjálfstæðisflokkurinn,803
+2023-02-01,Gallup,Framsóknarflokkurinn,386
+2023-02-01,Gallup,Viðreisn,275
+2023-02-01,Gallup,Flokkur Fólksins,200
+2023-02-01,Gallup,Sósíalistaflokkurinn,178
+2023-02-01,Gallup,Miðflokkurinn,189
+2023-02-01,Gallup,Píratar,432
+2023-02-01,Gallup,Samfylkingin,857
+2023-02-01,Gallup,Vinstri Græn,243
+2023-02-01,Gallup,Annað,11
+2023-01-01,Gallup,Sjálfstæðisflokkurinn,832
+2023-01-01,Gallup,Framsóknarflokkurinn,400
+2023-01-01,Gallup,Viðreisn,258
+2023-01-01,Gallup,Flokkur Fólksins,195
+2023-01-01,Gallup,Sósíalistaflokkurinn,156
+2023-01-01,Gallup,Miðflokkurinn,195
+2023-01-01,Gallup,Píratar,368
+2023-01-01,Gallup,Samfylkingin,896
+2023-01-01,Gallup,Vinstri Græn,241
+2023-01-01,Gallup,Annað,0
+2022-12-01,Gallup,Sjálfstæðisflokkurinn,609
+2022-12-01,Gallup,Framsóknarflokkurinn,310
+2022-12-01,Gallup,Viðreisn,177
+2022-12-01,Gallup,Flokkur Fólksins,159
+2022-12-01,Gallup,Sósíalistaflokkurinn,118
+2022-12-01,Gallup,Miðflokkurinn,118
+2022-12-01,Gallup,Píratar,289
+2022-12-01,Gallup,Samfylkingin,599
+2022-12-01,Gallup,Vinstri Græn,174
+2022-12-01,Gallup,Annað,8
+2022-11-01,Gallup,Sjálfstæðisflokkurinn,1003
+2022-11-01,Gallup,Framsóknarflokkurinn,508
+2022-11-01,Gallup,Viðreisn,308
+2022-11-01,Gallup,Flokkur Fólksins,187
+2022-11-01,Gallup,Sósíalistaflokkurinn,216
+2022-11-01,Gallup,Miðflokkurinn,233
+2022-11-01,Gallup,Píratar,508
+2022-11-01,Gallup,Samfylkingin,878
+2022-11-01,Gallup,Vinstri Græn,312
+2022-11-01,Gallup,Annað,8
+2022-10-01,Gallup,Sjálfstæðisflokkurinn,756
+2022-10-01,Gallup,Framsóknarflokkurinn,428
+2022-10-01,Gallup,Viðreisn,260
+2022-10-01,Gallup,Flokkur Fólksins,164
+2022-10-01,Gallup,Sósíalistaflokkurinn,155
+2022-10-01,Gallup,Miðflokkurinn,155
+2022-10-01,Gallup,Píratar,400
+2022-10-01,Gallup,Samfylkingin,515
+2022-10-01,Gallup,Vinstri Græn,260
+2022-10-01,Gallup,Annað,3
+2022-09-01,Gallup,Sjálfstæðisflokkurinn,1000
+2022-09-01,Gallup,Framsóknarflokkurinn,556
+2022-09-01,Gallup,Viðreisn,353
+2022-09-01,Gallup,Flokkur Fólksins,212
+2022-09-01,Gallup,Sósíalistaflokkurinn,212
+2022-09-01,Gallup,Miðflokkurinn,224
+2022-09-01,Gallup,Píratar,564
+2022-09-01,Gallup,Samfylkingin,676
+2022-09-01,Gallup,Vinstri Græn,340
+2022-09-01,Gallup,Annað,4
+2022-08-01,Gallup,Sjálfstæðisflokkurinn,900
+2022-08-01,Gallup,Framsóknarflokkurinn,644
+2022-08-01,Gallup,Viðreisn,347
+2022-08-01,Gallup,Flokkur Fólksins,231
+2022-08-01,Gallup,Sósíalistaflokkurinn,211
+2022-08-01,Gallup,Miðflokkurinn,190
+2022-08-01,Gallup,Píratar,611
+2022-08-01,Gallup,Samfylkingin,640
+2022-08-01,Gallup,Vinstri Græn,347
+2022-08-01,Gallup,Annað,8
+2022-07-01,Gallup,Sjálfstæðisflokkurinn,846
+2022-07-01,Gallup,Framsóknarflokkurinn,590
+2022-07-01,Gallup,Viðreisn,329
+2022-07-01,Gallup,Flokkur Fólksins,253
+2022-07-01,Gallup,Sósíalistaflokkurinn,203
+2022-07-01,Gallup,Miðflokkurinn,169
+2022-07-01,Gallup,Píratar,574
+2022-07-01,Gallup,Samfylkingin,525
+2022-07-01,Gallup,Vinstri Græn,329
+2022-07-01,Gallup,Annað,15
+2022-06-01,Gallup,Sjálfstæðisflokkurinn,876
+2022-06-01,Gallup,Framsóknarflokkurinn,672
+2022-06-01,Gallup,Viðreisn,257
+2022-06-01,Gallup,Flokkur Fólksins,269
+2022-06-01,Gallup,Sósíalistaflokkurinn,157
+2022-06-01,Gallup,Miðflokkurinn,177
+2022-06-01,Gallup,Píratar,618
+2022-06-01,Gallup,Samfylkingin,526
+2022-06-01,Gallup,Vinstri Græn,276
+2022-06-01,Gallup,Annað,15
+2022-05-01,Gallup,Sjálfstæðisflokkurinn,931
+2022-05-01,Gallup,Framsóknarflokkurinn,810
+2022-05-01,Gallup,Viðreisn,440
+2022-05-01,Gallup,Flokkur Fólksins,296
+2022-05-01,Gallup,Sósíalistaflokkurinn,232
+2022-05-01,Gallup,Miðflokkurinn,199
+2022-05-01,Gallup,Píratar,681
+2022-05-01,Gallup,Samfylkingin,653
+2022-05-01,Gallup,Vinstri Græn,375
+2022-05-01,Gallup,Annað,9
+2022-04-01,Gallup,Sjálfstæðisflokkurinn,816
+2022-04-01,Gallup,Framsóknarflokkurinn,643
+2022-04-01,Gallup,Viðreisn,396
+2022-04-01,Gallup,Flokkur Fólksins,317
+2022-04-01,Gallup,Sósíalistaflokkurinn,190
+2022-04-01,Gallup,Miðflokkurinn,169
+2022-04-01,Gallup,Píratar,597
+2022-04-01,Gallup,Samfylkingin,564
+2022-04-01,Gallup,Vinstri Græn,416
+2022-04-01,Gallup,Annað,16
+2022-03-01,Gallup,Sjálfstæðisflokkurinn,1042
+2022-03-01,Gallup,Framsóknarflokkurinn,826
+2022-03-01,Gallup,Viðreisn,418
+2022-03-01,Gallup,Flokkur Fólksins,376
+2022-03-01,Gallup,Sósíalistaflokkurinn,165
+2022-03-01,Gallup,Miðflokkurinn,170
+2022-03-01,Gallup,Píratar,546
+2022-03-01,Gallup,Samfylkingin,514
+2022-03-01,Gallup,Vinstri Græn,523
+2022-03-01,Gallup,Annað,14
+2022-02-01,Gallup,Sjálfstæðisflokkurinn,889
+2022-02-01,Gallup,Framsóknarflokkurinn,735
+2022-02-01,Gallup,Viðreisn,394
+2022-02-01,Gallup,Flokkur Fólksins,304
+2022-02-01,Gallup,Sósíalistaflokkurinn,158
+2022-02-01,Gallup,Miðflokkurinn,158
+2022-02-01,Gallup,Píratar,536
+2022-02-01,Gallup,Samfylkingin,451
+2022-02-01,Gallup,Vinstri Græn,426
+2022-02-01,Gallup,Annað,8
+2022-01-01,Gallup,Sjálfstæðisflokkurinn,1037
+2022-01-01,Gallup,Framsóknarflokkurinn,787
+2022-01-01,Gallup,Viðreisn,435
+2022-01-01,Gallup,Flokkur Fólksins,407
+2022-01-01,Gallup,Sósíalistaflokkurinn,199
+2022-01-01,Gallup,Miðflokkurinn,171
+2022-01-01,Gallup,Píratar,579
+2022-01-01,Gallup,Samfylkingin,500
+2022-01-01,Gallup,Vinstri Græn,495
+2022-01-01,Gallup,Annað,19
+2021-12-01,Gallup,Sjálfstæðisflokkurinn,1619
+2021-12-01,Gallup,Framsóknarflokkurinn,1230
+2021-12-01,Gallup,Viðreisn,605
+2021-12-01,Gallup,Flokkur Fólksins,598
+2021-12-01,Gallup,Sósíalistaflokkurinn,313
+2021-12-01,Gallup,Miðflokkurinn,236
+2021-12-01,Gallup,Píratar,869
+2021-12-01,Gallup,Samfylkingin,730
+2021-12-01,Gallup,Vinstri Græn,737
+2021-12-01,Gallup,Annað,21
+2021-11-01,Gallup,Sjálfstæðisflokkurinn,2007
+2021-11-01,Gallup,Framsóknarflokkurinn,1503
+2021-11-01,Gallup,Viðreisn,743
+2021-11-01,Gallup,Flokkur Fólksins,707
+2021-11-01,Gallup,Sósíalistaflokkurinn,389
+2021-11-01,Gallup,Miðflokkurinn,336
+2021-11-01,Gallup,Píratar,1043
+2021-11-01,Gallup,Samfylkingin,946
+2021-11-01,Gallup,Vinstri Græn,1149
+2021-11-01,Gallup,Annað,18
+2021-10-01,Gallup,Sjálfstæðisflokkurinn,1808
+2021-10-01,Gallup,Framsóknarflokkurinn,1364
+2021-10-01,Gallup,Viðreisn,706
+2021-10-01,Gallup,Flokkur Fólksins,626
+2021-10-01,Gallup,Sósíalistaflokkurinn,365
+2021-10-01,Gallup,Miðflokkurinn,341
+2021-10-01,Gallup,Píratar,872
+2021-10-01,Gallup,Samfylkingin,777
+2021-10-01,Gallup,Vinstri Græn,1063
+2021-10-01,Gallup,Annað,16
+2021-09-01,Gallup,Sjálfstæðisflokkurinn,2903
+2021-09-01,Gallup,Framsóknarflokkurinn,1784
+2021-09-01,Gallup,Viðreisn,1276
+2021-09-01,Gallup,Flokkur Fólksins,781
+2021-09-01,Gallup,Sósíalistaflokkurinn,885
+2021-09-01,Gallup,Miðflokkurinn,911
+2021-09-01,Gallup,Píratar,1367
+2021-09-01,Gallup,Samfylkingin,1562
+2021-09-01,Gallup,Vinstri Græn,1484
+2021-09-01,Gallup,Annað,78
