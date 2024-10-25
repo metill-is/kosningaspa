@@ -7,7 +7,7 @@ manuscript:
   code-links:
     - text: Stan Model
       icon: file-code
-      url: Stan/base_model.stan
+      href: Stan/base_model.stan
 
 
 format:
