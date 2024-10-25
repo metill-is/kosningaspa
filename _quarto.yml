@@ -13,6 +13,8 @@ manuscript:
 format:
   html: 
     toc: true
+    comments:
+      hypothesis: true
   docx: default
   jats: default
   pdf: 
