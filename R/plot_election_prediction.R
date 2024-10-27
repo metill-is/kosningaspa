@@ -51,7 +51,7 @@ write_parquet(
   here(
     "results",
     "Predictions",
-    glue("coverage_data_{today_date}.parquet")
+    glue("coverage_data_no_polling_bias_{today_date}.parquet")
   )
 )
 
@@ -127,13 +127,13 @@ p <- coverage_data |>
   labs(
     x = NULL,
     y = NULL,
-    title = glue("Fylgisspá þegar {days_until_vote} dagar eru til kosninga"),
+    title = "Vegið fylgi stjórnmálaflokka",
     subtitle = "Línustrik tákna miðgildi spár og hver kassi inniheldur 5% af niðurstöðum spár",
     caption = caption
   )
 
 ggsave(
-  here("Figures", "Preds", glue("election_prediction_{today_date}.png")),
+  here("Figures", "Preds", glue("election_prediction_no_polling_bias_{today_date}.png")),
   width = 8,
   height = 0.4 * 8,
   scale = 1.4

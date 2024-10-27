@@ -22,11 +22,17 @@ colors <- tribble(
   "Annað", "grey50"
 )
 
+point_shapes <- c(
+  "Gallup" = 21,
+  "Maskína" = 22,
+  "Prósent" = 23,
+  " Kosningar" = 4
+)
+
 # read data
-gallup_data <- read_csv(here("data", "gallup_data_combined.csv"))
+gallup_data <- read_csv(here("data", "gallup_data.csv"))
 maskina_data <- read_csv(here("data", "maskina_data.csv"))
 prosent_data <- read_csv(here("data", "prosent_data.csv"))
-felagsvisindastofnun_data <- read_csv(here("data", "felagsvisindastofnun_data.csv"))
 election_data <- read_csv(here("data", "election_data.csv")) |>
   mutate(
     p = n / sum(n),
@@ -44,8 +50,7 @@ election_data <- read_csv(here("data", "election_data.csv")) |>
 poll_data <- bind_rows(
   maskina_data,
   prosent_data,
-  gallup_data,
-  felagsvisindastofnun_data
+  gallup_data
 ) |>
   mutate(
     flokkur = if_else(flokkur == "Lýðræðisflokkurinn", "Annað", flokkur)
@@ -62,6 +67,13 @@ poll_data <- bind_rows(
   ) |>
   filter(
     dags >= clock::date_build(2021, 1, 1)
+  )
+
+poll_data |>
+  group_by(fyrirtaeki) |>
+  summarise(
+    min_dags = min(dags),
+    max_dags = max(dags)
   )
 
 d <- read_parquet(here("data", "y_rep_draws.parquet")) |>
@@ -120,7 +132,7 @@ p1 <- d |>
     labels = label_percent()
   ) +
   scale_colour_identity() +
-  coord_cartesian(clip = "off", xlim = c(-0.1, 0.25)) +
+  coord_cartesian(clip = "off", xlim = c(-0.12, 0.25)) +
   theme(
     plot.margin = margin(5, 15, 5, 15),
     axis.text.y = element_blank(),
@@ -168,7 +180,7 @@ p2 <- d |>
     data = ~ filter(.x, dags != max(dags))
   ) +
   geom_point_interactive(
-    aes(y = p_poll),
+    aes(y = p_poll, shape = fyrirtaeki, fill = litur),
     alpha = 0.3
   ) +
   scale_x_date(
@@ -204,8 +216,15 @@ p2 <- d |>
   scale_alpha_continuous(
     range = c(0, 0.1)
   ) +
+  scale_shape_manual(
+    values = point_shapes,
+    name = "Könnunarfyrirtæki:"
+  ) +
   coord_cartesian(
     xlim = clock::date_build(2024, c(8, 11), c(1, 30))
+  ) +
+  theme(
+    legend.position = "none"
   ) +
   labs(
     x = NULL,
@@ -230,23 +249,35 @@ p3 <- d |>
     fill = "#faf9f9"
   ) +
   geom_smooth_interactive(
-    data = ~ filter(.x, dags != max(dags)),
+    data = ~ filter(.x, dags <= max(poll_data$dags)),
     method = "loess",
-    span = 0.2,
+    span = 0.15,
     se = 0,
     n = 500
   ) +
   geom_point_interactive(
-    aes(y = p_poll),
+    aes(
+      y = p_poll,
+      shape = fyrirtaeki,
+      color = litur,
+      fill = litur
+    ),
     alpha = 0.2
   ) +
   geom_point_interactive(
     data = election_data,
-    aes(y = p, x = date),
+    aes(y = p, x = date, shape = " Kosningar"),
     alpha = 1,
-    size = 4,
-    shape = "X"
+    size = 4
   ) +
+  scale_shape_manual(
+    values = point_shapes,
+    name = "Könnunarfyrirtæki:",
+    na.translate = FALSE
+  ) +
+  scale_color_identity() +
+  scale_fill_identity() +
+  guides(shape = guide_legend(override.aes = list(alpha = 0.8))) +
   scale_x_date(
     guide = ggh4x::guide_axis_truncated(
       trunc_upper = clock::date_build(2024, 11, 30)
@@ -261,16 +292,19 @@ p3 <- d |>
   ) +
   scale_y_continuous(
     breaks = seq(0, 0.3, by = 0.05),
-    limits = c(0, 0.3),
     guide = ggh4x::guide_axis_truncated(),
     labels = label_percent()
   ) +
-  scale_colour_identity() +
   labs(
     x = NULL,
     y = NULL,
-    subtitle = "Fylgisþróun",
-    caption = "Unnið af Brynjólfi Gauta Guðrúnar Jónssyni og Rafael Daniel Vias"
+    subtitle = "Fylgisþróun"
+  ) +
+  theme(
+    legend.position = "bottom",
+    legend.background = element_rect(fill = "transparent", color = NA),
+    legend.key.size = unit(1.5, "lines"),
+    legend.box.margin = margin(6, 6, 6, 6)
   )
 
 design <- "
@@ -285,7 +319,7 @@ p <- wrap_plots(
 ) +
   plot_annotation(
     title = "Samantekt á fylgi stjórnmálaflokka",
-    subtitle = "Niðustöður mismunandi kannana vegnar saman með Bayesísku tölfræðilíkani"
+    subtitle = "Niðustöður mismunandi kannana vegnar saman"
   )
 
 girafe(

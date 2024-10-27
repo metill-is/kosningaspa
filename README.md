@@ -1,2 +1,3 @@
-# althingi-forecast-2025
-Forecasting model and data analysis for the 2025 Icelandic parliamentary elections
+# A Dynamic Generalized Linear Model for Predicting the Icelandic Parliamentary Elections
+
+This repository contains the code and data for a dynamic generalized linear model for predicting the outcome of the Icelandic Parliamentary Elections.

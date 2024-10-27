@@ -7,113 +7,36 @@ library(gt)
 library(gtExtras)
 library(arrow)
 library(scales)
-# read data
-gallup_data <- read_csv(here("data", "gallup_data.csv"))
-maskina_data <- read_csv(here("data", "maskina_data.csv"))
-prosent_data <- read_csv(here("data", "prosent_data.csv"))
-felagsvisindastofnun_data <- read_csv(
-  here("data", "felagsvisindastofnun_data.csv")
+library(clock)
+library(metill)
+theme_set(theme_metill())
+
+box::use(
+  R / prepare_data[
+    combine_datasets,
+    prepare_stan_data
+  ]
 )
-election_data <- read_csv(here("data", "election_data.csv"))
-# combine data
-data <- bind_rows(
-  maskina_data,
-  prosent_data,
-  felagsvisindastofnun_data,
-  gallup_data,
-  election_data
-) |>
-  mutate(
-    flokkur = if_else(flokkur == "Lýðræðisflokkurinn", "Annað", flokkur),
-    fyrirtaeki = fct_relevel(
-      as_factor(fyrirtaeki),
-      "Kosning"
-    )
-  ) |>
-  filter(
-    date >= clock::date_build(2021, 1, 1),
-    flokkur != "Annað"
-  ) |>
-  arrange(date, fyrirtaeki, flokkur)
 
-D <- length(unique(data$date))
-P <- length(unique(data$flokkur))
-H <- length(unique(data$fyrirtaeki))
-N <- data |>
-  distinct(fyrirtaeki, date) |>
-  nrow()
+election_date <- date_build(2024, 11, 30)
 
+data <- combine_datasets()
 
-y <- data |>
-  select(date, fyrirtaeki, flokkur, n) |>
-  mutate(
-    n = as.integer(n)
-  ) |>
-  pivot_wider(names_from = flokkur, values_from = n, values_fill = 0) |>
-  select(-date, -fyrirtaeki) |>
-  as.matrix()
+stan_data <- prepare_stan_data(data)
 
-house <- data |>
-  pivot_wider(names_from = flokkur, values_from = n, values_fill = 0) |>
-  mutate(
-    house = as.numeric(factor(fyrirtaeki))
-  ) |>
-  pull(house)
-
-date <- data |>
-  pivot_wider(names_from = flokkur, values_from = n, values_fill = 0) |>
-  mutate(
-    date = as.numeric(factor(date))
-  ) |>
-  pull(date)
-
-time_diff <- data |>
-  distinct(date) |>
-  arrange(date) |>
-  mutate(
-    time_diff = c(NA, diff(date))
-  ) |>
-  drop_na() |>
-  pull(time_diff) |>
-  as.numeric()
-
-max_date <- max(data$date)
-election_date <- clock::date_build(2024, 11, 30)
-pred_y_time_diff <- as.numeric(election_date - max_date)
-stjornarslit <- data |>
-  pivot_wider(names_from = flokkur, values_from = n, values_fill = 0) |>
-  mutate(
-    stjornarslit = 1 * (date >= clock::date_build(2024, 10, 14))
-  ) |>
-  pull(stjornarslit)
-
-stan_data <- list(
-  D = D,
-  P = P,
-  H = H,
-  N = N,
-  y = y,
-  house = house,
-  date = date,
-  time_diff = time_diff,
-  pred_y_time_diff = pred_y_time_diff,
-  stjornarslit = stjornarslit,
-  n_pred = as.integer(sum(election_data$n)),
-  sigma_house_sum = 1,
-  sigma_house = 0.2,
-  sigma_stjornarslit = 0.2
-)
+stan_data$sigma_house <- 0.2
 
 model <- cmdstan_model(
   here("Stan", "base_model.stan")
 )
 
 init <- list(
-  sigma = rep(1, P),
-  beta_0 = rep(0, P),
-  z_beta = matrix(0, P, D),
-  gamma_raw = matrix(0, P, H - 1),
-  phi_inv = 1
+  sigma = rep(1, stan_data$P),
+  beta_0 = rep(0, stan_data$P),
+  z_beta = matrix(0, stan_data$P, stan_data$D + stan_data$pred_y_time_diff),
+  gamma_raw = matrix(0, stan_data$P, stan_data$H - 1),
+  phi_inv = 1,
+  beta_stjornarslit = rep(0, stan_data$P)
 )
 
 fit <- model$sample(
@@ -125,19 +48,23 @@ fit <- model$sample(
 )
 
 
+
+
 fit$summary("sigma") |>
   mutate(
-    flokkur = colnames(y),
+    flokkur = colnames(stan_data$y),
     .before = variable
   )
 
 fit$summary("phi_inv")
 
-fit$summary("beta_stjornarslit")
 
 
 
-dates <- c(unique(data$date), election_date)
+dates <- c(
+  unique(data$date),
+  seq.Date(max(data$date), election_date, by = "day")
+)
 
 
 fit$summary("y_rep", mean, ~ quantile(.x, c(0.05, 0.95))) |>
@@ -145,7 +72,7 @@ fit$summary("y_rep", mean, ~ quantile(.x, c(0.05, 0.95))) |>
   mutate(
     t = str_match(variable, "y_rep\\[(.*),.*\\]")[, 2] |> parse_number(),
     p = str_match(variable, "y_rep\\[.*,(.*)\\]")[, 2] |> parse_number(),
-    flokkur = colnames(y)[p],
+    flokkur = colnames(stan_data$y)[p],
     dags = dates[t]
   ) |>
   group_by(dags) |>
@@ -270,47 +197,55 @@ write_parquet(y_rep_draws, here("data", "y_rep_draws.parquet"))
 theme_set(metill::theme_metill())
 
 fit$summary("gamma") |>
-  select(variable, mean) |>
+  select(variable, mean, q5, q95) |>
   mutate(
     p = str_match(variable, "gamma\\[(.*),.*\\]")[, 2] |> parse_number(),
     h = str_match(variable, "gamma\\[.*,(.*)\\]")[, 2] |> parse_number(),
-    flokkur = colnames(y)[p],
+    flokkur = colnames(stan_data$y)[p],
     fyrirtaeki = levels(data$fyrirtaeki)[h]
   ) |>
   filter(h != 1) |>
-  ggplot(aes(0, flokkur, col = fyrirtaeki)) +
+  ggplot(aes(0, fyrirtaeki, col = fyrirtaeki)) +
   geom_vline(xintercept = 0, lty = 2) +
-  geom_segment(
-    aes(xend = mean, yend = flokkur),
-    position = position_jitter(width = 0, height = 0.3),
-    arrow = arrow(length = unit(0.3, "cm"), type = "closed"),
-    alpha = 0.5,
-    linewidth = 0.5
-  ) +
   geom_point(
-    data = fit$summary("gamma_raw") |>
-      select(variable, mean) |>
-      mutate(
-        p = str_match(variable, "gamma_raw\\[(.*),.*\\]")[, 2] |> parse_number(),
-        h = str_match(variable, "gamma_raw\\[.*,(.*)\\]")[, 2] |> parse_number(),
-        flokkur = colnames(y)[p],
-        fyrirtaeki = levels(data$fyrirtaeki)[h + 1]
-      ) |>
-      summarise(
-        mean = mean(mean),
-        .by = flokkur
-      ),
-    aes(x = mean, y = flokkur),
-    col = "black",
+    aes(x = mean),
     size = 3
+  ) +
+  geom_segment(
+    aes(x = q5, xend = q95, y = fyrirtaeki, yend = fyrirtaeki),
+    alpha = 0.5
+  ) +
+  scale_x_continuous(
+    breaks = seq(-0.5, 0.5, by = 0.1),
+    guide = ggh4x::guide_axis_truncated(
+      trunc_lower = -0.5,
+      trunc_upper = 0.5
+    ),
+    limits = c(-0.55, 0.55)
+  ) +
+  scale_y_discrete(
+    guide = ggh4x::guide_axis_truncated()
   ) +
   scale_colour_brewer(
     palette = "Set1"
+  ) +
+  facet_wrap(
+    vars(flokkur),
+    ncol = 1,
+    scales = "free_y"
+  ) +
+  theme(
+    legend.position = "none"
+  ) +
+  labs(
+    x = NULL,
+    y = NULL,
+    title = "Bjagi mismunandi fyrirtækja á fylgi flokka"
   )
 
 fit$summary("industry_bias") |>
   mutate(
-    flokkur = colnames(y) |>
+    flokkur = colnames(stan_data$y) |>
       as_factor() |>
       fct_reorder(mean),
     .before = variable
@@ -367,23 +302,4 @@ fit$summary("beta_stjornarslit") |>
   ) +
   scale_y_discrete(
     guide = ggh4x::guide_axis_truncated()
-  )
-
-
-fit$summary("Omega") |>
-  select(variable, mean = q95) |>
-  mutate(
-    p = str_match(variable, "Omega\\[(.*),.*\\]")[, 2] |> parse_number(),
-    q = str_match(variable, "Omega\\[.*,(.*)\\]")[, 2] |> parse_number(),
-    flokkur = colnames(y)[p],
-    flokkur2 = colnames(y)[q]
-  ) |>
-  ggplot(aes(flokkur, flokkur2, fill = mean)) +
-  geom_tile() +
-  scale_fill_gradient2(
-    low = "red",
-    high = "blue",
-    mid = "white",
-    midpoint = 0,
-    limits = c(-1, 1)
   )
