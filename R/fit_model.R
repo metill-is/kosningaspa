@@ -217,7 +217,7 @@ write_parquet(y_rep_draws, here("data", "y_rep_draws.parquet"))
 
 theme_set(metill::theme_metill())
 
-fit$summary("gamma") |>
+p <- fit$summary("gamma") |>
   select(variable, mean, q5, q95) |>
   mutate(
     p = str_match(variable, "gamma\\[(.*),.*\\]")[, 2] |> parse_number(),
@@ -274,3 +274,13 @@ fit$summary("gamma") |>
     y = NULL,
     title = "Bjagi mismunandi fyrirtækja á fylgi flokka"
   )
+
+p
+
+ggsave(
+  here("Figures", "gamma.png"),
+  p,
+  width = 8,
+  height = 1.2 * 8,
+  scale = 1.3
+)

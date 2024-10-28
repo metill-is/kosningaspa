@@ -6,7 +6,8 @@
 \documentclass[
   letterpaper,
   DIV=11,
-  numbers=noendperiod]{scrartcl}
+  numbers=noendperiod,
+  oneside]{scrartcl}
 
 \usepackage{amsmath,amssymb}
 \usepackage{iftex}
@@ -40,6 +41,7 @@
   \KOMAoptions{parskip=half}}
 \makeatother
 \usepackage{xcolor}
+\usepackage[left=1in,marginparwidth=2.0666666666667in,textwidth=4.1333333333333in,marginparsep=0.3in]{geometry}
 \setlength{\emergencystretch}{3em} % prevent overfull lines
 \setcounter{secnumdepth}{-\maxdimen} % remove section numbering
 % Make \paragraph and \subparagraph free-standing
@@ -133,6 +135,10 @@
 \makeatletter
 \@ifpackageloaded{caption}{}{\usepackage{caption}}
 \@ifpackageloaded{subcaption}{}{\usepackage{subcaption}}
+\makeatother
+\makeatletter
+\@ifpackageloaded{sidenotes}{}{\usepackage{sidenotes}}
+\@ifpackageloaded{marginnote}{}{\usepackage{marginnote}}
 \makeatother
 
 \ifLuaTeX
@@ -332,6 +338,18 @@ party support and adjusts for polling house biases while accounting for
 overdispersion in the data. By leveraging Bayesian methods, we obtain a
 comprehensive probabilistic forecast of the election outcomes,
 accounting for uncertainty in the estimates.
+
+\section{Results}\label{results}
+
+\begin{figure*}
+
+\includegraphics{index_files/figure-pdf/unnamed-chunk-1-1.pdf}
+
+\textsubscript{Source:
+\href{https://metill-is.github.io/kosningaspa/index.qmd.html}{Article
+Notebook}}
+
+\end{figure*}%
 
 
 

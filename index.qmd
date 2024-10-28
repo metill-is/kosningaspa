@@ -103,3 +103,14 @@ where $\boldsymbol{\pi}_{d} = \text{softmax}\left(\boldsymbol{\eta}_{d}\right)$ 
 ## Conclusion
 
 The dynamic linear model effectively captures the temporal evolution of party support and adjusts for polling house biases while accounting for overdispersion in the data. By leveraging Bayesian methods, we obtain a comprehensive probabilistic forecast of the election outcomes, accounting for uncertainty in the estimates.
+
+# Results
+
+
+```{r}
+#| eval: true
+#| column: page
+source("R/plot_model_results.R")
+make_plot()
+```
+
