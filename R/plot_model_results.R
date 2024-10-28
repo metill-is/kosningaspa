@@ -42,8 +42,7 @@ election_data <- read_csv(here("data", "election_data.csv")) |>
     colors
   ) |>
   filter(
-    flokkur != "Annað",
-    date >= clock::date_build(2021, 1, 1)
+    flokkur != "Annað"
   )
 
 # combine data
@@ -64,9 +63,6 @@ poll_data <- bind_rows(
     fyrirtaeki,
     flokkur,
     p_poll = p
-  ) |>
-  filter(
-    dags >= clock::date_build(2021, 1, 1)
   )
 
 poll_data |>
@@ -287,7 +283,7 @@ p3 <- d |>
     breaks = seq.Date(
       from = clock::date_build(2021, 1),
       to = clock::date_build(2024, 11, 30),
-      by = "2 month"
+      by = "3 month"
     )
   ) +
   scale_y_continuous(

@@ -1,68 +1,52 @@
 ## Introduction
 
-This report outlines the methodology behind forecasting the outcome of the upcoming Icelandic Parliamentary Elections scheduled for November 30th. The forecast is based on a dynamic linear model implemented in Stan, incorporating polling data over time, adjusting for polling house effects, accounting for overdispersion, and modeling the impact of significant political events.
+This report outlines the methodology behind forecasting the outcome of the upcoming Icelandic Parliamentary Elections scheduled for November 30th. The forecast is based on a dynamic linear model implemented in Stan, incorporating polling data over time and adjusting for polling house effects while accounting for overdispersion.
 
 ## Model Specification
 
-We model the polling percentages for each political party over time using a dynamic linear model with a Dirichlet-Multinomial observation component. The model captures the evolution of party support, accounts for variations between different polling houses, incorporates overdispersion, and includes the effect of notable political events.
+We model the polling percentages for each political party over time using a dynamic linear model with a Dirichlet-Multinomial observation component. The model captures the evolution of party support and accounts for variations between different polling houses.
 
 ### Notation
 
 #### Input Data
 
-- $P$: Number of political parties.
-- $T$: Number of time points (dates) at which we have polling data.
-- $H$: Number of polling houses.
-- $N$: Number of observations (polls).
-- $y_{n,p}$: Count of responses for party $p$ in poll $n$.
-- $s_t$: Indicator variable for the occurrence of the political event at time $t$.
+- $P$: Number of political parties *(including the Other category)*
+- $T$: Number of time points (dates) at which we have polling data
+- $H$: Number of polling houses
+- $N$: Number of observations (polls)
+- $y_{n,p}$: Count of responses for party $p$ in poll $n$
+- $\Delta_t$: The time difference between polls at $t-1$ and $t$ in days
 
 #### Parameters
 
-- $\beta_{p,t}$: Latent support for party $p$ at time $t$.
-- $\gamma_{p,h}$: Effect of polling house $h$ for party $p$.
-- $\sigma_p$: Scale parameter for the random walk of party $p$.
-- $\phi$: Overdispersion parameter.
-- $\beta^{\text{event}}_p$: Effect of a significant political event for party $p$.
-- $\Delta_t$: The time difference between polls at $t-1$ and $t$ in days.
+- $\beta_{p,t}$: Latent support for party $p$ at time $t$ (for $p = 2,\ldots,P$)
+- $\gamma_{p,h}$: Effect of polling house $h$ for party $p$ (for $p = 2,\ldots,P$)
+- $\mu_{\gamma,p}$: Mean house effect for party $p$
+- $\sigma_{\gamma,p}$: Scale of house effects for party $p$
+- $\sigma_p$: Scale parameter for the random walk of party $p$
+- $\phi$: Overdispersion parameter
 
 ### Dynamic Party Effects
 
-The latent support for each party evolves over time following a random walk with Student's t-distributed innovations:
+The latent support for each party (except the reference category) evolves over time following a random walk with scaled innovations:
 
 $$
-\beta_{p,1} = \beta_{0,p}, \quad \beta_{p,t} = \beta_{p,t-1} + \epsilon_{p,t} \quad \text{for } t = 2, \dots, T+1,
+\beta_{p,1} = \beta_{p}^{(0)}, \quad \beta_{p,t} = \beta_{p,t-1} + \sigma_p z_{p,t} \sqrt{\Delta_t} \quad \text{for } t = 2, \dots, T, \quad p=1, \dots, P - 1
 $$
 
-where $\epsilon_{p,t} \sim t_3\left(0, \sigma_p \sqrt{\Delta_t}\right)$, a Student's t-distribution with 3 degrees of freedom, scale $\sigma_p \sqrt{\Delta_t}$, and $\Delta_t$ is the time difference between consecutive polls in days.
-
-$\beta_{p, T + 1}$ is the predicted support for party $p$ at election day where $\Delta_{T+1}$ is the number of days between the most recent poll and the day of the elections.
+where $z_{p,t} \sim \mathcal{N}(0, 1)$ and $\sqrt{\Delta_t}$ scales the innovations according to the time difference between polls.
 
 ### Polling House Effects
 
-Polling house effects are modeled to account for systematic biases:
+Polling house effects are modeled hierarchically to account for systematic biases:
 
 $$
-\gamma_{p,1} = 0, \quad \gamma_{p,h} \sim \mathcal{N}\left(0, \sigma_{\text{house}}^2\right) \quad \text{for } h = 2, \dots, H,
+\gamma_{p,1} = 0, \quad \gamma_{p,h} = \mu_{\gamma,p} + \sigma_{\gamma,p} \tilde{\gamma}_{p,h} \quad \text{for } h = 2, \dots, H,
 $$
 
-where outcomes of elections are coded as the first polling house and thus the first polling house effect is set to zero. The hyperparameter $\sigma_{\text{house}}$ controls the variability of polling house effects.
+where $\tilde{\gamma}_{p,h} \sim \mathcal{N}(0, 1)$. The parameters $\mu_{\gamma,p}$ and $\sigma_{\gamma,p}$ control the mean and variability of polling house effects for each party.
 
-### Political Event Effect
-
-We include an effect for a significant political event (e.g., government collapse):
-
-$$
-\beta^{\text{event}}_p \sim \mathcal{N}\left(0, \sigma_{\text{event}}^2\right),
-$$
-
-and incorporate it into the model as:
-
-$$
-\eta_{n,p} = \beta_{p, t_n} + \gamma_{p, h_n} + \beta^{\text{event}}_p \times s_{t_n},
-$$
-
-where $s_{t_n}$ is an indicator (typically 0 or 1) denoting the occurrence of the event at time $t_n$.
+Elections are set to be the first polling house and therefore $\gamma_{p,1} = 0$.
 
 ### Overdispersion
 
@@ -72,7 +56,7 @@ $$
 \phi = \frac{1}{\phi_{\text{inv}}},
 $$
 
-where $\phi_{\text{inv}} \sim \text{Exponential}(1)$. This parameter adjusts the concentration of the Dirichlet-Multinomial distribution where a larger value of $\phi_{\text{inv}}$ implies greater dispersion (more observational variance) and a smaller value of $\phi_{\text{inv}}$ implies less overdispersion.
+where $\phi_{\text{inv}} \sim \text{Exponential}(1)$.
 
 ## Data and Likelihood
 
@@ -82,56 +66,40 @@ $$
 \mathbf{y}_{n} \sim \text{Dirichlet-Multinomial}\left(\sum_{p=1}^P y_{n,p}, \phi \cdot \boldsymbol{\pi}_{n}\right),
 $$
 
-where $\boldsymbol{\pi}_{n} = \text{softmax}\left(\boldsymbol{\eta}_{n}\right)$ and $\boldsymbol{\eta}_{n} = \left(\eta_{n,1}, \dots, \eta_{n,P}\right)$ includes the latent support, polling house effect, and event effect for each party:
+where $\boldsymbol{\pi}_{n} = \text{softmax}\left(\boldsymbol{\eta}_{n}\right)$ and $\boldsymbol{\eta}_{n}$ includes the latent support and polling house effect for each party, with the first party's linear predictor constrained to be the negative sum of other parties' predictors:
 
 $$
-\eta_{n,p} = \beta_{p, t_n} + \gamma_{p, h_n} + \beta^{\text{event}}_p \times s_{t_n}.
-$$
-
-Here, $t_n$ is the date of poll $n$, and $h_n$ is the polling house of poll $n$.
-
-## Predictions
-
-We then predict the true latent party support as
-
-$$
-\mathbf{y}^*_{t} \sim \text{Dirichlet-Multinomial}\left(n_{\text{pred}}, \phi \cdot \boldsymbol{\pi}^*_{t}\right),
-$$
-
-where $\boldsymbol{\pi}^*_{t} = \text{softmax}\left(\boldsymbol{\eta}^*_{t}\right)$ and $\boldsymbol{\eta}^*_{t} = \left(\eta_{t,1}^*, \dots, \eta_{t,P}^*\right)$ includes the latent support and event effect for each party, but not the house effects: 
-
-$$
-\eta_{t,p}^* = \beta_{p, t} + \beta^{\text{event}}_p \times s_{t}.
+\eta_{n,p} = \begin{cases}
+-\sum_{p^*=2}^{P} (\beta_{p^*,t_n} + \gamma_{p^*,h_n}) & \text{if } p = 1 \\
+\beta_{p,t_n} + \gamma_{p,h_n} & \text{if } p > 1
+\end{cases}
 $$
 
 ## Prior Distributions
 
 The priors are specified as follows:
 
-- **Initial Party Effects**: $\beta_{0,p} \sim \mathcal{N}(0, 1)$.
-- **Random Walk Innovations**: $\epsilon_{p,t} \sim t_3\left(0, \sigma_p \sqrt{\Delta_t}\right)$.
-- **Polling House Effects**: $\gamma_{p,h} \sim \mathcal{N}\left(0, \sigma_{\text{house}}^2\right)$ for $h = 2, \dots, H$.
-- **Scale Parameters**: $\sigma_p \sim \text{Exponential}(1)$.
-- **Overdispersion Parameter Inverse**: $\phi_{\text{inv}} \sim \text{Exponential}(1)$.
-- **Event Effects**: $\beta^{\text{event}}_p \sim \mathcal{N}\left(0, \sigma_{\text{event}}^2\right)$.
+- **Initial Party Effects**: $\beta_{p}^{(0)} \sim \mathcal{N}(0, 1)$
+- **Random Walk Innovations**: $z_{p,t} \sim \mathcal{N}(0, 1)$
+- **House Effect Means**: $\mu_{\gamma,p} \sim \mathcal{N}(0, 1)$ with $\sum_p \mu_{\gamma,p} \sim \mathcal{N}(0, 1)$
+- **House Effect Scales**: $\sigma_{\gamma,p} \sim \text{Exponential}(1)$
+- **Random Walk Scales**: $\sigma_p \sim \text{Exponential}(1)$
+- **Overdispersion Parameter Inverse**: $\phi_{\text{inv}} \sim \text{Exponential}(1)$
 
 ## Inference
 
-Bayesian inference is performed using Markov Chain Monte Carlo (MCMC) sampling via Stan. Posterior distributions of the latent variables $\beta_{p,t}$, $\gamma_{p,h}$, and $\beta^{\text{event}}_p$ are obtained, allowing for probabilistic forecasting of election outcomes. The overdispersion parameter $\phi$ helps in capturing extra variability in the polling data beyond the multinomial assumption.
+Bayesian inference is performed using Markov Chain Monte Carlo (MCMC) sampling via Stan. Posterior distributions of the latent variables $\beta_{p,t}$ and $\gamma_{p,h}$ are obtained, allowing for probabilistic forecasting of election outcomes. The overdispersion parameter $\phi$ helps in capturing extra variability in the polling data beyond the multinomial assumption.
 
 ## Posterior Predictive Checks
 
 To assess the model's fit, posterior predictive simulations are conducted:
 
 $$
-\mathbf{y}_{\text{rep}, d} \sim \text{Dirichlet-Multinomial}\left(n_{\text{pred}}, \phi \cdot \boldsymbol{\pi}_{d}\right), \quad d = 1, \dots, D+1,
+\mathbf{y}_{\text{rep},d} \sim \text{Dirichlet-Multinomial}\left(n_{\text{pred}}, \phi \cdot \boldsymbol{\pi}_{d}\right),
 $$
 
-where $\boldsymbol{\pi}_{d} = \text{softmax}\left(\boldsymbol{\beta}_{d}\right)$ and $\boldsymbol{\beta}_{d} = \left(\beta_{1,d}, \dots, \beta_{P,d}\right)$.
-
-These simulations generate replicated data under the model to compare with the observed data, aiding in the evaluation of model adequacy.
+where $\boldsymbol{\pi}_{d} = \text{softmax}\left(\boldsymbol{\eta}_{d}\right)$ and $\boldsymbol{\eta}_{d}$ is constructed such that its first component is the negative sum of the remaining components, which are the latent party support values $\beta_{p,d}$.
 
 ## Conclusion
 
-The dynamic linear model effectively captures the temporal evolution of party support, adjusts for polling house biases, accounts for overdispersion in the data, and incorporates the effects of significant political events. By leveraging Bayesian methods, we obtain a comprehensive probabilistic forecast of the election outcomes, accounting for uncertainty in the estimates.
-
+The dynamic linear model effectively captures the temporal evolution of party support and adjusts for polling house biases while accounting for overdispersion in the data. By leveraging Bayesian methods, we obtain a comprehensive probabilistic forecast of the election outcomes, accounting for uncertainty in the estimates.

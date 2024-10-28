@@ -7,100 +7,31 @@ library(gt)
 library(gtExtras)
 library(arrow)
 library(scales)
-# read data
-gallup_data <- read_csv(here("data", "gallup_data.csv"))
-maskina_data <- read_csv(here("data", "maskina_data.csv"))
-prosent_data <- read_csv(here("data", "prosent_data.csv"))
-election_data <- read_csv(here("data", "election_data.csv"))
-# combine data
-data <- bind_rows(
-  maskina_data,
-  prosent_data,
-  gallup_data,
-  election_data
-) |>
-  mutate(
-    flokkur = if_else(flokkur == "Lýðræðisflokkurinn", "Annað", flokkur),
-    fyrirtaeki = fct_relevel(
-      as_factor(fyrirtaeki),
-      "Kosning"
-    )
-  ) |>
-  filter(
-    # date >= clock::date_build(2021, 1, 1),
-    flokkur != "Annað"
-  ) |>
-  arrange(date, fyrirtaeki, flokkur)
+library(clock)
+library(metill)
+theme_set(theme_metill())
 
-D <- length(unique(data$date))
-P <- length(unique(data$flokkur))
-H <- length(unique(data$fyrirtaeki))
-N <- data |>
-  distinct(fyrirtaeki, date) |>
-  nrow()
-
-
-y <- data |>
-  select(date, fyrirtaeki, flokkur, n) |>
-  mutate(
-    n = as.integer(n)
-  ) |>
-  pivot_wider(names_from = flokkur, values_from = n, values_fill = 0) |>
-  select(-date, -fyrirtaeki) |>
-  as.matrix()
-
-house <- data |>
-  pivot_wider(names_from = flokkur, values_from = n, values_fill = 0) |>
-  mutate(
-    house = as.numeric(factor(fyrirtaeki))
-  ) |>
-  pull(house)
-
-date <- data |>
-  pivot_wider(names_from = flokkur, values_from = n, values_fill = 0) |>
-  mutate(
-    date = as.numeric(factor(date))
-  ) |>
-  pull(date)
-
-time_diff <- data |>
-  distinct(date) |>
-  arrange(date) |>
-  mutate(
-    time_diff = c(NA, diff(date))
-  ) |>
-  drop_na() |>
-  pull(time_diff) |>
-  as.numeric()
-
-max_date <- max(data$date)
-election_date <- clock::date_build(2024, 11, 30)
-pred_y_time_diff <- as.numeric(election_date - max_date)
-
-stan_data <- list(
-  D = D,
-  P = P,
-  H = H,
-  N = N,
-  y = y,
-  house = house,
-  date = date,
-  time_diff = time_diff,
-  pred_y_time_diff = pred_y_time_diff,
-  n_pred = as.integer(sum(election_data$n)),
-  sigma_house = 1,
-  scale_beta = 0.01
+box::use(
+  R / prepare_data[
+    combine_datasets,
+    prepare_stan_data
+  ]
 )
+
+election_date <- date_build(2024, 11, 30)
+
+data <- combine_datasets()
+stan_data <- prepare_stan_data(data)
 
 model <- cmdstan_model(
   here("Stan", "base_model_no_polling_bias.stan")
 )
 
 init <- list(
-  sigma = rep(stan_data$scale_beta, P),
-  beta_0 = rep(0, P),
-  z_beta = matrix(0, P, D + pred_y_time_diff),
-  gamma_raw = matrix(0, P, H - 2),
+  sigma = rep(1, stan_data$P),
+  beta_0 = rep(0, stan_data$P),
+  z_beta = matrix(0, stan_data$P, stan_data$D + stan_data$pred_y_time_diff),
+  gamma_raw = matrix(0, stan_data$P, stan_data$H - 2),
   phi_inv = 1
 )
 
@@ -127,7 +58,7 @@ fit$summary("phi_inv")
 
 dates <- c(
   unique(data$date),
-  seq.Date(max_date, election_date, by = "day")
+  seq.Date(max(data$date), election_date, by = "day")
 )
 
 
@@ -136,7 +67,7 @@ fit$summary("y_rep", mean, ~ quantile(.x, c(0.05, 0.95))) |>
   mutate(
     t = str_match(variable, "y_rep\\[(.*),.*\\]")[, 2] |> parse_number(),
     p = str_match(variable, "y_rep\\[.*,(.*)\\]")[, 2] |> parse_number(),
-    flokkur = colnames(y)[p],
+    flokkur = colnames(stan_data$y)[p],
     dags = dates[t]
   ) |>
   group_by(dags) |>
@@ -171,7 +102,7 @@ fit$draws("y_rep") |>
   mutate(
     t = str_match(name, "y_rep\\[(.*),.*\\]")[, 2] |> parse_number(),
     p = str_match(name, "y_rep\\[.*,(.*)\\]")[, 2] |> parse_number(),
-    flokkur = colnames(y)[p],
+    flokkur = colnames(stan_data$y)[p],
     dags = dates[t]
   ) |>
   filter(dags == max(dags)) |>
@@ -215,18 +146,18 @@ fit$draws("y_rep") |>
   gt_plt_conf_int(
     column = plot_col,
     ci_columns = c(q5, q95),
-    ref_line = 0,
+    ref_line = 0.05,
     text_size = 0,
     width = 30
   ) |>
   tab_header(
-    title = "Spáð fylgi stjórnmálaflokka á kosningadag"
+    title = "Spáð fylgi stjórnmálaflokka"
   ) |>
   tab_footnote(
     md(
       str_c(
         "Matið styðst við kannanir Félagsvísindastofnunar, Gallup, Maskínu og Prósents\n",
-        "auk niðurstaðna kosninga frá 2021."
+        "auk niðurstaðna kosninga frá 2017 og 2021."
       )
     )
   )

@@ -25,6 +25,50 @@ get_sheet_data <- function(sheet) {
 }
 
 #' @export
+get_felo_data <- function() {
+  box::use(
+    googlesheets4[read_sheet, gs4_auth],
+    janitor[clean_names],
+    dplyr[mutate, select, coalesce, left_join, join_by, summarise],
+    tidyr[drop_na, pivot_longer],
+    lubridate[dmy]
+  )
+  url <- "https://docs.google.com/spreadsheets/d/1US1qVhLE8I6496dXvoGUPp8QnRvC52FCc2jTyBkRNZs/edit?gid=621143960#gid=621143960"
+  gs4_auth(email = Sys.getenv("GOOGLE_MAIL"))
+  d <- read_sheet(url)
+
+  d |>
+    mutate(
+      fyrstidagur = dmy(fyrstidagur),
+      sidastidagur = dmy(sidastidagur),
+      date = fyrstidagur + (sidastidagur - fyrstidagur) / 2
+    ) |>
+    select(
+      date, fyrirtaeki, D:Other
+    ) |>
+    pivot_longer(
+      c(-date, -fyrirtaeki),
+      names_to = "bokstafur",
+      values_to = "n",
+      values_transform = list(
+        "n" = as.numeric
+      )
+    ) |>
+    left_join(
+      party_tibble(),
+      by = join_by(bokstafur)
+    ) |>
+    mutate(
+      flokkur = coalesce(flokkur, "Annað"),
+      litur = coalesce(litur, "grey50")
+    ) |>
+    summarise(
+      n = sum(n, na.rm = TRUE),
+      .by = c(date, fyrirtaeki, flokkur)
+    ) |>
+    drop_na()
+}
+#' @export
 get_election_data <- function() {
   box::use(
     dplyr[tribble, bind_rows, mutate, select],
@@ -32,6 +76,7 @@ get_election_data <- function() {
   )
   d <- tribble(
     ~date, ~flokkur, ~p,
+    # 2021
     date_build(2021, 09, 25), "Samfylkingin", 0.099,
     date_build(2021, 09, 25), "Sjálfstæðisflokkurinn", 0.244,
     date_build(2021, 09, 25), "Miðflokkurinn", 0.054,
@@ -41,6 +86,7 @@ get_election_data <- function() {
     date_build(2021, 09, 25), "Viðreisn", 0.083,
     date_build(2021, 09, 25), "Píratar", 0.086,
     date_build(2021, 09, 25), "Sósíalistaflokkurinn", 0.041,
+    # 2017
     date_build(2017, 10, 28), "Samfylkingin", 0.1205,
     date_build(2017, 10, 28), "Sjálfstæðisflokkurinn", 0.2525,
     date_build(2017, 10, 28), "Miðflokkurinn", 0.1087,
@@ -49,7 +95,17 @@ get_election_data <- function() {
     date_build(2017, 10, 28), "Flokkur Fólksins", 0.0688,
     date_build(2017, 10, 28), "Viðreisn", 0.0669,
     date_build(2017, 10, 28), "Píratar", 0.092,
-    date_build(2017, 10, 28), "Sósíalistaflokkurinn", 0
+    date_build(2017, 10, 28), "Sósíalistaflokkurinn", 0,
+    # 2016
+    date_build(2016, 10, 29), "Samfylkingin", 0.057,
+    date_build(2016, 10, 29), "Sjálfstæðisflokkurinn", 0.29,
+    date_build(2016, 10, 29), "Miðflokkurinn", 0,
+    date_build(2016, 10, 29), "Framsóknarflokkurinn", 0.115,
+    date_build(2016, 10, 29), "Vinstri Græn", 0.159,
+    date_build(2016, 10, 29), "Flokkur Fólksins", 0,
+    date_build(2016, 10, 29), "Viðreisn", 0.105,
+    date_build(2016, 10, 29), "Píratar", 0.145,
+    date_build(2016, 10, 29), "Sósíalistaflokkurinn", 0
   )
 
   out <- d |>
@@ -57,11 +113,12 @@ get_election_data <- function() {
       tribble(
         ~date, ~flokkur, ~p,
         date_build(2021, 09, 25), "Annað", 1 - sum(d$p[d$date == date_build(2021, 09, 25)]),
-        date_build(2017, 10, 28), "Annað", 1 - sum(d$p[d$date == date_build(2017, 10, 28)])
+        date_build(2017, 10, 28), "Annað", 1 - sum(d$p[d$date == date_build(2017, 10, 28)]),
+        date_build(2016, 10, 29), "Annað", 1 - sum(d$p[d$date == date_build(2016, 10, 29)])
       )
     ) |>
     mutate(
-      n = p * c(199730, 196259),
+      n = p * c(199730, 196259, 189648),
       fyrirtaeki = "Kosning"
     ) |>
     select(-p)
@@ -82,30 +139,63 @@ combine_datasets <- function() {
     forcats[fct_relevel, as_factor],
     clock[date_build]
   )
+
+  box::use(
+    R / party_utils[party_tibble]
+  )
+
   gallup_data <- get_sheet_data("gallup")
   maskina_data <- get_sheet_data("maskina")
   prosent_data <- get_sheet_data("prosent")
+  felagsvisindastofnun <- get_sheet_data("felagsvisindastofnun")
   election_data <- get_election_data()
+  felo_data <- get_felo_data()
+
+
   # combine data
   data <- bind_rows(
     maskina_data,
     prosent_data,
     gallup_data,
+    felagsvisindastofnun,
     election_data
   ) |>
+    filter(
+      (date > max(felo_data$date)) | (fyrirtaeki == "Kosning")
+    ) |>
+    bind_rows(
+      felo_data
+    ) |>
     mutate(
       flokkur = if_else(flokkur == "Lýðræðisflokkurinn", "Annað", flokkur),
       fyrirtaeki = fct_relevel(
         as_factor(fyrirtaeki),
-        "Kosning"
+        "Kosning",
+        "Félagsvísindastofnun"
       )
-    ) |>
-    filter(
-      flokkur != "Annað"
     ) |>
     arrange(date, fyrirtaeki, flokkur)
 
   data
+}
+
+#' @export
+update_polling_data <- function(data) {
+  box::use(
+    readr[write_csv],
+    here[here]
+  )
+  data <- combine_datasets()
+  write_csv(data, here("data", "polling_data.csv"))
+}
+
+#' @export
+read_polling_data <- function() {
+  box::use(
+    readr[read_csv],
+    here[here]
+  )
+  read_csv(here("data", "polling_data.csv"))
 }
 
 #' @export

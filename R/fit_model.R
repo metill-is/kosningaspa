@@ -13,30 +13,43 @@ theme_set(theme_metill())
 
 box::use(
   R / prepare_data[
-    combine_datasets,
+    read_polling_data,
     prepare_stan_data
   ]
 )
 
 election_date <- date_build(2024, 11, 30)
 
-data <- combine_datasets()
+data <- read_polling_data() |>
+  filter(
+    date >= clock::date_build(2016, 1, 1)
+  ) |>
+  mutate(
+    fyrirtaeki = fct_relevel(
+      as_factor(fyrirtaeki),
+      "Kosning",
+      "Félagsvísindastofnun"
+    ),
+    flokkur = fct_relevel(
+      as_factor(flokkur),
+      "Annað"
+    )
+  )
 
 stan_data <- prepare_stan_data(data)
-
-stan_data$sigma_house <- 0.4
 
 model <- cmdstan_model(
   here("Stan", "base_model.stan")
 )
 
 init <- list(
-  sigma = rep(1, stan_data$P),
-  beta_0 = rep(0, stan_data$P),
-  z_beta = matrix(0, stan_data$P, stan_data$D + stan_data$pred_y_time_diff),
-  gamma_raw = matrix(0, stan_data$P, stan_data$H - 1),
-  phi_inv = 1,
-  beta_stjornarslit = rep(0, stan_data$P)
+  sigma = rep(1, stan_data$P - 1),
+  beta_0 = rep(0, stan_data$P - 1),
+  z_beta = matrix(0, stan_data$P - 1, stan_data$D + stan_data$pred_y_time_diff),
+  mu_gamma = rep(0, stan_data$P - 1),
+  sigma_gamma = rep(0.4, stan_data$P - 1),
+  gamma_raw = matrix(0, stan_data$P - 1, stan_data$H - 1),
+  phi_inv = 1
 )
 
 fit <- model$sample(
@@ -48,7 +61,11 @@ fit <- model$sample(
 )
 
 
+fit$summary("mu_gamma")
+fit$summary("sigma_gamma")
 
+mcmc_trace(fit$draws("mu_gamma"))
+mcmc_trace(fit$draws("sigma_gamma"))
 
 fit$summary("sigma") |>
   mutate(
@@ -75,6 +92,7 @@ fit$summary("y_rep", mean, ~ quantile(.x, c(0.05, 0.95))) |>
     flokkur = colnames(stan_data$y)[p],
     dags = dates[t]
   ) |>
+  filter(flokkur != "Annað") |>
   group_by(dags) |>
   mutate_at(
     vars(mean, q5, q95),
@@ -107,10 +125,13 @@ fit$draws("y_rep") |>
   mutate(
     t = str_match(name, "y_rep\\[(.*),.*\\]")[, 2] |> parse_number(),
     p = str_match(name, "y_rep\\[.*,(.*)\\]")[, 2] |> parse_number(),
-    flokkur = colnames(y)[p],
+    flokkur = colnames(stan_data$y)[p],
     dags = dates[t]
   ) |>
-  filter(dags == max(dags)) |>
+  filter(
+    dags == max(dags),
+    flokkur != "Annað"
+  ) |>
   mutate(
     value = value / stan_data$n_pred
   ) |>
@@ -151,18 +172,18 @@ fit$draws("y_rep") |>
   gt_plt_conf_int(
     column = plot_col,
     ci_columns = c(q5, q95),
-    ref_line = 0,
+    ref_line = 0.05,
     text_size = 0,
     width = 30
   ) |>
   tab_header(
-    title = "Spáð fylgi stjórnmálaflokka á kosningadag"
+    title = "Spáð fylgi stjórnmálaflokka miðað við nýjustu kannanir"
   ) |>
   tab_footnote(
     md(
       str_c(
         "Matið styðst við kannanir Félagsvísindastofnunar, Gallup, Maskínu og Prósents\n",
-        "auk niðurstaðna kosninga frá 2021."
+        "auk niðurstaðna kosninga frá 2017 og 2021."
       )
     )
   )
@@ -177,7 +198,7 @@ y_rep_draws <- fit$draws("y_rep") |>
   mutate(
     t = str_match(name, "y_rep\\[(.*),.*\\]")[, 2] |> parse_number(),
     p = str_match(name, "y_rep\\[.*,(.*)\\]")[, 2] |> parse_number(),
-    flokkur = colnames(y)[p],
+    flokkur = colnames(stan_data$y)[p],
     dags = dates[t]
   ) |>
   select(
@@ -201,10 +222,20 @@ fit$summary("gamma") |>
   mutate(
     p = str_match(variable, "gamma\\[(.*),.*\\]")[, 2] |> parse_number(),
     h = str_match(variable, "gamma\\[.*,(.*)\\]")[, 2] |> parse_number(),
-    flokkur = colnames(stan_data$y)[p],
+    flokkur = colnames(stan_data$y)[-1][p],
     fyrirtaeki = levels(data$fyrirtaeki)[h]
   ) |>
   filter(h != 1) |>
+  bind_rows(
+    fit$summary("mu_gamma") |>
+      mutate(
+        flokkur = colnames(stan_data$y)[-1] |>
+          as_factor() |>
+          fct_reorder(mean),
+        fyrirtaeki = "Samtals",
+        .before = variable
+      )
+  ) |>
   ggplot(aes(0, fyrirtaeki, col = fyrirtaeki)) +
   geom_vline(xintercept = 0, lty = 2) +
   geom_point(
@@ -216,18 +247,19 @@ fit$summary("gamma") |>
     alpha = 0.5
   ) +
   scale_x_continuous(
-    breaks = seq(-0.5, 0.5, by = 0.1),
-    guide = ggh4x::guide_axis_truncated(
-      trunc_lower = -0.5,
-      trunc_upper = 0.5
-    ),
-    limits = c(-0.55, 0.55)
+    breaks = breaks_width(width = 0.1),
+    guide = ggh4x::guide_axis_truncated()
   ) +
   scale_y_discrete(
     guide = ggh4x::guide_axis_truncated()
   ) +
-  scale_colour_brewer(
-    palette = "Set1"
+  scale_colour_manual(
+    values = c(
+      "Samtals" = "black",
+      "Prósent" = "#1f78b4",
+      "Maskína" = "#1b9e77",
+      "Gallup" = "#e41a1c"
+    )
   ) +
   facet_wrap(
     vars(flokkur),
@@ -241,65 +273,4 @@ fit$summary("gamma") |>
     x = NULL,
     y = NULL,
     title = "Bjagi mismunandi fyrirtækja á fylgi flokka"
-  )
-
-fit$summary("industry_bias") |>
-  mutate(
-    flokkur = colnames(stan_data$y) |>
-      as_factor() |>
-      fct_reorder(mean),
-    .before = variable
-  ) |>
-  ggplot(aes(mean, flokkur)) +
-  geom_vline(xintercept = 0, lty = 2) +
-  geom_point(
-    size = 3
-  ) +
-  geom_segment(
-    aes(x = q5, xend = q95, y = flokkur, yend = flokkur),
-    alpha = 0.5
-  ) +
-  scale_x_continuous(
-    breaks = breaks_width(width = 0.1),
-    guide = ggh4x::guide_axis_truncated(
-      trunc_lower = -0.4,
-      trunc_upper = 0.4
-    )
-  ) +
-  scale_y_discrete(
-    guide = ggh4x::guide_axis_truncated()
-  ) +
-  labs(
-    x = NULL,
-    y = NULL,
-    title = "Heildarbjagi í mati á fylgi flokka",
-    subtitle = "Sýnt á log-odds kvarða"
-  )
-
-
-fit$summary("beta_stjornarslit") |>
-  mutate(
-    flokkur = colnames(y) |>
-      as_factor() |>
-      fct_reorder(mean),
-    .before = variable
-  ) |>
-  ggplot(aes(mean, flokkur)) +
-  geom_vline(xintercept = 0, lty = 2) +
-  geom_point(
-    size = 3
-  ) +
-  geom_segment(
-    aes(x = q5, xend = q95, y = flokkur, yend = flokkur),
-    alpha = 0.5
-  ) +
-  scale_x_continuous(
-    breaks = breaks_width(width = 0.1),
-    guide = ggh4x::guide_axis_truncated(
-      trunc_lower = -0.4,
-      trunc_upper = 0.4
-    )
-  ) +
-  scale_y_discrete(
-    guide = ggh4x::guide_axis_truncated()
   )
