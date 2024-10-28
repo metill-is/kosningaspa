@@ -102,7 +102,7 @@ get_election_data <- function() {
     date_build(2016, 10, 29), "Miðflokkurinn", 0,
     date_build(2016, 10, 29), "Framsóknarflokkurinn", 0.115,
     date_build(2016, 10, 29), "Vinstri Græn", 0.159,
-    date_build(2016, 10, 29), "Flokkur Fólksins", 0,
+    date_build(2016, 10, 29), "Flokkur Fólksins", 0.0354,
     date_build(2016, 10, 29), "Viðreisn", 0.105,
     date_build(2016, 10, 29), "Píratar", 0.145,
     date_build(2016, 10, 29), "Sósíalistaflokkurinn", 0

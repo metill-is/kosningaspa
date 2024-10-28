@@ -46,6 +46,9 @@ data <- read_polling_data() |>
   ) |>
   arrange(date, fyrirtaeki, flokkur)
 
+data |>
+  filter(fyrirtaeki == "Kosning")
+
 stan_data <- prepare_stan_data(data)
 
 n_parties <- data |>
