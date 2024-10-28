@@ -12,6 +12,7 @@ data {
   int<lower = 1> pred_y_time_diff;
 
   real<lower = 0> sigma_house;
+  real<lower = 0> scale_beta;
   int<lower = 1> n_pred;
 }
 
@@ -59,7 +60,7 @@ model {
 
   beta_0 ~ std_normal();
   to_vector(z_beta) ~ std_normal();
-  sigma ~ exponential(1);                 // Random walk scale prior
+  sigma ~ exponential(pow(scale_beta, -1));                 // Random walk scale prior
   phi_inv ~ exponential(1);
   // Likelihood (Multinomial observation model)
   for (n in 1:N) {

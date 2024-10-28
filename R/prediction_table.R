@@ -2,6 +2,7 @@ library(tidyverse)
 library(gt)
 library(gtExtras)
 library(here)
+library(arrow)
 
 colors <- tribble(
   ~flokkur, ~litur,
@@ -21,7 +22,7 @@ seats_draws <- read_parquet(here("data", "seats_draws.parquet"))
 y_rep <- read_parquet(here("data", "y_rep_draws.parquet"))
 
 
-y_rep |>
+table_dat <- y_rep |>
   filter(
     dags == max(dags)
   ) |>
@@ -45,7 +46,16 @@ y_rep |>
       )
   ) |>
   select(flokkur, median_votes, lower_votes, upper_votes, median_seats, lower_seats, upper_seats) |>
-  arrange(desc(median_votes)) |>
+  arrange(desc(median_votes))
+
+table_dat |>
+  select(
+    Flokkur = flokkur,
+    `Þingsæti` = median_seats
+  ) |>
+  write_csv(here("data", "prediction_table.csv"))
+
+table_dat |>
   gt() |>
   cols_label(
     flokkur = "Flokkur",

@@ -9,7 +9,6 @@ data {
   array[N] int<lower = 1, upper = H> house; // House indicator for each poll
   array[N] int<lower = 1, upper = D> date;  // Date indicator for each poll
 
-  real<lower = 0> sigma_house_sum;
   real<lower = 0> sigma_house;
   int<lower = 1> n_pred;
   real<lower = 0> trend_damping;
@@ -20,8 +19,8 @@ parameters {
   vector[P] beta_0;                      // Party-specific initial effect
   vector[P] beta_1;
   matrix[P, D - 2] z_beta;                   // Second order innovations
-  matrix[P, H - 1] gamma_raw;            // House effects (constant over time for each house)
-  vector<lower = 0>[P] sigma_beta;            // Party-specific random walk scale
+  matrix[P, H - 2] gamma_raw;            // House effects (constant over time for each house)
+  real<lower = 0> sigma_beta;            // Party-specific random walk scale
 }
 
 transformed parameters {
@@ -30,15 +29,16 @@ transformed parameters {
   matrix[P, D] beta;                     // Dynamic party effects over time
   
   for (p in 1:P) {
-    gamma[p, 1] = 0;                   // Fix the house effect of the election to zero
-    gamma[p, 2:H] = gamma_raw[p];      // Free parameters for other houses
+    gamma[p, 1] = 0;                   // Fix the first house effect of the election to zero
+    gamma[p, 2] = -sum(gamma_raw[p, ]);
+    gamma[p, 3:H] = gamma_raw[p, ];      // Free parameters for other houses
   }
 
   for (p in 1:P) {
     beta[p, 1] = beta_0[p];
     beta[p, 2] = beta_1[p];
     for (t in 3:D) {
-      beta[p, t] = 2 * beta[p, t - 1] - beta[p, t - 2] + sigma_beta[p] * z_beta[p, t - 2];
+      beta[p, t] = 2 * beta[p, t - 1] - beta[p, t - 2] + sigma_beta * z_beta[p, t - 2];
     }
   }
 }
@@ -52,7 +52,7 @@ model {
   beta_0 ~ std_normal();
   beta_1 ~ std_normal();
   to_vector(z_beta) ~ std_normal();
-  sigma_beta ~ exponential(5);                 // First order innovation scale
+  sigma_beta ~ exponential(1);                 // First order innovation scale
   phi_inv ~ exponential(1);
   // Likelihood (Multinomial observation model)
   for (n in 1:N) {

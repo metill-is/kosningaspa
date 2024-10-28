@@ -11,15 +11,11 @@ library(scales)
 gallup_data <- read_csv(here("data", "gallup_data.csv"))
 maskina_data <- read_csv(here("data", "maskina_data.csv"))
 prosent_data <- read_csv(here("data", "prosent_data.csv"))
-felagsvisindastofnun_data <- read_csv(
-  here("data", "felagsvisindastofnun_data.csv")
-)
 election_data <- read_csv(here("data", "election_data.csv"))
 # combine data
 data <- bind_rows(
   maskina_data,
   prosent_data,
-  felagsvisindastofnun_data,
   gallup_data,
   election_data
 ) |>
@@ -109,9 +105,7 @@ stan_data <- list(
   pred_y_time_diff = pred_y_time_diff,
   stjornarslit = stjornarslit,
   n_pred = as.integer(sum(election_data$n)),
-  sigma_house_sum = 1,
-  sigma_house = 0.5,
-  sigma_stjornarslit = 0.2,
+  sigma_house = 0.01,
   trend_damping = 0.8
 )
 
@@ -120,12 +114,11 @@ model <- cmdstan_model(
 )
 
 init <- list(
-  sigma_beta = rep(0.1, P),
-  sigma = rep(0.1, P),
+  sigma_beta = 0.005,
   beta_0 = rep(0, P),
   beta_1 = rep(0, P),
   z_beta = matrix(0, P, D - 2),
-  gamma_raw = matrix(0, P, H - 1),
+  gamma_raw = matrix(0, P, H - 2),
   phi_inv = 1
 )
 
@@ -135,8 +128,8 @@ fit <- model$sample(
   parallel_chains = 4,
   init = rep(list(init), 4),
   refresh = 10,
-  iter_warmup = 250,
-  iter_sampling = 250
+  iter_warmup = 500,
+  iter_sampling = 500
 )
 
 fit$summary("beta_0") |>
@@ -144,6 +137,10 @@ fit$summary("beta_0") |>
     flokkur = colnames(y),
     .before = variable
   )
+
+mcmc_trace(
+  fit$draws("beta_0")
+)
 
 fit$summary("beta_1") |>
   mutate(
@@ -156,6 +153,11 @@ fit$summary("sigma_beta") |>
     flokkur = colnames(y),
     .before = variable
   )
+
+mcmc_trace(
+  fit$draws("sigma_beta"),
+  pars = "sigma_beta"
+)
 
 fit$summary("sigma_eps_beta") |>
   mutate(
@@ -199,13 +201,9 @@ p <- plot_dat |>
     relationship = "many-to-many"
   ) |>
   ggplot(aes(dags, mean)) +
-  geom_ribbon(
-    aes(ymin = q5, ymax = q95, fill = flokkur),
-    alpha = 0.2
-  ) +
   geom_line(aes(col = flokkur), linewidth = 1) +
   geom_point(aes(y = konnun, col = flokkur))
-
+p
 
 ggsave(
   here("Figures", "y_rep.png"),
@@ -328,7 +326,7 @@ ggsave(
 )
 
 p <- fit$summary("gamma") |>
-  select(variable, mean, rhat) |>
+  select(variable, mean, q5, q95, rhat) |>
   mutate(
     p = str_match(variable, "gamma\\[(.*),.*\\]")[, 2] |> parse_number(),
     h = str_match(variable, "gamma\\[.*,(.*)\\]")[, 2] |> parse_number(),
@@ -338,33 +336,16 @@ p <- fit$summary("gamma") |>
   filter(h != 1) |>
   ggplot(aes(0, flokkur, col = fyrirtaeki)) +
   geom_vline(xintercept = 0, lty = 2) +
+  geom_point(aes(x = mean, y = flokkur)) +
   geom_segment(
-    aes(xend = mean, yend = flokkur),
-    position = position_jitter(width = 0, height = 0.3),
-    arrow = arrow(length = unit(0.3, "cm"), type = "closed"),
-    alpha = 0.5,
-    linewidth = 0.5
-  ) +
-  geom_point(
-    data = fit$summary("gamma_raw") |>
-      select(variable, mean) |>
-      mutate(
-        p = str_match(variable, "gamma_raw\\[(.*),.*\\]")[, 2] |> parse_number(),
-        h = str_match(variable, "gamma_raw\\[.*,(.*)\\]")[, 2] |> parse_number(),
-        flokkur = colnames(y)[p],
-        fyrirtaeki = levels(data$fyrirtaeki)[h + 1]
-      ) |>
-      summarise(
-        mean = mean(mean),
-        .by = flokkur
-      ),
-    aes(x = mean, y = flokkur),
-    col = "black",
-    size = 3
+    aes(x = q5, xend = q95, y = flokkur, yend = flokkur),
+    alpha = 0.5
   ) +
   scale_colour_brewer(
     palette = "Set1"
   )
+
+p
 
 ggsave(
   here("Figures", "gamma.png"),
@@ -373,83 +354,3 @@ ggsave(
   height = 0.621 * 8,
   scale = 1.5
 )
-
-fit$summary("industry_bias") |>
-  mutate(
-    flokkur = colnames(y) |>
-      as_factor() |>
-      fct_reorder(mean),
-    .before = variable
-  ) |>
-  ggplot(aes(mean, flokkur)) +
-  geom_vline(xintercept = 0, lty = 2) +
-  geom_point(
-    size = 3
-  ) +
-  geom_segment(
-    aes(x = q5, xend = q95, y = flokkur, yend = flokkur),
-    alpha = 0.5
-  ) +
-  scale_x_continuous(
-    breaks = breaks_width(width = 0.1),
-    guide = ggh4x::guide_axis_truncated(
-      trunc_lower = -0.4,
-      trunc_upper = 0.4
-    )
-  ) +
-  scale_y_discrete(
-    guide = ggh4x::guide_axis_truncated()
-  ) +
-  labs(
-    x = NULL,
-    y = NULL,
-    title = "Heildarbjagi í mati á fylgi flokka",
-    subtitle = "Sýnt á log-odds kvarða"
-  )
-
-
-fit$summary("beta_stjornarslit") |>
-  mutate(
-    flokkur = colnames(y) |>
-      as_factor() |>
-      fct_reorder(mean),
-    .before = variable
-  ) |>
-  ggplot(aes(mean, flokkur)) +
-  geom_vline(xintercept = 0, lty = 2) +
-  geom_point(
-    size = 3
-  ) +
-  geom_segment(
-    aes(x = q5, xend = q95, y = flokkur, yend = flokkur),
-    alpha = 0.5
-  ) +
-  scale_x_continuous(
-    breaks = breaks_width(width = 0.1),
-    guide = ggh4x::guide_axis_truncated(
-      trunc_lower = -0.4,
-      trunc_upper = 0.4
-    )
-  ) +
-  scale_y_discrete(
-    guide = ggh4x::guide_axis_truncated()
-  )
-
-
-fit$summary("Omega") |>
-  select(variable, mean = q95) |>
-  mutate(
-    p = str_match(variable, "Omega\\[(.*),.*\\]")[, 2] |> parse_number(),
-    q = str_match(variable, "Omega\\[.*,(.*)\\]")[, 2] |> parse_number(),
-    flokkur = colnames(y)[p],
-    flokkur2 = colnames(y)[q]
-  ) |>
-  ggplot(aes(flokkur, flokkur2, fill = mean)) +
-  geom_tile() +
-  scale_fill_gradient2(
-    low = "red",
-    high = "blue",
-    mid = "white",
-    midpoint = 0,
-    limits = c(-1, 1)
-  )

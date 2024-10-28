@@ -24,7 +24,7 @@ data <- combine_datasets()
 
 stan_data <- prepare_stan_data(data)
 
-stan_data$sigma_house <- 0.2
+stan_data$sigma_house <- 0.4
 
 model <- cmdstan_model(
   here("Stan", "base_model.stan")

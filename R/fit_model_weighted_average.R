@@ -88,7 +88,8 @@ stan_data <- list(
   time_diff = time_diff,
   pred_y_time_diff = pred_y_time_diff,
   n_pred = as.integer(sum(election_data$n)),
-  sigma_house = 1
+  sigma_house = 1,
+  scale_beta = 0.01
 )
 
 model <- cmdstan_model(
@@ -96,7 +97,7 @@ model <- cmdstan_model(
 )
 
 init <- list(
-  sigma = rep(1, P),
+  sigma = rep(stan_data$scale_beta, P),
   beta_0 = rep(0, P),
   z_beta = matrix(0, P, D + pred_y_time_diff),
   gamma_raw = matrix(0, P, H - 2),
