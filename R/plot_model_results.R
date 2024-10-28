@@ -74,7 +74,18 @@ make_plot <- function() {
     ) |>
     left_join(
       poll_data
-    )
+    ) |> 
+    inner_join(
+      poll_data |> 
+        filter(p_poll > 0) |> 
+        summarise(
+          start_dags = min(dags),
+          .by = flokkur
+        )
+    ) |> 
+    filter(dags >= start_dags)
+  
+  
   
   coverage_data <- read_parquet(here("data", "y_rep_draws.parquet")) |>
     reframe(
@@ -85,7 +96,16 @@ make_plot <- function() {
     ) |>
     inner_join(
       colors
-    )
+    ) |> 
+    inner_join(
+      poll_data |> 
+        filter(p_poll > 0) |> 
+        summarise(
+          start_dags = min(dags),
+          .by = flokkur
+        )
+    ) |> 
+    filter(dags >= start_dags)
   
   
   
@@ -234,12 +254,9 @@ make_plot <- function() {
       angle = 90,
       fill = "#faf9f9"
     ) +
-    geom_smooth_interactive(
+    geom_line_interactive(
       data = ~ filter(.x, dags <= max(poll_data$dags)),
-      method = "loess",
-      span = 0.1,
-      se = 0,
-      n = 500
+      linewidth = 1
     ) +
     geom_point_interactive(
       data = ~filter(.x, fyrirtaeki != "Kosning"),

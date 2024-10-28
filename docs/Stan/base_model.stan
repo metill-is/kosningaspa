@@ -8,6 +8,7 @@ data {
 
   array[N] int<lower = 1, upper = H> house; // House indicator for each poll
   array[N] int<lower = 1, upper = D> date;  // Date indicator for each poll
+  array[N] int<lower = 1, upper = P> n_parties; // Number of parties in each poll
   vector[D - 1] time_diff;
   int<lower = 1> pred_y_time_diff;
   
@@ -74,7 +75,7 @@ model {
     eta_n[2:P] = beta[, date[n]] + gamma[ , house[n]];  // Linear predictor for softmax
     eta_n[1] = -sum(eta_n[2:P]);
     vector[P] pi_n = softmax(eta_n);
-    y[n, ] ~ dirichlet_multinomial(pi_n * phi);                // Polling data likelihood
+    y[n, 1:n_parties[n]] ~ dirichlet_multinomial(pi_n[1:n_parties[n]] * phi);                // Polling data likelihood
   }
 }
 

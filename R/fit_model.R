@@ -32,11 +32,31 @@ data <- read_polling_data() |>
     ),
     flokkur = fct_relevel(
       as_factor(flokkur),
-      "Annað"
+      "Annað",
+      "Sjálfstæðisflokkurinn",
+      "Samfylkingin",
+      "Framsóknarflokkurinn",
+      "Vinstri Græn",
+      "Píratar",
+      "Viðreisn",
+      "Flokkur Fólksins",
+      "Miðflokkurinn",
+      "Sósíalistaflokkurinn"
     )
-  )
+  ) |>
+  arrange(date, fyrirtaeki, flokkur)
 
 stan_data <- prepare_stan_data(data)
+
+n_parties <- data |>
+  summarise(
+    n_parties = sum(n != 0),
+    .by = c(date, fyrirtaeki)
+  ) |>
+  arrange(date) |>
+  pull(n_parties)
+
+stan_data$n_parties <- n_parties
 
 model <- cmdstan_model(
   here("Stan", "base_model.stan")
