@@ -20,13 +20,16 @@ data {
   int<lower = 1> P_f;
   matrix[P_f, D_f] logit_votes;
   array[D_f] int<lower = 0, upper = P_f> n_parties_f;
+  vector[D_f] time_diff_f;
 }
 
 transformed data {
   vector[D - 1] time_scale = sqrt(time_diff);
+  vector[D_f] time_scale_f = sqrt(time_diff_f);
 }
 
 parameters {
+  // Polling Data
   matrix[P - 1, D + pred_y_time_diff] z_beta;   // Standardized random walk innovations
   matrix[P - 1, H - 1] gamma_raw;               // House effects (constant over time for each house)
   vector[P - 1] mu_gamma;
@@ -34,26 +37,35 @@ parameters {
   vector<lower = 0>[P - 1] sigma;               // Party-specific random walk scale
   real<lower = 0> phi_inv;
 
-  vector[D_f] z_alpha_f;
-  real mu_alpha_f;
-  real<lower = 0> sigma_alpha_f;
+  // Fundamentals
+  vector[D_f - 1] z_alpha_f;
+  real alpha_f0;
+  real trend_alpha_f0;
 
-  vector[D_f] z_beta_f;
-  real mu_beta_f;
-  real<lower = 0> sigma_beta_f;
+  vector [D_f - 1] z_beta_f;
+  real beta_f0;
+  real trend_beta_f0;
   
-  vector[D_f] z_log_sigma_f;
-  real mu_log_sigma_f;
-  real<lower = 0> sigma_log_sigma_f;
+  real<lower = 0> sigma_f;
+  vector[P_f - 1] z_prediction_pred;
 }
 
 transformed parameters {
   real<lower = 0> phi = pow(phi_inv, -1);
   matrix[P - 1, H] gamma;                     
   matrix[P - 1, D + pred_y_time_diff] beta;   
-  vector[D_f] alpha_f = mu_alpha_f + sigma_alpha_f * z_alpha_f;
-  vector[D_f] beta_f = mu_beta_f + sigma_beta_f * z_beta_f;
-  vector[D_f] sigma_f = exp(mu_log_sigma_f + sigma_log_sigma_f * z_log_sigma_f);
+  vector[D_f] alpha_f;
+  vector[D_f] beta_f;
+
+  alpha_f[1] = alpha_f0;
+  beta_f[1] = beta_f0;
+
+  for (d in 2:D_f) {
+    alpha_f[d] = alpha_f[d - 1] + trend_alpha_f0 + z_alpha_f[d - 1];
+    beta_f[d] = beta_f[d - 1] + trend_beta_f0 + z_beta_f[d - 1];
+  }
+
+
   for (p in 1:(P - 1)) {
     // Fix the first house effect of the election to zero
     gamma[p, 1] = 0;                      
@@ -61,7 +73,7 @@ transformed parameters {
     gamma[p, 2:H] = mu_gamma[p] + sigma_gamma[p] * gamma_raw[p, ];         
   }
   
-  beta[ , D + pred_y_time_diff] = alpha_f[D_f] + beta_f[D_f] * logit_votes[, D_f];
+  beta[ , D + pred_y_time_diff] = alpha_f[D_f] + beta_f[D_f] * logit_votes[2:P_f, D_f] + z_prediction_pred * sigma_f;
 
   for (t in 1:pred_y_time_diff) {
     beta[ , D + pred_y_time_diff - t] = beta[ , D + pred_y_time_diff - t + 1] + z_beta[, D + pred_y_time_diff - t + 1] .* sigma;
@@ -75,7 +87,7 @@ transformed parameters {
 }
 
 model {
-  // Polling Data
+  /* Polling Data */
   // Priors for house effects
   to_vector(gamma_raw) ~ std_normal();
   mu_gamma ~ std_normal();
@@ -101,21 +113,22 @@ model {
     y[n, 1:n_parties[n]] ~ dirichlet_multinomial(pi_n[1:n_parties[n]] * phi);                // Polling data likelihood
   }
 
-  // Fundamentals
+  /* Fundamentals */
+  // Priors
   to_vector(z_alpha_f) ~ std_normal();
   to_vector(z_beta_f) ~ std_normal();
-  to_vector(z_log_sigma_f) ~ std_normal();
-  mu_alpha_f ~ std_normal();
-  mu_beta_f ~ std_normal();
-  mu_log_sigma_f ~ std_normal();
-  sigma_alpha_f ~ exponential(1);
-  sigma_beta_f ~ exponential(1);
-  sigma_log_sigma_f ~ exponential(1);
-
+  z_prediction_pred ~ std_normal();
+  alpha_f0 ~ std_normal();
+  beta_f0 ~ std_normal();
+  trend_alpha_f0 ~ std_normal();
+  trend_beta_f0 ~ std_normal();
+  sigma_f ~ exponential(1);
 
   // Likelihood
   for (d in 2:D_f) {
-    logit_votes[1:n_parties_f[d], d] ~ normal(alpha_f[d] + beta_f[d] * logit_votes[1:n_parties_f[d], d - 1], sigma_f[d]);
+    vector[n_parties_f[d]] eta_d = alpha_f[d] + beta_f[d] * logit_votes[1:n_parties_f[d], d - 1];
+    real sigma_d = sigma_f * time_scale_f[d - 1];
+    logit_votes[1:n_parties_f[d], d] ~ normal(eta_d, sigma_f);
   }
 }
 

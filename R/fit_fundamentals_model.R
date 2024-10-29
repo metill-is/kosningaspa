@@ -28,6 +28,9 @@ polling_data <- read_polling_data() |>
 
 fundamentals_data <- read_fundamentals_data()
 
+fundamentals_data |>
+  filter(date >= clock::date_build(2021, 1, 1))
+
 stan_data <- prepare_stan_data(polling_data, fundamentals_data)
 
 
@@ -44,12 +47,14 @@ init <- list(
   sigma_gamma = rep(1, stan_data$P - 1),
   gamma_raw = matrix(0, stan_data$P - 1, stan_data$H - 1),
   phi_inv = 1,
-  z_alpha_f = rep(0, stan_data$D_f),
-  z_beta_f = rep(0, stan_data$D_f),
-  mu_alpha_f = 0,
-  sigma_alpha_f = 1,
-  mu_beta_f = 0,
-  sigma_beta_f = 1
+  z_alpha_f = rep(0, stan_data$D_f - 1),
+  z_beta_f = rep(0, stan_data$D_f - 1),
+  z_prediction_pred = rep(0, stan_data$P_f - 1),
+  alpha_f0 = 0,
+  beta_f0 = 0,
+  trend_alpha_f0 = 0,
+  trend_beta_f0 = 0,
+  sigma_f = 1
 )
 
 fit <- model$sample(
@@ -62,13 +67,12 @@ fit <- model$sample(
 
 fit$summary("sigma_f")
 fit$summary("beta_f")
+fit$summary("trend_beta_f0")
 fit$summary("alpha_f")
+fit$summary("trend_alpha_f0")
+fit$summary("z_prediction_pred")
 
-fit$summary("sigma") |>
-  mutate(
-    flokkur = colnames(stan_data$y),
-    .before = variable
-  )
+
 
 fit$summary("phi_inv")
 
@@ -89,7 +93,7 @@ fit$summary("y_rep", mean, ~ quantile(.x, c(0.05, 0.95))) |>
     flokkur = colnames(stan_data$y)[p],
     dags = dates[t]
   ) |>
-  filter(flokkur != "Annað") |>
+  # filter(flokkur != "Annað") |>
   group_by(dags) |>
   mutate_at(
     vars(mean, q5, q95),
@@ -210,7 +214,7 @@ y_rep_draws <- fit$draws("y_rep") |>
     value = value / stan_data$n_pred
   )
 
-last_poll_date <- max(data$date)
+last_poll_date <- max(polling_data$date)
 dir.create(here("data", as.character(last_poll_date)), showWarnings = FALSE)
 write_parquet(y_rep_draws, here("data", as.character(last_poll_date), "y_rep_draws.parquet"))
 
@@ -222,7 +226,7 @@ p <- fit$summary("gamma") |>
     p = str_match(variable, "gamma\\[(.*),.*\\]")[, 2] |> parse_number(),
     h = str_match(variable, "gamma\\[.*,(.*)\\]")[, 2] |> parse_number(),
     flokkur = colnames(stan_data$y)[-1][p],
-    fyrirtaeki = levels(data$fyrirtaeki)[h]
+    fyrirtaeki = levels(polling_data$fyrirtaeki)[h]
   ) |>
   filter(h != 1) |>
   bind_rows(

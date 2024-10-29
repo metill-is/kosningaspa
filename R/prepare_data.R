@@ -6,7 +6,8 @@ update_fundamentals_data <- function() {
     tidyr[pivot_longer, pivot_wider],
     readr[write_csv],
     here[here],
-    janitor[clean_names]
+    janitor[clean_names],
+    lubridate[ymd]
   )
   gs4_auth(email = Sys.getenv("GOOGLE_MAIL"))
   fundamentals <- read_sheet(
@@ -19,6 +20,10 @@ update_fundamentals_data <- function() {
     mutate(
       atkvaedahlutfall = atkvaedahlutfall / sum(atkvaedahlutfall),
       .by = ar
+    ) |>
+    rename(date = ar) |>
+    mutate(
+      date = ymd(date)
     )
 
   fundamentals |>
@@ -49,7 +54,7 @@ read_fundamentals_data <- function() {
         "Sósíalistaflokkurinn"
       )
     ) |>
-    arrange(flokkur, ar)
+    arrange(flokkur, date)
 }
 
 #' @export
@@ -365,19 +370,18 @@ prepare_stan_data <- function(polling_data, fundamentals_data) {
   #### Fundamentals data ####
   X <- fundamentals_data |>
     rename(p = atkvaedahlutfall) |>
-    arrange(ar) |>
+    arrange(date) |>
     filter(p > 0) |>
     mutate(
       logit_p = log(p) - log(1 - p)
     ) |>
     mutate(
       logit_p = logit_p - mean(logit_p),
-      .by = ar
+      .by = date
     ) |>
-    filter(flokkur != "Annað") |>
     select(-p) |>
     pivot_wider(
-      names_from = ar,
+      names_from = date,
       values_from = logit_p,
       values_fill = 0
     ) |>
@@ -386,8 +390,7 @@ prepare_stan_data <- function(polling_data, fundamentals_data) {
 
   n_parties_fundamentals <- fundamentals_data |>
     rename(p = atkvaedahlutfall) |>
-    filter(flokkur != "Annað") |>
-    arrange(ar, flokkur) |>
+    arrange(date, flokkur) |>
     mutate(
       in_election = 1 * (p > 0)
     ) |>
@@ -397,9 +400,16 @@ prepare_stan_data <- function(polling_data, fundamentals_data) {
     ) |>
     summarise(
       n_parties = sum(in_last_election),
-      .by = ar
+      .by = date
     ) |>
     pull(n_parties)
+
+  time_diff_f <- fundamentals_data$date |>
+    unique() |>
+    diff() |>
+    as.numeric()
+  time_diff_f <- c(time_diff_f, as.numeric(date_build(2024, 10, 30) - fundamentals_data$date[length(fundamentals_data$date)]))
+
 
   stan_data <- list(
     # Polling Data
@@ -419,7 +429,8 @@ prepare_stan_data <- function(polling_data, fundamentals_data) {
     D_f = ncol(X),
     P_f = nrow(X),
     logit_votes = X,
-    n_parties_f = n_parties_fundamentals
+    n_parties_f = n_parties_fundamentals,
+    time_diff_f = time_diff_f
   )
 
   stan_data

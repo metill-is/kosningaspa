@@ -35,7 +35,7 @@ colors <- tribble(
   "Annað", "grey50"
 )
 
-coverage_data <- read_parquet(here("data", "y_rep_draws.parquet")) |>
+coverage_data <- read_parquet(here("data", "2024-10-28", "y_rep_draws.parquet")) |>
   reframe(
     mean = median(value),
     coverage = c(0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9),
@@ -52,7 +52,7 @@ write_parquet(
   here(
     "results",
     "Predictions",
-    glue("coverage_data_no_polling_bias_{today_date}.parquet")
+    glue("coverage_data_{today_date}.parquet")
   )
 )
 

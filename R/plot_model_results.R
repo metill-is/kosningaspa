@@ -6,15 +6,15 @@ make_plot <- function() {
   library(here)
   library(arrow)
   Sys.setlocale("LC_ALL", "is_IS.UTF-8")
-  
+
   box::use(
     R / prepare_data[
       read_polling_data
     ]
   )
-  
+
   theme_set(theme_metill())
-  
+
   colors <- tribble(
     ~flokkur, ~litur,
     "Sjálfstæðisflokkurinn", "#377eb8",
@@ -28,7 +28,7 @@ make_plot <- function() {
     "Sósíalistaflokkurinn", "#67000d",
     "Annað", "grey50"
   )
-  
+
   point_shapes <- c(
     "Gallup" = 21,
     "Maskína" = 22,
@@ -38,7 +38,7 @@ make_plot <- function() {
     "Fréttablaðið, Stöð 2 og Vísir" = 3,
     "Félagsvísindastofnun" = 24
   )
-  
+
   # read data
   poll_data <- read_polling_data() |>
     mutate(
@@ -50,21 +50,21 @@ make_plot <- function() {
       fyrirtaeki,
       flokkur,
       p_poll = p
-    ) |> 
+    ) |>
     mutate(
       fyrirtaeki = fct_relevel(fyrirtaeki, "Kosning")
     )
-  
+
   poll_data |>
     group_by(fyrirtaeki) |>
     summarise(
       min_dags = min(dags),
       max_dags = max(dags)
     )
-  
-  d <- read_parquet(here("data", "y_rep_draws.parquet")) |>
+
+  d <- read_parquet(here("data", "2024-10-28", "y_rep_draws.parquet")) |>
     summarise(
-      mean = mean(value),
+      mean = median(value),
       q5 = quantile(value, 0.05),
       q95 = quantile(value, 0.95),
       .by = c(dags, flokkur)
@@ -74,20 +74,20 @@ make_plot <- function() {
     ) |>
     left_join(
       poll_data
-    ) |> 
+    ) |>
     inner_join(
-      poll_data |> 
-        filter(p_poll > 0) |> 
+      poll_data |>
+        filter(p_poll > 0) |>
         summarise(
           start_dags = min(dags),
           .by = flokkur
         )
-    ) |> 
+    ) |>
     filter(dags >= start_dags)
-  
-  
-  
-  coverage_data <- read_parquet(here("data", "y_rep_draws.parquet")) |>
+
+
+
+  coverage_data <- read_parquet(here("data", "2024-10-28", "y_rep_draws.parquet")) |>
     reframe(
       coverage = c(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95),
       lower = quantile(value, 0.5 - coverage / 2),
@@ -96,19 +96,19 @@ make_plot <- function() {
     ) |>
     inner_join(
       colors
-    ) |> 
+    ) |>
     inner_join(
-      poll_data |> 
-        filter(p_poll > 0) |> 
+      poll_data |>
+        filter(p_poll > 0) |>
         summarise(
           start_dags = min(dags),
           .by = flokkur
         )
-    ) |> 
+    ) |>
     filter(dags >= start_dags)
-  
-  
-  
+
+
+
   p1 <- d |>
     filter(dags == max(dags)) |>
     distinct(flokkur, mean, litur) |>
@@ -150,7 +150,7 @@ make_plot <- function() {
       y = NULL,
       subtitle = "Staðan í nýjustu könnunum"
     )
-  
+
   p2 <- d |>
     ggplot(aes(dags, mean, colour = litur, data_id = flokkur)) +
     geom_vline(
@@ -237,7 +237,7 @@ make_plot <- function() {
       y = NULL,
       subtitle = "Kapphlaupið"
     )
-  
+
   p3 <- d |>
     ggplot(aes(dags, mean, colour = litur, data_id = flokkur)) +
     geom_vline(
@@ -255,11 +255,10 @@ make_plot <- function() {
       fill = "#faf9f9"
     ) +
     geom_line_interactive(
-      data = ~ filter(.x, dags <= max(poll_data$dags)),
       linewidth = 1
     ) +
     geom_point_interactive(
-      data = ~filter(.x, fyrirtaeki != "Kosning"),
+      data = ~ filter(.x, fyrirtaeki != "Kosning"),
       aes(
         y = p_poll,
         shape = fyrirtaeki,
@@ -269,7 +268,7 @@ make_plot <- function() {
       alpha = 0.2
     ) +
     geom_point_interactive(
-      data = ~filter(.x, fyrirtaeki == "Kosning"),
+      data = ~ filter(.x, fyrirtaeki == "Kosning"),
       aes(
         y = p_poll,
         shape = fyrirtaeki,
@@ -315,26 +314,26 @@ make_plot <- function() {
       legend.key.size = unit(1.5, "lines"),
       legend.box.margin = margin(6, 6, 6, 6)
     )
-  
+
   design <- "
 AABB
 CCCC
 "
-  
+
   p <- wrap_plots(
     p1, p2, p3,
     design = design,
-    heights = c(0.7, 1)
+    heights = c(0.6, 1)
   ) +
     plot_annotation(
       title = "Samantekt á fylgi stjórnmálaflokka",
       subtitle = "Niðustöður mismunandi kannana vegnar saman"
     )
-  
+
   girafe(
     ggobj = p,
     width_svg = 11,
-    height_svg = 0.9 * 11,
+    height_svg = 1 * 11,
     bg = "transparent",
     options = list(
       opts_tooltip(
@@ -349,5 +348,4 @@ CCCC
       opts_zoom(max = 1)
     )
   )
-  
 }
