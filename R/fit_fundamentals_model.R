@@ -44,8 +44,12 @@ init <- list(
   sigma_gamma = rep(1, stan_data$P - 1),
   gamma_raw = matrix(0, stan_data$P - 1, stan_data$H - 1),
   phi_inv = 1,
-  alpha_f = 0,
-  beta_f = 1
+  z_alpha_f = rep(0, stan_data$D_f),
+  z_beta_f = rep(0, stan_data$D_f),
+  mu_alpha_f = 0,
+  sigma_alpha_f = 1,
+  mu_beta_f = 0,
+  sigma_beta_f = 1
 )
 
 fit <- model$sample(

@@ -42,7 +42,9 @@ parameters {
   real mu_beta_f;
   real<lower = 0> sigma_beta_f;
   
-  real<lower = 0> sigma_f;
+  vector[D_f] z_log_sigma_f;
+  real mu_log_sigma_f;
+  real<lower = 0> sigma_log_sigma_f;
 }
 
 transformed parameters {
@@ -51,6 +53,7 @@ transformed parameters {
   matrix[P - 1, D + pred_y_time_diff] beta;   
   vector[D_f] alpha_f = mu_alpha_f + sigma_alpha_f * z_alpha_f;
   vector[D_f] beta_f = mu_beta_f + sigma_beta_f * z_beta_f;
+  vector[D_f] sigma_f = exp(mu_log_sigma_f + sigma_log_sigma_f * z_log_sigma_f);
   for (p in 1:(P - 1)) {
     // Fix the first house effect of the election to zero
     gamma[p, 1] = 0;                      
@@ -72,6 +75,7 @@ transformed parameters {
 }
 
 model {
+  // Polling Data
   // Priors for house effects
   to_vector(gamma_raw) ~ std_normal();
   mu_gamma ~ std_normal();
@@ -97,8 +101,21 @@ model {
     y[n, 1:n_parties[n]] ~ dirichlet_multinomial(pi_n[1:n_parties[n]] * phi);                // Polling data likelihood
   }
 
+  // Fundamentals
+  to_vector(z_alpha_f) ~ std_normal();
+  to_vector(z_beta_f) ~ std_normal();
+  to_vector(z_log_sigma_f) ~ std_normal();
+  mu_alpha_f ~ std_normal();
+  mu_beta_f ~ std_normal();
+  mu_log_sigma_f ~ std_normal();
+  sigma_alpha_f ~ exponential(1);
+  sigma_beta_f ~ exponential(1);
+  sigma_log_sigma_f ~ exponential(1);
+
+
+  // Likelihood
   for (d in 2:D_f) {
-    logit_votes[1:n_parties_f[d], d] ~ normal(alpha_f + beta_f * logit_votes[1:n_parties_f[d], d - 1], sigma_f);
+    logit_votes[1:n_parties_f[d], d] ~ normal(alpha_f[d] + beta_f[d] * logit_votes[1:n_parties_f[d], d - 1], sigma_f[d]);
   }
 }
 
