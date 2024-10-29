@@ -26,12 +26,12 @@ polling_data <- read_polling_data() |>
     date >= clock::date_build(2021, 1, 1)
   )
 
-fundamentals_data <- read_fundamentals_data()
-
-fundamentals_data |>
-  filter(date >= clock::date_build(2021, 1, 1))
+fundamentals_data <- read_fundamentals_data() |>
+  filter(date >= clock::date_build(1990, 1, 1))
 
 stan_data <- prepare_stan_data(polling_data, fundamentals_data)
+
+str(stan_data)
 
 
 
@@ -65,12 +65,10 @@ fit <- model$sample(
   refresh = 100
 )
 
-fit$summary("sigma_f")
-fit$summary("beta_f")
-fit$summary("trend_beta_f0")
-fit$summary("alpha_f")
-fit$summary("trend_alpha_f0")
-fit$summary("z_prediction_pred")
+
+fit$summary("beta0")
+fit$summary("alpha_f0")
+fit$summary("beta_f0")
 
 
 

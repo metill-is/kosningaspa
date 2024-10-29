@@ -15,13 +15,12 @@ update_fundamentals_data <- function() {
     sheet = "kosningar"
   ) |>
     # Convert to proportions
-    pivot_longer(cols = -Flokkur, names_to = "ar", values_to = "atkvaedahlutfall") |>
+    pivot_longer(cols = -Flokkur, names_to = "date", values_to = "votes") |>
     clean_names() |>
     mutate(
-      atkvaedahlutfall = atkvaedahlutfall / sum(atkvaedahlutfall),
-      .by = ar
+      p = votes / sum(votes),
+      .by = date
     ) |>
-    rename(date = ar) |>
     mutate(
       date = ymd(date)
     )
@@ -369,7 +368,7 @@ prepare_stan_data <- function(polling_data, fundamentals_data) {
 
   #### Fundamentals data ####
   X <- fundamentals_data |>
-    rename(p = atkvaedahlutfall) |>
+    select(-votes) |>
     arrange(date) |>
     filter(p > 0) |>
     mutate(
@@ -386,10 +385,22 @@ prepare_stan_data <- function(polling_data, fundamentals_data) {
       values_fill = 0
     ) |>
     arrange(flokkur) |>
-    select(-flokkur)
+    select(-flokkur) |>
+    as.matrix()
+
+  y_f <- fundamentals_data |>
+    select(-p) |>
+    arrange(date) |>
+    pivot_wider(
+      names_from = date,
+      values_from = votes,
+      values_fill = 0
+    ) |>
+    arrange(flokkur) |>
+    select(-flokkur) |>
+    as.matrix()
 
   n_parties_fundamentals <- fundamentals_data |>
-    rename(p = atkvaedahlutfall) |>
     arrange(date, flokkur) |>
     mutate(
       in_election = 1 * (p > 0)
@@ -429,6 +440,7 @@ prepare_stan_data <- function(polling_data, fundamentals_data) {
     D_f = ncol(X),
     P_f = nrow(X),
     logit_votes = X,
+    y_f = y_f,
     n_parties_f = n_parties_fundamentals,
     time_diff_f = time_diff_f
   )
