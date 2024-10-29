@@ -6,6 +6,7 @@ library(here)
 library(arrow)
 library(glue)
 library(ggtext)
+library(geomtextpath)
 Sys.setlocale("LC_ALL", "is_IS.UTF-8")
 
 theme_set(theme_metill())
@@ -17,7 +18,7 @@ days_until_vote <- as.numeric(vote_date - today_date)
 caption <- str_c(
   "Samantektin byggir á fylgiskönnunum Félagsvísindastofnunar, Gallup, Maskínu og Prósents ",
   "ásamt niðurstöðum kosninga og kjörsókn 2021", "\n",
-  "Unnið af Brynjólfi Gauta Guðrúnar Jónssyni og Rafael Daniel Vias"
+  "Unnið af Agnari Frey Helgasyni, Brynjólfi Gauta Guðrúnar Jónssyni, Hafsteini Einarssyni og Rafael Daniel Vias"
 )
 
 colors <- tribble(
@@ -55,13 +56,34 @@ write_parquet(
   )
 )
 
+labels <- coverage_data |>
+  filter(dags == max(dags)) |>
+  filter(
+    coverage == 0.5
+  ) |>
+  mutate_at(
+    vars(mean, lower, upper),
+    round,
+    digits = 3
+  ) |>
+  summarise(
+    label = glue("{percent(lower)}-{percent(upper)}"),
+    mean = unique(mean),
+    .by = c(flokkur, litur)
+  ) |>
+  mutate(
+    flokkur_ordered = glue("<b style='color:{litur}'>{flokkur} ({label})</b>"),
+    flokkur_ordered = fct_reorder(flokkur_ordered, mean)
+  ) |>
+  select(flokkur, litur, flokkur_ordered)
+
 p <- coverage_data |>
   filter(
     dags == max(dags)
   ) |>
-  mutate(
-    flokkur_ordered = glue("<b style='color:{litur}'>{flokkur}</b>"),
-    flokkur_ordered = fct_reorder(flokkur_ordered, mean)
+  inner_join(
+    labels,
+    by = join_by(flokkur, litur)
   ) |>
   ggplot(aes(
     y = flokkur_ordered,
@@ -105,8 +127,14 @@ p <- coverage_data |>
     ),
     linewidth = 0.2
   ) +
+  geom_vline(
+    xintercept = 0.05,
+    linetype = "dashed",
+    alpha = 0.4
+  ) +
   scale_color_identity() +
   scale_x_continuous(
+    breaks = c(0.05, seq(0, 0.3, 0.1)),
     labels = label_percent(),
     limits = c(0, 0.3),
     guide = ggh4x::guide_axis_truncated(

@@ -22,7 +22,7 @@ election_date <- date_build(2024, 11, 30)
 
 data <- read_polling_data() |>
   filter(
-    date >= clock::date_build(2016, 1, 1)
+    date >= clock::date_build(2017, 1, 1)
   )
 
 stan_data <- prepare_stan_data(data)
@@ -38,7 +38,7 @@ init <- list(
   beta_0 = rep(0, stan_data$P - 1),
   z_beta = matrix(0, stan_data$P - 1, stan_data$D + stan_data$pred_y_time_diff),
   mu_gamma = rep(0, stan_data$P - 1),
-  sigma_gamma = rep(0.4, stan_data$P - 1),
+  sigma_gamma = rep(1, stan_data$P - 1),
   gamma_raw = matrix(0, stan_data$P - 1, stan_data$H - 1),
   phi_inv = 1
 )
@@ -204,7 +204,9 @@ y_rep_draws <- fit$draws("y_rep") |>
     value = value / stan_data$n_pred
   )
 
-write_parquet(y_rep_draws, here("data", "y_rep_draws.parquet"))
+last_poll_date <- max(data$date)
+dir.create(here("data", as.character(last_poll_date)), showWarnings = FALSE)
+write_parquet(y_rep_draws, here("data", as.character(last_poll_date), "y_rep_draws.parquet"))
 
 theme_set(metill::theme_metill())
 

@@ -1,4 +1,58 @@
 #' @export
+update_fundamentals_data <- function() {
+  box::use(
+    googlesheets4[read_sheet, gs4_auth],
+    dplyr[filter, mutate, group_by, ungroup, arrange],
+    tidyr[pivot_longer, pivot_wider],
+    readr[write_csv],
+    here[here],
+    janitor[clean_names]
+  )
+  gs4_auth(email = Sys.getenv("GOOGLE_MAIL"))
+  fundamentals <- read_sheet(
+    "https://docs.google.com/spreadsheets/d/1MHpyMXJxnxhYSMf1nj73yKNKJ1BLJ4qaL1WMmf804Iw/edit?gid=1816405109#gid=1816405109",
+    sheet = "kosningar"
+  ) |>
+    # Convert to proportions
+    pivot_longer(cols = -Flokkur, names_to = "ar", values_to = "atkvaedahlutfall") |>
+    clean_names() |>
+    mutate(
+      atkvaedahlutfall = atkvaedahlutfall / sum(atkvaedahlutfall),
+      .by = ar
+    )
+
+  fundamentals |>
+    write_csv(here("data", "fundamentals_data.csv"))
+}
+
+#' @export
+read_fundamentals_data <- function() {
+  box::use(
+    readr[read_csv],
+    here[here],
+    forcats[fct_relevel, as_factor],
+    dplyr[mutate, arrange]
+  )
+  read_csv(here("data", "fundamentals_data.csv")) |>
+    mutate(
+      flokkur = fct_relevel(
+        as_factor(flokkur),
+        "Annað",
+        "Sjálfstæðisflokkurinn",
+        "Framsóknarflokkurinn",
+        "Samfylkingin",
+        "Vinstri Græn",
+        "Píratar",
+        "Viðreisn",
+        "Flokkur Fólksins",
+        "Miðflokkurinn",
+        "Sósíalistaflokkurinn"
+      )
+    ) |>
+    arrange(flokkur, ar)
+}
+
+#' @export
 get_sheet_data <- function(sheet) {
   box::use(
     googlesheets4[read_sheet, gs4_auth],
@@ -194,8 +248,8 @@ read_polling_data <- function() {
   box::use(
     readr[read_csv],
     here[here],
-    dplyr[mutate, arrange],
-    forcats[fct_relevel, as_factor]
+    dplyr[mutate, arrange, rename],
+    forcats[fct_relevel, as_factor],
   )
   read_csv(here("data", "polling_data.csv")) |>
     mutate(
@@ -222,7 +276,7 @@ read_polling_data <- function() {
 }
 
 #' @export
-prepare_stan_data <- function(data) {
+prepare_stan_data <- function(polling_data, fundamentals_data) {
   box::use(
     dplyr[
       distinct,
@@ -231,20 +285,25 @@ prepare_stan_data <- function(data) {
       pull,
       arrange,
       filter,
-      summarise
+      lag,
+      summarise,
+      rename
     ],
     tidyr[pivot_wider, drop_na],
-    clock[date_build]
+    clock[date_build],
+    forcats[fct_relevel, as_factor]
   )
-  D <- length(unique(data$date))
-  P <- length(unique(data$flokkur))
-  H <- length(unique(data$fyrirtaeki))
-  N <- data |>
+
+  #### Polling data ####
+  D <- length(unique(polling_data$date))
+  P <- length(unique(polling_data$flokkur))
+  H <- length(unique(polling_data$fyrirtaeki))
+  N <- polling_data |>
     distinct(fyrirtaeki, date) |>
     nrow()
 
 
-  y <- data |>
+  y <- polling_data |>
     select(date, fyrirtaeki, flokkur, n) |>
     mutate(
       n = as.integer(n)
@@ -253,21 +312,21 @@ prepare_stan_data <- function(data) {
     select(-date, -fyrirtaeki) |>
     as.matrix()
 
-  house <- data |>
+  house <- polling_data |>
     pivot_wider(names_from = flokkur, values_from = n, values_fill = 0) |>
     mutate(
       house = as.numeric(factor(fyrirtaeki))
     ) |>
     pull(house)
 
-  date <- data |>
+  date <- polling_data |>
     pivot_wider(names_from = flokkur, values_from = n, values_fill = 0) |>
     mutate(
       date = as.numeric(factor(date))
     ) |>
     pull(date)
 
-  time_diff <- data |>
+  time_diff <- polling_data |>
     distinct(date) |>
     arrange(date) |>
     mutate(
@@ -277,17 +336,17 @@ prepare_stan_data <- function(data) {
     pull(time_diff) |>
     as.numeric()
 
-  max_date <- max(data$date)
+  max_date <- max(polling_data$date)
   election_date <- clock::date_build(2024, 11, 30)
   pred_y_time_diff <- as.numeric(election_date - max_date)
-  stjornarslit <- data |>
+  stjornarslit <- polling_data |>
     distinct(date) |>
     mutate(
       stjornarslit = 1 * (date >= clock::date_build(2024, 10, 14))
     ) |>
     pull(stjornarslit)
 
-  n_election <- data |>
+  n_election <- polling_data |>
     filter(
       fyrirtaeki == "Kosning",
       date == date_build(2021, 09, 25)
@@ -295,7 +354,7 @@ prepare_stan_data <- function(data) {
     pull(n) |>
     sum()
 
-  n_parties <- data |>
+  n_parties <- polling_data |>
     summarise(
       n_parties = sum(n != 0),
       .by = c(date, fyrirtaeki)
@@ -303,7 +362,47 @@ prepare_stan_data <- function(data) {
     arrange(date) |>
     pull(n_parties)
 
+  #### Fundamentals data ####
+  X <- fundamentals_data |>
+    rename(p = atkvaedahlutfall) |>
+    arrange(ar) |>
+    filter(p > 0) |>
+    mutate(
+      logit_p = log(p) - log(1 - p)
+    ) |>
+    mutate(
+      logit_p = logit_p - mean(logit_p),
+      .by = ar
+    ) |>
+    filter(flokkur != "Annað") |>
+    select(-p) |>
+    pivot_wider(
+      names_from = ar,
+      values_from = logit_p,
+      values_fill = 0
+    ) |>
+    arrange(flokkur) |>
+    select(-flokkur)
+
+  n_parties_fundamentals <- fundamentals_data |>
+    rename(p = atkvaedahlutfall) |>
+    filter(flokkur != "Annað") |>
+    arrange(ar, flokkur) |>
+    mutate(
+      in_election = 1 * (p > 0)
+    ) |>
+    mutate(
+      in_last_election = lag(in_election, default = 0),
+      .by = flokkur
+    ) |>
+    summarise(
+      n_parties = sum(in_last_election),
+      .by = ar
+    ) |>
+    pull(n_parties)
+
   stan_data <- list(
+    # Polling Data
     D = D,
     P = P,
     H = H,
@@ -315,7 +414,12 @@ prepare_stan_data <- function(data) {
     pred_y_time_diff = pred_y_time_diff,
     stjornarslit = stjornarslit,
     n_pred = as.integer(n_election),
-    n_parties = n_parties
+    n_parties = n_parties,
+    # Fundamentals Data
+    D_f = ncol(X),
+    P_f = nrow(X),
+    logit_votes = X,
+    n_parties_f = n_parties_fundamentals
   )
 
   stan_data

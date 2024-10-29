@@ -40,15 +40,17 @@ transformed parameters {
     gamma[p, 2:H] = mu_gamma[p] + sigma_gamma[p] * gamma_raw[p, ];         
   }
   
-  beta[ , 1] = beta_0;
-
-  for (t in 2:D) {
-    beta[ , t] = beta[ , t - 1] + z_beta[, t - 1] .* sigma * time_scale[t - 1];
-  }
+  beta[ , D + pred_y_time_diff] = beta_0;
 
   for (t in 1:pred_y_time_diff) {
-    beta[ , D + t] = beta[ , D + t - 1] + z_beta[, D + t - 1] .* sigma * time_scale[D - 1];
+    beta[ , D + pred_y_time_diff - t] = beta[ , D + pred_y_time_diff - t + 1] + z_beta[, D + pred_y_time_diff - t + 1] .* sigma;
   }
+
+  for (t in 1:(D - 1)) {
+    beta[ , D - t] = beta[ , D - t + 1] + z_beta[, D - t + 1] .* sigma * time_scale[D - t];
+  }
+
+  
 }
 
 model {
