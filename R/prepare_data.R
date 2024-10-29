@@ -193,9 +193,32 @@ update_polling_data <- function(data) {
 read_polling_data <- function() {
   box::use(
     readr[read_csv],
-    here[here]
+    here[here],
+    dplyr[mutate, arrange],
+    forcats[fct_relevel, as_factor]
   )
-  read_csv(here("data", "polling_data.csv"))
+  read_csv(here("data", "polling_data.csv")) |>
+    mutate(
+      fyrirtaeki = fct_relevel(
+        as_factor(fyrirtaeki),
+        "Kosning",
+        "Félagsvísindastofnun"
+      ),
+      flokkur = fct_relevel(
+        as_factor(flokkur),
+        "Annað",
+        "Sjálfstæðisflokkurinn",
+        "Samfylkingin",
+        "Framsóknarflokkurinn",
+        "Vinstri Græn",
+        "Píratar",
+        "Viðreisn",
+        "Flokkur Fólksins",
+        "Miðflokkurinn",
+        "Sósíalistaflokkurinn"
+      )
+    ) |>
+    arrange(date, fyrirtaeki, flokkur)
 }
 
 #' @export
@@ -207,7 +230,8 @@ prepare_stan_data <- function(data) {
       mutate,
       pull,
       arrange,
-      filter
+      filter,
+      summarise
     ],
     tidyr[pivot_wider, drop_na],
     clock[date_build]
@@ -271,6 +295,14 @@ prepare_stan_data <- function(data) {
     pull(n) |>
     sum()
 
+  n_parties <- data |>
+    summarise(
+      n_parties = sum(n != 0),
+      .by = c(date, fyrirtaeki)
+    ) |>
+    arrange(date) |>
+    pull(n_parties)
+
   stan_data <- list(
     D = D,
     P = P,
@@ -282,7 +314,8 @@ prepare_stan_data <- function(data) {
     time_diff = time_diff,
     pred_y_time_diff = pred_y_time_diff,
     stjornarslit = stjornarslit,
-    n_pred = as.integer(n_election)
+    n_pred = as.integer(n_election),
+    n_parties = n_parties
   )
 
   stan_data

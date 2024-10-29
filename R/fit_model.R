@@ -23,43 +23,11 @@ election_date <- date_build(2024, 11, 30)
 data <- read_polling_data() |>
   filter(
     date >= clock::date_build(2016, 1, 1)
-  ) |>
-  mutate(
-    fyrirtaeki = fct_relevel(
-      as_factor(fyrirtaeki),
-      "Kosning",
-      "Félagsvísindastofnun"
-    ),
-    flokkur = fct_relevel(
-      as_factor(flokkur),
-      "Annað",
-      "Sjálfstæðisflokkurinn",
-      "Samfylkingin",
-      "Framsóknarflokkurinn",
-      "Vinstri Græn",
-      "Píratar",
-      "Viðreisn",
-      "Flokkur Fólksins",
-      "Miðflokkurinn",
-      "Sósíalistaflokkurinn"
-    )
-  ) |>
-  arrange(date, fyrirtaeki, flokkur)
-
-data |>
-  filter(fyrirtaeki == "Kosning")
+  )
 
 stan_data <- prepare_stan_data(data)
 
-n_parties <- data |>
-  summarise(
-    n_parties = sum(n != 0),
-    .by = c(date, fyrirtaeki)
-  ) |>
-  arrange(date) |>
-  pull(n_parties)
 
-stan_data$n_parties <- n_parties
 
 model <- cmdstan_model(
   here("Stan", "base_model.stan")

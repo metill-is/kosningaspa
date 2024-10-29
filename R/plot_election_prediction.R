@@ -127,7 +127,7 @@ p <- coverage_data |>
   labs(
     x = NULL,
     y = NULL,
-    title = "Vegið fylgi stjórnmálaflokka",
+    title = glue("Fylgisspá þegar {days_until_vote} dagar eru til kosninga"),
     subtitle = "Línustrik tákna miðgildi spár og hver kassi inniheldur 5% af niðurstöðum spár",
     caption = caption
   )
