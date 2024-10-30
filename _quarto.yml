@@ -12,13 +12,15 @@ manuscript:
 
 format:
   html: 
-    title: A Dynamic Generalized Linear Model for Predicting the Icelandic Parliamentary Elections
+    title: A Joint Fundamentals and Polling Dynamic Generalized Linear Model for Predicting the Icelandic Parliamentary Elections
     toc: true
     comments:
       hypothesis: true
     author:
       - name: Brynjólfur Gauti Guðrúnar Jónsson
       - name: Rafael Daniel Vias
+      - name: Hafsteinn Einarsson
+      - name: Agnar Freyr Helgason
   docx: default
   jats: default
   pdf: 
