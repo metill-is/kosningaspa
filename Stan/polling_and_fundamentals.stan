@@ -22,6 +22,9 @@ data {
   array[P_f, D_f] int<lower = 0> y_f;
   matrix[P_f, D_f + 1] x_f;
   matrix[P_f, D_f + 1] incumbent_f;
+  matrix[P_f, D_f + 1] incumbent_years;
+  matrix[P_f, D_f + 1] vnv;
+  matrix[P_f, D_f + 1] growth;
   int<lower = 1> max_n_parties_f;
   array[max_n_parties_f, D_f + 1] int<lower = 0> index_f;
   array[D_f + 1] int<lower = 0, upper = P_f> n_parties_f;
@@ -47,7 +50,10 @@ parameters {
   vector[P_f - 1] alpha_f_raw;
   real beta_lag_f;
   real beta_inc_f;
-  real<lower = 0> sigma_f;
+  real beta_inc_years_f;
+  real beta_vnv_f;
+  real beta_growth_f;
+  real<lower = 0> tau_f;
   real<lower = 0> phi_f_inv;
 }
 
@@ -86,7 +92,10 @@ transformed parameters {
 model {
   vector[P - 1] mu_pred = alpha_f[index_f[2:n_parties_f[D_f + 1], D_f + 1]] + 
     beta_lag_f * x_f[index_f[2:n_parties_f[D_f + 1], D_f + 1], D_f + 1] + 
-    beta_inc_f * incumbent_f[index_f[2:n_parties_f[D_f + 1], D_f + 1], D_f + 1];
+    //beta_inc_f * incumbent_f[index_f[2:n_parties_f[D_f + 1], D_f + 1], D_f + 1] +
+    beta_inc_years_f * incumbent_years[index_f[2:n_parties_f[D_f + 1], D_f + 1], D_f + 1] +
+    beta_vnv_f * vnv[index_f[2:n_parties_f[D_f + 1], D_f + 1], D_f + 1] +
+    beta_growth_f * growth[index_f[2:n_parties_f[D_f + 1], D_f + 1], D_f + 1];
   /* Polling Data */
   // Priors for house effects
   to_vector(gamma_raw) ~ std_normal();
@@ -100,7 +109,7 @@ model {
   // Priors for true party support
   to_vector(z_beta) ~ std_normal();
   sigma ~ exponential(1);                 
-  beta0 ~ normal(mu_pred, sigma_f * sigma);
+  beta0 ~ normal(mu_pred, tau_f * sigma);
   // Prior for the Dirichlet-multinomial scale parameter
   phi_inv ~ exponential(1);
 
@@ -117,15 +126,19 @@ model {
   // Priors
   beta_lag_f ~ std_normal();
   beta_inc_f ~ std_normal();
+  beta_inc_years_f ~ std_normal();
   alpha_f_raw ~ std_normal();
-  sigma_f ~ gamma(8, 0.8);
+  tau_f ~ gamma(8, 0.8);
   phi_f_inv ~ exponential(1);
 
   for (d in 1:D_f) { 
     vector[n_parties_f[d]] mu_d;
     mu_d[1:n_parties_f[d]] = alpha_f[index_f[1:n_parties_f[d], d]] + 
       beta_lag_f * x_f[index_f[1:n_parties_f[d], d], d] + 
-      beta_inc_f * incumbent_f[index_f[1:n_parties_f[d], d], d];
+      //beta_inc_f * incumbent_f[index_f[1:n_parties_f[d], d], d] +
+      beta_inc_years_f * incumbent_years[index_f[1:n_parties_f[d], d], d] +
+      beta_vnv_f * vnv[index_f[1:n_parties_f[d], d], d] +
+      beta_growth_f * growth[index_f[1:n_parties_f[d], d], d];
     vector[n_parties_f[d]] pi_d = softmax(mu_d);
     y_f[index_f[1:n_parties_f[d], d], d] ~ dirichlet_multinomial(pi_d * phi_f);
   }

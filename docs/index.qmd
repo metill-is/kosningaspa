@@ -31,7 +31,9 @@ Our model combines two components:
 - $P_f$: Number of parties in historical data
 - $y_{p,d}^{(f)}$: Vote share for party $p$ in election $d$
 - $x_{p,d}$: Previous vote share for party $p$ in election $d$
-- $I_{p,d}$: Incumbency status for party $p$ in election $d$
+- $I_{p,d}$: Years party $p$ has been incumbent at election $d$
+- $v_{p,d}$: Inflation rate (%) for party $p$ at election $d$ (if incumbent)
+- $g_{p,d}$: GDP growth rate (%) for party $p$ at election $d$ (if incumbent)
 
 #### Parameters
 
@@ -46,8 +48,21 @@ Our model combines two components:
 ##### Fundamentals Model Parameters
 - $\alpha_p$: Base support level for party $p$
 - $\beta_{\text{lag}}$: Effect of previous vote share
-- $\beta_{\text{inc}}$: Incumbency effect
+- $\beta_{\text{years inc}}$: Effect of log years as incumbent
+- $\beta_{\text{vnv}}$: Effect of excess inflation for incumbent parties
+- $\beta_{\text{growth}}$: Effect of GDP growth for incumbent parties
+- $\phi_f$: Overdispersion parameter for the fundamentals model
 - $\tau_f$: Scaling factor for the prior of the support during the next election
+
+### Data Preprocessing
+
+The economic variables are transformed to better capture their effects:
+
+- Incumbent years are log-transformed: $\log(I_{p,d})$
+- Excess inflation is calculated as deviation from 2% target and log-transformed: $\log(1 + v_{p,d} - 0.02)$
+- GDP growth is log-transformed: $\log(1 + g_{p,d}/100)$
+
+Both economic variables (inflation and growth) are only included for incumbent parties by multiplying them with the incumbency indicator. This allows us to specifically capture how economic performance during a party's time in government affects their electoral prospects.
 
 ### Polling Component
 
@@ -121,18 +136,22 @@ $$
 \begin{aligned}
 y^{(f)} &\sim \text{Dirichlet-Multinomial}(\phi_f \cdot \pi) \\
 \pi &= \mathrm{softmax}(\mu)\\
-\mu_{p} &= \alpha_p + \beta_{\text{lag}} x_{p} + \beta_{\text{inc}} I_{p}
+\mu_{p} &= \alpha_p + \beta_{\text{lag}} x_{p} + \beta_{\text{years inc}} \log(I{p}) + \beta_{\text{vnv}} \log(1 + v_p) + \beta_{\text{growth}} \log(1 + g_p)
 \end{aligned}
 $$
 
 where:
 
 * $\alpha_p$ is the base support level for party $p$ (with $\alpha_1 = -\sum_{p=2}^P \alpha_p$)
-* $\beta_{\text{lag}}$ is the effect of previous vote share $x_p$
-* $\beta_{\text{inc}}$ is the incumbency effect where $I_p$ is the incumbency indicator
+* $\beta_{\text{lag}}$ is the effect of zero-centered logit transformed vote shares $x_p$ from the previous election
+* $\beta_{\text{years inc}}$ is the effect of the log number of years as incumbent where $I_p$ is the number of years
+* $\beta_{\text{vnv}}$ is the effect of inflation (%), where $v_p$ is the yearly inflation rate (only for incumbent parties), measured six months before the election
+* $\beta_{\text{growth}}$ is the effect of GDP growth (%) $g_p$ (only for incumbent parties), measured six months before the election
 * $\phi_f$ is an overdispersion parameter for the fundamentals model
 
 This creates a hierarchical structure where the fundamentals model informs the prior for the outcome of the elections, but the backwards random walk along with the polling data updates that prior according to the current latent support.
+
+The economic variables (inflation and growth) are only included for incumbent parties through multiplication with the incumbency indicator, allowing us to capture how economic performance during a party's time in government affects their electoral prospects.
 
 ## Inference
 
@@ -140,6 +159,17 @@ Bayesian inference is performed using Markov Chain Monte Carlo (MCMC) sampling v
 
 # Results
 
+## Parameter Estimates
+
+### Polling Component
+
+![](Figures/gamma.png)
+
+### Fundamentals Component
+
+![](Figures/fundamentals_effect.png)
+
+## Prediction
 
 ```{r}
 #| eval: true

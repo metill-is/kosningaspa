@@ -16,11 +16,10 @@ update_fundamentals_data <- function() {
     sheet = "data"
   ) |>
     rename(
-      flokkur = party,
-      date = year
+      flokkur = party
     ) |>
     mutate(
-      date = date_build(date, 1, 1)
+      date = as.Date(date)
     )
 
   fundamentals |>
@@ -371,22 +370,22 @@ prepare_stan_data <- function(polling_data, fundamentals_data) {
   ###########################
   logit_votes_f <- fundamentals_data |>
     drop_na(voteshare_prior) |>
-    arrange(date) |>
+    arrange(year) |>
     mutate(
       p = voteshare / sum(voteshare),
-      .by = date
+      .by = year
     ) |>
     filter(
       (p > 0)
     ) |>
     mutate(
       logit_p = log(p) - log(1 - p),
-      logit_p = logit_p - mean(logit_p),
-      .by = date
+      logit_p = logit_p - mean(logit_p, na.rm = TRUE),
+      .by = year
     ) |>
-    select(date, flokkur, logit_p) |>
-    arrange(flokkur, date) |>
-    pivot_wider(names_from = date, values_from = logit_p, values_fill = 0) |>
+    select(year, flokkur, logit_p) |>
+    arrange(flokkur, year) |>
+    pivot_wider(names_from = year, values_from = logit_p, values_fill = 0) |>
     column_to_rownames("flokkur") |>
     as.matrix()
 
@@ -404,9 +403,9 @@ prepare_stan_data <- function(polling_data, fundamentals_data) {
     filter(
       (p > 0)
     ) |>
-    select(date, flokkur, votes) |>
-    arrange(flokkur, date) |>
-    pivot_wider(names_from = date, values_from = votes, values_fill = 0) |>
+    select(year, flokkur, votes) |>
+    arrange(flokkur, year) |>
+    pivot_wider(names_from = year, values_from = votes, values_fill = 0) |>
     column_to_rownames("flokkur") |>
     as.matrix()
 
@@ -416,21 +415,60 @@ prepare_stan_data <- function(polling_data, fundamentals_data) {
 
   incumbent_f <- fundamentals_data |>
     drop_na(voteshare_prior) |>
-    select(date, flokkur, incumbent) |>
-    arrange(flokkur, date) |>
-    mutate(
-      incumbent = incumbent - mean(incumbent),
-      .by = date
-    ) |>
-    pivot_wider(names_from = date, values_from = incumbent, values_fill = 0) |>
+    select(year, flokkur, incumbent) |>
+    arrange(flokkur, year) |>
+    pivot_wider(names_from = year, values_from = incumbent, values_fill = 0) |>
     column_to_rownames("flokkur") |>
     as.matrix()
 
   incumbent_f <- incumbent_f[, -1]
 
+  incumbent_years <- fundamentals_data |>
+    drop_na(voteshare_prior) |>
+    select(year, flokkur, incumbent, incumbent_years) |>
+    arrange(flokkur, year) |>
+    mutate(
+      incumbent_years = if_else(incumbent_years > 0, log(incumbent_years), 0),
+      .by = year
+    ) |>
+    select(year, flokkur, incumbent_years) |>
+    pivot_wider(names_from = year, values_from = incumbent_years, values_fill = 0) |>
+    column_to_rownames("flokkur") |>
+    as.matrix()
+
+  incumbent_years <- incumbent_years[, -1]
+
+  vnv <- fundamentals_data |>
+    drop_na(voteshare_prior) |>
+    mutate(
+      vnv = log(1 + vnv) * incumbent,
+      .by = year
+    ) |>
+    select(year, flokkur, vnv) |>
+    arrange(flokkur, year) |>
+    pivot_wider(names_from = year, values_from = vnv, values_fill = 0) |>
+    column_to_rownames("flokkur") |>
+    as.matrix()
+
+  vnv <- vnv[, -1]
+
+  growth <- fundamentals_data |>
+    drop_na(voteshare_prior) |>
+    arrange(flokkur, year) |>
+    mutate(
+      growth = log(1 + growth / 100) * incumbent,
+      .by = year
+    ) |>
+    select(year, flokkur, growth) |>
+    pivot_wider(names_from = year, values_from = growth, values_fill = 0) |>
+    column_to_rownames("flokkur") |>
+    as.matrix()
+
+  growth <- growth[, -1]
+
   n_parties_fundamentals <- fundamentals_data |>
     drop_na(voteshare_prior) |>
-    arrange(flokkur, date) |>
+    arrange(flokkur, year) |>
     rename(p = voteshare) |>
     mutate(
       in_election = 1 * (p > 0)
@@ -438,31 +476,31 @@ prepare_stan_data <- function(polling_data, fundamentals_data) {
     filter(in_election > 0) |>
     summarise(
       n_parties = sum(in_election),
-      .by = date
+      .by = year
     ) |>
     pull(n_parties)
 
   which_index <- fundamentals_data |>
     drop_na(voteshare_prior) |>
-    arrange(flokkur, date) |>
+    arrange(flokkur, year) |>
     rename(p = voteshare) |>
     mutate(
       in_election = 1 * (p > 0)
     ) |>
-    select(flokkur, date, in_election) |>
-    complete(flokkur, date, fill = list(in_election = 0)) |>
-    arrange(date, flokkur) |>
+    select(flokkur, year, in_election) |>
+    complete(flokkur, year, fill = list(in_election = 0)) |>
+    arrange(year, flokkur) |>
     mutate(
       index = row_number(),
-      .by = date
+      .by = year
     ) |>
     filter(in_election == 1) |>
     mutate(
       index_nr = row_number(),
-      .by = date
+      .by = year
     ) |>
-    select(date, index, index_nr) |>
-    pivot_wider(names_from = date, values_from = index, values_fill = 0) |>
+    select(year, index, index_nr) |>
+    pivot_wider(names_from = year, values_from = index, values_fill = 0) |>
     select(-index_nr) |>
     as.matrix()
 
@@ -470,8 +508,8 @@ prepare_stan_data <- function(polling_data, fundamentals_data) {
 
   time_diff_f <- fundamentals_data |>
     drop_na(voteshare_prior) |>
-    distinct(date) |>
-    pull(date) |>
+    distinct(year) |>
+    pull(year) |>
     unique() |>
     diff() |>
     as.numeric()
@@ -497,6 +535,9 @@ prepare_stan_data <- function(polling_data, fundamentals_data) {
     y_f = y_f,
     x_f = x_f,
     incumbent_f = incumbent_f,
+    incumbent_years = incumbent_years,
+    vnv = vnv,
+    growth = growth,
     index_f = which_index,
     n_parties_f = n_parties_fundamentals,
     max_n_parties_f = max(n_parties_fundamentals),
