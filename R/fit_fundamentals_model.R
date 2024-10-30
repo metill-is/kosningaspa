@@ -23,29 +23,19 @@ election_date <- date_build(2024, 11, 30)
 
 polling_data <- read_polling_data() |>
   filter(
-    date >= clock::date_build(2021, 1, 1),
-    date <= clock::date_build(2024, 5, 1)
+    date >= clock::date_build(2021, 1, 1)
   )
 
 unique(polling_data$flokkur)
+max(polling_data$date)
 
 fundamentals_data <- read_fundamentals_data()
 
 
 stan_data <- prepare_stan_data(polling_data, fundamentals_data)
 
+
 str(stan_data)
-
-
-for (i in 1:16) {
-  print(i)
-  print(stan_data$y_f[1:stan_data$index_f[stan_data$n_parties_f[i + 1], i + 1], i] |> sum())
-}
-i <- 1
-stan_data$y_f[1:stan_data$index_f[stan_data$n_parties_f[i], i], i]
-
-stan_data$y_f[, i]
-stan_data$index_f[, i]
 
 model <- cmdstan_model(
   here("Stan", "polling_and_fundamentals.stan")
@@ -59,9 +49,11 @@ init <- list(
   sigma_gamma = rep(1, stan_data$P - 1),
   gamma_raw = matrix(0, stan_data$P - 1, stan_data$H - 1),
   phi_inv = 1,
-  alpha_f = 0,
-  beta_f = 1,
-  sigma_f = 1
+  inv_phi_f = 1,
+  alpha_f_raw = rep(0, stan_data$P_f - 1),
+  beta1_f = 0,
+  beta2_f = 0,
+  sigma_f = 10
 )
 
 fit <- model$sample(
@@ -72,25 +64,36 @@ fit <- model$sample(
   refresh = 100
 )
 
-
+# Polling Parameters
 fit$summary("beta0")
-fit$summary("alpha_f")
-fit$summary("beta1_f")
-fit$summary("beta2_f")
-fit$summary("beta3_f")
-fit$summary("sigma_f")
 fit$summary("sigma")
 
+# Fundamentals Parameters
+fit$summary("alpha_f")
+fit$summary("beta_lag_f")
+fit$summary("beta_inc_f")
+fit$summary("sigma_f")
+
+fit$summary("alpha_f") |>
+  mutate(
+    flokkur = rownames(stan_data$y_f)
+  ) |>
+  select(flokkur, mean) |>
+  mutate(
+    voteshare = exp(mean) / sum(exp(mean))
+  ) |>
+  arrange(desc(voteshare))
 
 fit$summary("phi_inv")
+fit$summary("phi_f_inv")
 
 
 tibble(
-  y = as.numeric(stan_data$y_f[, ]),
-  prev = as.numeric(stan_data$x_f[, -17]),
-  incumbent = as.numeric(stan_data$incumbent_f[, -17])
-)
-filter(y != 0) |>
+  y = as.numeric(stan_data$y_f[-1, ]),
+  prev = as.numeric(stan_data$x_f[-1, -17]),
+  incumbent = as.numeric(stan_data$incumbent_f[-1, -17])
+) |>
+  filter(y != 0) |>
   reframe(
     lm(y ~ prev + incumbent) |>
       broom::tidy(conf.int = TRUE)
