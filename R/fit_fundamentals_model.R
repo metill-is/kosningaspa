@@ -23,17 +23,29 @@ election_date <- date_build(2024, 11, 30)
 
 polling_data <- read_polling_data() |>
   filter(
-    date >= clock::date_build(2021, 1, 1)
+    date >= clock::date_build(2021, 1, 1),
+    date <= clock::date_build(2024, 5, 1)
   )
 
-fundamentals_data <- read_fundamentals_data() |>
-  filter(date >= clock::date_build(1990, 1, 1))
+unique(polling_data$flokkur)
+
+fundamentals_data <- read_fundamentals_data()
+
 
 stan_data <- prepare_stan_data(polling_data, fundamentals_data)
 
 str(stan_data)
 
 
+for (i in 1:16) {
+  print(i)
+  print(stan_data$y_f[1:stan_data$index_f[stan_data$n_parties_f[i + 1], i + 1], i] |> sum())
+}
+i <- 1
+stan_data$y_f[1:stan_data$index_f[stan_data$n_parties_f[i], i], i]
+
+stan_data$y_f[, i]
+stan_data$index_f[, i]
 
 model <- cmdstan_model(
   here("Stan", "polling_and_fundamentals.stan")
@@ -47,13 +59,8 @@ init <- list(
   sigma_gamma = rep(1, stan_data$P - 1),
   gamma_raw = matrix(0, stan_data$P - 1, stan_data$H - 1),
   phi_inv = 1,
-  z_alpha_f = rep(0, stan_data$D_f - 1),
-  z_beta_f = rep(0, stan_data$D_f - 1),
-  z_prediction_pred = rep(0, stan_data$P_f - 1),
-  alpha_f0 = 0,
-  beta_f0 = 0,
-  trend_alpha_f0 = 0,
-  trend_beta_f0 = 0,
+  alpha_f = 0,
+  beta_f = 1,
   sigma_f = 1
 )
 
@@ -67,14 +74,27 @@ fit <- model$sample(
 
 
 fit$summary("beta0")
-fit$summary("alpha_f0")
-fit$summary("beta_f0")
-
+fit$summary("alpha_f")
+fit$summary("beta1_f")
+fit$summary("beta2_f")
+fit$summary("beta3_f")
+fit$summary("sigma_f")
+fit$summary("sigma")
 
 
 fit$summary("phi_inv")
 
 
+tibble(
+  y = as.numeric(stan_data$y_f[, ]),
+  prev = as.numeric(stan_data$x_f[, -17]),
+  incumbent = as.numeric(stan_data$incumbent_f[, -17])
+)
+filter(y != 0) |>
+  reframe(
+    lm(y ~ prev + incumbent) |>
+      broom::tidy(conf.int = TRUE)
+  )
 
 
 dates <- c(
@@ -176,15 +196,7 @@ fit$draws("y_rep") |>
     width = 30
   ) |>
   tab_header(
-    title = "Spáð fylgi stjórnmálaflokka miðað við nýjustu kannanir"
-  ) |>
-  tab_footnote(
-    md(
-      str_c(
-        "Matið styðst við kannanir Félagsvísindastofnunar, Gallup, Maskínu og Prósents\n",
-        "auk niðurstaðna kosninga frá 2017 og 2021."
-      )
-    )
+    title = "Spáð fylgi stjórnmálaflokka"
   )
 
 

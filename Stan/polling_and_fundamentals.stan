@@ -10,6 +10,7 @@ data {
   array[N] int<lower = 1, upper = H> house; // House indicator for each poll
   array[N] int<lower = 1, upper = D> date;  // Date indicator for each poll
   array[N] int<lower = 1, upper = P> n_parties; // Number of parties in each poll
+  
   vector[D - 1] time_diff;
   int<lower = 1> pred_y_time_diff;
   
@@ -18,15 +19,18 @@ data {
   // Fundamentals
   int<lower = 1> D_f;
   int<lower = 1> P_f;
-  matrix[P_f, D_f] logit_votes;
-  array[P_f, D_f] int<lower = 0> y_f;
-  array[D_f] int<lower = 0, upper = P_f> n_parties_f;
-  vector[D_f] time_diff_f;
+  matrix[P_f, D_f] y_f;
+  matrix[P_f, D_f + 1] x_f;
+  matrix[P_f, D_f + 1] incumbent_f;
+  matrix[P_f, D_f + 1] not_incumbent_f;
+  int<lower = 1> max_n_parties_f;
+  array[max_n_parties_f, D_f + 1] int<lower = 0> index_f;
+  array[D_f + 1] int<lower = 0, upper = P_f> n_parties_f;
+
 }
 
 transformed data {
   vector[D - 1] time_scale = sqrt(time_diff);
-  vector[D_f] time_scale_f = sqrt(time_diff_f);
 }
 
 parameters {
@@ -40,9 +44,12 @@ parameters {
   real<lower = 0> phi_inv;
 
 
-  
-  real beta_f0;
-  real alpha_f0;
+  // Fundamentals
+  real beta1_f;
+  real beta2_f;
+  real beta3_f;
+  real alpha_f;
+  real<lower = 0> sigma_f;
 }
 
 transformed parameters {
@@ -74,6 +81,9 @@ transformed parameters {
 }
 
 model {
+  vector[P - 1] mu_pred = beta1_f * x_f[index_f[2:n_parties_f[D_f + 1], D_f + 1], D_f + 1] + 
+    beta2_f * incumbent_f[index_f[2:n_parties_f[D_f + 1], D_f + 1], D_f + 1] +
+    beta3_f * not_incumbent_f[index_f[2:n_parties_f[D_f + 1], D_f + 1], D_f + 1];
   /* Polling Data */
   // Priors for house effects
   to_vector(gamma_raw) ~ std_normal();
@@ -87,7 +97,7 @@ model {
   // Priors for true party support
   to_vector(z_beta) ~ std_normal();
   sigma ~ exponential(1);                 
-  beta0 ~ normal(alpha_f0 + beta_f0 * logit_votes[2:P_f, D_f], 1);
+  beta0 ~ normal(mu_pred, sigma_f);
   // Prior for the Dirichlet-multinomial scale parameter
   phi_inv ~ exponential(1);
 
@@ -95,23 +105,41 @@ model {
   for (n in 1:N) {
     vector[P] eta_n;
     eta_n[2:P] = beta[, date[n]] + gamma[ , house[n]];  // Linear predictor for softmax
-    eta_n[1] = -sum(eta_n[2:P]);
+    eta_n[1] = 0;
     vector[P] pi_n = softmax(eta_n);
     y[n, 1:n_parties[n]] ~ dirichlet_multinomial(pi_n[1:n_parties[n]] * phi);                // Polling data likelihood
   }
 
   /* Fundamentals */
   // Priors
-  beta_f0 ~ std_normal();
-  alpha_f0 ~ std_normal();
+  beta1_f ~ std_normal();
+  beta2_f ~ std_normal();
+  alpha_f ~ std_normal();
+  sigma_f ~ exponential(1);
 
   // Likelihood
-  for (d in 2:D_f) {
+  /* for (d in 2:D_f) {
     vector[n_parties_f[d]] eta_d;
     eta_d[2:n_parties_f[d]] = alpha_f0 + beta_f0 * logit_votes[2:n_parties_f[d], d - 1];
     eta_d[1] = -sum(eta_d[2:n_parties_f[d]]);
     y_f[1:n_parties_f[d], d] ~ multinomial_logit(eta_d);
-  }
+  } */
+
+  /* for (d in 2:D_f) {
+    vector[n_parties_f[d]] mu_d;
+    mu_d[1:n_parties_f[d]] = alpha_f + beta1_f * x_f[index_f[1:n_parties_f[d], d], d] + beta2_f * incumbent_f[index_f[1:n_parties_f[d], d], d];
+    // mu_d[1] = -sum(mu_d[2:n_parties_f[d]]);
+    y_f[index_f[1:n_parties_f[d], d], d] ~ normal(mu_d, sigma_f);
+  } */
+
+  for (d in 1:D_f) { 
+    vector[n_parties_f[d]] nu_d;
+    nu_d[2:n_parties_f[d]] = beta1_f * x_f[index_f[2:n_parties_f[d], d], d] + 
+      beta2_f * incumbent_f[index_f[2:n_parties_f[d], d], d] +
+      beta3_f * not_incumbent_f[index_f[2:n_parties_f[d], d], d];
+    nu_d[1] = 0;
+    y_f[index_f[1:n_parties_f[d], d], d] ~ normal(nu_d, sigma_f);
+}
 }
 
 generated quantities {
@@ -119,9 +147,13 @@ generated quantities {
   for (d in 1:(D + pred_y_time_diff)) {
     vector[P] eta_d;
     eta_d[2:P] = beta[, d];
-    eta_d[1] = -sum(eta_d[2:P]);
+    eta_d[1] = 0;
     vector[P] pi_d = softmax(eta_d);
     y_rep[d, ] = dirichlet_multinomial_rng(pi_d * phi, n_pred);
   }
 
 }
+
+
+
+
