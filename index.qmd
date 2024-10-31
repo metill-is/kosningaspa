@@ -1,4 +1,20 @@
-## Introduction
+# Introduction
+
+There is considerable public interest in election forecasting, a task that is complicated by the numerous mechanisms that may lead to a divergence between voting intentions as measured by pre-election polls and election results. Polling error refers to the accuracy of pre-election polls in terms of predicting election results but this is bound to be affected lead, referring to the time between the administration of the poll and the election [@jennings2020election]. Simply put, we should expect that the fewer days that remain until the election is held, the more accurate the polls and election forecasts will become, although even in the final days of the campaign considerable error, far exceeding sampling error alone, can be expected [@jennings2016timeline; @jennings2018election]. @jennings2020election suggest that a lead of two or three months before an election occurs is often sufficient for creating accurate election forecasts. 
+
+However, the accuracy and lead of election forecasts may vary from country to country, as specific polling error mechanisms may be at work in some contexts but not in others. Survey methodologists rely on the Total Survey Error framework to decompose error sources which cause survey statistics to diverge from population parameters. Of these error sources, sampling error is almost always accounted for, but non-sampling errors such as coverage, nonresponse, measurement, and estimation errors often are not, although each can cause both systematic and variable errors [@biemer2010total; @groves2010total]. @prosser2018twilight find that measurement error (“shy” voters) plays a limited role in polling error. Instead, the fact that voting intention is dynamic and problems with gathering representative samples and weighting are the primary causes of polling error. This suggest that nonresponse and estimation errors play important roles in polling error.
+
+Nonresponse bias is the prime suspect in analyses of polling error and can be caused by various mechanisms. On the one hand, If the same characteristic predicts both response propensities and target variables (i.e. voting intentions), corresponding to a missing at random mechanism, bias can be adjusted in estimation by weighting on the characteristic, provided that it has been observed. On the other hand, if a target variable is the true cause of variation in response propensities, corresponding to a missing not at random mechanism, analyses of the target variable will be biased by nonresponse bias [@little2020statistical; @groves2006nonresponse]. The latter scenario is easy to envisage in polls, where voters of specific parties may be more engaged in politics even when weighting adjustments for other characteristics are applied. 
+
+To address the issue of polling error, election forecasters often adjust for “house effects”, where some pollsters systematically over- or underestimate support for specific parties, relative to other pollsters [@jennings2018election]. Here, we add to the literature on election forecasting by adjusting for industry effects, referring to cases where polling error has been observed repeatedly and the direction in which it occurs as it relates to specific parties is consistent. This scenario would reflect an industry wide inability to recruit representative samples or to identify suitable auxiliary information to adjust for nonresponse bias as it relates to voting intention [@kalton2003weighting; @groves2006nonresponse]. 
+
+We put our assumptions to an empirical test by publishing an election forecast prior to the Icelandic parliamentary election of 2024. Response rates in Icelandic surveys have declined significantly over time but remain high in the international contexts **(Hvaða Einarsson er hvað í bibtex?)** (Einarsson et al., n.d.; Einarsson and Helgason, n.d.). However, most Icelandic pre-election polls are conducted using probability-based online panels. Online panels have mixed records when it comes to polling error but probability-based ones have been found to outperform non-probability ones [@kennedy2016evaluation; @callegaro2014online]. However, the repeated selection of respondents carries significant risks in terms of panel conditioning [@struminskaya2021panel] and attrition [@frankel2014looking]. Therefore, online panels often rely heavily on model-based (rather than design-based) inference [@little2004model], which will only be successful in the case that a suitable source of auxiliary information is identified. 
+
+Icelandic politics were characterised by remarkable stability prior to the 2008 financial crisis but have seen high electoral volatility since [@onnudottir2021electoral; @helgason2022electoral] . In fact, only one of the previous four governments has been able to serve a full four-year term, causing early elections in each instance, for a total of five elections in the span of 11 years. Each election has been associated with polling errors which can be attributed to the high degree of electoral volatility. Despite this, there has been little variation in voting intention estimates between polling houses and biases at the party level have been similar election-to-election, with right-wing parties being underestimated **(Hvaða bibtex er þetta?)** (Einarsson and Helgason, n.d.). This suggests that pollsters are relying on similar methods but failing to address the issue of polling error, i.e. industry effects may be at play. 
+
+As our model comes with significant assumptions regarding the direction of polling error, it is plausible that it may not improve the prediction of election outcomes. For example, if pollsters have identified new recruitment methods or identified weighting characteristics correlated both with the propensity to respond and target variables [@little2005weighting], our adjustments will introduce bias rather than adjust it. If, however, the same industry wide problems remain, our model will provide a more accurate picture of the voting intentions of the Icelandic electorate than an unadjusted polling average would.  
+
+# Methods
 
 This report outlines the methodology behind forecasting the outcome of the upcoming Icelandic Parliamentary Elections scheduled for November 30th. The forecast is based on a joint model that combines two components:
 
@@ -155,7 +171,7 @@ The economic variables (inflation and growth) are only included for incumbent pa
 
 ## Inference
 
-Bayesian inference is performed using Markov Chain Monte Carlo (MCMC) sampling via Stan. Posterior distributions of the latent variables $\beta_{p,t}$ and $\gamma_{p,h}$ are obtained, allowing for probabilistic forecasting of election outcomes. The overdispersion parameter $\phi$ helps in capturing extra variability in the polling data beyond the multinomial assumption.
+Bayesian inference is performed using Markov Chain Monte Carlo (MCMC) sampling via Stan. Posterior distributions of the latent party support $\beta_{p,t}$ are obtained, allowing for probabilistic forecasting of election outcomes.
 
 # Results
 
@@ -173,8 +189,12 @@ Bayesian inference is performed using Markov Chain Monte Carlo (MCMC) sampling v
 
 ```{r}
 #| eval: true
-#| column: page
+#| column: body-outset-right
 source("R/plot_model_results.R")
 make_plot()
 ```
 
+
+# Discussion
+
+# Appendix {.appendix}

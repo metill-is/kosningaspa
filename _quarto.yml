@@ -14,6 +14,8 @@ format:
   html: 
     title: A Joint Fundamentals and Polling Dynamic Generalized Linear Model for Predicting the Icelandic Parliamentary Elections
     toc: true
+    number-sections: true
+    bibliography: references.bib
     comments:
       hypothesis: true
     author:
@@ -22,7 +24,6 @@ format:
       - name: Hafsteinn Einarsson
       - name: Agnar Freyr Helgason
   docx: default
-  jats: default
   pdf: 
     keep-tex: true
  
@@ -30,4 +31,5 @@ execute:
   freeze: true
 
 editor: source
+engine: knitr
 
