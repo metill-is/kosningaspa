@@ -12,7 +12,7 @@ update_fundamentals_data <- function() {
   )
   gs4_auth(email = Sys.getenv("GOOGLE_MAIL"))
   fundamentals <- read_sheet(
-    "https://docs.google.com/spreadsheets/d/12tAJ_uJ-ZpNh-scMgBQMNXY593RQEAK2NCbpKd7DiqM/edit?gid=934543893#gid=934543893",
+    Sys.getenv("FUNDAMENTALS_SHEET_URL"),
     sheet = "data"
   ) |>
     rename(
@@ -63,7 +63,7 @@ get_sheet_data <- function(sheet) {
   )
   gs4_auth(email = Sys.getenv("GOOGLE_MAIL"))
   read_sheet(
-    "https://docs.google.com/spreadsheets/d/1yEn5feIiltc4kWC61q57sGg_CpMCkxVFLIK9ySYxWQ4",
+    Sys.getenv("POLLING_SHEET_URL"),
     sheet = sheet
   ) |>
     janitor::clean_names() |>
@@ -432,7 +432,11 @@ prepare_stan_data <- function(polling_data, fundamentals_data) {
       .by = year
     ) |>
     select(year, flokkur, incumbent_years) |>
-    pivot_wider(names_from = year, values_from = incumbent_years, values_fill = 0) |>
+    pivot_wider(
+      names_from = year,
+      values_from = incumbent_years,
+      values_fill = 0
+    ) |>
     column_to_rownames("flokkur") |>
     as.matrix()
 
