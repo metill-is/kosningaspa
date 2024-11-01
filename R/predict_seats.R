@@ -52,7 +52,7 @@ maskina_kjordaemi <- read_sheet(
     .by = flokkur
   )
 
-draws <- read_parquet(here("data", "y_rep_draws.parquet")) |>
+draws <- read_parquet(here("data", "2024-10-31", "y_rep_draws.parquet")) |>
   filter(
     dags == max(dags)
   ) |>

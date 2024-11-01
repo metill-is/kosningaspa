@@ -198,3 +198,57 @@ make_plot()
 # Discussion
 
 # Appendix {.appendix}
+
+## Choosing $\tau_f$
+
+To choose how we want to calculate the standard deviation for prior on $\beta_T$, we can frame our model as a Gaussian-Gaussian conjugate problem where:
+
+- The prior (fundamentals prediction) is: $\beta_T \sim \mathcal{N}(\mu_{\text{pred}}, \tau_f \cdot \sigma)$
+- The likelihood (polling prediction from time t) is: $\beta_T \sim \mathcal{N}(\beta_t, V(t) \cdot \sigma)$
+
+where $V(t)$ represents the accumulated variance from time t to election time T:
+
+* For $t \leq 47$ (after government split): $V(t) = t \cdot (1 + \tau_{\text{stjornarslit}})^2$
+* For t > 47 (before government split): $V(t) = (t - 47) + 47 \cdot (1 + \tau_{\text{stjornarslit}})^2$
+
+Using standard Gaussian-Gaussian conjugate formulas:
+
+$$
+\begin{aligned}
+\text{Posterior precision} &= \frac{1}{(\tau_f \cdot \sigma)^2} + \frac{1}{V(t) \cdot \sigma^2} \\
+&= \left(\frac{1}{\tau_f^2} + \frac{1}{V(t)}\right) \cdot \frac{1}{\sigma^2}
+\end{aligned}
+$$
+
+For a desired fundamentals weight w at time t:
+
+$$
+w = \frac{1/\tau_f^2}{1/\tau_f^2 + 1/V(t)}
+$$
+
+Solving for $\tau_f$:
+
+$$
+\tau_f = \sqrt{V(t) \cdot (1-w)/w}
+$$
+
+where $V(t)$ depends on $\tau_{\text{stjornarslit}}$ as defined above. As an example, if we choose $w = \frac13$ and $t = 180$, we get:
+
+$$
+\begin{aligned}
+V(180) &= (180 - 47) + 47 \cdot (1 + \tau_{\text{stjornarslit}})^2 \\
+&= 133 + 47 \cdot (1 + \tau_{\text{stjornarslit}})^2
+\end{aligned}
+$$
+
+Then:
+
+$$
+\begin{aligned}
+\tau_f &= \sqrt{V(180) \cdot (1-\frac{1}{3})/\frac{1}{3}} \\
+&= \sqrt{(133 + 47 \cdot (1 + \tau_{\text{stjornarslit}})^2) \cdot 2} \\
+&= \sqrt{266 + 94 \cdot (1 + \tau_{\text{stjornarslit}})^2}
+\end{aligned}
+$$
+
+This shows how $\tau_f$ adapts to the estimated value of $\tau_{\text{stjornarslit}}$ in our model, increasing when there is more uncertainty during the government split period.

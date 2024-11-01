@@ -35,7 +35,7 @@ colors <- tribble(
   "Annað", "grey50"
 )
 
-coverage_data <- read_parquet(here("data", "2024-10-28", "y_rep_draws.parquet")) |>
+coverage_data <- read_parquet(here("data", "2024-10-31", "y_rep_draws.parquet")) |>
   reframe(
     mean = median(value),
     coverage = c(0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9),
@@ -59,7 +59,7 @@ write_parquet(
 labels <- coverage_data |>
   filter(dags == max(dags)) |>
   filter(
-    coverage == 0.5
+    coverage == 0.9
   ) |>
   mutate_at(
     vars(mean, lower, upper),
@@ -156,7 +156,7 @@ p <- coverage_data |>
     x = NULL,
     y = NULL,
     title = glue("Fylgisspá þegar {days_until_vote} dagar eru til kosninga"),
-    subtitle = "Línustrik tákna miðgildi spár og hver kassi inniheldur 5% af niðurstöðum spár",
+    subtitle = "Línustrik tákna miðgildi spár og hver kassi er jafn líklegur til að raungerast",
     caption = caption
   )
 

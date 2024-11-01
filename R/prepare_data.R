@@ -2,7 +2,7 @@
 update_fundamentals_data <- function() {
   box::use(
     googlesheets4[read_sheet, gs4_auth],
-    dplyr[filter, mutate, group_by, ungroup, arrange],
+    dplyr[filter, mutate, group_by, ungroup, arrange, rename],
     tidyr[pivot_longer, pivot_wider],
     readr[write_csv],
     here[here],
@@ -89,9 +89,13 @@ get_felo_data <- function() {
     tidyr[drop_na, pivot_longer],
     lubridate[dmy]
   )
-  url <- "https://docs.google.com/spreadsheets/d/1US1qVhLE8I6496dXvoGUPp8QnRvC52FCc2jTyBkRNZs/edit?gid=621143960#gid=621143960"
+
+  box::use(
+    R / party_utils[party_tibble]
+  )
+
   gs4_auth(email = Sys.getenv("GOOGLE_MAIL"))
-  d <- read_sheet(url)
+  d <- read_sheet(Sys.getenv("FELO_SHEET_URL"))
 
   d |>
     mutate(
@@ -290,7 +294,8 @@ prepare_stan_data <- function(polling_data, fundamentals_data) {
       lag,
       summarise,
       rename,
-      row_number
+      row_number,
+      if_else
     ],
     tibble[column_to_rownames],
     tidyr[pivot_wider, drop_na, complete],
@@ -306,6 +311,9 @@ prepare_stan_data <- function(polling_data, fundamentals_data) {
     distinct(fyrirtaeki, date) |>
     nrow()
 
+  election_date <- date_build(2024, 11, 30)
+  stjornarslit_dags <- date_build(2024, 10, 14)
+  days_between_stjornarslit_and_election <- as.numeric(election_date - stjornarslit_dags)
 
   y <- polling_data |>
     select(date, fyrirtaeki, flokkur, n) |>
@@ -341,14 +349,24 @@ prepare_stan_data <- function(polling_data, fundamentals_data) {
     as.numeric()
 
   max_date <- max(polling_data$date)
-  election_date <- clock::date_build(2024, 11, 30)
+
   pred_y_time_diff <- as.numeric(election_date - max_date)
   stjornarslit <- polling_data |>
     distinct(date) |>
     mutate(
-      stjornarslit = 1 * (date >= clock::date_build(2024, 10, 14))
+      stjornarslit_dags = clock::date_build(2024, 10, 14),
+      diff = abs(as.numeric(date - stjornarslit_dags)),
+      stjornarslit = if_else(diff == min(diff), 1, 0)
     ) |>
     pull(stjornarslit)
+
+  post_stjornarslit <- polling_data |>
+    distinct(date) |>
+    mutate(
+      stjornarslit_dags = clock::date_build(2024, 10, 14),
+      post_stjornarslit = 1 * (date >= stjornarslit_dags)
+    ) |>
+    pull(post_stjornarslit)
 
   n_election <- polling_data |>
     filter(
@@ -526,11 +544,13 @@ prepare_stan_data <- function(polling_data, fundamentals_data) {
     H = H,
     N = N,
     y = y,
+    days_between_stjornarslit_and_election = days_between_stjornarslit_and_election,
     house = house,
     date = date,
     time_diff = time_diff,
     pred_y_time_diff = pred_y_time_diff,
     stjornarslit = stjornarslit,
+    post_stjornarslit = post_stjornarslit,
     n_pred = as.integer(n_election),
     n_parties = n_parties,
     # Fundamentals Data
