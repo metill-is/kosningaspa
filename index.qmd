@@ -16,19 +16,201 @@ As our model comes with significant assumptions regarding the direction of polli
 
 # Methods
 
-This report outlines the methodology behind forecasting the outcome of the upcoming Icelandic Parliamentary Elections scheduled for November 30th. The forecast is based on a joint model that combines two components:
+We develop a Bayesian hierarchical model to forecast the 2024 Icelandic Parliamentary Elections by combining:
 
-1. A dynamic linear model for polling data that incorporates polling house effects and accounts for house-specific biases as well as overdispersion
-2. A fundamentals model that leverages historical election results, incumbency status, and previous vote shares
+* A dynamic linear model for polling data that captures:
+  - Temporal evolution of party support
+  - House-specific and industry-wide polling biases
+  - Increased volatility during the government coalition change leading up to the election
+  - Cross-party correlations in support changes
 
-By combining these two sources of information, we aim to produce more accurate and robust forecasts that account for both the current state of public opinion and structural factors that influence election outcomes.
+* A fundamentals model incorporating:
+  - Historical election results
+  - Incumbency status and duration
+  - Economic indicators (inflation and GDP growth)
 
-## Model Specification
 
-Our model combines two components:
 
-1. A dynamic linear model for polling data that captures temporal evolution of party support and polling house effects
-2. A fundamentals model that incorporates structural factors from historical election data
+## Model Structure
+
+### Statistical Framework
+
+The model combines polling data $y_{n,p}$ and fundamentals data through a hierarchical structure:
+
+$$
+\begin{aligned}
+y_{n} &\sim \text{Dirichlet-Multinomial}(\pi_{n}, \phi_{h[n]}) \\
+\pi_{n} &= \text{softmax}(\eta_{n}) \\
+\eta_{n,p} &= \beta_{p,t[n]} + \gamma_{p,h[n]}
+\end{aligned}
+$$
+
+where $\phi_{h[n]}$ is house-specific overdispersion, $t[n]$ indexes the time of poll $n$, and $h[n]$ indexes the polling house.
+
+The fundamentals component predicts election results through:
+
+$$
+\begin{aligned}
+y^{(f)}_{d} &\sim \text{Dirichlet-Multinomial}(\pi^{(f)}_{d}, \phi_f) \\
+\pi^{(f)}_{d} &= \text{softmax}(\mu_{d}) \\
+\mu_{d,p} &= \alpha_p + \beta_{\text{lag}}x_{p,d} + \beta_{\text{years}}\log(I_{p,d}) + \beta_{\text{vnv}}v_{p,d} + \beta_{\text{growth}}g_{p,d}
+\end{aligned}
+$$
+
+The two components are linked through the election day prediction $\mu_{\text{pred}}$, which is calculated from the fundamentals model using current economic conditions and previous election results. This prediction serves as a prior for the election day support:
+
+$$
+\beta_{T} \sim \mathcal{N}(\mu_{\text{pred}}, \tau_f\cdot \sigma)
+$$
+
+The relative weight between polling and fundamentals is controlled by $\tau_f$, which is computed so that the fundamentals component has a desired percentage weight in the prediction at a specified time before the election (see Appendix for details).
+
+### Polling Component
+
+The polling model tracks latent party support $\beta_{p,t}$ through time using a multivariate random walk with correlation structure $\Omega$ between parties:
+
+$$
+\beta_{t} = \begin{cases}
+\mathrm{Normal}\left(\beta_{t+1}, (1 + \tau_s)\sqrt{\Delta_t} \boldsymbol \Sigma\right) & \text{after government split} \\
+\mathrm{Normal}\left(\beta_{t+1}, \sqrt{\Delta_t} \boldsymbol \Sigma\right) & \text{otherwise}
+\end{cases}
+$$
+
+
+where:
+
+- $\boldsymbol \Sigma = \text{diag}(\sigma_1,\ldots,\sigma_P) \Omega \text{diag}(\sigma_1,\ldots,\sigma_P)$ is the covariance matrix
+- $\sigma_p$ captures party-specific volatility scales
+- $\Omega$ is the correlation matrix between the party-specific innovations
+- $\tau_s$ allows for increased volatility after the government split
+- $\Delta_t$ is the number of days between polls
+
+The observed polling data follows a Dirichlet-multinomial distribution with house-specific overdispersion parameters $\phi_h$:
+
+$$
+\begin{aligned}
+y_n &\sim \text{Dirichlet-Multinomial}(\pi_n, \phi_{h[n]}) \\
+\pi_n &= \text{softmax}(\beta_{t[n]} + \gamma_{h[n]})
+\end{aligned}
+$$
+
+where $\gamma_{h}$ captures house-specific biases in reported support levels, with the election day house effect fixed to zero ($\gamma_1 = 0$). The other house effects are given a hierarchical prior:
+
+$$
+\begin{aligned}
+\gamma_{p,h} &= \mathrm{Normal}\left(\mu_{\gamma,p}, \sigma_{\gamma,p} \right)\\
+\mu_{\gamma,p} &\sim \mathcal{N}(0, 1) \\
+\sigma_{\gamma,p} &\sim \text{Exponential}(1) \\
+\sum_{p=2}^{P} \mu_{\gamma,p} &\sim \mathcal{N}(0, 1) \\
+\sum_{p=2}^{P} \gamma_{p, h} &\sim \mathcal{N}(0, 1)
+\end{aligned}
+$$
+
+### Fundamentals Component
+
+The fundamentals model predicts party vote shares using economic and political variables:
+
+$$
+\pi = \text{softmax}(\alpha + \beta_\text{lag}x + \beta_\text{inc}\log(I) + \beta_\text{vnv}V + \beta_\text{growth}G)
+$$
+
+where:
+
+- $\alpha_p$ are party-specific intercepts that sum to zero ($\sum_p \alpha_p = 0$)
+- $x$ are previous election vote shares
+- $I$ are years in government for incumbent parties
+- $V$ is the vote/no-vote indicator for government parties
+- $G$ represents economic growth
+- $\beta_\text{lag}$ captures persistence in party support
+- $\beta_\text{inc}$ measures the effect of time spent in government
+- $\beta_\text{vnv}$ captures the impact of being in/out of government
+- $\beta_\text{growth}$ measures how economic conditions affect support
+
+### Model Integration
+
+The fundamentals prediction serves as a prior for the election day vote shares $\beta_T$:
+
+$$
+\beta_T \sim \mathcal{N}(\mu_\text{pred}, \tau_f \cdot \sigma)
+$$
+
+where $\mu_\text{pred}$ is the fundamentals prediction and $\tau_f$ controls how much weight is given to the fundamentals versus polling data at some point before the elections (see Appendix for details on choosing $\tau_f$).
+
+# Results
+
+## Parameter Estimates
+
+### Polling Component
+
+#### House Effects
+- Plot of house-specific biases ($\gamma_{h}$) with uncertainty intervals
+- Table of significant house effects by party
+- Analysis of industry-wide bias patterns
+
+#### Volatility Parameters
+- Estimates of party-specific volatility ($\sigma_p$)
+- Impact of government split ($\tau_\text{stjornarslit}$)
+- Systematic shifts after split ($\beta_\text{stjornarslit}$)
+
+#### Cross-Party Correlations
+- Heatmap of correlation matrix ($\Omega$)
+- Discussion of strongest party-to-party relationships
+- Clustering analysis of correlated party groups
+
+### Fundamentals Component
+
+#### Economic Effects
+- Coefficient plot for $\beta_\text{growth}$
+- Analysis of GDP growth impact on incumbent parties
+
+#### Political Effects
+- Coefficient estimates for:
+  - Previous vote share effect ($\beta_\text{lag}$)
+  - Incumbency duration ($\beta_\text{inc}$)
+  - Government participation ($\beta_\text{vnv}$)
+- Discussion of which factors most strongly predict party support
+
+## Model Validation
+
+### Historical Performance
+- Out-of-sample predictions for previous elections
+- Comparison with simple polling averages
+- Analysis of when/where model performs best/worst
+
+### Uncertainty Calibration
+- Coverage of prediction intervals
+- Comparison of predicted vs. actual volatility
+- Assessment of overdispersion estimates ($\phi_h$)
+
+## 2024 Election Prediction
+
+### Point Predictions
+- Table of predicted vote shares with 95% intervals
+- Comparison to latest polls
+- Discussion of largest predicted changes
+
+### Coalition Scenarios
+- Probability of different majority combinations
+- Most likely government formations
+- Key parties for coalition formation
+
+### Prediction Evolution
+- Plot showing how predictions changed over time
+- Impact of recent polling data
+- Effect of economic/political developments
+
+```{r}
+#| eval: true
+#| column: body-outset-right
+source("R/plot_model_results.R")
+make_plot()
+```
+
+# Discussion
+
+# Appendix {.appendix}
+
+## Model Specification Details
 
 ### Notation
 
@@ -36,7 +218,7 @@ Our model combines two components:
 
 ##### Polling Data
 - $P$: Number of political parties *(including the Other category)*
-- $T$: Number of time points (dates), $1, \dots, T$, where $T$ is the date of the next election.
+- $T$: Number of time points (dates), $1, \dots, T$, where $T$ is the date of the next election
 - $H$: Number of polling houses
 - $N$: Number of observations (polls)
 - $y_{n,p}$: Count of responses for party $p$ in poll $n$
@@ -51,25 +233,6 @@ Our model combines two components:
 - $v_{p,d}$: Inflation rate (%) for party $p$ at election $d$ (if incumbent)
 - $g_{p,d}$: GDP growth rate (%) for party $p$ at election $d$ (if incumbent)
 
-#### Parameters
-
-##### Polling Model Parameters
-- $\beta_{p,t}$: Latent support for party $p$ at time $t$ (for $p = 2,\ldots,P$)
-- $\gamma_{p,h}$: Effect of polling house $h$ for party $p$ (for $p = 2,\ldots,P$)
-- $\mu_{\gamma,p}$: Mean house effect for party $p$
-- $\sigma_{\gamma,p}$: Scale of house effects for party $p$
-- $\sigma_p$: Scale parameter for the random walk of party $p$
-- $\phi$: Overdispersion parameter
-
-##### Fundamentals Model Parameters
-- $\alpha_p$: Base support level for party $p$
-- $\beta_{\text{lag}}$: Effect of previous vote share
-- $\beta_{\text{years inc}}$: Effect of log years as incumbent
-- $\beta_{\text{vnv}}$: Effect of excess inflation for incumbent parties
-- $\beta_{\text{growth}}$: Effect of GDP growth for incumbent parties
-- $\phi_f$: Overdispersion parameter for the fundamentals model
-- $\tau_f$: Scaling factor for the prior of the support during the next election
-
 ### Data Preprocessing
 
 The economic variables are transformed to better capture their effects:
@@ -78,128 +241,19 @@ The economic variables are transformed to better capture their effects:
 - Excess inflation is calculated as deviation from 2% target and log-transformed: $\log(1 + v_{p,d} - 0.02)$
 - GDP growth is log-transformed: $\log(1 + g_{p,d}/100)$
 
-Both economic variables (inflation and growth) are only included for incumbent parties by multiplying them with the incumbency indicator. This allows us to specifically capture how economic performance during a party's time in government affects their electoral prospects.
+Both economic variables (inflation and growth) are only included for incumbent parties by multiplying them with the incumbency indicator.
 
-### Polling Component
+### Government Split Effects
 
-The polling model tracks party support over time using a centered logit transformation:
+The model accounts for potential changes in voting patterns during government coalition changes through two mechanisms:
+1. Increased volatility scaled by $\tau_\text{stjornarslit}$
+2. Potential systematic shifts in party support through $\beta_\text{stjornarslit}$
 
-$$
-\beta_{p,t} = \beta_{p,t + 1} + \sigma_p z_{p,t} \sqrt{\Delta_t} \quad \text{for } t = 2, \dots, T, \quad p=2, \dots, P
-$$
+### Cross-Party Correlations
 
-where:
+Rather than treating each party's support as independent, the model captures correlations in support changes through a Cholesky decomposition of the correlation matrix $\Omega$. This allows the model to account for situations where increased support for one party typically corresponds to decreased support for specific other parties.
 
-* $\beta_{p,t}$ is the latent support for party $p$ at time $t$
-* $\sigma_p$ is the party-specific scale of random walk innovations
-* $z_{p,t} \sim \mathcal{N}(0, 1)$ are standardized innovations
-* $\sqrt{\Delta_t}$ scales the innovations according to time between polls
-
-#### Dynamic Latent Party Support
-
-The initial states $\beta_{p,T}$ are linked to the fundamentals model through their prior:
-
-$$
-\beta_{p,T} \sim \mathcal{N}(\mu_{p,\text{pred}}, \tau_f  \cdot \sigma_p)
-$$
-
-where $\mu_{p,\text{pred}}$ comes from the fundamentals model prediction. Thus the polling component is set up as a backwards random walk starting at the next election, with a prior for the initial value set according to predictions from the fundamentals component.
-
-The scaling-parameter $\tau_f$ can be interpreted as the weight the model gives to the polls as opposed to the fundamentals model. If $\tau_f$ is large, then $\beta_{p,T}$ is weakly informed by the fundamentals model, but if $\tau_f$ is small, then the fundamentals component is given more weight.
-
-#### Polling House Effects
-
-Polling house effects are modeled hierarchically to account for systematic biases:
-
-$$
-\gamma_{p,1} = 0, \quad \gamma_{p,h} = \mu_{\gamma,p} + \sigma_{\gamma,p} \tilde{\gamma}_{p,h} \quad \text{for } h = 2, \dots, H,
-$$
-
-where $\tilde{\gamma}_{p,h} \sim \mathcal{N}(0, 1)$. The parameters $\mu_{\gamma,p}$ and $\sigma_{\gamma,p}$ control the mean and variability of polling house effects for each party.
-
-Elections are set to be the first polling house and therefore $\gamma_{p,1} = 0$.
-
-#### Overdispersion
-
-To account for overdispersion in the polling data, we introduce an overdispersion parameter $\phi$:
-
-$$
-\phi = \frac{1}{\phi_{\text{inv}}},
-$$
-
-where $\phi_{\text{inv}} \sim \text{Exponential}(1)$.
-
-#### Likelihood
-
-The counts from polls and elections close to polls, $\mathbf y_n = \left( y_{n,1}, \dots, y_{n,P} \right)$ are modeled using a Dirichlet-Multinomial distribution:
-
-$$
-\begin{align}
-\mathbf y_n &\sim \text{Dirichlet-Multinomial}\left(\sum_{p=1}^P y_{n,p}, \phi \cdot \boldsymbol \pi_n\right) \\
-\boldsymbol \pi_n &= \mathrm{softmax}(\eta_n) \\
-\eta_{n,p} &= \begin{cases} 
-\beta_{p, t_n} + \gamma_{p, h_n} & p > 1 \\
--\sum_{p^*=2}^P \eta_{n,p^*} & p = 1
-\end{cases}
-\end{align}
-$$
-
-### Fundamentals Component
-
-The fundamentals model predicts the number of party votes based on:
-
-$$
-\begin{aligned}
-y^{(f)} &\sim \text{Dirichlet-Multinomial}(\phi_f \cdot \pi) \\
-\pi &= \mathrm{softmax}(\mu)\\
-\mu_{p} &= \alpha_p + \beta_{\text{lag}} x_{p} + \beta_{\text{years inc}} \log(I{p}) + \beta_{\text{vnv}} \log(1 + v_p) + \beta_{\text{growth}} \log(1 + g_p)
-\end{aligned}
-$$
-
-where:
-
-* $\alpha_p$ is the base support level for party $p$ (with $\alpha_1 = -\sum_{p=2}^P \alpha_p$)
-* $\beta_{\text{lag}}$ is the effect of zero-centered logit transformed vote shares $x_p$ from the previous election
-* $\beta_{\text{years inc}}$ is the effect of the log number of years as incumbent where $I_p$ is the number of years
-* $\beta_{\text{vnv}}$ is the effect of inflation (%), where $v_p$ is the yearly inflation rate (only for incumbent parties), measured six months before the election
-* $\beta_{\text{growth}}$ is the effect of GDP growth (%) $g_p$ (only for incumbent parties), measured six months before the election
-* $\phi_f$ is an overdispersion parameter for the fundamentals model
-
-This creates a hierarchical structure where the fundamentals model informs the prior for the outcome of the elections, but the backwards random walk along with the polling data updates that prior according to the current latent support.
-
-The economic variables (inflation and growth) are only included for incumbent parties through multiplication with the incumbency indicator, allowing us to capture how economic performance during a party's time in government affects their electoral prospects.
-
-## Inference
-
-Bayesian inference is performed using Markov Chain Monte Carlo (MCMC) sampling via Stan. Posterior distributions of the latent party support $\beta_{p,t}$ are obtained, allowing for probabilistic forecasting of election outcomes.
-
-# Results
-
-## Parameter Estimates
-
-### Polling Component
-
-![](Figures/gamma.png)
-
-### Fundamentals Component
-
-![](Figures/fundamentals_effect.png)
-
-## Prediction
-
-```{r}
-#| eval: true
-#| column: body-outset-right
-source("R/plot_model_results.R")
-make_plot()
-```
-
-
-# Discussion
-
-# Appendix {.appendix}
-
-## Choosing $\tau_f$
+### Choosing $\tau_f$
 
 To choose how we want to calculate the standard deviation for prior on $\beta_T$, we can frame our model as a Gaussian-Gaussian conjugate problem where:
 

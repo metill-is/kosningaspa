@@ -45,6 +45,8 @@ stan_data$desired_weight <- 0.33
 stan_data$weight_time <- 180
 
 
+
+
 str(stan_data)
 
 model <- cmdstan_model(
@@ -82,11 +84,6 @@ fit$summary("alpha_f")
 fit$summary("beta_lag_f")
 
 
-fit$summary("beta_inc_f")
-fit$summary("beta_inc_f") |>
-  select(variable, mean, q5, q95) |>
-  mutate_at(vars(-variable), exp)
-
 fit$summary("beta_inc_years_f")
 
 fit$summary(c("beta_vnv_f", "beta_growth_f"))
@@ -98,10 +95,71 @@ fit$draws(c("beta_vnv_f", "beta_growth_f")) |>
 
 fit$summary("tau_f")
 
-fit$summary("phi_inv")
+fit$summary("phi_inv") |>
+  mutate(
+    house = levels(polling_data$fyrirtaeki)
+  ) |>
+  select(
+    house, mean, q5, q95
+  )
+
 fit$summary("phi_f_inv")
 
 
+fit$summary("Omega") |>
+  mutate(
+    p = str_match(variable, "Omega\\[(.*),.*\\]")[, 2] |> parse_number(),
+    q = str_match(variable, "Omega\\[.*,(.*)\\]")[, 2] |> parse_number(),
+    flokkur1 = colnames(stan_data$y)[-1][p],
+    flokkur2 = colnames(stan_data$y)[-1][q]
+  ) |>
+  select(flokkur1, flokkur2, mean) |>
+  ggplot(aes(flokkur1, flokkur2, fill = mean)) +
+  geom_tile() +
+  scale_fill_distiller(
+    palette = "RdBu",
+    limits = c(-1, 1),
+    direction = 1
+  )
+
+fit$summary("Omega") |>
+  mutate(
+    p = str_match(variable, "Omega\\[(.*),.*\\]")[, 2] |> parse_number(),
+    q = str_match(variable, "Omega\\[.*,(.*)\\]")[, 2] |> parse_number(),
+    flokkur1 = colnames(stan_data$y)[-1][p],
+    flokkur2 = colnames(stan_data$y)[-1][q]
+  ) |>
+  select(flokkur1, flokkur2, mean) |>
+  pivot_wider(
+    names_from = flokkur2,
+    values_from = mean
+  ) |>
+  column_to_rownames("flokkur1") |>
+  as.matrix() |>
+  corrplot::corrplot(
+    method = "color",
+    order = "hclust",
+    tl.col = "black",
+    addCoef.col = "black"
+  )
+
+fit$summary("Omega") |>
+  mutate(
+    p = str_match(variable, "Omega\\[(.*),.*\\]")[, 2] |> parse_number(),
+    q = str_match(variable, "Omega\\[.*,(.*)\\]")[, 2] |> parse_number(),
+    flokkur1 = colnames(stan_data$y)[-1][p],
+    flokkur2 = colnames(stan_data$y)[-1][q]
+  ) |>
+  select(flokkur1, flokkur2, mean, q5, q95) |>
+  filter(flokkur1 != flokkur2) |>
+  ggplot(aes(mean, flokkur2)) +
+  geom_vline(xintercept = 0, lty = 2) +
+  geom_point() +
+  geom_linerange(aes(xmin = q5, xmax = q95)) +
+  facet_wrap(
+    vars(flokkur1),
+    scales = "free_y"
+  )
 
 dates <- c(
   unique(polling_data$date),
@@ -294,7 +352,8 @@ p <- fit$summary("gamma") |>
   labs(
     x = NULL,
     y = NULL,
-    title = "Bjagi mismunandi fyrirtækja á fylgi flokka"
+    title = "Bjagi mismunandi fyrirtækja á fylgi flokka",
+    subtitle = "Bjagi í janúar 2016"
   )
 
 p
@@ -306,9 +365,6 @@ ggsave(
   height = 1.2 * 8,
   scale = 1.3
 )
-
-
-
 
 p <- fit$draws(c("beta_inc_years_f", "beta_vnv_f", "beta_growth_f")) |>
   as_draws_df() |>

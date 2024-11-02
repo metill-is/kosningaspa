@@ -13,33 +13,51 @@ theme_set(theme_metill())
 
 box::use(
   R / prepare_data[
-    combine_datasets,
-    prepare_stan_data
+    read_polling_data,
+    prepare_stan_data,
+    read_fundamentals_data
   ]
 )
 
 election_date <- date_build(2024, 11, 30)
 
-data <- combine_datasets()
-stan_data <- prepare_stan_data(data)
+polling_data <- read_polling_data() |>
+  filter(
+    date >= date_build(2016, 1, 1)
+  )
+
+unique(polling_data$flokkur)
+max(polling_data$date)
+
+fundamentals_data <- read_fundamentals_data()
+
+econ_data <- read_csv(here("data", "economy_data.csv"))
+
+fundamentals_data <- fundamentals_data |>
+  inner_join(
+    econ_data,
+    by = "date"
+  )
+
+stan_data <- prepare_stan_data(polling_data, fundamentals_data)
+
+stan_data$desired_weight <- 0.33
+stan_data$weight_time <- 180
+
+
+
+
+str(stan_data)
 
 model <- cmdstan_model(
   here("Stan", "base_model_no_polling_bias.stan")
 )
 
-init <- list(
-  sigma = rep(1, stan_data$P),
-  beta_0 = rep(0, stan_data$P),
-  z_beta = matrix(0, stan_data$P, stan_data$D + stan_data$pred_y_time_diff),
-  gamma_raw = matrix(0, stan_data$P, stan_data$H - 2),
-  phi_inv = 1
-)
 
 fit <- model$sample(
   data = stan_data,
   chains = 4,
   parallel_chains = 4,
-  init = rep(list(init), 4),
   refresh = 100
 )
 
@@ -57,8 +75,8 @@ fit$summary("phi_inv")
 
 
 dates <- c(
-  unique(data$date),
-  seq.Date(max(data$date), election_date, by = "day")
+  unique(polling_data$date),
+  seq.Date(max(polling_data$date), election_date, by = "day")
 )
 
 
@@ -77,12 +95,13 @@ fit$summary("y_rep", mean, ~ quantile(.x, c(0.05, 0.95))) |>
   ) |>
   ungroup() |>
   left_join(
-    data |>
+    polling_data |>
       mutate(p = n / sum(n), .by = c(date, fyrirtaeki)) |>
       select(dags = date, fyrirtaeki, flokkur, konnun = p),
     by = join_by(dags, flokkur),
     relationship = "many-to-many"
   ) |>
+  filter(dags >= date_build(2024, 1, 1)) |>
   ggplot(aes(dags, mean)) +
   geom_ribbon(
     aes(ymin = q5, ymax = q95, fill = flokkur),
@@ -152,14 +171,6 @@ fit$draws("y_rep") |>
   ) |>
   tab_header(
     title = "Spáð fylgi stjórnmálaflokka"
-  ) |>
-  tab_footnote(
-    md(
-      str_c(
-        "Matið styðst við kannanir Félagsvísindastofnunar, Gallup, Maskínu og Prósents\n",
-        "auk niðurstaðna kosninga frá 2017 og 2021."
-      )
-    )
   )
 
 
@@ -172,7 +183,7 @@ y_rep_draws <- fit$draws("y_rep") |>
   mutate(
     t = str_match(name, "y_rep\\[(.*),.*\\]")[, 2] |> parse_number(),
     p = str_match(name, "y_rep\\[.*,(.*)\\]")[, 2] |> parse_number(),
-    flokkur = colnames(y)[p],
+    flokkur = colnames(stan_data$y)[p],
     dags = dates[t]
   ) |>
   select(
@@ -187,7 +198,9 @@ y_rep_draws <- fit$draws("y_rep") |>
     value = value / stan_data$n_pred
   )
 
-write_parquet(y_rep_draws, here("data", "y_rep_draws_no_polling_bias.parquet"))
+
+last_poll_date <- max(polling_data$date)
+write_parquet(y_rep_draws, here("data", as.character(last_poll_date), "y_rep_draws_no_polling_bias.parquet"))
 
 theme_set(metill::theme_metill())
 
@@ -196,22 +209,25 @@ fit$summary("gamma") |>
   mutate(
     p = str_match(variable, "gamma\\[(.*),.*\\]")[, 2] |> parse_number(),
     h = str_match(variable, "gamma\\[.*,(.*)\\]")[, 2] |> parse_number(),
-    flokkur = colnames(y)[p],
-    fyrirtaeki = levels(data$fyrirtaeki)[h]
+    flokkur = colnames(stan_data$y)[p],
+    fyrirtaeki = levels(polling_data$fyrirtaeki)[h]
   ) |>
   filter(h != 1) |>
-  ggplot(aes(0, flokkur, col = fyrirtaeki)) +
+  ggplot(aes(0, fyrirtaeki, col = fyrirtaeki)) +
   geom_vline(xintercept = 0, lty = 2) +
   geom_point(aes(x = mean), size = 3) +
   geom_segment(
-    aes(x = q5, xend = q95, y = flokkur, yend = flokkur),
+    aes(x = q5, xend = q95, y = fyrirtaeki, yend = fyrirtaeki),
     alpha = 0.5
   ) +
   scale_colour_brewer(
     palette = "Set1"
   ) +
+  coord_cartesian(
+    xlim = c(-0.4, 0.4)
+  ) +
   facet_wrap(
-    vars(fyrirtaeki),
+    vars(flokkur),
     scales = "free_y"
   )
 
@@ -246,4 +262,26 @@ fit$summary("industry_bias") |>
     y = NULL,
     title = "Heildarbjagi í mati á fylgi flokka",
     subtitle = "Sýnt á log-odds kvarða"
+  )
+
+
+fit$summary("Omega") |>
+  mutate(
+    p = str_match(variable, "Omega\\[(.*),.*\\]")[, 2] |> parse_number(),
+    q = str_match(variable, "Omega\\[.*,(.*)\\]")[, 2] |> parse_number(),
+    flokkur1 = colnames(stan_data$y)[-1][p],
+    flokkur2 = colnames(stan_data$y)[-1][q]
+  ) |>
+  select(flokkur1, flokkur2, mean) |>
+  pivot_wider(
+    names_from = flokkur2,
+    values_from = mean
+  ) |>
+  column_to_rownames("flokkur1") |>
+  as.matrix() |>
+  corrplot::corrplot(
+    method = "color",
+    order = "hclust",
+    tl.col = "black",
+    addCoef.col = "black"
   )

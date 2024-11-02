@@ -43,14 +43,17 @@ transformed data {
 
 parameters {
   // Polling Data
-  matrix[P - 1, D + pred_y_time_diff] z_beta;   // Standardized random walk innovations
+  matrix[P - 1, D + pred_y_time_diff] z_beta_raw;   // Standardized random walk innovations
+  cholesky_factor_corr[P - 1] L_Omega;
   vector[P - 1] beta0;
   vector[P - 1] beta_stjornarslit;
+
   matrix[P - 1, H - 1] gamma_raw;               // House effects (constant over time for each house)
   vector[P - 1] mu_gamma;
   vector<lower = 0>[P - 1] sigma_gamma;
+
   vector<lower = 0>[P - 1] sigma;               // Party-specific random walk scale
-  real<lower = 0> phi_inv;
+  vector<lower = 0>[H] phi_inv;
   real<lower = 0> tau_stjornarslit;
 
 
@@ -64,8 +67,9 @@ parameters {
 }
 
 transformed parameters {
-  real<lower = 0> phi = pow(phi_inv, -1);
+  vector<lower = 0>[H] phi = pow(phi_inv, -1);
   real<lower = 0> phi_f = pow(phi_f_inv, -1);
+  matrix[P - 1, D + pred_y_time_diff] z_beta = L_Omega * z_beta_raw;
   matrix[P - 1, H] gamma;                     
   matrix[P - 1, D + pred_y_time_diff] beta;   
   vector[P_f] alpha_f;
@@ -133,12 +137,13 @@ model {
   }
 
   // Priors for true party support
-  to_vector(z_beta) ~ std_normal();
+  to_vector(z_beta_raw) ~ std_normal();
+  L_Omega ~ lkj_corr_cholesky(2);
   sigma ~ exponential(1);                 
   beta0 ~ normal(mu_pred, tau_f * sigma);
   beta_stjornarslit ~ std_normal();
   sum(beta_stjornarslit) ~ normal(0, 0.1);
-  tau_stjornarslit ~ normal(0, 0.5);
+  tau_stjornarslit ~ normal(0, 0.2);
   // Prior for the Dirichlet-multinomial scale parameter
   phi_inv ~ exponential(1);
 
@@ -148,7 +153,7 @@ model {
     eta_n[2:P] = beta[, date[n]] + gamma[ , house[n]];  // Linear predictor for softmax
     eta_n[1] = -sum(eta_n[2:P]);
     vector[P] pi_n = softmax(eta_n);
-    y[n, 1:n_parties[n]] ~ dirichlet_multinomial(pi_n[1:n_parties[n]] * phi);                // Polling data likelihood
+    y[n, 1:n_parties[n]] ~ dirichlet_multinomial(pi_n[1:n_parties[n]] * phi[house[n]]);                // Polling data likelihood
   }
 
   /* Fundamentals */
@@ -172,13 +177,14 @@ model {
 }
 
 generated quantities {
-  array[D + pred_y_time_diff, P] int<lower = 0> y_rep;;
+  array[D + pred_y_time_diff, P] int<lower = 0> y_rep;
+  corr_matrix[P - 1] Omega = L_Omega * L_Omega';
   for (d in 1:(D + pred_y_time_diff)) {
     vector[P] eta_d;
     eta_d[2:P] = beta[, d];
     eta_d[1] = -sum(eta_d[2:P]);
     vector[P] pi_d = softmax(eta_d);
-    y_rep[d, ] = dirichlet_multinomial_rng(pi_d * phi, n_pred);
+    y_rep[d, ] = dirichlet_multinomial_rng(pi_d * phi[1], n_pred);
   }
 
 }

@@ -4,8 +4,9 @@ library(here)
 library(googlesheets4)
 library(purrr)
 
+
 box::use(
-  R / election_utils[dhondt, jofnunarsaeti]
+  R / election_utils[calculate_seats]
 )
 
 seats_tibble <- tribble(

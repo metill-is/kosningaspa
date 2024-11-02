@@ -239,6 +239,7 @@ make_plot <- function() {
     )
 
   p3 <- d |>
+    filter(dags >= clock::date_build(2021, 1, 1)) |>
     ggplot(aes(dags, mean, colour = litur, data_id = flokkur)) +
     geom_vline(
       xintercept = clock::date_build(2024, 11, 30),
