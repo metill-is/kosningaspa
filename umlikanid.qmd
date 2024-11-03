@@ -1,0 +1,46 @@
+---
+title: Hvernig virkar spálíkanið?
+---
+
+Spálíkanið okkar er byggt upp af tveimur meginþáttum sem vinna saman til að spá fyrir um úrslit Alþingiskosninga 2024:
+
+# 1. Skoðanakannanir og þróun fylgis
+
+Fyrri hluti líkansins fylgist með þróun fylgis flokkanna yfir tíma og tekur tillit til:
+
+- Hvernig fylgi flokkanna breytist dag frá degi
+- Kerfisbundinna skekkja í könnunum eftir fyrirtækjum
+- Aukinnar óvissu í kjölfar stjórnarslita
+- Hvernig fylgisbreytingar eins flokks hafa áhrif á aðra flokka
+
+## Hvernig er tekið tillit til skekkja í könnunum?
+
+Líkanið gerir ráð fyrir að hver könnunaraðili geti haft sína eigin kerfisbundnu skekkju. Til dæmis gæti eitt fyrirtæki alltaf mælt aðeins hærra fylgi hjá sumum flokkum en öðrum. Með því að bera saman kannanir frá mismunandi fyrirtækjum og raunveruleg úrslit síðustu kosninga getum við metið þessar skekkjur og leiðrétt fyrir þeim.
+
+## Hvernig er tekið tillit til stjórnarslita?
+
+Líkanið tekur tillit til stjórnarslita á tvo vegu:
+
+1. Líkanið metur hvort stjórnarslitin hafi leitt til kerfisbundinna breytinga á fylgi flokkanna. Það er, hvort einhverjir flokkar hafi almennt bætt við sig fylgi eða tapað fylgi í kjölfar stjórnarslitanna.
+
+2. Þegar stjórnarslit verða eykst óvissan í spánni því slíkir atburðir geta haft veruleg áhrif á fylgi flokkanna. Líkanið tekur tillit til þessa með því að leyfa meiri sveiflur í fylgi á tímabilinu eftir stjórnarslit.
+
+# 2. Grunnbreytur og söguleg gögn
+
+Seinni hluti líkansins byggir á:
+
+- Úrslitum síðustu kosninga
+- Stöðu flokka (hvort þeir eru í stjórn eða stjórnarandstöðu)
+- Hversu lengi flokkar hafa verið við völd
+- Efnahagslegum breytum eins og:
+  * Verðbólgu
+  * Hagvexti
+
+## Hvernig vinna þessir þættir saman?
+
+Líkanið vegur og metur upplýsingar frá báðum þáttum. Vægi þáttanna breytist eftir því hversu langt er til kosninga:
+
+- Þegar langt er til kosninga fá sögulegu gögnin og grunnbreyturnar meira vægi
+- Eftir því sem nær dregur kosningum fá nýjustu skoðanakannanirnar meira vægi
+
+Með þessu móti nýtir líkanið bæði langtímaþróun og nýjustu upplýsingar til að gefa sem nákvæmasta spá um úrslit kosninganna.
