@@ -19,21 +19,6 @@ data {
   
   int<lower = 1> n_pred;
 
-  // Fundamentals
-  int<lower = 1> D_f;
-  int<lower = 1> P_f;
-  array[P_f, D_f] int<lower = 0> y_f;
-  matrix[P_f, D_f + 1] x_f;
-  matrix[P_f, D_f + 1] incumbent_f;
-  matrix[P_f, D_f + 1] incumbent_years;
-  matrix[P_f, D_f + 1] vnv;
-  matrix[P_f, D_f + 1] growth;
-  int<lower = 1> max_n_parties_f;
-  array[max_n_parties_f, D_f + 1] int<lower = 0> index_f;
-  array[D_f + 1] int<lower = 0, upper = P_f> n_parties_f;
-
-  real<lower = 0, upper = 1> desired_weight;  // Desired weight for fundamentals at t=180
-  int<lower = 0> weight_time;                 // Time point for desired weight (e.g., 180)
 
 }
 
@@ -42,11 +27,11 @@ transformed data {
 }
 
 parameters {
-  // Polling Data
+  // Polling Parameters
   matrix[P - 1, D + pred_y_time_diff] z_beta_raw;   // Standardized random walk innovations
   cholesky_factor_corr[P - 1] L_Omega;
   vector[P - 1] beta0;
-  // vector[P - 1] beta_stjornarslit;
+  vector[P - 1] beta_stjornarslit;
 
   matrix[P - 1, H - 1] gamma_raw;               // House effects (constant over time for each house)
   vector[P - 1] mu_gamma;
@@ -57,36 +42,14 @@ parameters {
   real<lower = 0> tau_stjornarslit;
 
 
-  // Fundamentals
-  vector[P_f - 1] alpha_f_raw;
-  real beta_lag_f;
-  real beta_inc_years_f;
-  real beta_vnv_f;
-  real beta_growth_f;
-  real<lower = 0> phi_f_inv;
 }
 
 transformed parameters {
   vector<lower = 0>[H] phi = pow(phi_inv, -1);
-  real<lower = 0> phi_f = pow(phi_f_inv, -1);
   matrix[P - 1, D + pred_y_time_diff] z_beta = L_Omega * z_beta_raw;
   matrix[P - 1, H] gamma;                     
   matrix[P - 1, D + pred_y_time_diff] beta;   
-  vector[P_f] alpha_f;
-  alpha_f[2:P_f] = alpha_f_raw;
-  alpha_f[1] = -sum(alpha_f[2:P_f]);
-  real<lower = 0> V_t;
-  real<lower = 0> tau_f;
   
-  // Calculate V(t) based on weight_time and tau_stjornarslit
-  if (weight_time <= 47) {
-    V_t = weight_time * square(1 + tau_stjornarslit);
-  } else {
-    V_t = (weight_time - 47) + 47 * square(1 + tau_stjornarslit);
-  }
-  
-  // Calculate tau_f based on desired weight and V_t
-  tau_f = sqrt(V_t * (1 - desired_weight) / desired_weight);
   
   
 
@@ -98,33 +61,34 @@ transformed parameters {
     gamma[p, 2:H] = mu_gamma[p] + sigma_gamma[p] * gamma_raw[p, ];         
   }
   
-  beta[ , D + pred_y_time_diff] = beta0;
+  beta[ , 1] = beta0;
+
+  for (t in 2:D) {
+    beta[ , t] = beta[ , t - 1] + 
+      time_scale[t - 1] * z_beta[, t] .* sigma * (1 + tau_stjornarslit * stjornarslit[t - 1])  -
+      beta_stjornarslit * stjornarslit[t - 1];
+  }
 
   for (t in 1:pred_y_time_diff) {
     real scale;
-    if (t <= days_between_stjornarslit_and_election) {
+
+    if ((pred_y_time_diff - t) <= days_between_stjornarslit_and_election) {
       scale = 1 + tau_stjornarslit;
     } else {
       scale = 1;
     }
-    beta[ , D + pred_y_time_diff - t] = beta[ , D + pred_y_time_diff - t + 1] + 
-      z_beta[, D + pred_y_time_diff - t + 1] .* sigma * scale;
+
+    beta[ , D + t] = beta[ , D + t - 1] + 
+      z_beta[, D + t - 1] .* sigma * scale;
   }
 
-  for (t in 1:(D - 1)) {
-    beta[ , D - t] = beta[ , D - t + 1] + 
-      time_scale[D - t] * z_beta[, D - t + 1] .* sigma * (1 + tau_stjornarslit * post_stjornarslit[D - t]);
-  }
+  
 
   
 }
 
 model {
-  vector[P - 1] mu_pred = alpha_f[index_f[2:n_parties_f[D_f + 1], D_f + 1]] + 
-    beta_lag_f * x_f[index_f[2:n_parties_f[D_f + 1], D_f + 1], D_f + 1] + 
-    beta_inc_years_f * incumbent_years[index_f[2:n_parties_f[D_f + 1], D_f + 1], D_f + 1] +
-    beta_vnv_f * vnv[index_f[2:n_parties_f[D_f + 1], D_f + 1], D_f + 1] +
-    beta_growth_f * growth[index_f[2:n_parties_f[D_f + 1], D_f + 1], D_f + 1];
+
   /* Polling Data */
   // Priors for house effects
   to_vector(gamma_raw) ~ std_normal();
@@ -136,12 +100,12 @@ model {
   }
 
   // Priors for true party support
-  to_vector(z_beta_raw) ~ std_normal();
+  to_vector(z_beta_raw) ~ student_t(3, 0, 1);
   L_Omega ~ lkj_corr_cholesky(2);
   sigma ~ exponential(1);                 
-  beta0 ~ normal(mu_pred, tau_f * sigma);
-  // beta_stjornarslit ~ std_normal();
-  // sum(beta_stjornarslit) ~ normal(0, 0.1);
+  beta0 ~ std_normal();
+  beta_stjornarslit ~ std_normal();
+  sum(beta_stjornarslit) ~ normal(0, 0.1);
   tau_stjornarslit ~ normal(0, 0.2);
   // Prior for the Dirichlet-multinomial scale parameter
   phi_inv ~ exponential(1);
@@ -153,24 +117,6 @@ model {
     eta_n[1] = -sum(eta_n[2:P]);
     vector[P] pi_n = softmax(eta_n);
     y[n, 1:n_parties[n]] ~ dirichlet_multinomial(pi_n[1:n_parties[n]] * phi[house[n]]);                // Polling data likelihood
-  }
-
-  /* Fundamentals */
-  // Priors
-  beta_lag_f ~ std_normal();
-  beta_inc_years_f ~ std_normal();
-  alpha_f_raw ~ std_normal();
-  phi_f_inv ~ exponential(1);
-
-  for (d in 1:D_f) { 
-    vector[n_parties_f[d]] mu_d;
-    mu_d[1:n_parties_f[d]] = alpha_f[index_f[1:n_parties_f[d], d]] + 
-      beta_lag_f * x_f[index_f[1:n_parties_f[d], d], d] + 
-      beta_inc_years_f * incumbent_years[index_f[1:n_parties_f[d], d], d] +
-      beta_vnv_f * vnv[index_f[1:n_parties_f[d], d], d] +
-      beta_growth_f * growth[index_f[1:n_parties_f[d], d], d];
-    vector[n_parties_f[d]] pi_d = softmax(mu_d);
-    y_f[index_f[1:n_parties_f[d], d], d] ~ dirichlet_multinomial(pi_d * phi_f);
   }
 }
 

@@ -22,7 +22,7 @@ colors <- tribble(
   "Annað", "grey50"
 )
 
-seats_draws <- read_parquet(here("data", "seats_draws.parquet"))
+seats_draws <- read_parquet(here("data", today(), "seats_draws.parquet"))
 
 seats_draws |>
   summarise(
@@ -75,7 +75,9 @@ seats_draws |>
     prop = mean(seats >= n_seats),
     .by = c(flokkur, kjordaemi, n_seats)
   ) |>
-  filter(prop >= 0.005) |>
+  filter(
+    (prop >= 0.005) | (n_seats == 1)
+  ) |>
   arrange(n_seats, kjordaemi) |>
   pivot_wider(names_from = n_seats, values_from = prop) |>
   group_by(flokkur) |>

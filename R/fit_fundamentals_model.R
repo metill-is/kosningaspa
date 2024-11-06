@@ -39,18 +39,20 @@ fundamentals_data <- fundamentals_data |>
     by = "date"
   )
 
+n_votes <- fundamentals_data |>
+  summarise(
+    n_votes = unique(total_valid_votes) |>
+      coalesce(200000),
+    .by = year
+  ) |>
+  pull(n_votes)
+
 stan_data <- prepare_stan_data(polling_data, fundamentals_data)
-
-stan_data$desired_weight <- 0.33
-stan_data$weight_time <- 180
-
-
-
-
+stan_data$n_votes <- n_votes[-(1:2)]
 str(stan_data)
 
 model <- cmdstan_model(
-  here("Stan", "polling_and_fundamentals.stan")
+  here("Stan", "fundamentals.stan")
 )
 
 
@@ -58,26 +60,11 @@ fit <- model$sample(
   data = stan_data,
   chains = 4,
   parallel_chains = 4,
-  refresh = 100
+  refresh = 100,
+  init = 0
 )
 
 
-# Polling Parameters
-fit$summary("beta0")
-fit$summary("sigma")
-fit$summary("tau_stjornarslit")
-fit$summary("tau_f")
-fit$summary("beta_stjornarslit") |>
-  mutate(
-    flokkur = colnames(stan_data$y)[-1] |>
-      fct_reorder(mean)
-  ) |>
-  select(flokkur, mean, q5, q95) |>
-  mutate_at(vars(-flokkur), exp) |>
-  ggplot(aes(mean, flokkur)) +
-  geom_vline(xintercept = 1, lty = 2) +
-  geom_point() +
-  geom_linerange(aes(xmin = q5, xmax = q95))
 
 # Fundamentals Parameters
 fit$summary("alpha_f")
@@ -106,328 +93,61 @@ fit$summary("phi_inv") |>
 fit$summary("phi_f_inv")
 
 
-fit$summary("Omega") |>
-  mutate(
-    p = str_match(variable, "Omega\\[(.*),.*\\]")[, 2] |> parse_number(),
-    q = str_match(variable, "Omega\\[.*,(.*)\\]")[, 2] |> parse_number(),
-    flokkur1 = colnames(stan_data$y)[-1][p],
-    flokkur2 = colnames(stan_data$y)[-1][q]
-  ) |>
-  select(flokkur1, flokkur2, mean) |>
-  ggplot(aes(flokkur1, flokkur2, fill = mean)) +
-  geom_tile() +
-  scale_fill_distiller(
-    palette = "RdBu",
-    limits = c(-1, 1),
-    direction = 1
-  )
+fit$summary(c("beta_lag_f", "beta_inc_years_f", "beta_vnv_f", "beta_growth_f"))
 
-fit$summary("Omega") |>
-  mutate(
-    p = str_match(variable, "Omega\\[(.*),.*\\]")[, 2] |> parse_number(),
-    q = str_match(variable, "Omega\\[.*,(.*)\\]")[, 2] |> parse_number(),
-    flokkur1 = colnames(stan_data$y)[-1][p],
-    flokkur2 = colnames(stan_data$y)[-1][q]
-  ) |>
-  select(flokkur1, flokkur2, mean) |>
-  pivot_wider(
-    names_from = flokkur2,
-    values_from = mean
-  ) |>
-  column_to_rownames("flokkur1") |>
-  as.matrix() |>
-  corrplot::corrplot(
-    method = "color",
-    order = "hclust",
-    tl.col = "black",
-    addCoef.col = "black"
-  )
-
-fit$summary("Omega") |>
-  mutate(
-    p = str_match(variable, "Omega\\[(.*),.*\\]")[, 2] |> parse_number(),
-    q = str_match(variable, "Omega\\[.*,(.*)\\]")[, 2] |> parse_number(),
-    flokkur1 = colnames(stan_data$y)[-1][p],
-    flokkur2 = colnames(stan_data$y)[-1][q]
-  ) |>
-  select(flokkur1, flokkur2, mean, q5, q95) |>
-  filter(flokkur1 != flokkur2) |>
-  ggplot(aes(mean, flokkur2)) +
-  geom_vline(xintercept = 0, lty = 2) +
-  geom_point() +
-  geom_linerange(aes(xmin = q5, xmax = q95)) +
-  facet_wrap(
-    vars(flokkur1),
-    scales = "free_y"
-  )
-
-dates <- c(
-  unique(polling_data$date),
-  seq.Date(max(polling_data$date), election_date, by = "day")
-)
-
-
-fit$summary("y_rep", mean, ~ quantile(.x, c(0.05, 0.95))) |>
-  rename(q5 = `5%`, q95 = `95%`) |>
-  mutate(
-    t = str_match(variable, "y_rep\\[(.*),.*\\]")[, 2] |> parse_number(),
-    p = str_match(variable, "y_rep\\[.*,(.*)\\]")[, 2] |> parse_number(),
-    flokkur = colnames(stan_data$y)[p],
-    dags = dates[t]
-  ) |>
-  # filter(flokkur != "Annað") |>
-  group_by(dags) |>
-  mutate_at(
-    vars(mean, q5, q95),
-    ~ .x / stan_data$n_pred
-  ) |>
-  ungroup() |>
-  left_join(
-    polling_data |>
-      mutate(p = n / sum(n), .by = c(date, fyrirtaeki)) |>
-      select(dags = date, fyrirtaeki, flokkur, konnun = p),
-    by = join_by(dags, flokkur),
-    relationship = "many-to-many"
-  ) |>
-  filter(dags >= date_build(2024, 1, 1)) |>
-  ggplot(aes(dags, mean)) +
-  geom_ribbon(
-    aes(ymin = q5, ymax = q95, fill = flokkur),
-    alpha = 0.2
-  ) +
-  geom_line(aes(col = flokkur), linewidth = 1) +
-  geom_point(aes(y = konnun, col = flokkur))
-
-
-
-fit$draws("y_rep") |>
+plot_dat <- fit$draws("y_rep") |>
   as_draws_df() |>
   as_tibble() |>
-  pivot_longer(
-    c(-.chain, -.iteration, -.draw)
+  pivot_longer(c(-.draw, -.chain, -.iteration)) |>
+  mutate(
+    p = str_match(name, "y_rep\\[(.*),.*\\]")[, 2] |> parse_number(),
+    t = str_match(name, "y_rep\\[.*,(.*)\\]")[, 2] |> parse_number(),
+    flokkur = rownames(stan_data$y_f)[p],
+    year = colnames(stan_data$y_f)[t] |> as.numeric()
   ) |>
   mutate(
-    t = str_match(name, "y_rep\\[(.*),.*\\]")[, 2] |> parse_number(),
-    p = str_match(name, "y_rep\\[.*,(.*)\\]")[, 2] |> parse_number(),
-    flokkur = colnames(stan_data$y)[p],
-    dags = dates[t]
+    value = value / sum(value),
+    .by = c(year, .draw, .iteration, .chain)
   ) |>
-  filter(
-    dags == max(dags),
-    flokkur != "Annað"
+  inner_join(
+    fundamentals_data,
+    by = c("year", "flokkur")
   ) |>
   mutate(
-    value = value / stan_data$n_pred
-  ) |>
+    value = value - voteshare / 100
+  )
+
+
+
+
+plot_dat |>
   summarise(
     mean = mean(value),
     q5 = quantile(value, 0.05),
     q95 = quantile(value, 0.95),
-    .by = flokkur
+    .by = c(year, flokkur, voteshare)
   ) |>
-  select(flokkur, mean, q5, q95) |>
-  arrange(desc(mean)) |>
-  mutate(
-    plot_col = mean,
-    .before = mean
-  ) |>
-  gt() |>
-  cols_label(
-    flokkur = "Flokkur",
-    plot_col = "",
-    mean = "Væntigildi",
-    q5 = "Neðri",
-    q95 = "Efri"
-  ) |>
-  tab_spanner(
-    label = "95% Öryggisbil",
-    columns = c(q5, q95)
-  ) |>
-  cols_align(
-    align = "left",
-    columns = 1
-  ) |>
-  fmt_percent(
-    decimals = 1
-  ) |>
-  gt_color_rows(
-    columns = c(mean, q5, q95),
-    palette = "Greys",
-    domain = c(0, 0.5)
-  ) |>
-  gt_plt_conf_int(
-    column = plot_col,
-    ci_columns = c(q5, q95),
-    ref_line = 0.05,
-    text_size = 0,
-    width = 30
-  ) |>
-  tab_header(
-    title = "Spáð fylgi stjórnmálaflokka"
-  )
-
-
-y_rep_draws <- fit$draws("y_rep") |>
-  as_draws_df() |>
-  as_tibble() |>
-  pivot_longer(
-    c(-.chain, -.iteration, -.draw)
-  ) |>
-  mutate(
-    t = str_match(name, "y_rep\\[(.*),.*\\]")[, 2] |> parse_number(),
-    p = str_match(name, "y_rep\\[.*,(.*)\\]")[, 2] |> parse_number(),
-    flokkur = colnames(stan_data$y)[p],
-    dags = dates[t]
-  ) |>
-  select(
-    .chain,
-    .iteration,
-    .draw,
-    dags,
-    flokkur,
-    value
-  ) |>
-  mutate(
-    value = value / stan_data$n_pred
-  )
-
-last_poll_date <- max(polling_data$date)
-dir.create(here("data", as.character(last_poll_date)), showWarnings = FALSE)
-write_parquet(y_rep_draws, here("data", as.character(last_poll_date), "y_rep_draws.parquet"))
-
-theme_set(metill::theme_metill())
-
-p <- fit$summary("gamma") |>
-  select(variable, mean, q5, q95) |>
-  mutate(
-    p = str_match(variable, "gamma\\[(.*),.*\\]")[, 2] |> parse_number(),
-    h = str_match(variable, "gamma\\[.*,(.*)\\]")[, 2] |> parse_number(),
-    flokkur = colnames(stan_data$y)[-1][p],
-    fyrirtaeki = levels(polling_data$fyrirtaeki)[h]
-  ) |>
-  filter(h != 1) |>
-  bind_rows(
-    fit$summary("mu_gamma") |>
-      mutate(
-        flokkur = colnames(stan_data$y)[-1] |>
-          as_factor() |>
-          fct_reorder(mean),
-        fyrirtaeki = "Samtals",
-        .before = variable
-      )
-  ) |>
-  ggplot(aes(0, fyrirtaeki, col = fyrirtaeki)) +
-  geom_vline(xintercept = 0, lty = 2) +
-  geom_point(
-    aes(x = mean),
-    size = 3
-  ) +
-  geom_segment(
-    aes(x = q5, xend = q95, y = fyrirtaeki, yend = fyrirtaeki),
-    alpha = 0.5
-  ) +
-  scale_x_continuous(
-    breaks = breaks_width(width = 0.1),
-    guide = ggh4x::guide_axis_truncated()
-  ) +
-  scale_y_discrete(
-    guide = ggh4x::guide_axis_truncated()
-  ) +
-  scale_colour_manual(
-    values = c(
-      "Samtals" = "black",
-      "Prósent" = "#1f78b4",
-      "Maskína" = "#1b9e77",
-      "Gallup" = "#e41a1c"
-    )
-  ) +
+  select(year, flokkur, mean, voteshare, q5, q95) |>
+  ggplot(aes(year, mean)) +
+  geom_hline(yintercept = 0, lty = 2) +
+  geom_linerange(aes(ymin = q5, ymax = q95), alpha = 0.5) +
+  geom_point() +
   facet_wrap(
-    vars(flokkur),
-    ncol = 1,
-    scales = "free_y"
+    ~flokkur,
+    scales = "free_y",
+    ncol = 3
   ) +
-  theme(
-    legend.position = "none"
-  ) +
-  labs(
-    x = NULL,
-    y = NULL,
-    title = "Bjagi mismunandi fyrirtækja á fylgi flokka",
-    subtitle = "Bjagi í janúar 2016"
-  )
+  coord_cartesian(ylim = c(-0.25, 0.25))
 
-p
-
-ggsave(
-  here("Figures", "gamma.png"),
-  p,
-  width = 8,
-  height = 1.2 * 8,
-  scale = 1.3
-)
-
-p <- fit$draws(c("beta_inc_years_f", "beta_vnv_f", "beta_growth_f")) |>
-  as_draws_df() |>
-  crossing(
-    years = 1:15,
-    vnv = c(0, 0.02, 0.05, 0.1),
-    growth = c(-0.1, 0, 0.05, 0.1)
+plot_dat |>
+  summarise(
+    mean = mean(value),
+    q5 = quantile(value, 0.05),
+    q95 = quantile(value, 0.95),
+    .by = year
   ) |>
-  mutate(
-    value = beta_inc_years_f * log(years) +
-      beta_vnv_f * log(1 + vnv) +
-      beta_growth_f * log(1 + growth)
-  ) |>
-  group_by(years, vnv, growth) |>
-  reframe(
-    coverage = seq(0.05, 0.95, by = 0.1),
-    lower = quantile(value, 0.5 - coverage / 2),
-    upper = quantile(value, 0.5 + coverage / 2)
-  ) |>
-  mutate_at(vars(lower, upper), exp) |>
-  mutate(
-    Inflation = percent(vnv, accuracy = 0.1) |>
-      fct_reorder(vnv),
-    Growth = percent(growth, accuracy = 0.1) |>
-      fct_reorder(growth)
-  ) |>
-  arrange(coverage) |>
-  ggplot(aes(years, ymin = lower, ymax = upper, fill = coverage, group = coverage)) +
-  geom_hline(yintercept = 1, lty = 2) +
-  geom_ribbon(aes(alpha = -coverage)) +
-  scale_x_continuous(
-    labels = \(x) number(x, accuracy = 1),
-    breaks = breaks_width(width = 2, offset = 1),
-    guide = ggh4x::guide_axis_truncated()
-  ) +
-  scale_y_continuous(
-    labels = \(x) number(x, accuracy = 0.1),
-    guide = ggh4x::guide_axis_truncated()
-  ) +
-  scale_alpha_continuous(
-    range = c(0.1, 0.4)
-  ) +
-  facet_grid(
-    rows = vars(Growth),
-    cols = vars(Inflation),
-    labeller = label_both
-  ) +
-  labs(
-    x = "Years as Incumbent",
-    y = "Effect on Odds Ratio Scale",
-    title = "Effect of Incumbent Years, Inflation and Growth on Vote Share",
-    subtitle = "Deeper blues indicate lower posterior coverage"
-  ) +
-  theme(
-    legend.position = "none"
-  )
-
-p
-
-ggsave(
-  here("Figures", "fundamentals_effect.png"),
-  p,
-  width = 8,
-  height = 0.8 * 8,
-  scale = 1.3
-)
+  select(year, mean, q5, q95) |>
+  ggplot(aes(year, mean)) +
+  geom_hline(yintercept = 0, lty = 2) +
+  geom_linerange(aes(ymin = q5, ymax = q95), alpha = 0.5) +
+  geom_point()

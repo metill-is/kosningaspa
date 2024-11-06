@@ -1,6 +1,8 @@
 library(tidyverse)
 library(googlesheets4)
 library(arrow)
+library(here)
+library(scales)
 
 dhondt <- function(votes, n_seats = 63, return_seats = TRUE) {
   n_seats <- unique(n_seats)
@@ -37,76 +39,30 @@ jofnunarsaeti <- function(seats, votes, n_seats = 9) {
   jofnun_seats
 }
 
-seats_tibble <- tribble(
-  ~kjordaemi, ~n_seats, ~n_jofnun,
-  "Reykjavík Suður", 9, 2,
-  "Reykjavík Norður", 9, 2,
-  "Suðvestur", 11, 2,
-  "Suður", 9, 1,
-  "Norðaustur", 9, 1,
-  "Norðvestur", 7, 1
-)
-
-gs4_auth()
-
-electorate_byagearea <- read_csv("data/electorate_byagearea.csv")
-maskina_aldur <- read_sheet(
-  "https://docs.google.com/spreadsheets/d/1yEn5feIiltc4kWC61q57sGg_CpMCkxVFLIK9ySYxWQ4",
-  sheet = "maskina_aldur"
-) |>
-  select(-Ár, -Mánuður) |>
-  pivot_longer(
-    cols = -Flokkur,
-    names_to = "aldur",
-    values_to = "p_aldur"
-  ) |>
-  janitor::clean_names() |>
-  mutate(
-    p_aldur = p_aldur / sum(p_aldur),
-    .by = flokkur
-  )
-
-maskina_kjordaemi <- read_sheet(
-  "https://docs.google.com/spreadsheets/d/1yEn5feIiltc4kWC61q57sGg_CpMCkxVFLIK9ySYxWQ4",
-  sheet = "maskina_kjordaemi"
-) |>
-  select(-Ár, -Mánuður) |>
-  pivot_longer(
-    cols = -Flokkur,
-    names_to = "kjordaemi",
-    values_to = "p_kjordaemi"
-  ) |>
-  janitor::clean_names() |>
-  mutate(
-    p_kjordaemi = p_kjordaemi / sum(p_kjordaemi),
-    .by = flokkur
-  )
-
-y_rep <- read_parquet("data/y_rep_draws.parquet") |>
+y_rep <- read_parquet(here("data", today(), "y_rep_draws.parquet")) |>
   filter(dags == max(dags))
 
 
-d <- y_rep |>
-  filter(.draw <= 1) |>
+d <- y_rep
+
+d |>
   mutate(
-    value = value / sum(value),
-    .by = c(.draw, .iteration, .chain)
+    seats = dhondt(value),
+    balance = jofnunarsaeti(seats, value),
+    total_seats = seats + balance,
+    .by = .draw
   ) |>
-  inner_join(
-    maskina_kjordaemi,
-    by = join_by(flokkur)
-  ) |>
-  inner_join(
-    maskina_aldur,
-    by = join_by(flokkur)
-  ) |>
-  inner_join(
-    electorate_byagearea,
-    by = join_by(kjordaemi, aldur)
-  ) |>
+  count(flokkur, total_seats) |>
   mutate(
-    value = value * p_aldur * p_kjordaemi * n_kjosendur
-  )
+    p = n / sum(n),
+    .by = flokkur
+  ) |>
+  ggplot(aes(total_seats, p)) +
+  geom_col() +
+  scale_x_continuous(
+    breaks = breaks_width(1)
+  ) +
+  facet_wrap("flokkur", scales = "free")
 
 d |>
   summarise(

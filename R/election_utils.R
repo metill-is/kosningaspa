@@ -51,15 +51,35 @@ jofnunarsaeti <- function(data, ...) {
     )
 }
 
-
+#' @export
+seats_tibble <- function() {
+  box::use(
+    dplyr[tribble]
+  )
+  tribble(
+    ~kjordaemi, ~n_seats, ~n_jofnun,
+    "Reykjavík Suður", 9, 2,
+    "Reykjavík Norður", 9, 2,
+    "Suðvestur", 11, 2,
+    "Suður", 9, 1,
+    "Norðaustur", 9, 1,
+    "Norðvestur", 7, 1
+  )
+}
 #' @export
 calculate_seats <- function(draw) {
+  box::use(
+    dplyr[arrange, pull],
+    tidyr[pivot_wider],
+    tibble[as_tibble, column_to_rownames]
+  )
+
   votes_matrix <- draw |>
     pivot_wider(names_from = kjordaemi, values_from = votes) |>
     column_to_rownames("flokkur") |>
     as.matrix()
 
-  available_seats <- seats_tibble |>
+  available_seats <- seats_tibble() |>
     arrange(kjordaemi) |>
     pull(n_seats)
 
@@ -87,7 +107,7 @@ calculate_seats <- function(draw) {
   }
 
 
-  available_jofnun <- seats_tibble |>
+  available_jofnun <- seats_tibble() |>
     arrange(kjordaemi) |>
     pull(n_jofnun)
 
