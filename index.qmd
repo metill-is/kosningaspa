@@ -136,6 +136,68 @@ $$
 
 where $\mu_\text{pred}$ is the fundamentals prediction and $\tau_f$ controls how much weight is given to the fundamentals versus polling data at some point before the elections (see Appendix for details on choosing $\tau_f$).
 
+### Constituency Component
+
+The model extends the national-level polling model to incorporate constituency-level effects through a hierarchical structure. This allows us to capture systematic differences in party support across constituencies while sharing information between them.
+
+#### Constituency Effects
+
+The constituency-level model adds constituency-specific deviations $\delta_{p,k}$ to the national-level support:
+
+$$
+\begin{aligned}
+y_{n,k} &\sim \text{Dirichlet-Multinomial}(\pi_{n,k}, \phi_{h[n]}) \\
+\pi_{n,k} &= \text{softmax}(\eta_{n,k}) \\
+\eta_{n,k,p} &= \beta_{p,t[n]} + \gamma_{p,h[n]} + \delta_{p,k}
+\end{aligned}
+$$
+
+where $k$ indexes constituencies. The constituency effects follow a hierarchical prior:
+
+$$
+\begin{aligned}
+\delta_{p,k} &\sim \text{Normal}(0, \sigma_{\delta,p}) \\
+\sigma_{\delta,p} &\sim \text{Exponential}(1)
+\end{aligned}
+$$
+
+This structure allows for:
+
+- Constituency-specific deviations from national support levels
+- Party-specific scales of constituency variation ($\sigma_{\delta,p}$)
+- Partial pooling of information across constituencies
+- Separate treatment of each party's geographic distribution
+
+The constituency effects are constrained to sum to zero across constituencies for each party to ensure identifiability:
+
+$$
+\sum_{k=1}^K \delta_{p,k} = 0
+$$
+
+#### Integration with National Model
+
+The constituency model is integrated with the national model through:
+
+1. Shared national-level parameters ($\beta_{p,t}$)
+2. Common house effects ($\gamma_{p,h}$)
+3. Joint estimation of overdispersion parameters ($\phi_h$)
+
+This allows constituency-level polls to inform national-level estimates and vice versa, while accounting for systematic differences between constituencies.
+
+#### Prediction
+
+The model generates both national-level predictions and constituency-specific predictions:
+
+- National: $y^{\text{rep}}_{\text{national}}$ represents overall party support
+- Constituency: $y^{\text{rep}}_{\text{constituency}}$ gives constituency-level predictions
+
+These predictions incorporate the combined uncertainty in:
+
+- National trends
+- Constituency-specific effects
+- House effects
+- Overdispersion in both national and constituency-level polls
+
 # Results
 
 ## Parameter Estimates
