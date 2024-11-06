@@ -321,7 +321,7 @@ write_parquet(y_rep_draws, here("data", as.character(last_poll_date), "y_rep_dra
 
 #### Constituency Y-Rep Draws ####
 
-fit$summary("y_rep_constituency") |>
+d_const <- fit$summary("y_rep_constituency") |>
   mutate(
     p = str_match(variable, "y_rep_constituency\\[(.*),.*\\]")[, 2] |> parse_number(),
     k = str_match(variable, "y_rep_constituency\\[.*,(.*)\\]")[, 2] |> parse_number(),
@@ -332,7 +332,9 @@ fit$summary("y_rep_constituency") |>
     vars(mean, q5, q95),
     ~ .x / stan_data$n_pred
   ) |>
-  select(flokkur, kjordaemi, mean, q5, q95) |>
+  select(flokkur, kjordaemi, mean, q5, q95)
+
+d_const |>
   group_by(kjordaemi2 = kjordaemi) |>
   arrange(desc(mean)) |>
   group_map(

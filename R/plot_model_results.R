@@ -8,7 +8,7 @@ make_plot <- function() {
   Sys.setlocale("LC_ALL", "is_IS.UTF-8")
 
   box::use(
-    R / prepare_data[
+    R / data[
       read_polling_data
     ]
   )
