@@ -5,13 +5,15 @@ data {
   int<lower = 1> P;                        // Number of parties
   int<lower = 1> H;                        // Number of polling houses
   int<lower = 1> N;                        // Number of date x house observations
+  int<lower = 1> N_n;
   int<lower = 1> days_between_stjornarslit_and_election;
 
-  array[N, P] int<lower = 0> y;           // Polling data (counts per party)
+  array[N_n, P] int<lower = 0> y_n;           // Polling data (counts per party)
 
-  array[N] int<lower = 1, upper = H> house; // House indicator for each poll
-  array[N] int<lower = 1, upper = D> date;  // Date indicator for each poll
-  array[N] int<lower = 1, upper = P> n_parties; // Number of parties in each poll
+  array[N_n] int<lower = 1, upper = H> house_n; // House indicator for each poll
+  array[N_n] int<lower = 1, upper = D> date_n;  // Date indicator for each poll
+  array[N_n] int<lower = 1, upper = P> n_parties_n; // Number of parties in each poll
+
   vector[D] stjornarslit;
   vector[D] post_stjornarslit;
   
@@ -159,20 +161,22 @@ model {
   L_Omega ~ lkj_corr_cholesky(2);
   sigma ~ exponential(1);                 
   beta0 ~ normal(mu_pred, tau_f * sigma);
-  tau_stjornarslit ~ normal(0, 0.2);
+  tau_stjornarslit ~ normal(0, 0.01);
 
-  // Constituency effects
-  to_vector(delta_raw) ~ std_normal();
-  sigma_delta ~ exponential(1);
+  
 
   // National-level likelihood (Dirichlet-multinomial observation model)
-  for (n in 1:N) {
+  for (n in 1:N_n) {
     vector[P] eta_n;
-    eta_n[2:P] = beta[, date[n]] + gamma[ , house[n]];  // Linear predictor for softmax
+    eta_n[2:P] = beta[, date_n[n]] + gamma[ , house_n[n]];  // Linear predictor for softmax
     eta_n[1] = -sum(eta_n[2:P]);
     vector[P] pi_n = softmax(eta_n);
-    y[n, 1:n_parties[n]] ~ dirichlet_multinomial(pi_n[1:n_parties[n]] * phi[house[n]]);                // Polling data likelihood
+    y_n[n, 1:n_parties_n[n]] ~ dirichlet_multinomial(pi_n[1:n_parties_n[n]] * phi[house_n[n]]);                // Polling data likelihood
   }
+
+  // Constituency priors
+  to_vector(delta_raw) ~ std_normal();
+  sigma_delta ~ exponential(1);
 
   // Constituency-level likelihood
   for (n in 1:N_k) {

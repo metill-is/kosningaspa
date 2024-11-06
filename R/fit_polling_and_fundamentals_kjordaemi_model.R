@@ -41,22 +41,25 @@ fundamentals_data <- fundamentals_data |>
     econ_data,
     by = "date"
   )
-
+# update_constituency_data()
 constituency_data <- read_constituency_data() |>
+  drop_na() |>
   mutate(
     fyrirtaeki = factor(fyrirtaeki, levels = levels(polling_data$fyrirtaeki)),
     flokkur = factor(flokkur, levels = levels(polling_data$flokkur)),
     kjordaemi = as_factor(kjordaemi)
-  )
+  ) |>
+  arrange(flokkur, date, kjordaemi)
 
-stan_data <- prepare_stan_data(polling_data, fundamentals_data, constituency_data)
+stan_data <- prepare_stan_data(
+  polling_data,
+  fundamentals_data,
+  constituency_data
+)
 
 stan_data$desired_weight <- 0.33
 stan_data$weight_time <- 180
 
-
-stan_data$stjornarslit
-stan_data$post_stjornarslit
 str(stan_data)
 
 model <- cmdstan_model(
@@ -73,32 +76,56 @@ fit <- model$sample(
 )
 
 
-# Polling Parameters
+#### Polling Parameters ####
+#### National Level ####
 fit$summary("beta0")
 fit$summary("sigma")
 fit$summary("tau_stjornarslit")
 fit$summary("tau_f")
-fit$summary("beta_stjornarslit") |>
+
+#### Constituency Parameters ####
+fit$summary("sigma_delta") |>
   mutate(
-    flokkur = colnames(stan_data$y)[-1] |>
-      fct_reorder(mean)
+    flokkur = levels(constituency_data$flokkur)[-1]
   ) |>
-  select(flokkur, mean, q5, q95) |>
-  mutate_at(vars(-flokkur), exp) |>
+  select(flokkur, mean, q5, q95)
+
+fit$summary("delta") |>
+  mutate(
+    p = str_match(variable, "delta\\[(.*),.*\\]")[, 2] |> parse_number(),
+    k = str_match(variable, "delta\\[.*,(.*)\\]")[, 2] |> parse_number(),
+    flokkur = levels(constituency_data$flokkur)[p + 1],
+    kjordaemi = levels(constituency_data$kjordaemi)[k]
+  ) |>
   ggplot(aes(mean, flokkur)) +
-  geom_vline(xintercept = 1, lty = 2) +
+  geom_vline(xintercept = 0, lty = 2) +
   geom_point() +
-  geom_linerange(aes(xmin = q5, xmax = q95))
+  geom_linerange(aes(xmin = q5, xmax = q95)) +
+  facet_wrap(
+    vars(kjordaemi)
+  )
+
+fit$summary("delta") |>
+  mutate(
+    p = str_match(variable, "delta\\[(.*),.*\\]")[, 2] |> parse_number(),
+    k = str_match(variable, "delta\\[.*,(.*)\\]")[, 2] |> parse_number(),
+    flokkur = levels(constituency_data$flokkur)[p + 1],
+    kjordaemi = levels(constituency_data$kjordaemi)[k]
+  ) |>
+  ggplot(aes(mean, kjordaemi)) +
+  geom_vline(xintercept = 0, lty = 2) +
+  geom_point() +
+  geom_linerange(aes(xmin = q5, xmax = q95)) +
+  facet_wrap(
+    vars(flokkur)
+  )
+
 
 # Fundamentals Parameters
 fit$summary("alpha_f")
 fit$summary("beta_lag_f")
-
-
 fit$summary("beta_inc_years_f")
-
 fit$summary(c("beta_vnv_f", "beta_growth_f"))
-
 fit$draws(c("beta_vnv_f", "beta_growth_f")) |>
   summarise_draws(
     "perc_less_than_0" = ~ mean(.x < 0)
@@ -158,17 +185,17 @@ fit$summary("Omega") |>
   )
 
 dates <- c(
-  unique(polling_data$date),
-  seq.Date(max(polling_data$date) + 1, election_date, by = "day")
+  unique(c(polling_data$date, constituency_data$date)),
+  seq.Date(max(c(polling_data$date, constituency_data$date)) + 1, election_date, by = "day")
 )
 
 
-fit$summary("y_rep", mean, ~ quantile(.x, c(0.05, 0.95))) |>
+fit$summary("y_rep_national", mean, ~ quantile(.x, c(0.05, 0.95))) |>
   rename(q5 = `5%`, q95 = `95%`) |>
   mutate(
-    t = str_match(variable, "y_rep\\[(.*),.*\\]")[, 2] |> parse_number(),
-    p = str_match(variable, "y_rep\\[.*,(.*)\\]")[, 2] |> parse_number(),
-    flokkur = colnames(stan_data$y)[p],
+    t = str_match(variable, "y_rep_national\\[(.*),.*\\]")[, 2] |> parse_number(),
+    p = str_match(variable, "y_rep_national\\[.*,(.*)\\]")[, 2] |> parse_number(),
+    flokkur = colnames(stan_data$y_n)[p],
     dags = dates[t]
   ) |>
   # filter(flokkur != "Annað") |>
@@ -196,16 +223,16 @@ fit$summary("y_rep", mean, ~ quantile(.x, c(0.05, 0.95))) |>
 
 
 
-fit$draws("y_rep") |>
+fit$draws("y_rep_national") |>
   as_draws_df() |>
   as_tibble() |>
   pivot_longer(
     c(-.chain, -.iteration, -.draw)
   ) |>
   mutate(
-    t = str_match(name, "y_rep\\[(.*),.*\\]")[, 2] |> parse_number(),
-    p = str_match(name, "y_rep\\[.*,(.*)\\]")[, 2] |> parse_number(),
-    flokkur = colnames(stan_data$y)[p],
+    t = str_match(name, "y_rep_national\\[(.*),.*\\]")[, 2] |> parse_number(),
+    p = str_match(name, "y_rep_national\\[.*,(.*)\\]")[, 2] |> parse_number(),
+    flokkur = colnames(stan_data$y_n)[p],
     dags = dates[t]
   ) |>
   filter(
@@ -263,15 +290,15 @@ fit$draws("y_rep") |>
   )
 
 
-y_rep_draws <- fit$draws("y_rep") |>
+y_rep_draws <- fit$draws("y_rep_national") |>
   as_draws_df() |>
   as_tibble() |>
   pivot_longer(
     c(-.chain, -.iteration, -.draw)
   ) |>
   mutate(
-    t = str_match(name, "y_rep\\[(.*),.*\\]")[, 2] |> parse_number(),
-    p = str_match(name, "y_rep\\[.*,(.*)\\]")[, 2] |> parse_number(),
+    t = str_match(name, "y_rep_national\\[(.*),.*\\]")[, 2] |> parse_number(),
+    p = str_match(name, "y_rep_national\\[.*,(.*)\\]")[, 2] |> parse_number(),
     flokkur = colnames(stan_data$y)[p],
     dags = dates[t]
   ) |>
@@ -291,6 +318,38 @@ last_poll_date <- max(polling_data$date)
 dir.create(here("data", as.character(last_poll_date)), showWarnings = FALSE)
 write_parquet(y_rep_draws, here("data", as.character(last_poll_date), "y_rep_draws.parquet"))
 
+
+#### Constituency Y-Rep Draws ####
+
+fit$summary("y_rep_constituency") |>
+  mutate(
+    p = str_match(variable, "y_rep_constituency\\[(.*),.*\\]")[, 2] |> parse_number(),
+    k = str_match(variable, "y_rep_constituency\\[.*,(.*)\\]")[, 2] |> parse_number(),
+    flokkur = levels(constituency_data$flokkur)[p],
+    kjordaemi = levels(constituency_data$kjordaemi)[k]
+  ) |>
+  mutate_at(
+    vars(mean, q5, q95),
+    ~ .x / stan_data$n_pred
+  ) |>
+  select(flokkur, kjordaemi, mean, q5, q95) |>
+  group_by(kjordaemi2 = kjordaemi) |>
+  arrange(desc(mean)) |>
+  group_map(
+    \(data, ...)  {
+      data |>
+        select(-kjordaemi) |>
+        gt() |>
+        fmt_percent(decimals = 0) |>
+        tab_header(
+          title = unique(data$kjordaemi)
+        ) |>
+        patchwork::wrap_table(space = "free")
+    }
+  ) |>
+  patchwork::wrap_plots()
+
+#### Gamma ####
 theme_set(metill::theme_metill())
 
 p <- fit$summary("gamma") |>
@@ -298,14 +357,14 @@ p <- fit$summary("gamma") |>
   mutate(
     p = str_match(variable, "gamma\\[(.*),.*\\]")[, 2] |> parse_number(),
     h = str_match(variable, "gamma\\[.*,(.*)\\]")[, 2] |> parse_number(),
-    flokkur = colnames(stan_data$y)[-1][p],
+    flokkur = colnames(stan_data$y_n)[-1][p],
     fyrirtaeki = levels(polling_data$fyrirtaeki)[h]
   ) |>
   filter(h != 1) |>
   bind_rows(
     fit$summary("mu_gamma") |>
       mutate(
-        flokkur = colnames(stan_data$y)[-1] |>
+        flokkur = colnames(stan_data$y_n)[-1] |>
           as_factor() |>
           fct_reorder(mean),
         fyrirtaeki = "Samtals",
@@ -348,8 +407,7 @@ p <- fit$summary("gamma") |>
   labs(
     x = NULL,
     y = NULL,
-    title = "Bjagi mismunandi fyrirtækja á fylgi flokka",
-    subtitle = "Bjagi í janúar 2016"
+    title = "Bjagi mismunandi fyrirtækja á fylgi flokka"
   )
 
 p

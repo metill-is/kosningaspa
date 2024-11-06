@@ -15,7 +15,8 @@ prepare_stan_data <- function(
       summarise,
       rename,
       row_number,
-      if_else
+      if_else,
+      anti_join
     ],
     tibble[column_to_rownames],
     tidyr[pivot_wider, drop_na, complete],
@@ -62,7 +63,8 @@ prepare_polling_data <- function(polling_data, constituency_data) {
       summarise,
       rename,
       row_number,
-      if_else
+      if_else,
+      anti_join
     ],
     tibble[column_to_rownames],
     tidyr[pivot_wider, drop_na, complete],
@@ -70,20 +72,37 @@ prepare_polling_data <- function(polling_data, constituency_data) {
     forcats[fct_relevel, as_factor]
   )
 
+  election_date <- date_build(2024, 11, 30)
+  stjornarslit_dags <- date_build(2024, 10, 14)
+  days_between_stjornarslit_and_election <- as.numeric(election_date - stjornarslit_dags)
+
+  dates <- unique(c(polling_data$date, constituency_data$date))
+  date_factor <- factor(dates)
+
+  stjornarslit <- cumsum(dates > stjornarslit_dags)
+  stjornarslit <- 1 * (stjornarslit == 1)
+  post_stjornarslit <- 1 * (dates > stjornarslit_dags)
+
+  time_diff <- c(NA, diff(dates))[-1]
+
+  max_date <- max(dates)
+
+  pred_y_time_diff <- as.numeric(election_date - max_date)
+
   #### National level ####
-  D <- length(unique(polling_data$date))
+  D <- length(date_factor)
   P <- length(unique(polling_data$flokkur))
   H <- length(unique(polling_data$fyrirtaeki))
   N <- polling_data |>
     distinct(fyrirtaeki, date) |>
     nrow()
 
-  election_date <- date_build(2024, 11, 30)
-  stjornarslit_dags <- date_build(2024, 10, 14)
-  days_between_stjornarslit_and_election <- as.numeric(election_date - stjornarslit_dags)
-
-  y <- polling_data |>
+  y_n <- polling_data |>
     select(date, fyrirtaeki, flokkur, n) |>
+    anti_join(
+      constituency_data,
+      by = c("date", "fyrirtaeki")
+    ) |>
     mutate(
       n = as.integer(n)
     ) |>
@@ -91,51 +110,28 @@ prepare_polling_data <- function(polling_data, constituency_data) {
     select(-date, -fyrirtaeki) |>
     as.matrix()
 
-  house <- polling_data |>
+  house_n <- polling_data |>
+    anti_join(
+      constituency_data,
+      by = c("date", "fyrirtaeki")
+    ) |>
     pivot_wider(names_from = flokkur, values_from = n, values_fill = 0) |>
     mutate(
-      house = as.numeric(factor(fyrirtaeki))
+      house = as.numeric(fyrirtaeki)
     ) |>
     pull(house)
 
-  date <- polling_data |>
+  date_n <- polling_data |>
+    anti_join(
+      constituency_data,
+      by = c("date", "fyrirtaeki")
+    ) |>
     pivot_wider(names_from = flokkur, values_from = n, values_fill = 0) |>
     mutate(
-      date = as.numeric(factor(date))
+      date = as.numeric(factor(date, levels = levels(date_factor)))
     ) |>
     pull(date)
 
-  time_diff <- polling_data |>
-    distinct(date) |>
-    arrange(date) |>
-    mutate(
-      time_diff = c(NA, diff(date))
-    ) |>
-    drop_na() |>
-    pull(time_diff) |>
-    as.numeric()
-
-  max_date <- max(polling_data$date)
-
-  pred_y_time_diff <- as.numeric(election_date - max_date)
-  stjornarslit <- polling_data |>
-    distinct(date) |>
-    mutate(
-      stjornarslit_dags = clock::date_build(2024, 10, 14),
-      diff = pmax(as.numeric(date - stjornarslit_dags), 0),
-      diff = if_else(diff == 0, 9999, diff),
-      stjornarslit = if_else(diff == min(diff), 1, 0)
-    ) |>
-    pull(stjornarslit)
-
-  post_stjornarslit <- polling_data |>
-    distinct(date) |>
-    mutate(
-      stjornarslit_dags = clock::date_build(2024, 10, 14),
-      diff = pmax(as.numeric(date - stjornarslit_dags), 0),
-      post_stjornarslit = 1 * (diff > 0)
-    ) |>
-    pull(post_stjornarslit)
 
   n_election <- polling_data |>
     filter(
@@ -146,6 +142,10 @@ prepare_polling_data <- function(polling_data, constituency_data) {
     sum()
 
   n_parties <- polling_data |>
+    anti_join(
+      constituency_data,
+      by = c("date", "fyrirtaeki")
+    ) |>
     summarise(
       n_parties = sum(n != 0),
       .by = c(date, fyrirtaeki)
@@ -163,32 +163,31 @@ prepare_polling_data <- function(polling_data, constituency_data) {
     nrow()
 
   y_k <- constituency_data |>
-    select(date, kjordaemi, flokkur, n) |>
+    select(date, fyrirtaeki, kjordaemi, flokkur, n) |>
     mutate(
       n = as.integer(n)
     ) |>
     pivot_wider(names_from = flokkur, values_from = n, values_fill = 0) |>
-    select(-date, -kjordaemi) |>
+    select(-date, -kjordaemi, -fyrirtaeki) |>
     as.matrix()
 
   house_k <- constituency_data |>
     pivot_wider(names_from = flokkur, values_from = n, values_fill = 0) |>
     mutate(
-      house = as.numeric(factor(fyrirtaeki))
+      house = as.numeric(fyrirtaeki)
     ) |>
     pull(house)
-
   date_k <- constituency_data |>
     pivot_wider(names_from = flokkur, values_from = n, values_fill = 0) |>
     mutate(
-      date = as.numeric(factor(date))
+      date = as.numeric(factor(date, levels = levels(date_factor)))
     ) |>
     pull(date)
 
   n_parties_k <- constituency_data |>
     summarise(
       n_parties = sum(n != 0),
-      .by = c(date, kjordaemi)
+      .by = c(date, kjordaemi, fyrirtaeki)
     ) |>
     arrange(date) |>
     pull(n_parties)
@@ -206,16 +205,17 @@ prepare_polling_data <- function(polling_data, constituency_data) {
     P = P,
     H = H,
     N = N,
-    y = y,
+    y_n = y_n,
+    N_n = nrow(y_n),
     days_between_stjornarslit_and_election = days_between_stjornarslit_and_election,
-    house = house,
-    date = date,
+    house_n = house_n,
+    date_n = date_n,
+    n_parties_n = n_parties,
     time_diff = time_diff,
     pred_y_time_diff = pred_y_time_diff,
     stjornarslit = stjornarslit,
     post_stjornarslit = post_stjornarslit,
     n_election = n_election,
-    n_parties = n_parties,
     n_pred = as.integer(n_election),
     # Kjördæmi level
     K = K,
