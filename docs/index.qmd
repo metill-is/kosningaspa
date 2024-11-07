@@ -119,7 +119,7 @@ where:
 - $\alpha_p$ are party-specific intercepts that sum to zero ($\sum_p \alpha_p = 0$)
 - $x$ are previous election vote shares
 - $I$ are years in government for incumbent parties
-- $V$ is inflationn on an annual basis six months before the election
+- $V$ is inflation on an annual basis six months before the election
 - $G$ is economic growth on an annual basis six months before the election
 - $\beta_\text{lag}$ captures persistence in party support
 - $\beta_\text{inc}$ measures the effect of time spent in government on incumbent parties
