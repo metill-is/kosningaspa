@@ -72,7 +72,9 @@ fit <- model$sample(
   chains = 4,
   parallel_chains = 4,
   refresh = 100,
-  init = 0
+  init = 0,
+  iter_warmup = 500,
+  iter_sampling = 500
 )
 
 
@@ -321,22 +323,76 @@ write_parquet(y_rep_draws, here("data", as.character(last_poll_date), "y_rep_dra
 
 #### Constituency Y-Rep Draws ####
 
-d_const <- fit$summary("y_rep_constituency") |>
+d <- fit$summary("y_rep_k") |>
   mutate(
-    p = str_match(variable, "y_rep_constituency\\[(.*),.*\\]")[, 2] |> parse_number(),
-    k = str_match(variable, "y_rep_constituency\\[.*,(.*)\\]")[, 2] |> parse_number(),
+    n_k = str_match(variable, "y_rep_k\\[(.*),.*\\]")[, 2] |> parse_number(),
+    p = str_match(variable, "y_rep_k\\[.*,(.*)\\]")[, 2] |> parse_number(),
+    flokkur = levels(constituency_data$flokkur)[p],
+    kjordaemi = levels(constituency_data$kjordaemi)[stan_data$constituency_k[n_k]],
+    date = dates[stan_data$date_k[n_k]],
+    fyrirtaeki = levels(polling_data$fyrirtaeki)[stan_data$house_k[n_k]]
+  ) |>
+  select(flokkur, kjordaemi, date, fyrirtaeki, mean, q5, q95) |>
+  filter(
+    fyrirtaeki == "Kosning",
+    year(date) == 2017
+  )
+
+d |>
+  inner_join(
+    constituency_data,
+    by = join_by(flokkur, kjordaemi, date, fyrirtaeki)
+  ) |>
+  mutate(
+    mean = mean / sum(n),
+    q5 = q5 / sum(n),
+    q95 = q95 / sum(n),
+    n = n / sum(n),
+    .by = c(kjordaemi)
+  ) |>
+  ggplot(aes(mean, kjordaemi)) +
+  geom_point(
+    aes(col = "Predicted", shape = "Predicted"),
+    size = 3
+  ) +
+  geom_point(
+    aes(x = n, col = "Observed", shape = "Observed"),
+    size = 3
+  ) +
+  geom_linerange(
+    aes(xmin = q5, xmax = q95, col = "Predicted"),
+    alpha = 0.5
+  ) +
+  scale_x_continuous(
+    labels = \(x) percent(x, accuracy = 1)
+  ) +
+  facet_wrap(
+    vars(flokkur),
+    scales = "free_x"
+  ) +
+  labs(
+    shape = "Type",
+    col = "Type"
+  )
+
+#### Constituency Predictions ####
+
+d_const <- fit$summary("y_pred_constituency") |>
+  mutate(
+    k = str_match(variable, "y_pred_constituency\\[(.*),.*\\]")[, 2] |> parse_number(),
+    p = str_match(variable, "y_pred_constituency\\[.*,(.*)\\]")[, 2] |> parse_number(),
     flokkur = levels(constituency_data$flokkur)[p],
     kjordaemi = levels(constituency_data$kjordaemi)[k]
   ) |>
   mutate_at(
-    vars(mean, q5, q95),
+    vars(median, mean, q5, q95),
     ~ .x / stan_data$n_pred
   ) |>
-  select(flokkur, kjordaemi, mean, q5, q95)
+  select(flokkur, kjordaemi, median, q5, q95)
 
 d_const |>
   group_by(kjordaemi2 = kjordaemi) |>
-  arrange(desc(mean)) |>
+  arrange(desc(median)) |>
   group_map(
     \(data, ...)  {
       data |>

@@ -111,7 +111,7 @@ $$
 The fundamentals model predicts party vote shares using economic and political variables:
 
 $$
-\pi = \text{softmax}(\alpha + \beta_\text{lag}x + \beta_\text{inc}\log(I) + \beta_\text{vnv}V + \beta_\text{growth}G)
+\pi = \text{softmax}(\alpha + \beta_\text{lag}x + \beta_\text{inc}\log(I) + \beta_\text{infl}V + \beta_\text{growth}G)
 $$
 
 where:
@@ -119,12 +119,12 @@ where:
 - $\alpha_p$ are party-specific intercepts that sum to zero ($\sum_p \alpha_p = 0$)
 - $x$ are previous election vote shares
 - $I$ are years in government for incumbent parties
-- $V$ is the vote/no-vote indicator for government parties
-- $G$ represents economic growth
+- $V$ is inflationn on an annual basis six months before the election
+- $G$ is economic growth on an annual basis six months before the election
 - $\beta_\text{lag}$ captures persistence in party support
-- $\beta_\text{inc}$ measures the effect of time spent in government
-- $\beta_\text{vnv}$ captures the impact of being in/out of government
-- $\beta_\text{growth}$ measures how economic conditions affect support
+- $\beta_\text{inc}$ measures the effect of time spent in government on incumbent parties
+- $\beta_\text{vnv}$ captures the impact of inflation on incumbent parties
+- $\beta_\text{growth}$ captures the impact of growth on incumbent parties
 
 ### Model Integration
 

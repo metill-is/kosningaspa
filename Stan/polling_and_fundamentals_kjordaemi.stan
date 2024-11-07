@@ -207,9 +207,15 @@ model {
 }
 
 generated quantities {
-  array[D + pred_y_time_diff, P] int<lower = 0> y_rep_national;
-  array[P, K] int<lower = 0> y_rep_constituency;
   corr_matrix[P - 1] Omega = L_Omega * L_Omega';
+  array[D + pred_y_time_diff, P] int<lower = 0> y_rep_national;
+  array[N_k, P] int<lower = 0> y_rep_k;
+  array[K, P] int<lower = 0> y_pred_constituency;
+  for (n in 1:N_k) {
+    for (p in 1:P) {
+      y_rep_k[n, p] = 0;
+    }
+  }
   for (d in 1:(D + pred_y_time_diff)) {
     vector[P] eta_d;
     eta_d[2:P] = beta[, d];
@@ -223,7 +229,15 @@ generated quantities {
     eta_k[2:P] = beta[, D + pred_y_time_diff] + delta[, k];
     eta_k[1] = -sum(eta_k[2:P]);
     vector[P] pi_k = softmax(eta_k);
-    y_rep_constituency[, k] = dirichlet_multinomial_rng(pi_k * phi[1], n_pred);
+    y_pred_constituency[k, ] = dirichlet_multinomial_rng(pi_k * phi[1], n_pred);
+  }
+
+  for (n in 1:N_k) {
+    vector[P] eta_k;
+    eta_k[2:P] = beta[, date_k[n]] + gamma[, house_k[n]] + delta[, constituency_k[n]];
+    eta_k[1] = -sum(eta_k[2:P]);
+    vector[P] pi_k = softmax(eta_k);
+    y_rep_k[n, ] = dirichlet_multinomial_rng(pi_k * phi[house_k[n]], sum(y_k[n, ]));
   }
 
 }
