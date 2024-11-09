@@ -15,9 +15,18 @@ seats_tibble <- tribble(
   "Norðvestur", 7, 1
 )
 
+draw <- read_csv("data/constituency_data.csv") |> 
+  filter(
+    fyrirtaeki == "Kosning",
+    year(date) == 2021
+  ) |> 
+  select(-date, -fyrirtaeki) |> 
+  rename(votes = n)
+
 calculate_seats <- function(draw) {
 
   votes_matrix <- draw |>
+    arrange(kjordaemi) |> 
     pivot_wider(names_from = kjordaemi, values_from = votes) |>
     column_to_rownames("flokkur") |>
     as.matrix()
@@ -62,6 +71,7 @@ calculate_seats <- function(draw) {
 
   adjustment_seats <- numeric(9)
   n_adjustment_seats <- numeric(nrow(votes_matrix))
+  names(n_adjustment_seats) <- rownames(votes_matrix)
   where_to_assign <- numeric(nrow(votes_matrix))
 
   for (i in seq_along(adjustment_seats)) {
@@ -75,6 +85,10 @@ calculate_seats <- function(draw) {
       MARGIN = 2,
       FUN = function(x) x / sum(x)
     )
+    
+    resid_votes_matrix <- votes_matrix / (seats_matrix + 1)
+    
+    resid_votes_matrix <- t(t(resid_votes_matrix) / colSums(votes_matrix))
 
     seat_placement <- resid_votes_matrix[which_max, ] |>
       order(decreasing = TRUE)
@@ -110,7 +124,7 @@ calculate_seats <- function(draw) {
           values_to = "value"
         ) |>
         pull(value)
-    )
+    ) 
 }
 
 # Breyta í RDS til að deila
@@ -134,6 +148,7 @@ d <- draws |>
   group_modify(~ calculate_seats(.x)) |>
   ungroup()
 
+theme_set(metill::theme_metill())
 p <- d |>
   summarise(
     total_seats = sum(seats),
@@ -157,6 +172,7 @@ p <- d |>
     scales = "free",
     ncol = 3
   )
+
 
 ggsave(
   plot = p,
