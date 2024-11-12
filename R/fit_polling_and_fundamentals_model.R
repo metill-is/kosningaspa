@@ -204,7 +204,7 @@ d_yrep |>
     dags == max(dags)
   ) |>
   mutate(
-    mean = mean / stan_data$n_pred,
+    mean = median / stan_data$n_pred,
     q5 = q5 / stan_data$n_pred,
     q95 = q95 / stan_data$n_pred
   ) |>

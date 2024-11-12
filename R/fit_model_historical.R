@@ -13,7 +13,7 @@ fit_dates <- polling_data |>
   arrange(desc(date)) |>
   pull(date) |>
   unique() |>
-  head(2)
+  head(15)
 
 results <- list()
 
@@ -30,9 +30,9 @@ for (i in seq_along(fit_dates)) {
 
 
 library(ggplot2)
-results |>
-  bind_rows() |>
-  write_csv(here("data/historical_results.csv"))
+# results |>
+#  bind_rows() |>
+#  write_csv(here("data/historical_results.csv"))
 
 
 results |>

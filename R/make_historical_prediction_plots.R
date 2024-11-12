@@ -45,13 +45,7 @@ colors <- tribble(
     flokkur = str_to_sentence(flokkur)
   )
 
-d <- read_csv(here("data", "historical_results.csv")) |>
-  mutate(
-    median = case_when(
-      flokkur %in% c("Samfylkingin") ~ median - 0.001,
-      TRUE ~ median
-    )
-  )
+d <- read_csv(here("data", "historical_results.csv"))
 
 #### Plots with title and subtitle ####
 plots <- d |>
