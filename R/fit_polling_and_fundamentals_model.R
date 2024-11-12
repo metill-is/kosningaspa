@@ -12,10 +12,13 @@ library(metill)
 theme_set(theme_metill())
 
 box::use(
-  R / prepare_data[
+  R / data[
     read_polling_data,
-    prepare_stan_data,
-    read_fundamentals_data
+    read_fundamentals_data,
+    read_constituency_data
+  ],
+  R / stan_data[
+    prepare_stan_data
   ]
 )
 
@@ -39,14 +42,28 @@ fundamentals_data <- fundamentals_data |>
     by = "date"
   )
 
-stan_data <- prepare_stan_data(polling_data, fundamentals_data)
+constituency_data <- read_constituency_data() |>
+  mutate(var = NA) |>
+  drop_na() |>
+  select(-var)
+
+polling_data$fyrirtaeki |> levels()
+
+stan_data <- prepare_stan_data(
+  polling_data,
+  fundamentals_data,
+  constituency_data
+)
+
+
 
 stan_data$desired_weight <- 0.33
 stan_data$weight_time <- 180
+stan_data$last_poll_days <- 27
+stan_data$last_poll_house <- 6
+stan_data$n_last_poll <- 1000
 
 
-stan_data$stjornarslit
-stan_data$post_stjornarslit
 str(stan_data)
 
 model <- cmdstan_model(
@@ -59,7 +76,9 @@ fit <- model$sample(
   chains = 4,
   parallel_chains = 4,
   refresh = 100,
-  init = 0
+  init = 0,
+  iter_warmup = 1000,
+  iter_sampling = 1000
 )
 
 
@@ -68,17 +87,6 @@ fit$summary("beta0")
 fit$summary("sigma")
 fit$summary("tau_stjornarslit")
 fit$summary("tau_f")
-fit$summary("beta_stjornarslit") |>
-  mutate(
-    flokkur = colnames(stan_data$y)[-1] |>
-      fct_reorder(mean)
-  ) |>
-  select(flokkur, mean, q5, q95) |>
-  mutate_at(vars(-flokkur), exp) |>
-  ggplot(aes(mean, flokkur)) +
-  geom_vline(xintercept = 1, lty = 2) +
-  geom_point() +
-  geom_linerange(aes(xmin = q5, xmax = q95))
 
 # Fundamentals Parameters
 fit$summary("alpha_f")
@@ -112,8 +120,8 @@ fit$summary("Omega") |>
   mutate(
     p = str_match(variable, "Omega\\[(.*),.*\\]")[, 2] |> parse_number(),
     q = str_match(variable, "Omega\\[.*,(.*)\\]")[, 2] |> parse_number(),
-    flokkur1 = colnames(stan_data$y)[-1][p],
-    flokkur2 = colnames(stan_data$y)[-1][q]
+    flokkur1 = colnames(stan_data$y_n)[-1][p],
+    flokkur2 = colnames(stan_data$y_n)[-1][q]
   ) |>
   select(flokkur1, flokkur2, mean) |>
   pivot_wider(
@@ -152,16 +160,15 @@ dates <- c(
   seq.Date(max(polling_data$date) + 1, election_date, by = "day")
 )
 
+d_yrep <- fit$summary("y_rep")
 
-fit$summary("y_rep", mean, ~ quantile(.x, c(0.05, 0.95))) |>
-  rename(q5 = `5%`, q95 = `95%`) |>
+d_yrep |>
   mutate(
     t = str_match(variable, "y_rep\\[(.*),.*\\]")[, 2] |> parse_number(),
     p = str_match(variable, "y_rep\\[.*,(.*)\\]")[, 2] |> parse_number(),
-    flokkur = colnames(stan_data$y)[p],
+    flokkur = colnames(stan_data$y_n)[p],
     dags = dates[t]
   ) |>
-  # filter(flokkur != "Annað") |>
   group_by(dags) |>
   mutate_at(
     vars(mean, q5, q95),
@@ -186,30 +193,20 @@ fit$summary("y_rep", mean, ~ quantile(.x, c(0.05, 0.95))) |>
 
 
 
-fit$draws("y_rep") |>
-  as_draws_df() |>
-  as_tibble() |>
-  pivot_longer(
-    c(-.chain, -.iteration, -.draw)
-  ) |>
+d_yrep |>
   mutate(
-    t = str_match(name, "y_rep\\[(.*),.*\\]")[, 2] |> parse_number(),
-    p = str_match(name, "y_rep\\[.*,(.*)\\]")[, 2] |> parse_number(),
-    flokkur = colnames(stan_data$y)[p],
+    t = str_match(variable, "y_rep\\[(.*),.*\\]")[, 2] |> parse_number(),
+    p = str_match(variable, "y_rep\\[.*,(.*)\\]")[, 2] |> parse_number(),
+    flokkur = colnames(stan_data$y_n)[p],
     dags = dates[t]
   ) |>
   filter(
-    dags == max(dags),
-    flokkur != "Annað"
+    dags == max(dags)
   ) |>
   mutate(
-    value = value / stan_data$n_pred
-  ) |>
-  summarise(
-    mean = mean(value),
-    q5 = quantile(value, 0.05),
-    q95 = quantile(value, 0.95),
-    .by = flokkur
+    mean = mean / stan_data$n_pred,
+    q5 = q5 / stan_data$n_pred,
+    q95 = q95 / stan_data$n_pred
   ) |>
   select(flokkur, mean, q5, q95) |>
   arrange(desc(mean)) |>
@@ -262,7 +259,7 @@ y_rep_draws <- fit$draws("y_rep") |>
   mutate(
     t = str_match(name, "y_rep\\[(.*),.*\\]")[, 2] |> parse_number(),
     p = str_match(name, "y_rep\\[.*,(.*)\\]")[, 2] |> parse_number(),
-    flokkur = colnames(stan_data$y)[p],
+    flokkur = colnames(stan_data$y_n)[p],
     dags = dates[t]
   ) |>
   select(
@@ -277,25 +274,129 @@ y_rep_draws <- fit$draws("y_rep") |>
     value = value / stan_data$n_pred
   )
 
-last_poll_date <- max(polling_data$date)
+last_poll_date <- today()
 dir.create(here("data", as.character(last_poll_date)), showWarnings = FALSE)
 write_parquet(y_rep_draws, here("data", as.character(last_poll_date), "y_rep_draws.parquet"))
 
-theme_set(metill::theme_metill())
+#### Predicting The Newest Poll ####
+
+theme_set(theme_metill(type = "blog"))
+
+d <- fit$draws("y_rep_newest_poll")
+
+plot_dat <- d |>
+  as_draws_df() |>
+  as_tibble() |>
+  pivot_longer(
+    c(-.chain, -.iteration, -.draw)
+  ) |>
+  mutate(
+    value = value / sum(value),
+    .by = .draw
+  ) |>
+  summarise(
+    mean = mean(value),
+    q5 = quantile(value, 0.05),
+    q95 = quantile(value, 0.95),
+    .by = c(name)
+  ) |>
+  mutate(
+    flokkur = colnames(stan_data$y_n)
+  ) |>
+  select(flokkur, mean, q5, q95) |>
+  mutate(
+    true = c(
+      0.014, 0.123, 0.216, 0.058, 0.026, 0.057, 0.171, 0.115, 0.151, 0.067
+    )
+  ) |>
+  mutate(
+    flokkur = if_else(
+      flokkur == "Annað",
+      "Lýðræðisflokkurinn",
+      flokkur
+    ) |>
+      str_to_sentence(),
+    flokkur = fct_reorder(flokkur, true)
+  )
+
+plot_dat |>
+  write_csv(
+    here("data", "poll_predictions", "prosent8nov.csv")
+  )
+
+p <- plot_dat |>
+  ggplot(aes(true, flokkur)) +
+  geom_linerange(aes(xmin = q5, xmax = q95, col = "Spá")) +
+  geom_point(
+    aes(x = mean, col = "Spá", shape = "Spá"),
+    size = 4
+  ) +
+  geom_point(
+    aes(col = "Rétt gildi", shape = "Rétt gildi"),
+    size = 4
+  ) +
+  scale_x_continuous(
+    labels = label_percent(accuracy = 1),
+    guide = ggh4x::guide_axis_truncated()
+  ) +
+  scale_y_discrete(
+    guide = ggh4x::guide_axis_truncated()
+  ) +
+  scale_colour_manual(
+    values = c("Rétt gildi" = "black", "Spá" = "gray70")
+  ) +
+  scale_shape_manual(
+    values = c("Rétt gildi" = 16, "Spá" = 15)
+  ) +
+  theme(
+    legend.position = "top"
+  ) +
+  labs(
+    x = NULL,
+    y = NULL,
+    title = "Spáð fylgi flokka í könnun Prósents 8. nóvember",
+    subtitle = str_c(
+      "Gráir kassar eru miðgildi og línur eru 90% öryggisbil fyrir spár | ",
+      "Svartir punktar eru rétt gildi"
+    ),
+    shape = NULL,
+    col = NULL
+  )
+p
+
+ggsave(
+  here("Figures", "newest_poll_predictions.png"),
+  p,
+  width = 8,
+  height = 0.5 * 8,
+  scale = 1.3,
+  bg = "#fdfcfc"
+)
+
+ggsave(
+  here("Figures", "newest_poll_predictions_transparent.png"),
+  p,
+  width = 8,
+  height = 0.5 * 8,
+  scale = 1.3,
+  bg = "transparent"
+)
+
+#### Gamma / House Effects ####
 
 p <- fit$summary("gamma") |>
   select(variable, mean, q5, q95) |>
   mutate(
     p = str_match(variable, "gamma\\[(.*),.*\\]")[, 2] |> parse_number(),
     h = str_match(variable, "gamma\\[.*,(.*)\\]")[, 2] |> parse_number(),
-    flokkur = colnames(stan_data$y)[-1][p],
+    flokkur = colnames(stan_data$y_n)[-1][p],
     fyrirtaeki = levels(polling_data$fyrirtaeki)[h]
   ) |>
   filter(h != 1) |>
   bind_rows(
     fit$summary("mu_gamma") |>
       mutate(
-        flokkur = colnames(stan_data$y)[-1] |>
+        flokkur = colnames(stan_data$y_n)[-1] |>
           as_factor() |>
           fct_reorder(mean),
         fyrirtaeki = "Samtals",

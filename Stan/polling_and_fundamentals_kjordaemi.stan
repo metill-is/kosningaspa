@@ -30,6 +30,7 @@ data {
   array[N_k] int<lower = 1, upper = D> date_k;
   array[N_k] int<lower = 1, upper = P> n_parties_k;
   array[N_k] int<lower = 1, upper = K> constituency_k;
+  array[K] int<lower = 1> n_pred_k;
 
   /* Fundamentals Data*/
   int<lower = 1> D_f;
@@ -161,7 +162,7 @@ model {
   L_Omega ~ lkj_corr_cholesky(2);
   sigma ~ exponential(1);                 
   beta0 ~ normal(mu_pred, tau_f * sigma);
-  tau_stjornarslit ~ normal(0, 0.01);
+  tau_stjornarslit ~ normal(0, 0.1);
 
   
 
@@ -229,7 +230,7 @@ generated quantities {
     eta_k[2:P] = beta[, D + pred_y_time_diff] + delta[, k];
     eta_k[1] = -sum(eta_k[2:P]);
     vector[P] pi_k = softmax(eta_k);
-    y_pred_constituency[k, ] = dirichlet_multinomial_rng(pi_k * phi[1], n_pred);
+    y_pred_constituency[k, ] = dirichlet_multinomial_rng(pi_k * phi[1], n_pred_k[k]);
   }
 
   for (n in 1:N_k) {

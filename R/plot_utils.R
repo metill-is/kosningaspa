@@ -79,3 +79,8 @@ plot_gamma <- function(fit) {
       title = "Bjagi mismunandi fyrirtækja á fylgi flokka"
     )
 }
+
+plot_election_prediction <- function(coverage_data) {
+
+
+}

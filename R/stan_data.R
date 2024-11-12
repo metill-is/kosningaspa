@@ -2,7 +2,8 @@
 prepare_stan_data <- function(
     polling_data,
     fundamentals_data,
-    constituency_data) {
+    constituency_data,
+    election_date = date_build(2024, 11, 30)) {
   box::use(
     dplyr[
       distinct,
@@ -28,7 +29,7 @@ prepare_stan_data <- function(
   #### Polling data ####
 
 
-  polling_data <- prepare_polling_data(polling_data, constituency_data)
+  polling_data <- prepare_polling_data(polling_data, constituency_data, election_date)
 
 
   #### Fundamentals data ####
@@ -50,7 +51,7 @@ prepare_stan_data <- function(
 
 
 #' @export
-prepare_polling_data <- function(polling_data, constituency_data) {
+prepare_polling_data <- function(polling_data, constituency_data, election_date) {
   box::use(
     dplyr[
       distinct,
@@ -72,7 +73,6 @@ prepare_polling_data <- function(polling_data, constituency_data) {
     forcats[fct_relevel, as_factor]
   )
 
-  election_date <- date_build(2024, 11, 30)
   stjornarslit_dags <- date_build(2024, 10, 14)
   days_between_stjornarslit_and_election <- as.numeric(election_date - stjornarslit_dags)
 
@@ -135,8 +135,10 @@ prepare_polling_data <- function(polling_data, constituency_data) {
 
   n_election <- polling_data |>
     filter(
-      fyrirtaeki == "Kosning",
-      date == date_build(2021, 09, 25)
+      fyrirtaeki == "Kosning"
+    ) |>
+    filter(
+      date == max(date)
     ) |>
     pull(n) |>
     sum()
@@ -199,6 +201,17 @@ prepare_polling_data <- function(polling_data, constituency_data) {
     ) |>
     pull(constituency)
 
+  n_pred_k <- constituency_data |>
+    filter(
+      fyrirtaeki == "Kosning",
+      date == date_build(2021, 09, 25)
+    ) |>
+    summarise(
+      n = sum(n),
+      .by = kjordaemi
+    ) |>
+    pull(n)
+
   list(
     # National level
     D = D,
@@ -224,7 +237,8 @@ prepare_polling_data <- function(polling_data, constituency_data) {
     house_k = house_k,
     date_k = date_k,
     n_parties_k = n_parties_k,
-    constituency_k = constituency_k
+    constituency_k = constituency_k,
+    n_pred_k = n_pred_k
   )
 }
 

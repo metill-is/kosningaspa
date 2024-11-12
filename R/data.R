@@ -70,7 +70,14 @@ get_sheet_data <- function(sheet) {
     mutate(
       dagur = coalesce(dagur, 15),
       date = clock::date_build(ar, manudur, dagur),
-      n = hlutfall * fjoldi_alls
+      hlutfall = hlutfall / sum(hlutfall, na.rm = TRUE),
+      hlutfall = if_else(
+        flokkur == "Annað",
+        1 - sum(hlutfall[!flokkur %in% c("Annað", "Lýðræðisflokkurinn")]),
+        hlutfall
+      ),
+      n = hlutfall * fjoldi_alls,
+      .by = c(ar, manudur, dagur, fyrirtaeki)
     ) |>
     select(
       date,

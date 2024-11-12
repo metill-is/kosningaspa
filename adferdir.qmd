@@ -1,0 +1,121 @@
+---
+title: "Statistical Methods"
+---
+
+# Methods
+
+### Statistical Framework
+
+The model integrates polling data $y_{n,p}$ and fundamentals data through a hierarchical structure:
+
+$$
+\begin{aligned}
+y_{n} &\sim \text{Dirichlet-Multinomial}(\pi_{n}, \phi_{h[n]}) \\
+\pi_{n} &= \text{softmax}(\eta_{n}) \\
+\eta_{n,p} &= \beta_{p,t[n]} + \gamma_{p,h[n]}
+\end{aligned}
+$$
+
+where $\phi_{h[n]}$ is house-specific overdispersion, $t[n]$ indexes the time of poll $n$, and $h[n]$ indexes the polling house.
+
+The fundamentals component predicts election results through:
+
+$$
+\begin{aligned}
+y^{(f)}_{d} &\sim \text{Dirichlet-Multinomial}(\pi^{(f)}_{d}, \phi_f) \\
+\pi^{(f)}_{d} &= \text{softmax}(\mu_{d}) \\
+\mu_{d,p} &= \alpha_p + \beta_{\text{lag}}x_{p,d} + \beta_{\text{years}}\log(I_{p,d}) + \beta_{\text{vnv}}v_{p,d} + \beta_{\text{growth}}g_{p,d}
+\end{aligned}
+$$
+
+The connection between these two components is the election day prediction $\mu_{\text{pred}}$, calculated from the fundamentals model using current economic conditions and previous election results. This prediction serves as a prior for election day support:
+
+$$
+\beta_{T} \sim \mathcal{N}(\mu_{\text{pred}}, \tau_f\cdot \sigma)
+$$
+
+The relative weight between polling and fundamentals is controlled by $\tau_f$, computed to give the fundamentals component a specified percentage weight in the prediction at a certain time before the election (see Appendix for details).
+
+### Polling Component
+
+The polling model tracks latent party support $\beta_{p,t}$ over time using a multivariate random walk with correlation structure $\Omega$ between parties:
+
+$$
+\beta_{t} = \begin{cases}
+\mathrm{Normal}\left(\beta_{t+1}, (1 + \tau_s)\sqrt{\Delta_t} \boldsymbol \Sigma\right) & \text{after government split} \\
+\mathrm{Normal}\left(\beta_{t+1}, \sqrt{\Delta_t} \boldsymbol \Sigma\right) & \text{otherwise}
+\end{cases}
+$$
+
+where:
+
+- $\boldsymbol \Sigma = \text{diag}(\sigma_1,\ldots,\sigma_P) \Omega \text{diag}(\sigma_1,\ldots,\sigma_P)$ is the covariance matrix
+- $\sigma_p$ captures party-specific volatility scales
+- $\Omega$ is the correlation matrix between party-specific innovations
+- $\tau_s$ allows for increased volatility after government splits
+- $\Delta_t$ is the number of days between polls
+
+### Fundamentals Component
+
+The fundamentals model predicts party vote shares using economic and political variables:
+
+$$
+\pi = \text{softmax}(\alpha + \beta_\text{lag}x + \beta_\text{inc}\log(I) + \beta_\text{infl}V + \beta_\text{growth}G)
+$$
+
+where:
+
+- $\alpha_p$ are party-specific intercepts that sum to zero ($\sum_p \alpha_p = 0$)
+- $x$ are previous election vote shares
+- $I$ are years in government for incumbent parties
+- $V$ is inflation on an annual basis six months before the election
+- $G$ is economic growth on an annual basis six months before the election
+- $\beta_\text{lag}$ captures persistence in party support
+- $\beta_\text{inc}$ measures the effect of time spent in government on incumbent parties
+- $\beta_\text{infl}$ captures the impact of inflation on incumbent parties
+- $\beta_\text{growth}$ captures the impact of growth on incumbent parties
+
+### Model Integration
+
+The fundamentals prediction serves as a prior for the election day vote shares $\beta_T$:
+
+$$
+\beta_T \sim \mathcal{N}(\mu_\text{pred}, \tau_f \cdot \sigma)
+$$
+
+where $\mu_\text{pred}$ is the fundamentals prediction and $\tau_f$ controls how much weight is given to the fundamentals versus polling data at some point before the elections.
+
+### Choosing $\tau_f$
+
+To choose how we want to calculate the standard deviation for prior on $\beta_T$, we can frame our model as a Gaussian-Gaussian conjugate problem where:
+
+- The prior (fundamentals prediction) is: $\beta_T \sim \mathcal{N}(\mu_{\text{pred}}, \tau_f \cdot \sigma)$
+- The likelihood (polling prediction from time t) is: $\beta_T \sim \mathcal{N}(\beta_t, V(t) \cdot \sigma)$
+
+where $V(t)$ represents the accumulated variance from time t to election time T:
+
+* For $t \leq 47$ (after government split): $V(t) = t \cdot (1 + \tau_{\text{stjornarslit}})^2$
+* For t > 47 (before government split): $V(t) = (t - 47) + 47 \cdot (1 + \tau_{\text{stjornarslit}})^2$
+
+Using standard Gaussian-Gaussian conjugate formulas:
+
+$$
+\begin{aligned}
+\text{Posterior precision} &= \frac{1}{(\tau_f \cdot \sigma)^2} + \frac{1}{V(t) \cdot \sigma^2} \\
+&= \left(\frac{1}{\tau_f^2} + \frac{1}{V(t)}\right) \cdot \frac{1}{\sigma^2}
+\end{aligned}
+$$
+
+For a desired fundamentals weight w at time t:
+
+$$
+w = \frac{1/\tau_f^2}{1/\tau_f^2 + 1/V(t)}
+$$
+
+Solving for $\tau_f$:
+
+$$
+\tau_f = \sqrt{V(t) \cdot (1-w)/w}
+$$
+
+where $V(t)$ depends on $\tau_{\text{stjornarslit}}$ as defined above. In our current modeling, we choose $w = \frac13$ and $t = 180$.

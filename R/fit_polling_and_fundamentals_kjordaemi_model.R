@@ -73,8 +73,8 @@ fit <- model$sample(
   parallel_chains = 4,
   refresh = 100,
   init = 0,
-  iter_warmup = 500,
-  iter_sampling = 500
+  iter_warmup = 1000,
+  iter_sampling = 2000
 )
 
 
@@ -151,8 +151,8 @@ fit$summary("Omega") |>
   mutate(
     p = str_match(variable, "Omega\\[(.*),.*\\]")[, 2] |> parse_number(),
     q = str_match(variable, "Omega\\[.*,(.*)\\]")[, 2] |> parse_number(),
-    flokkur1 = colnames(stan_data$y)[-1][p],
-    flokkur2 = colnames(stan_data$y)[-1][q]
+    flokkur1 = colnames(stan_data$y_n)[-1][p],
+    flokkur2 = colnames(stan_data$y_n)[-1][q]
   ) |>
   select(flokkur1, flokkur2, mean) |>
   pivot_wider(
@@ -172,8 +172,8 @@ fit$summary("Omega") |>
   mutate(
     p = str_match(variable, "Omega\\[(.*),.*\\]")[, 2] |> parse_number(),
     q = str_match(variable, "Omega\\[.*,(.*)\\]")[, 2] |> parse_number(),
-    flokkur1 = colnames(stan_data$y)[-1][p],
-    flokkur2 = colnames(stan_data$y)[-1][q]
+    flokkur1 = colnames(stan_data$y_n)[-1][p],
+    flokkur2 = colnames(stan_data$y_n)[-1][q]
   ) |>
   select(flokkur1, flokkur2, mean, q5, q95) |>
   filter(flokkur1 != flokkur2) |>
@@ -301,7 +301,7 @@ y_rep_draws <- fit$draws("y_rep_national") |>
   mutate(
     t = str_match(name, "y_rep_national\\[(.*),.*\\]")[, 2] |> parse_number(),
     p = str_match(name, "y_rep_national\\[.*,(.*)\\]")[, 2] |> parse_number(),
-    flokkur = colnames(stan_data$y)[p],
+    flokkur = colnames(stan_data$y_n)[p],
     dags = dates[t]
   ) |>
   select(
@@ -316,9 +316,9 @@ y_rep_draws <- fit$draws("y_rep_national") |>
     value = value / stan_data$n_pred
   )
 
-last_poll_date <- max(polling_data$date)
-dir.create(here("data", as.character(last_poll_date)), showWarnings = FALSE)
-write_parquet(y_rep_draws, here("data", as.character(last_poll_date), "y_rep_draws.parquet"))
+
+
+write_parquet(y_rep_draws, here("data", as.character(today()), "y_rep_draws_constituency.parquet"))
 
 
 #### Constituency Y-Rep Draws ####
@@ -377,16 +377,39 @@ d |>
 
 #### Constituency Predictions ####
 
-d_const <- fit$summary("y_pred_constituency") |>
+d_const_draws <- fit$draws("y_pred_constituency") |>
+  as_draws_df() |>
+  as_tibble() |>
+  pivot_longer(
+    c(-.chain, -.iteration, -.draw)
+  ) |>
   mutate(
-    k = str_match(variable, "y_pred_constituency\\[(.*),.*\\]")[, 2] |> parse_number(),
-    p = str_match(variable, "y_pred_constituency\\[.*,(.*)\\]")[, 2] |> parse_number(),
+    k = str_match(name, "y_pred_constituency\\[(.*),.*\\]")[, 2] |> parse_number(),
+    p = str_match(name, "y_pred_constituency\\[.*,(.*)\\]")[, 2] |> parse_number(),
     flokkur = levels(constituency_data$flokkur)[p],
     kjordaemi = levels(constituency_data$kjordaemi)[k]
   ) |>
-  mutate_at(
-    vars(median, mean, q5, q95),
-    ~ .x / stan_data$n_pred
+  select(
+    .chain,
+    .iteration,
+    .draw,
+    kjordaemi,
+    flokkur,
+    value
+  )
+
+write_parquet(d_const_draws, here("data", as.character(today()), "constituency_predictions.parquet"))
+
+d_const <- d_const_draws |>
+  mutate(
+    value = value / sum(value),
+    .by = c(.draw, kjordaemi)
+  ) |>
+  summarise(
+    median = median(value),
+    q5 = quantile(value, 0.05),
+    q95 = quantile(value, 0.95),
+    .by = c(kjordaemi, flokkur)
   ) |>
   select(flokkur, kjordaemi, median, q5, q95)
 
@@ -406,6 +429,7 @@ d_const |>
     }
   ) |>
   patchwork::wrap_plots()
+
 
 #### Gamma ####
 theme_set(metill::theme_metill())

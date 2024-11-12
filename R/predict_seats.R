@@ -9,10 +9,10 @@ seats_tibble <- tribble(
   ~kjordaemi, ~n_seats, ~n_jofnun,
   "Reykjavík Suður", 9, 2,
   "Reykjavík Norður", 9, 2,
-  "Suðvestur", 11, 2,
+  "Suðvestur", 12, 2,
   "Suður", 9, 1,
   "Norðaustur", 9, 1,
-  "Norðvestur", 7, 1
+  "Norðvestur", 6, 1
 )
 
 draw <- read_csv("data/constituency_data.csv") |> 

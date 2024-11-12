@@ -6,11 +6,11 @@ data {
   int<lower = 1> N;                        // Number of date x house observations
   int<lower = 1> days_between_stjornarslit_and_election;
 
-  array[N, P] int<lower = 0> y;           // Polling data (counts per party)
+  array[N, P] int<lower = 0> y_n;           // Polling data (counts per party)
 
-  array[N] int<lower = 1, upper = H> house; // House indicator for each poll
-  array[N] int<lower = 1, upper = D> date;  // Date indicator for each poll
-  array[N] int<lower = 1, upper = P> n_parties; // Number of parties in each poll
+  array[N] int<lower = 1, upper = H> house_n; // House indicator for each poll
+  array[N] int<lower = 1, upper = D> date_n;  // Date indicator for each poll
+  array[N] int<lower = 1, upper = P> n_parties_n; // Number of parties in each poll
   vector[D] stjornarslit;
   vector[D] post_stjornarslit;
   
@@ -47,6 +47,7 @@ parameters {
   vector[P - 1] beta0;
   cholesky_factor_corr[P - 1] L_Omega;
   vector<lower = 0>[P - 1] sigma;               // Party-specific random walk scale
+  real<lower = 0> tau_stjornarslit;
 
   matrix[P - 1, H - 2] gamma_raw;               // House effects (constant over time for each house)
 
@@ -69,11 +70,11 @@ transformed parameters {
   beta[ , 1] = beta0;
 
   for (t in 2:D) {
-    beta[, t] = beta[ , t - 1] + time_scale[t - 1] * z_beta[, t - 1] .* sigma;
+    beta[, t] = beta[ , t - 1] + time_scale[t - 1] * z_beta[, t - 1] .* sigma * (1 + tau_stjornarslit * post_stjornarslit[t]);
   }
 
   for (t in 1:pred_y_time_diff) {
-    beta[ , D + t] = beta[ , D + t - 1] + z_beta[, D + t - 1] .* sigma;
+    beta[ , D + t] = beta[ , D + t - 1] + z_beta[, D + t - 1] .* sigma * (1 + tau_stjornarslit);
   }
 
   
@@ -95,16 +96,17 @@ model {
   L_Omega ~ lkj_corr_cholesky(2);
   sigma ~ exponential(1);                 
   beta0 ~ std_normal();
+  tau_stjornarslit ~ normal(0, 0.2);
   // Prior for the Dirichlet-multinomial scale parameter
   phi_inv ~ exponential(1);
 
   // Likelihood (Dirichlet-multinomial observation model)
   for (n in 1:N) {
     vector[P] eta_n;
-    eta_n[2:P] = beta[, date[n]] + gamma[ , house[n]];  // Linear predictor for softmax
+    eta_n[2:P] = beta[, date_n[n]] + gamma[ , house_n[n]];  // Linear predictor for softmax
     eta_n[1] = -sum(eta_n[2:P]);
     vector[P] pi_n = softmax(eta_n);
-    y[n, 1:n_parties[n]] ~ dirichlet_multinomial(pi_n[1:n_parties[n]] * phi[house[n]]);                // Polling data likelihood
+    y_n[n, 1:n_parties_n[n]] ~ dirichlet_multinomial(pi_n[1:n_parties_n[n]] * phi[house_n[n]]);                // Polling data likelihood
   }
 
 }
