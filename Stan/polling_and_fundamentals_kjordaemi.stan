@@ -13,7 +13,7 @@ data {
   array[N_n] int<lower = 1, upper = H> house_n; // House indicator for each poll
   array[N_n] int<lower = 1, upper = D> date_n;  // Date indicator for each poll
   array[N_n] int<lower = 1, upper = P> n_parties_n; // Number of parties in each poll
-
+  array[N_n] int<lower = 1, upper = P> n_parties_n_rep; // Number of parties in each poll
   vector[D] stjornarslit;
   vector[D] post_stjornarslit;
   vector[D] month_before_election;
@@ -26,13 +26,17 @@ data {
   // Constituency Level
   int<lower = 1> K;                        // Number of constituencies
   int<lower = 1> N_k;                      // Number of constituency polls
+  int<lower = 1> N_obs_k;
   array[N_k, P] int<lower = 0> y_k;        // Constituency polling data
   array[N_k] int<lower = 1, upper = H> house_k;
   array[N_k] int<lower = 1, upper = D> date_k;
   array[N_k] int<lower = 1, upper = P> n_parties_k;
+  array[N_k] int<lower = 1, upper = P> n_parties_k_rep;
   array[N_k] int<lower = 1, upper = K> constituency_k;
+  array[N_k] int<lower = 1, upper = N_obs_k> obs_k;
   array[K] int<lower = 1> n_pred_k;
-  vector[K] constituency_weights;
+  matrix[N_obs_k, K] constituency_weights;
+  vector[K] constituency_weights_pred;
 
   /* Fundamentals Data*/
   int<lower = 1> D_f;
@@ -96,7 +100,6 @@ transformed parameters {
   alpha_f[1] = -sum(alpha_f[2:P_f]);
   real<lower = 0> V_t;
   real<lower = 0> tau_f;
-  matrix[P - 1, K] delta;
   
   // Calculate V(t) based on weight_time and tau_stjornarslit
   if (weight_time <= 47) {
@@ -114,9 +117,7 @@ transformed parameters {
     // Free parameters for other houses
     gamma[p, 2:H] = mu_gamma[p] + sigma_gamma[p] * gamma_raw[p, ];    
     
-    // Each party's constituency effects sum to zero
-    delta[p, 1:(K-1)] = sigma_delta[p] * delta_raw[p, ];
-    delta[p, K] = -sum(to_vector(delta[p, 1:(K-1)]) .* constituency_weights[1:(K-1)]) / constituency_weights[K];
+    
   }
   
   beta[ , D + pred_y_time_diff] = beta0;
@@ -164,16 +165,17 @@ model {
   L_Omega ~ lkj_corr_cholesky(2);
   sigma ~ exponential(1);                 
   beta0 ~ normal(mu_pred, tau_f * sigma);
-  tau_stjornarslit ~ normal(0, 0.1);
+  tau_stjornarslit ~ normal(0, 0.3);
 
   
 
   // National-level likelihood (Dirichlet-multinomial observation model)
   for (n in 1:N_n) {
-    vector[P] eta_n;
-    eta_n[2:P] = beta[, date_n[n]] + gamma[ , house_n[n]];  // Linear predictor for softmax
-    eta_n[1] = -sum(eta_n[2:P]);
-    vector[P] pi_n = softmax(eta_n);
+    vector[n_parties_n[n]] eta_n;
+    eta_n[2:n_parties_n[n]] = beta[1:(n_parties_n[n] - 1), date_n[n]] + 
+      gamma[1:(n_parties_n[n] - 1), house_n[n]];  // Linear predictor for softmax
+    eta_n[1] = -sum(eta_n[2:n_parties_n[n]]);
+    vector[n_parties_n[n]] pi_n = softmax(eta_n);
     y_n[n, 1:n_parties_n[n]] ~ dirichlet_multinomial(pi_n[1:n_parties_n[n]] * phi[house_n[n]]);                // Polling data likelihood
   }
 
@@ -183,11 +185,20 @@ model {
 
   // Constituency-level likelihood
   for (n in 1:N_k) {
-    vector[P] eta_k;
-    eta_k[2:P] = beta[, date_k[n]] + gamma[, house_k[n]] + delta[, constituency_k[n]];
-    eta_k[1] = -sum(eta_k[2:P]);
-    vector[P] pi_k = softmax(eta_k);
-    y_k[n, 1:n_parties_k[n]] ~ dirichlet_multinomial(pi_k[1:n_parties_k[n]] * phi[house_k[n]]);
+    matrix[P - 1, K] delta;
+    vector[n_parties_k[n]] eta_k;
+
+    for (p in 1:(P - 1)) {
+      delta[p, 1:(K - 1)] = sigma_delta[p] * delta_raw[p, ];
+      delta[p, K] = -sum(delta[p, 1:(K - 1)] .* constituency_weights[obs_k[n], 1:(K - 1)]) / 
+            constituency_weights[obs_k[n] , K];
+    }
+    eta_k[2:n_parties_k[n]] = beta[1:(n_parties_k[n] - 1), date_k[n]] + 
+      gamma[1:(n_parties_k[n] - 1), house_k[n]] + 
+      delta[1:(n_parties_k[n] - 1), constituency_k[n]];
+    eta_k[1] = -sum(eta_k[2:n_parties_k[n]]);
+    vector[n_parties_k[n]] pi_k = softmax(eta_k);
+    y_k[n, 1:n_parties_k[n]] ~ dirichlet_multinomial(pi_k * phi[house_k[n]]);
   }
 
   /* Fundamentals */
@@ -214,35 +225,89 @@ generated quantities {
   array[D + pred_y_time_diff, P] int<lower = 0> y_rep_national;
   array[N_k, P] int<lower = 0> y_rep_k;
   array[K, P] int<lower = 0> y_pred_constituency;
+  matrix[P - 1, K] delta_pred;
+
+  // Initialize all arrays to 0
+  for (d in 1:(D + pred_y_time_diff)) {
+    for (p in 1:P) {
+      y_rep_national[d, p] = 0;
+    }
+  }
+  
   for (n in 1:N_k) {
     for (p in 1:P) {
       y_rep_k[n, p] = 0;
     }
   }
-  for (d in 1:(D + pred_y_time_diff)) {
-    vector[P] eta_d;
-    eta_d[2:P] = beta[, d];
-    eta_d[1] = -sum(eta_d[2:P]);
-    vector[P] pi_d = softmax(eta_d);
-    y_rep_national[d, ] = dirichlet_multinomial_rng(pi_d * phi[1], n_pred);
+  
+  for (k in 1:K) {
+    for (p in 1:P) {
+      y_pred_constituency[k, p] = 0;
+    }
   }
 
+  for (p in 1:(P - 1)) {
+    delta_pred[p, 1:(K - 1)] = sigma_delta[p] * delta_raw[p, ];
+    delta_pred[p, K] = -sum(to_vector(delta_pred[p, 1:(K - 1)]) .* constituency_weights_pred[1:(K - 1)]) / 
+          constituency_weights_pred[K];
+  }
+
+  // Fill in predictions only for parties that exist at each time point
+  for (d in 1:D) {
+    vector[n_parties_n_rep[d]] eta_d;
+    vector[n_parties_n_rep[d]] pi_d;
+    
+    eta_d[2:n_parties_n_rep[d]] = beta[1:(n_parties_n_rep[d] - 1), d];
+    eta_d[1] = -sum(eta_d[2:n_parties_n_rep[d]]);
+    pi_d = softmax(eta_d);
+    y_rep_national[d, 1:n_parties_n_rep[d]] = 
+      dirichlet_multinomial_rng(pi_d * phi[1], n_pred);
+  }
+
+  for (d in 1:pred_y_time_diff) {
+    vector[P] eta_d;
+    vector[P] pi_d;
+    eta_d[2:P] = beta[, D + d];
+    eta_d[1] = -sum(eta_d[2:P]);
+    pi_d = softmax(eta_d);
+    y_rep_national[D + d, ] = dirichlet_multinomial_rng(pi_d * phi[1], n_pred);
+  }
+
+  
+
+  // Constituency predictions for current parties only
   for (k in 1:K) {
+    
     vector[P] eta_k;
-    eta_k[2:P] = beta[, D + pred_y_time_diff] + delta[, k];
+    vector[P] pi_k;
+    
+    eta_k[2:P] = beta[, D + pred_y_time_diff] + delta_pred[, k];
     eta_k[1] = -sum(eta_k[2:P]);
-    vector[P] pi_k = softmax(eta_k);
+    pi_k = softmax(eta_k);
     y_pred_constituency[k, ] = dirichlet_multinomial_rng(pi_k * phi[1], n_pred_k[k]);
   }
 
+  // Constituency replications for historical polls
   for (n in 1:N_k) {
-    vector[P] eta_k;
-    eta_k[2:P] = beta[, date_k[n]] + gamma[, house_k[n]] + delta[, constituency_k[n]];
-    eta_k[1] = -sum(eta_k[2:P]);
-    vector[P] pi_k = softmax(eta_k);
-    y_rep_k[n, ] = dirichlet_multinomial_rng(pi_k * phi[house_k[n]], sum(y_k[n, ]));
-  }
+    matrix[P - 1, K] delta;
+    vector[n_parties_k_rep[n]] eta_k;
+    vector[n_parties_k_rep[n]] pi_k;
 
+    for (p in 1:(P - 1)) {
+      delta[p, 1:(K - 1)] = sigma_delta[p] * delta_raw[p, ];
+      delta[p, K] = -sum(delta[p, 1:(K - 1)] .* constituency_weights[obs_k[n], 1:(K - 1)]) / 
+            constituency_weights[obs_k[n] , K];
+    }
+
+    eta_k[2:n_parties_k_rep[n]] = beta[1:(n_parties_k_rep[n] - 1), date_k[n]] + 
+        gamma[1:(n_parties_k_rep[n] - 1), house_k[n]] + 
+        delta[1:(n_parties_k_rep[n] - 1), constituency_k[n]];
+
+    eta_k[1] = -sum(eta_k[2:n_parties_k_rep[n]]);
+    pi_k = softmax(eta_k);
+    y_rep_k[n, 1:n_parties_k_rep[n]] = 
+      dirichlet_multinomial_rng(pi_k * phi[house_k[n]], sum(y_k[n, ]));
+  }
 }
 
 

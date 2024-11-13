@@ -176,6 +176,32 @@ $$
 
 This constraint also prevents the constituency effects from absorbing national-level trends and ensures that the deviations represent relative differences across constituencies.
 
+$$
+\begin{align*}
+\delta_{p,k} &= \sigma_{\delta,p} \cdot \tilde{\delta}_{p,k} \text{ for } k < K \\
+\delta_{p,K} &= -\sum_{k=1}^{K-1} w_k \delta_{p,k} / w_K \\
+\eta_{p,k,t} &= \beta_{p,t} + \gamma_{p,h} + \delta_{p,k}
+\end{align*}
+$$
+
+$$
+\delta_{p,k} = \sigma_p \cdot \tilde{\delta}_{p,k} \cdot w_k \text{ for } k < K
+$$
+
+$$
+\delta_{p,K} = -\frac{1}{w_K}\sum_{k=1}^{K-1} {\delta}_{p,k}
+$$
+
+$$
+\begin{align*}
+\sum_{k=1}^K w_k\delta_{p,k} &= \sum_{k=1}^{K-1} w_k\delta_{p,k} + w_K\delta_{p,K} \\
+&= \sum_{k=1}^{K-1} w_k\delta_{p,k} + w_K(-\frac{1}{w_K}\sum_{k=1}^{K-1} {\delta}_{p,k}) \\
+&= \sum_{k=1}^{K-1} w_k\delta_{p,k} - \sum_{k=1}^{K-1} {\delta}_{p,k} \\
+&= \sum_{k=1}^{K-1} (w_k - 1)\delta_{p,k} \\
+&= \sum_{k=1}^{K-1} (w_k - 1)(\sigma_p \cdot \tilde{\delta}_{p,k} \cdot w_k)
+\end{align*}
+$$
+
 #### Integration with National Model
 
 The constituency model is integrated with the national model through:

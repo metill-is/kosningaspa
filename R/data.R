@@ -351,20 +351,21 @@ get_electorate_byage <- function() {
     count(aldur, kjordaemi, name = "n_kjosendur", wt = n)
 }
 
+#' @export
 update_constituency_data <- function() {
   box::use(
     googlesheets4[read_sheet, gs4_auth],
     janitor[clean_names],
     dplyr[mutate, select, coalesce],
     clock[date_build],
-    here[here]
+    here[here],
+    tidyr[pivot_longer]
   )
   gs4_auth(email = Sys.getenv("GOOGLE_MAIL"))
   d <- read_sheet(
     Sys.getenv("POLLING_SHEET_URL"),
     sheet = "kjordaemi"
   )
-
   d |>
     pivot_longer(-c(1:5), names_to = "kjordaemi", values_to = "n") |>
     janitor::clean_names() |>
@@ -392,12 +393,7 @@ update_constituency_data <- function() {
         "Sósíalistaflokkurinn"
       )
     ) |>
-    mutate(
-      p = n / sum(n, na.rm = TRUE),
-      .by = c(date, fyrirtaeki)
-    )
-
-  write_csv(here("data", "constituency_data.csv"))
+    write_csv(here("data", "constituency_data.csv"))
 }
 
 #' @export
