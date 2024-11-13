@@ -16,6 +16,7 @@ data {
 
   vector[D] stjornarslit;
   vector[D] post_stjornarslit;
+  vector[D] month_before_election;
   
   vector[D - 1] time_diff;
   int<lower = 1> pred_y_time_diff;
@@ -31,6 +32,7 @@ data {
   array[N_k] int<lower = 1, upper = P> n_parties_k;
   array[N_k] int<lower = 1, upper = K> constituency_k;
   array[K] int<lower = 1> n_pred_k;
+  vector[K] constituency_weights;
 
   /* Fundamentals Data*/
   int<lower = 1> D_f;
@@ -114,7 +116,7 @@ transformed parameters {
     
     // Each party's constituency effects sum to zero
     delta[p, 1:(K-1)] = sigma_delta[p] * delta_raw[p, ];
-    delta[p, K] = -sum(delta[p, 1:(K-1)]);
+    delta[p, K] = -sum(to_vector(delta[p, 1:(K-1)]) .* constituency_weights[1:(K-1)]) / constituency_weights[K];
   }
   
   beta[ , D + pred_y_time_diff] = beta0;
@@ -132,7 +134,7 @@ transformed parameters {
 
   for (t in 1:(D - 1)) {
     beta[ , D - t] = beta[ , D - t + 1] + 
-      time_scale[D - t] * z_beta[, D - t + 1] .* sigma * (1 + tau_stjornarslit * post_stjornarslit[D - t]);
+      time_scale[D - t] * z_beta[, D - t + 1] .* sigma * (1 + tau_stjornarslit * month_before_election[D - t]);
   }
 
   

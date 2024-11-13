@@ -64,13 +64,31 @@ prepare_polling_data <- function(polling_data, constituency_data) {
       rename,
       row_number,
       if_else,
-      anti_join
+      anti_join,
+      case_when
     ],
     tibble[column_to_rownames],
     tidyr[pivot_wider, drop_na, complete],
     clock[date_build],
     forcats[fct_relevel, as_factor]
   )
+
+  election_dates <- date_build(
+    c(2016, 2017, 2021, 2024),
+    c(10, 10, 09, 11),
+    c(29, 28, 25, 30)
+  )
+
+  dates <- unique(c(polling_data$date, constituency_data$date))
+
+  time_before_election <- case_when(
+    dates <= election_dates[1] ~ election_dates[1] - dates,
+    dates <= election_dates[2] ~ election_dates[2] - dates,
+    dates <= election_dates[3] ~ election_dates[3] - dates,
+    dates <= election_dates[4] ~ election_dates[4] - dates
+  )
+
+  month_before_election <- 1 * (time_before_election <= 47)
 
   election_date <- date_build(2021, 9, 25)
   dates <- unique(c(polling_data$date, constituency_data$date))
@@ -218,6 +236,7 @@ prepare_polling_data <- function(polling_data, constituency_data) {
     n_parties_n = n_parties,
     time_diff = time_diff,
     pred_y_time_diff = pred_y_time_diff,
+    month_before_election = month_before_election,
     n_election = n_election,
     n_pred = as.integer(n_election),
     # Kjördæmi level

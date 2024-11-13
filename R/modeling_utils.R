@@ -120,6 +120,8 @@ fit_model_at_date <- function(
 #' @export
 fit_model_at_date_2021 <- function(
     cutoff_date,
+    weight_time = 180,
+    weight_desired = 0.33,
     election_date = clock::date_build(2021, 9, 25)) {
   box::use(
     cmdstanr[cmdstan_model],
@@ -159,7 +161,8 @@ fit_model_at_date_2021 <- function(
       date <= cutoff_date
     ) |>
     mutate(
-      flokkur = droplevels(flokkur)
+      flokkur = droplevels(flokkur),
+      fyrirtaeki = droplevels(fyrirtaeki)
     )
 
   # Read fundamentals data
@@ -212,8 +215,8 @@ fit_model_at_date_2021 <- function(
   )
 
   # Set additional parameters
-  stan_data$desired_weight <- 0.33
-  stan_data$weight_time <- 180
+  stan_data$desired_weight <- weight_desired
+  stan_data$weight_time <- weight_time
 
   # Initialize model
   model <- cmdstan_model(

@@ -59,7 +59,7 @@ stan_data <- prepare_stan_data(
 
 stan_data$desired_weight <- 0.33
 stan_data$weight_time <- 180
-stan_data$last_poll_days <- 27
+stan_data$last_poll_days <- 26
 stan_data$last_poll_house <- 6
 stan_data$n_last_poll <- 1000
 
@@ -439,8 +439,7 @@ p <- fit$summary("gamma") |>
   labs(
     x = NULL,
     y = NULL,
-    title = "Bjagi mismunandi fyrirtækja á fylgi flokka",
-    subtitle = "Bjagi í janúar 2016"
+    title = "Frávik mismunandi fyrirtækja frá metnu fylgi flokka samkvæmt líkani"
   )
 
 p

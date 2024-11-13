@@ -57,6 +57,21 @@ stan_data <- prepare_stan_data(
   constituency_data
 )
 
+constituency_weights <- constituency_data |>
+  filter(
+    fyrirtaeki == "Kosning",
+    year(date) == 2021
+  ) |>
+  summarise(
+    n = sum(n),
+    .by = kjordaemi
+  ) |>
+  mutate(
+    weight = n / sum(n)
+  ) |>
+  pull(weight)
+
+stan_data$constituency_weights <- constituency_weights
 stan_data$desired_weight <- 0.33
 stan_data$weight_time <- 180
 
@@ -74,7 +89,7 @@ fit <- model$sample(
   refresh = 100,
   init = 0,
   iter_warmup = 1000,
-  iter_sampling = 2000
+  iter_sampling = 1000
 )
 
 
@@ -334,11 +349,11 @@ d <- fit$summary("y_rep_k") |>
   ) |>
   select(flokkur, kjordaemi, date, fyrirtaeki, mean, q5, q95) |>
   filter(
-    fyrirtaeki == "Kosning",
-    year(date) == 2017
+    fyrirtaeki == "Maskína",
+    year(date) == 2024
   )
 
-d |>
+p <- d |>
   inner_join(
     constituency_data,
     by = join_by(flokkur, kjordaemi, date, fyrirtaeki)
@@ -364,7 +379,7 @@ d |>
     alpha = 0.5
   ) +
   scale_x_continuous(
-    labels = \(x) percent(x, accuracy = 1)
+    labels = \(x) percent(x, accuracy = 2)
   ) +
   facet_wrap(
     vars(flokkur),
@@ -374,6 +389,17 @@ d |>
     shape = "Type",
     col = "Type"
   )
+
+
+p
+
+ggsave(
+  here("Figures", "constituency_predictions_maskina_2024.png"),
+  p,
+  width = 8,
+  height = 0.621 * 8,
+  scale = 1.3
+)
 
 #### Constituency Predictions ####
 
@@ -413,7 +439,7 @@ d_const <- d_const_draws |>
   ) |>
   select(flokkur, kjordaemi, median, q5, q95)
 
-d_const |>
+p <- d_const |>
   group_by(kjordaemi2 = kjordaemi) |>
   arrange(desc(median)) |>
   group_map(
@@ -430,6 +456,13 @@ d_const |>
   ) |>
   patchwork::wrap_plots()
 
+ggsave(
+  here("Figures", "constituency_predictions.png"),
+  p,
+  width = 8,
+  height = 0.7 * 8,
+  scale = 1.3
+)
 
 #### Gamma ####
 theme_set(metill::theme_metill())

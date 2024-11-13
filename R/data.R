@@ -228,7 +228,7 @@ combine_datasets <- function() {
     election_data
   ) |>
     filter(
-      (date > max(felo_data$date)) | (fyrirtaeki == "Kosning")
+      (date > date_build(2021, 9, 25)) | (fyrirtaeki == "Kosning")
     ) |>
     bind_rows(
       felo_data
@@ -392,7 +392,12 @@ update_constituency_data <- function() {
         "Sósíalistaflokkurinn"
       )
     ) |>
-    write_csv(here("data", "constituency_data.csv"))
+    mutate(
+      p = n / sum(n, na.rm = TRUE),
+      .by = c(date, fyrirtaeki)
+    )
+
+  write_csv(here("data", "constituency_data.csv"))
 }
 
 #' @export

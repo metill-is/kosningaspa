@@ -12,25 +12,20 @@ library(metill)
 theme_set(theme_metill())
 
 box::use(
-  R / prepare_data[
-    read_polling_data,
-    prepare_stan_data,
+  R / data[
     read_fundamentals_data
+  ],
+  R / stan_data[
+    prepare_fundamentals_data
   ]
 )
 
 election_date <- date_build(2024, 11, 30)
 
-polling_data <- read_polling_data() |>
-  filter(
-    date >= date_build(2016, 1, 1)
-  )
-
-unique(polling_data$flokkur)
-max(polling_data$date)
-
+# Read fundamentals data
 fundamentals_data <- read_fundamentals_data()
 
+# Read and join economic data
 econ_data <- read_csv(here("data", "economy_data.csv"))
 
 fundamentals_data <- fundamentals_data |>
@@ -39,62 +34,45 @@ fundamentals_data <- fundamentals_data |>
     by = "date"
   )
 
-n_votes <- fundamentals_data |>
-  summarise(
-    n_votes = unique(total_valid_votes) |>
-      coalesce(200000),
-    .by = year
-  ) |>
-  pull(n_votes)
+# Prepare Stan data using only the fundamentals component
+stan_data <- prepare_fundamentals_data(fundamentals_data)
+stan_data$n_votes <- rep(1e4, ncol(stan_data$y_f) + 1)
 
-stan_data <- prepare_stan_data(polling_data, fundamentals_data)
-stan_data$n_votes <- n_votes[-(1:2)]
-str(stan_data)
-
+# Initialize model
 model <- cmdstan_model(
   here("Stan", "fundamentals.stan")
 )
 
-
+# Fit model
 fit <- model$sample(
   data = stan_data,
   chains = 4,
   parallel_chains = 4,
   refresh = 100,
-  init = 0
+  init = 0,
+  iter_warmup = 1000,
+  iter_sampling = 1000
 )
 
-
-
-# Fundamentals Parameters
+# Examine fundamentals parameters
 fit$summary("alpha_f")
 fit$summary("beta_lag_f")
-
-
 fit$summary("beta_inc_years_f")
-
 fit$summary(c("beta_vnv_f", "beta_growth_f"))
 
+# Calculate probability of negative effects
 fit$draws(c("beta_vnv_f", "beta_growth_f")) |>
   summarise_draws(
     "perc_less_than_0" = ~ mean(.x < 0)
   )
 
 fit$summary("tau_f")
-
-fit$summary("phi_inv") |>
-  mutate(
-    house = levels(polling_data$fyrirtaeki)
-  ) |>
-  select(
-    house, mean, q5, q95
-  )
-
 fit$summary("phi_f_inv")
 
-
+# Get combined parameter summary
 fit$summary(c("beta_lag_f", "beta_inc_years_f", "beta_vnv_f", "beta_growth_f"))
 
+# Create plot data
 plot_dat <- fit$draws("y_rep") |>
   as_draws_df() |>
   as_tibble() |>
@@ -114,40 +92,40 @@ plot_dat <- fit$draws("y_rep") |>
     by = c("year", "flokkur")
   ) |>
   mutate(
-    value = value - voteshare / 100
+    error = value - voteshare / 100
   )
 
-
-
-
+# Create visualization
 plot_dat |>
   summarise(
-    mean = mean(value),
-    q5 = quantile(value, 0.05),
-    q95 = quantile(value, 0.95),
+    mean = mean(error),
+    q5 = quantile(error, 0.05),
+    q95 = quantile(error, 0.95),
     .by = c(year, flokkur, voteshare)
   ) |>
   select(year, flokkur, mean, voteshare, q5, q95) |>
   ggplot(aes(year, mean)) +
   geom_hline(yintercept = 0, lty = 2) +
-  geom_linerange(aes(ymin = q5, ymax = q95), alpha = 0.5) +
+  # geom_linerange(aes(ymin = q5, ymax = q95), alpha = 0.5) +
   geom_point() +
   facet_wrap(
     ~flokkur,
     scales = "free_y",
     ncol = 3
   ) +
-  coord_cartesian(ylim = c(-0.25, 0.25))
+  coord_cartesian(ylim = c(-0.15, 0.15))
+
 
 plot_dat |>
   summarise(
-    mean = mean(value),
-    q5 = quantile(value, 0.05),
-    q95 = quantile(value, 0.95),
-    .by = year
+    median = median(value),
+    error = median(error),
+    .by = c(year, flokkur, voteshare)
   ) |>
-  select(year, mean, q5, q95) |>
-  ggplot(aes(year, mean)) +
-  geom_hline(yintercept = 0, lty = 2) +
-  geom_linerange(aes(ymin = q5, ymax = q95), alpha = 0.5) +
-  geom_point()
+  select(year, flokkur, median, voteshare, error) |>
+  filter(year == 2021) |>
+  filter(flokkur != "Annað") |>
+  mutate(
+    abs_error = abs(error)
+  ) |>
+  arrange(desc(abs_error))

@@ -13,6 +13,7 @@ data {
   array[N] int<lower = 1, upper = P> n_parties_n; // Number of parties in each poll
   vector[D] stjornarslit;
   vector[D] post_stjornarslit;
+  vector[D] month_before_election;
   
   vector[D - 1] time_diff;
   int<lower = 1> pred_y_time_diff;
@@ -115,7 +116,7 @@ transformed parameters {
 
   for (t in 1:(D - 1)) {
     beta[ , D - t] = beta[ , D - t + 1] + 
-      time_scale[D - t] * z_beta[, D - t + 1] .* sigma * (1 + tau_stjornarslit * post_stjornarslit[D - t]);
+      time_scale[D - t] * z_beta[, D - t + 1] .* sigma * (1 + tau_stjornarslit * month_before_election[D - t]);
   }
 
   
@@ -142,7 +143,7 @@ model {
   L_Omega ~ lkj_corr_cholesky(2);
   sigma ~ exponential(1);                 
   beta0 ~ normal(mu_pred, tau_f * sigma);
-  tau_stjornarslit ~ normal(0, 0.2);
+  tau_stjornarslit ~ normal(0, 0.3);
   // Prior for the Dirichlet-multinomial scale parameter
   phi_inv ~ exponential(1);
 
