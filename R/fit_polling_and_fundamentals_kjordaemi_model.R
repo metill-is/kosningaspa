@@ -47,7 +47,7 @@ fundamentals_data <- fundamentals_data |>
 # update_constituency_data()
 constituency_data <- read_constituency_data() |>
   filter(
-    date == date_build(2021, 9, 25)
+    date > date_build(2021, 9, 25)
   ) |>
   drop_na() |>
   mutate(
@@ -312,7 +312,7 @@ d_yrep_national |>
     columns = 1
   ) |>
   fmt_percent(
-    decimals = 1
+    decimals = 0
   ) |>
   gt_color_rows(
     columns = c(mean, q5, q95),

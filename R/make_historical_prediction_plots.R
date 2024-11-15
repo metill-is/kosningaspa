@@ -53,7 +53,7 @@ d <- list.files(
   map(read_csv) |>
   bind_rows()
 
-digits <- 0
+digits <- 1
 
 
 #### Plots with title and subtitle ####

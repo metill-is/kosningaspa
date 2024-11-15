@@ -276,16 +276,7 @@ prepare_polling_data <- function(polling_data, constituency_data, election_date)
     ) |>
     pull(constituency)
 
-  n_pred_k <- constituency_data |>
-    filter(
-      fyrirtaeki == "Kosning",
-      date == date_build(2021, 09, 25)
-    ) |>
-    summarise(
-      n = sum(n),
-      .by = kjordaemi
-    ) |>
-    pull(n)
+  n_pred_k <- c(35118, 35504, 58608, 17251, 23536, 29713)
 
   list(
     # National level

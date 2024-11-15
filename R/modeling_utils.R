@@ -64,7 +64,7 @@ fit_model_at_date <- function(
   )
 
   # Set additional parameters
-  stan_data$desired_weight <- 0.33
+  stan_data$desired_weight <- 0.15
   stan_data$weight_time <- 180
   stan_data$last_poll_days <- 27
   stan_data$last_poll_house <- 6
@@ -83,7 +83,7 @@ fit_model_at_date <- function(
     refresh = 100,
     init = 0,
     iter_warmup = 1000,
-    iter_sampling = 2000
+    iter_sampling = 1000
   )
 
   draws <- fit$draws("election_prediction") |>

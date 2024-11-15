@@ -57,7 +57,7 @@ stan_data <- prepare_stan_data(
 
 
 
-stan_data$desired_weight <- 0.33
+stan_data$desired_weight <- 0.15
 stan_data$weight_time <- 180
 stan_data$last_poll_days <- 20
 stan_data$last_poll_house <- 7
@@ -65,6 +65,9 @@ stan_data$n_last_poll <- 1436
 
 
 str(stan_data)
+
+rownames(stan_data$y_f)
+levels(polling_data$flokkur)
 
 model <- cmdstan_model(
   here("Stan", "polling_and_fundamentals.stan")
@@ -78,15 +81,41 @@ fit <- model$sample(
   refresh = 100,
   init = 0,
   iter_warmup = 1000,
-  iter_sampling = 1000
+  iter_sampling = 2000
 )
 
 
 # Polling Parameters
-fit$summary("beta0")
-fit$summary("sigma")
+fit$summary("beta0") |>
+  mutate(
+    flokkur = colnames(stan_data$y_n)[-1]
+  ) |>
+  select(flokkur, mean, q5, q95) |>
+  arrange(desc(mean))
+
+fit$summary("mu_pred") |>
+  mutate(
+    flokkur = colnames(stan_data$y_n)[-1]
+  ) |>
+  select(flokkur, mean, q5, q95) |>
+  arrange(desc(mean))
+
+fit$summary("sigma") |>
+  mutate(
+    flokkur = colnames(stan_data$y_n)[-1]
+  ) |>
+  select(flokkur, mean, q5, q95) |>
+  arrange(desc(mean))
+fit$summary("mu_log_sigma")
+
+fit$summary("tau_log_sigma")
+
 fit$summary("tau_stjornarslit")
 fit$summary("tau_f")
+
+fit$summary("sigma_gamma")
+fit$summary("mu_gamma")
+
 
 # Fundamentals Parameters
 fit$summary("alpha_f") |>
@@ -94,7 +123,13 @@ fit$summary("alpha_f") |>
     flokkur = rownames(stan_data$y_f)
   ) |>
   select(flokkur, mean, q5, q95) |>
-  arrange(desc(mean))
+  arrange(desc(mean)) |>
+  semi_join(
+    polling_data,
+    by = join_by(flokkur)
+  )
+
+
 
 fit$summary("beta_lag_f")
 
@@ -115,7 +150,7 @@ fit$summary("phi_inv") |>
     house = levels(polling_data$fyrirtaeki)
   ) |>
   select(
-    house, mean, q5, q95
+    house, mean, q5, q95, rhat
   )
 
 fit$summary("phi_f_inv")
@@ -136,19 +171,22 @@ fit$summary("Omega") |>
   ) |>
   column_to_rownames("flokkur1") |>
   as.matrix() |>
+  solve() |>
+  cov2cor() |>
   corrplot::corrplot(
     method = "color",
     order = "hclust",
     tl.col = "black",
-    addCoef.col = "black"
+    addCoef.col = "black",
+    is.corr = TRUE
   )
 
 fit$summary("Omega") |>
   mutate(
     p = str_match(variable, "Omega\\[(.*),.*\\]")[, 2] |> parse_number(),
     q = str_match(variable, "Omega\\[.*,(.*)\\]")[, 2] |> parse_number(),
-    flokkur1 = colnames(stan_data$y)[-1][p],
-    flokkur2 = colnames(stan_data$y)[-1][q]
+    flokkur1 = colnames(stan_data$y_n)[-1][p],
+    flokkur2 = colnames(stan_data$y_n)[-1][q]
   ) |>
   select(flokkur1, flokkur2, mean, q5, q95) |>
   filter(flokkur1 != flokkur2) |>
@@ -160,6 +198,7 @@ fit$summary("Omega") |>
     vars(flokkur1),
     scales = "free_y"
   )
+
 
 dates <- c(
   unique(polling_data$date),
@@ -198,6 +237,27 @@ d_yrep |>
   geom_point(aes(y = konnun, col = flokkur))
 
 
+d_yrep |>
+  mutate(
+    t = str_match(variable, "y_rep\\[(.*),.*\\]")[, 2] |> parse_number(),
+    p = str_match(variable, "y_rep\\[.*,(.*)\\]")[, 2] |> parse_number(),
+    flokkur = colnames(stan_data$y_n)[p],
+    dags = dates[t]
+  ) |>
+  filter(
+    dags %in% c(max(dags), today())
+  ) |>
+  mutate(
+    mean = median / stan_data$n_pred,
+    q5 = q5 / stan_data$n_pred,
+    q95 = q95 / stan_data$n_pred,
+    interval_size = q95 - q5
+  ) |>
+  select(dags, flokkur, interval_size) |>
+  pivot_wider(
+    names_from = dags,
+    values_from = interval_size
+  )
 
 d_yrep |>
   mutate(
@@ -207,7 +267,7 @@ d_yrep |>
     dags = dates[t]
   ) |>
   filter(
-    dags == today()
+    dags == max(dags)
   ) |>
   mutate(
     mean = median / stan_data$n_pred,
@@ -229,7 +289,7 @@ d_yrep |>
     q95 = "Efri"
   ) |>
   tab_spanner(
-    label = "95% Öryggisbil",
+    label = "90% Óvissubil",
     columns = c(q5, q95)
   ) |>
   cols_align(
@@ -237,7 +297,7 @@ d_yrep |>
     columns = 1
   ) |>
   fmt_percent(
-    decimals = 1
+    decimals = 0
   ) |>
   gt_color_rows(
     columns = c(mean, q5, q95),
@@ -390,7 +450,7 @@ ggsave(
 
 #### Gamma / House Effects ####
 
-p <- fit$summary("gamma") |>
+plot_dat <- fit$summary("gamma") |>
   select(variable, mean, q5, q95) |>
   mutate(
     p = str_match(variable, "gamma\\[(.*),.*\\]")[, 2] |> parse_number(),
@@ -398,17 +458,28 @@ p <- fit$summary("gamma") |>
     flokkur = colnames(stan_data$y_n)[-1][p],
     fyrirtaeki = levels(polling_data$fyrirtaeki)[h]
   ) |>
-  filter(h != 1) |>
+  filter(h != 1)
+
+plot_dat |>
+  print(n = 100)
+
+plot_dat |>
+  write_csv(
+    here("data", "gamma_effects.csv")
+  )
+
+p <- plot_dat |>
   bind_rows(
     fit$summary("mu_gamma") |>
       mutate(
-        flokkur = colnames(stan_data$y_n)[-1] |>
+        flokkur = colnames(stan_data$y_n)[-c(1, 10)] |>
           as_factor() |>
           fct_reorder(mean),
         fyrirtaeki = "Samtals",
         .before = variable
       )
   ) |>
+  filter(fyrirtaeki != "Samtals") |>
   ggplot(aes(0, fyrirtaeki, col = fyrirtaeki)) +
   geom_vline(xintercept = 0, lty = 2) +
   geom_point(
@@ -434,6 +505,9 @@ p <- fit$summary("gamma") |>
       "Gallup" = "#e41a1c"
     )
   ) +
+  coord_cartesian(
+    xlim = c(-0.7, 0.7)
+  ) +
   facet_wrap(
     vars(flokkur),
     ncol = 1,
@@ -451,7 +525,7 @@ p <- fit$summary("gamma") |>
 p
 
 ggsave(
-  here("Figures", "gamma.png"),
+  here("Figures", "gamma2.png"),
   p,
   width = 8,
   height = 1.2 * 8,

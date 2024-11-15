@@ -1,5 +1,6 @@
 library(ggplot2)
 library(dplyr)
+library(lubridate)
 
 # Function to calculate V(t)
 calc_V <- function(t, tau_stjornarslit) {
@@ -96,4 +97,4 @@ create_weight_plot <- function(tau_stjornarslit = 0.24) {
 }
 
 # Generate plot
-create_weight_plot(tau_stjornarslit = 0.878)
+create_weight_plot(tau_stjornarslit = 0.9)
