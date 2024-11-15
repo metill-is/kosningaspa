@@ -65,6 +65,22 @@ create_weight_plot <- function(tau_stjornarslit = 0.24) {
       hjust = 1.2,
       vjust = 1
     ) +
+    # Add point and label for day before election
+    annotate(
+      geom = "point",
+      x = 1,
+      y = calc_weight(1, tau_f, tau_stjornarslit),
+      color = "darkblue",
+      size = 3
+    ) +
+    annotate(
+      geom = "text",
+      x = 1,
+      y = calc_weight(1, tau_f, tau_stjornarslit),
+      label = sprintf("Election Eve: %.1f%%", calc_weight(1, tau_f, tau_stjornarslit) * 100),
+      hjust = 1.2,
+      vjust = 1
+    ) +
     scale_x_reverse() +
     scale_y_continuous(labels = scales::percent) +
     labs(
@@ -80,4 +96,4 @@ create_weight_plot <- function(tau_stjornarslit = 0.24) {
 }
 
 # Generate plot
-create_weight_plot()
+create_weight_plot(tau_stjornarslit = 0.878)

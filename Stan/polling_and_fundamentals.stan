@@ -132,7 +132,6 @@ model {
   // Priors for house effects
   to_vector(gamma_raw) ~ std_normal();
   mu_gamma ~ std_normal();
-  sum(mu_gamma) ~ std_normal();
   sigma_gamma ~ exponential(1);
   for (h in 2:(H - 1)) {
     sum(gamma_raw[ , h]) ~ std_normal();

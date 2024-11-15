@@ -47,7 +47,8 @@ fundamentals_data <- fundamentals_data |>
 # update_constituency_data()
 constituency_data <- read_constituency_data() |>
   filter(
-    date == date_build(2021, 9, 25)
+    fyrirtaeki == "Kosning",
+    year(date) >= 2021
   ) |>
   drop_na() |>
   mutate(
@@ -379,7 +380,7 @@ for (i in seq_len(nrow(obs))) {
   p <- d |>
     filter(
       fyrirtaeki == obs$fyrirtaeki[i],
-      date == obs$date[i]
+      year(date) == year(obs$date[i])
     ) |>
     inner_join(
       constituency_data,
@@ -415,14 +416,14 @@ for (i in seq_len(nrow(obs))) {
     labs(
       shape = "Type",
       col = "Type",
-      title = paste(obs$fyrirtaeki[i], obs$date[i])
+      title = paste(obs$fyrirtaeki[i], year(obs$date[i]))
     )
 
 
   p
 
   ggsave(
-    here("Figures", "constituency_predictions", paste0("constituency_predictions_", obs$fyrirtaeki[i], "_", obs$date[i], ".png")),
+    here("Figures", "constituency_predictions", paste0("constituency_predictions_", obs$fyrirtaeki[i], "_", year(obs$date[i]), ".png")),
     p,
     width = 8,
     height = 0.621 * 8,
@@ -629,31 +630,3 @@ ggsave(
   height = 0.8 * 8,
   scale = 1.3
 )
-
-
-constituency_data |>
-  filter(
-    fyrirtaeki == "Gallup",
-    year(date) == 2024
-  ) |>
-  mutate(
-    p = n / sum(n),
-    .by = kjordaemi
-  ) |>
-  mutate(
-    weight = constituency_weights[7, ] |> as.numeric(),
-    .by = flokkur
-  ) |>
-  summarise(
-    national_p = sum(p * weight),
-    .by = flokkur
-  )
-
-polling_data |>
-  filter(
-    fyrirtaeki == "Gallup",
-    date == ymd("2024-09-15")
-  ) |>
-  mutate(
-    p = n / sum(n)
-  )

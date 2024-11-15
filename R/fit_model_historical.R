@@ -26,13 +26,23 @@ for (i in seq_along(fit_dates)) {
     mutate(
       fit_date = fit_date
     )
+
+  dir.create(
+    here("data", "historical_results", fit_date),
+    recursive = TRUE,
+    showWarnings = FALSE
+  )
+  write_csv(
+    results[[i]],
+    here("data", "historical_results", fit_date, "results.csv")
+  )
 }
 
 
 library(ggplot2)
-# results |>
-#  bind_rows() |>
-#  write_csv(here("data/historical_results.csv"))
+results |>
+  bind_rows() |>
+  write_csv(here("data/historical_results.csv"))
 
 
 results |>

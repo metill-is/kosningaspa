@@ -59,9 +59,9 @@ stan_data <- prepare_stan_data(
 
 stan_data$desired_weight <- 0.33
 stan_data$weight_time <- 180
-stan_data$last_poll_days <- 26
-stan_data$last_poll_house <- 6
-stan_data$n_last_poll <- 1000
+stan_data$last_poll_days <- 20
+stan_data$last_poll_house <- 7
+stan_data$n_last_poll <- 1436
 
 
 str(stan_data)
@@ -89,7 +89,13 @@ fit$summary("tau_stjornarslit")
 fit$summary("tau_f")
 
 # Fundamentals Parameters
-fit$summary("alpha_f")
+fit$summary("alpha_f") |>
+  mutate(
+    flokkur = rownames(stan_data$y_f)
+  ) |>
+  select(flokkur, mean, q5, q95) |>
+  arrange(desc(mean))
+
 fit$summary("beta_lag_f")
 
 
@@ -201,7 +207,7 @@ d_yrep |>
     dags = dates[t]
   ) |>
   filter(
-    dags == max(dags)
+    dags == today()
   ) |>
   mutate(
     mean = median / stan_data$n_pred,
@@ -306,7 +312,7 @@ plot_dat <- d |>
   select(flokkur, mean, q5, q95) |>
   mutate(
     true = c(
-      0.014, 0.123, 0.216, 0.058, 0.026, 0.057, 0.171, 0.115, 0.151, 0.067
+      0.017, 0.134, 0.201, 0.073, 0.034, 0.051, 0.199, 0.092, 0.126, 0.063
     )
   ) |>
   mutate(
@@ -321,7 +327,7 @@ plot_dat <- d |>
 
 plot_dat |>
   write_csv(
-    here("data", "poll_predictions", "prosent8nov.csv")
+    here("data", "poll_predictions", "maskina14nov.csv")
   )
 
 p <- plot_dat |>
@@ -354,7 +360,7 @@ p <- plot_dat |>
   labs(
     x = NULL,
     y = NULL,
-    title = "Spáð fylgi flokka í könnun Prósents 8. nóvember",
+    title = "Spáð fylgi flokka í könnun Maskínu 8. nóvember",
     subtitle = str_c(
       "Gráir kassar eru miðgildi og línur eru 90% öryggisbil fyrir spár | ",
       "Svartir punktar eru rétt gildi"

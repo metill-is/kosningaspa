@@ -45,7 +45,16 @@ colors <- tribble(
     flokkur = str_to_sentence(flokkur)
   )
 
-d <- read_csv(here("data", "historical_results.csv"))
+d <- list.files(
+  here("data", "historical_results"),
+  full.names = TRUE
+) |>
+  paste0("/results.csv") |>
+  map(read_csv) |>
+  bind_rows()
+
+digits <- 0
+
 
 #### Plots with title and subtitle ####
 plots <- d |>
@@ -170,7 +179,7 @@ plots <- d |>
         gt(process_md = TRUE) |>
         fmt_percent(
           columns = median:upper,
-          decimals = 0
+          decimals = digits
         ) |>
         cols_label(
           flokkur = "",
@@ -370,7 +379,7 @@ plots <- d |>
         gt(process_md = TRUE) |>
         fmt_percent(
           columns = median:upper,
-          decimals = 0
+          decimals = digits
         ) |>
         cols_label(
           flokkur = "",

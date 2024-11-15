@@ -66,11 +66,12 @@ prepare_polling_data <- function(polling_data, constituency_data, election_date)
       row_number,
       if_else,
       anti_join,
+      left_join,
       case_when,
       count
     ],
     tibble[column_to_rownames],
-    tidyr[pivot_wider, drop_na, complete],
+    tidyr[pivot_wider, drop_na, complete, fill],
     clock[date_build],
     forcats[fct_relevel, as_factor]
   )
@@ -122,10 +123,10 @@ prepare_polling_data <- function(polling_data, constituency_data, election_date)
 
   y_n <- polling_data |>
     select(date, fyrirtaeki, flokkur, n) |>
-    anti_join(
-      constituency_data,
-      by = c("date", "fyrirtaeki")
-    ) |>
+    # anti_join(
+    #  constituency_data,
+    #  by = c("date", "fyrirtaeki")
+    # ) |>
     mutate(
       n = as.integer(n)
     ) |>
@@ -134,10 +135,10 @@ prepare_polling_data <- function(polling_data, constituency_data, election_date)
     as.matrix()
 
   house_n <- polling_data |>
-    anti_join(
-      constituency_data,
-      by = c("date", "fyrirtaeki")
-    ) |>
+    # anti_join(
+    #   constituency_data,
+    #   by = c("date", "fyrirtaeki")
+    # ) |>
     pivot_wider(names_from = flokkur, values_from = n, values_fill = 0) |>
     mutate(
       house = as.numeric(fyrirtaeki)
@@ -145,10 +146,10 @@ prepare_polling_data <- function(polling_data, constituency_data, election_date)
     pull(house)
 
   date_n <- polling_data |>
-    anti_join(
-      constituency_data,
-      by = c("date", "fyrirtaeki")
-    ) |>
+    # anti_join(
+    #   constituency_data,
+    #   by = c("date", "fyrirtaeki")
+    # ) |>
     pivot_wider(names_from = flokkur, values_from = n, values_fill = 0) |>
     mutate(
       date = as.numeric(factor(date, levels = levels(date_factor)))
@@ -167,10 +168,10 @@ prepare_polling_data <- function(polling_data, constituency_data, election_date)
     sum()
 
   n_parties <- polling_data |>
-    anti_join(
-      constituency_data,
-      by = c("date", "fyrirtaeki")
-    ) |>
+    # anti_join(
+    #   constituency_data,
+    #   by = c("date", "fyrirtaeki")
+    # ) |>
     summarise(
       n_parties = sum(n != 0),
       .by = c(date, fyrirtaeki)
@@ -190,10 +191,10 @@ prepare_polling_data <- function(polling_data, constituency_data, election_date)
     )
 
   n_parties_n_rep <- polling_data |>
-    anti_join(
-      constituency_data,
-      by = c("date", "fyrirtaeki")
-    ) |>
+    # anti_join(
+    #   constituency_data,
+    #   by = c("date", "fyrirtaeki")
+    # ) |>
     summarise(
       n_parties = sum(n != 0),
       .by = c(date, fyrirtaeki)

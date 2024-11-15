@@ -359,7 +359,8 @@ update_constituency_data <- function() {
     dplyr[mutate, select, coalesce],
     clock[date_build],
     here[here],
-    tidyr[pivot_longer]
+    tidyr[pivot_longer],
+    readr[write_csv]
   )
   gs4_auth(email = Sys.getenv("GOOGLE_MAIL"))
   d <- read_sheet(
