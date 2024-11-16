@@ -51,11 +51,17 @@ parameters {
   matrix[P - 1, D + pred_y_time_diff] z_beta_raw;   // Standardized random walk innovations
   cholesky_factor_corr[P - 1] L_Omega;
   vector[P - 1] z_beta0;
-  matrix[P - 1, H - 1] gamma_raw;               // House effects (constant over time for each house)
-  vector[P - 1] mu_gamma;
-  vector<lower = 0>[P - 1] sigma_gamma;
+  
+  
+  // House Effects Parameters
+  matrix[P - 1, H - 1] gamma_raw;                   // Raw house effects
+  vector[P - 2] mu_gamma;                           // Mean house effects
+  vector<lower = 0>[P - 2] sigma_gamma;             // Scale of house effects
 
-  vector<lower = 0>[P - 1] sigma;               // Party-specific random walk scale
+  // Variance Parameters
+  real mu_log_sigma;                    // Population mean of log volatility
+  real<lower=0> tau_log_sigma;          // Population SD of log volatility
+  vector[P-1] log_sigma_raw;            // Raw party-specific parameters
   vector<lower = 0>[H] phi_inv;
   real<lower = 0> tau_stjornarslit;
 
@@ -70,6 +76,7 @@ parameters {
 }
 
 transformed parameters {
+  vector<lower=0>[P-1] sigma = exp(mu_log_sigma + tau_log_sigma * log_sigma_raw);           // Party-specific volatilities
   vector<lower = 0>[H] phi = pow(phi_inv, -1);
   real<lower = 0> phi_f = pow(phi_f_inv, -1);
   matrix[P - 1, D + pred_y_time_diff] z_beta = L_Omega * z_beta_raw;
@@ -101,12 +108,19 @@ transformed parameters {
   tau_f = sqrt(V_t * (1 - desired_weight) / desired_weight);
 
 
-  for (p in 1:(P - 1)) {
-    // Fix the first house effect of the election to zero
-    gamma[p, 1] = 0;                      
-    // Free parameters for other houses
-    gamma[p, 2:H] = mu_gamma[p] + sigma_gamma[p] * gamma_raw[p, ];         
+  // Set up house effects
+  for (p in 1:(P - 2)) {
+    gamma[p, 1] = 0;                          // Reference house effect set to 0
+    gamma[p, 2:H] = mu_gamma[p] + sigma_gamma[p] * gamma_raw[p, ];  // Other house effects
   }
+
+  gamma[P - 1, 1] = 0;
+
+  for (h in 2:H) {
+    gamma[P - 1, h] = -sum(gamma[1:(P - 2), h]);
+  }
+
+
   beta0 = mu_pred + tau_f * sigma .* z_beta0;
   beta[ , D + pred_y_time_diff] = beta0;
 
@@ -133,20 +147,18 @@ model {
   
   /* Polling Data */
   // Priors for house effects
-  to_vector(gamma_raw) ~ std_normal();
-  mu_gamma ~ std_normal();
-  sum(mu_gamma) ~ normal(0, 0.1);
-  sigma_gamma ~ exponential(1);
-  for (h in 2:(H - 1)) {
-    sum(gamma_raw[ , h]) ~ normal(0, 0.1);
-  }
+  to_vector(gamma_raw) ~ std_normal();        // Raw house effects
+  mu_gamma ~ std_normal();                    // Mean house effects
+  sigma_gamma ~ exponential(1);               // House effect scales
 
   // Priors for true party support
   to_vector(z_beta_raw) ~ std_normal();
   L_Omega ~ lkj_corr_cholesky(2);
-  sigma ~ exponential(1);                 
+  mu_log_sigma ~ normal(-4, 1);         // Prior centered on small volatility
+  tau_log_sigma ~ exponential(2);       // Weakly informative prior on variance
+  log_sigma_raw ~ std_normal();         // Unit normal for non-centered param    
   z_beta0 ~ std_normal();
-  tau_stjornarslit ~ normal(0, 0.3);
+  tau_stjornarslit ~ exponential(1);
   // Prior for the Dirichlet-multinomial scale parameter
   phi_inv ~ exponential(1);
 

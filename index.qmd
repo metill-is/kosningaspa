@@ -67,7 +67,17 @@ The relative weight between polling and fundamentals is controlled by $\tau_f$, 
 
 ### Polling Component
 
-The polling model tracks latent party support $\beta_{p,t}$ through time using a multivariate random walk with correlation structure $\Omega$ between parties:
+The polling model tracks latent party support $\beta_{p,t}$ through time using a multivariate random walk with party-specific volatility
+
+$$
+\begin{aligned}
+\log(\sigma_p) &\sim \text{Normal}(\mu_{\log\sigma}, \tau_{\log\sigma}) \\
+\mu_{\log\sigma} &\sim \text{Normal}(-4, 1) \\
+\tau_{\log\sigma} &\sim \text{Exponential}(2),
+\end{aligned}
+$$
+
+and correlation structure $\Omega$ between parties:
 
 $$
 \beta_{t} = \begin{cases}
@@ -94,24 +104,27 @@ y_n &\sim \text{Dirichlet-Multinomial}(\pi_n, \phi_{h[n]}) \\
 \end{aligned}
 $$
 
-where $\gamma_{h}$ captures house-specific biases in reported support levels, with the election day house effect fixed to zero ($\gamma_1 = 0$). The other house effects are given a hierarchical prior:
+where $\gamma_{h}$ captures house-specific biases in reported support levels, with the election day house effect fixed to zero ($\gamma_1 = 0$). The other house effects are modeled hierarchically with explicit sum-to-zero constraints:
 
 $$
 \begin{aligned}
-\gamma_{p,h} &= \mathrm{Normal}\left(\mu_{\gamma,p}, \sigma_{\gamma,p} \right)\\
-\mu_{\gamma,p} &\sim \mathcal{N}(0, 1) \\
-\sigma_{\gamma,p} &\sim \text{Exponential}(1) \\
-\sum_{p=2}^{P} \mu_{\gamma,p} &\sim \mathcal{N}(0, 1) \\
-\sum_{p=2}^{P} \gamma_{p, h} &\sim \mathcal{N}(0, 1)
+\gamma_{p,h} &= \begin{cases}
+0 & \text{if } h = 1 \\
+\mu_{\gamma,p} + \sigma_{\gamma,p}\tilde{\gamma}_{p,h} & \text{if } h > 1
+\end{cases} \\
+\gamma_{P,h} &= -\sum_{p=1}^{P-1} \gamma_{p,h} \\
+\tilde{\gamma}_{p,h} &\sim \text{Normal}(0, 1)
 \end{aligned}
 $$
+
+where $h=1$ represents the election (reference category), and the final party's house effects are determined by the sum-to-zero constraint.
 
 ### Fundamentals Component
 
 The fundamentals model predicts party vote shares using economic and political variables:
 
 $$
-\pi = \text{softmax}(\alpha + \beta_\text{lag}x + \beta_\text{inc}\log(I) + \beta_\text{infl}V + \beta_\text{growth}G)
+\mu_{d,p} = \alpha_p + \beta_\text{lag}(x_{p,d} - \alpha_p) + \beta_\text{inc}\log(I_{p,d}) + \beta_\text{vnv}v_{p,d} + \beta_\text{growth}g_{p,d}
 $$
 
 where:
@@ -138,79 +151,71 @@ where $\mu_\text{pred}$ is the fundamentals prediction and $\tau_f$ controls how
 
 ### Constituency Component
 
-The model extends the national-level polling model to incorporate constituency-level effects through a hierarchical structure. This allows us to capture systematic differences in party support across constituencies while sharing information between them.
+The model extends the national-level polling model to incorporate constituency-level effects through a hierarchical structure that properly accounts for constituency weights and ensures identifiability through carefully constructed sum-to-zero constraints.
 
-#### Constituency Effects
+#### Constituency Effects Structure
 
-The constituency-level model adds constituency-specific deviations $\delta_{p,k}$ to the national-level support:
-
-$$
-\begin{aligned}
-y_{n,k} &\sim \text{Dirichlet-Multinomial}(\pi_{n,k}, \phi_{h[n]}) \\
-\pi_{n,k} &= \text{softmax}(\eta_{n,k}) \\
-\eta_{n,k,p} &= \beta_{p,t[n]} + \gamma_{p,h[n]} + \delta_{p,k}
-\end{aligned}
-$$
-
-where $k$ indexes constituencies. The constituency effects follow a hierarchical prior:
+For each constituency poll, the linear predictor combines national trends, house effects, and constituency-specific deviations:
 
 $$
 \begin{aligned}
-\delta_{p,k} &\sim \text{Normal}(0, \sigma_{\delta,p}) \\
-\sigma_{\delta,p} &\sim \text{Exponential}(1)
+y_{k} &\sim \text{Dirichlet-Multinomial}(\pi_k, \phi_{h[k]}) \\
+\pi_k &= \text{softmax}(\eta_k) \\
+\eta_{k,p} &= \beta_{p,t} + \gamma_{p,h} + \delta_{p,k}
 \end{aligned}
 $$
 
-This structure allows for:
+where $\delta_{p,k}$ represents the constituency-specific deviation for party $p$ in constituency $k$.
 
-- Constituency-specific deviations from national support levels
-- Party-specific scales of constituency variation ($\sigma_{\delta,p}$)
-- Partial pooling of information across constituencies
-- Separate treatment of each party's geographic distribution
-
-The constituency effects are constrained to sum to zero across constituencies for each party to ensure identifiability:
+The constituency effects follow a hierarchical structure:
 
 $$
-\sum_{k=1}^K \delta_{p,k} = 0
+\begin{aligned}
+\delta_{p,k} &= \sigma_{\delta,p} \tilde{\delta}_{p,k} \text{ for } k < K \\
+\delta_{p,K} &= -\sum_{k=1}^{K-1} w_k\delta_{p,k} / w_K \\
+\tilde{\delta}_{p,k} &\sim \text{Normal}(0, 1)
+\end{aligned}
 $$
 
-This constraint also prevents the constituency effects from absorbing national-level trends and ensures that the deviations represent relative differences across constituencies.
+where:
 
-$$
-\begin{align*}
-\delta_{p,k} &= \sigma_{\delta,p} \cdot \tilde{\delta}_{p,k} \text{ for } k < K \\
-\delta_{p,K} &= -\sum_{k=1}^{K-1} w_k \delta_{p,k} / w_K \\
-\eta_{p,k,t} &= \beta_{p,t} + \gamma_{p,h} + \delta_{p,k}
-\end{align*}
-$$
+- $\sigma_{\delta,p}$ is the party-specific scale of constituency variation
+- $w_k$ represents constituency weights based on historical voting patterns
+- The final constituency's effect is determined by the weighted sum-to-zero constraint
 
-$$
-\delta_{p,k} = \sigma_p \cdot \tilde{\delta}_{p,k} \cdot w_k \text{ for } k < K
-$$
+This structure ensures that:
 
-$$
-\delta_{p,K} = -\frac{1}{w_K}\sum_{k=1}^{K-1} {\delta}_{p,k}
-$$
-
-$$
-\begin{align*}
-\sum_{k=1}^K w_k\delta_{p,k} &= \sum_{k=1}^{K-1} w_k\delta_{p,k} + w_K\delta_{p,K} \\
-&= \sum_{k=1}^{K-1} w_k\delta_{p,k} + w_K(-\frac{1}{w_K}\sum_{k=1}^{K-1} {\delta}_{p,k}) \\
-&= \sum_{k=1}^{K-1} w_k\delta_{p,k} - \sum_{k=1}^{K-1} {\delta}_{p,k} \\
-&= \sum_{k=1}^{K-1} (w_k - 1)\delta_{p,k} \\
-&= \sum_{k=1}^{K-1} (w_k - 1)(\sigma_p \cdot \tilde{\delta}_{p,k} \cdot w_k)
-\end{align*}
-$$
+1. Constituency effects are properly weighted by constituency size
+2. The sum-to-zero constraint holds when accounting for constituency weights
+3. Each party can have different patterns of geographic variation ($\sigma_{\delta,p}$)
+4. Information is shared across constituencies through the hierarchical prior
 
 #### Integration with National Model
 
 The constituency model is integrated with the national model through:
 
-1. Shared national-level parameters ($\beta_{p,t}$)
+1. Shared national-level support trajectories ($\beta_{p,t}$)
 2. Common house effects ($\gamma_{p,h}$)
-3. Joint estimation of overdispersion parameters ($\phi_h$)
+3. Joint estimation of dispersion parameters ($\phi_h$)
 
-This allows constituency-level polls to inform national-level estimates and vice versa, while accounting for systematic differences between constituencies.
+This allows constituency-level polls to inform national-level estimates while accounting for systematic geographic differences in party support.
+
+#### Prediction
+
+The model generates both national and constituency-level predictions:
+
+$$
+\begin{aligned}
+y^{\text{rep}}_{\text{national}} &\sim \text{Dirichlet-Multinomial}(\text{softmax}(\beta_T), \phi_1) \\
+y^{\text{rep}}_{k} &\sim \text{Dirichlet-Multinomial}(\text{softmax}(\beta_T + \delta_k), \phi_1)
+\end{aligned}
+$$
+
+These predictions incorporate uncertainty in:
+- National support trends
+- Constituency-specific deviations
+- House effects
+- Overdispersion at both national and constituency levels
 
 #### Prediction
 

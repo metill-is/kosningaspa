@@ -86,7 +86,7 @@ obs_k <- rep(1:N_obs_k, each = ncol(constituency_weights))
 
 stan_data$constituency_weights <- constituency_weights
 stan_data$constituency_weights_pred <- constituency_weights[1, ] |> as.numeric()
-stan_data$desired_weight <- 0.33
+stan_data$desired_weight <- 0.15
 stan_data$weight_time <- 180
 stan_data$N_obs_k <- N_obs_k
 stan_data$obs_k <- obs_k

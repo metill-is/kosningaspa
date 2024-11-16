@@ -13,7 +13,7 @@ fit_dates <- polling_data |>
   arrange(desc(date)) |>
   pull(date) |>
   unique() |>
-  head(1)
+  head(25)
 
 results <- list()
 

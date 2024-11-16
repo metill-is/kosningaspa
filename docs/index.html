@@ -266,7 +266,15 @@ y^{(f)}_{d} &amp;\sim \text{Dirichlet-Multinomial}(\pi^{(f)}_{d}, \phi_f) \\
 </section>
 <section id="polling-component" class="level3" data-number="2.1.2">
 <h3 data-number="2.1.2" class="anchored" data-anchor-id="polling-component"><span class="header-section-number">2.1.2</span> Polling Component</h3>
-<p>The polling model tracks latent party support <span class="math inline">\(\beta_{p,t}\)</span> through time using a multivariate random walk with correlation structure <span class="math inline">\(\Omega\)</span> between parties:</p>
+<p>The polling model tracks latent party support <span class="math inline">\(\beta_{p,t}\)</span> through time using a multivariate random walk with party-specific volatility</p>
+<p><span class="math display">\[
+\begin{aligned}
+\log(\sigma_p) &amp;\sim \text{Normal}(\mu_{\log\sigma}, \tau_{\log\sigma}) \\
+\mu_{\log\sigma} &amp;\sim \text{Normal}(-4, 1) \\
+\tau_{\log\sigma} &amp;\sim \text{Exponential}(2),
+\end{aligned}
+\]</span></p>
+<p>and correlation structure <span class="math inline">\(\Omega\)</span> between parties:</p>
 <p><span class="math display">\[
 \beta_{t} = \begin{cases}
 \mathrm{Normal}\left(\beta_{t+1}, (1 + \tau_s)\sqrt{\Delta_t} \boldsymbol \Sigma\right) &amp; \text{after government split} \\
@@ -288,22 +296,24 @@ y_n &amp;\sim \text{Dirichlet-Multinomial}(\pi_n, \phi_{h[n]}) \\
 \pi_n &amp;= \text{softmax}(\beta_{t[n]} + \gamma_{h[n]})
 \end{aligned}
 \]</span></p>
-<p>where <span class="math inline">\(\gamma_{h}\)</span> captures house-specific biases in reported support levels, with the election day house effect fixed to zero (<span class="math inline">\(\gamma_1 = 0\)</span>). The other house effects are given a hierarchical prior:</p>
+<p>where <span class="math inline">\(\gamma_{h}\)</span> captures house-specific biases in reported support levels, with the election day house effect fixed to zero (<span class="math inline">\(\gamma_1 = 0\)</span>). The other house effects are modeled hierarchically with explicit sum-to-zero constraints:</p>
 <p><span class="math display">\[
 \begin{aligned}
-\gamma_{p,h} &amp;= \mathrm{Normal}\left(\mu_{\gamma,p}, \sigma_{\gamma,p} \right)\\
-\mu_{\gamma,p} &amp;\sim \mathcal{N}(0, 1) \\
-\sigma_{\gamma,p} &amp;\sim \text{Exponential}(1) \\
-\sum_{p=2}^{P} \mu_{\gamma,p} &amp;\sim \mathcal{N}(0, 1) \\
-\sum_{p=2}^{P} \gamma_{p, h} &amp;\sim \mathcal{N}(0, 1)
+\gamma_{p,h} &amp;= \begin{cases}
+0 &amp; \text{if } h = 1 \\
+\mu_{\gamma,p} + \sigma_{\gamma,p}\tilde{\gamma}_{p,h} &amp; \text{if } h &gt; 1
+\end{cases} \\
+\gamma_{P,h} &amp;= -\sum_{p=1}^{P-1} \gamma_{p,h} \\
+\tilde{\gamma}_{p,h} &amp;\sim \text{Normal}(0, 1)
 \end{aligned}
 \]</span></p>
+<p>where <span class="math inline">\(h=1\)</span> represents the election (reference category), and the final party’s house effects are determined by the sum-to-zero constraint.</p>
 </section>
 <section id="fundamentals-component" class="level3" data-number="2.1.3">
 <h3 data-number="2.1.3" class="anchored" data-anchor-id="fundamentals-component"><span class="header-section-number">2.1.3</span> Fundamentals Component</h3>
 <p>The fundamentals model predicts party vote shares using economic and political variables:</p>
 <p><span class="math display">\[
-\pi = \text{softmax}(\alpha + \beta_\text{lag}x + \beta_\text{inc}\log(I) + \beta_\text{infl}V + \beta_\text{growth}G)
+\mu_{d,p} = \alpha_p + \beta_\text{lag}(x_{p,d} - \alpha_p) + \beta_\text{inc}\log(I_{p,d}) + \beta_\text{vnv}v_{p,d} + \beta_\text{growth}g_{p,d}
 \]</span></p>
 <p>where:</p>
 <ul>
@@ -328,49 +338,63 @@ y_n &amp;\sim \text{Dirichlet-Multinomial}(\pi_n, \phi_{h[n]}) \\
 </section>
 <section id="constituency-component" class="level3" data-number="2.1.5">
 <h3 data-number="2.1.5" class="anchored" data-anchor-id="constituency-component"><span class="header-section-number">2.1.5</span> Constituency Component</h3>
-<p>The model extends the national-level polling model to incorporate constituency-level effects through a hierarchical structure. This allows us to capture systematic differences in party support across constituencies while sharing information between them.</p>
-<section id="constituency-effects" class="level4" data-number="2.1.5.1">
-<h4 data-number="2.1.5.1" class="anchored" data-anchor-id="constituency-effects"><span class="header-section-number">2.1.5.1</span> Constituency Effects</h4>
-<p>The constituency-level model adds constituency-specific deviations <span class="math inline">\(\delta_{p,k}\)</span> to the national-level support:</p>
+<p>The model extends the national-level polling model to incorporate constituency-level effects through a hierarchical structure that properly accounts for constituency weights and ensures identifiability through carefully constructed sum-to-zero constraints.</p>
+<section id="constituency-effects-structure" class="level4" data-number="2.1.5.1">
+<h4 data-number="2.1.5.1" class="anchored" data-anchor-id="constituency-effects-structure"><span class="header-section-number">2.1.5.1</span> Constituency Effects Structure</h4>
+<p>For each constituency poll, the linear predictor combines national trends, house effects, and constituency-specific deviations:</p>
 <p><span class="math display">\[
 \begin{aligned}
-y_{n,k} &amp;\sim \text{Dirichlet-Multinomial}(\pi_{n,k}, \phi_{h[n]}) \\
-\pi_{n,k} &amp;= \text{softmax}(\eta_{n,k}) \\
-\eta_{n,k,p} &amp;= \beta_{p,t[n]} + \gamma_{p,h[n]} + \delta_{p,k}
+y_{k} &amp;\sim \text{Dirichlet-Multinomial}(\pi_k, \phi_{h[k]}) \\
+\pi_k &amp;= \text{softmax}(\eta_k) \\
+\eta_{k,p} &amp;= \beta_{p,t} + \gamma_{p,h} + \delta_{p,k}
 \end{aligned}
 \]</span></p>
-<p>where <span class="math inline">\(k\)</span> indexes constituencies. The constituency effects follow a hierarchical prior:</p>
+<p>where <span class="math inline">\(\delta_{p,k}\)</span> represents the constituency-specific deviation for party <span class="math inline">\(p\)</span> in constituency <span class="math inline">\(k\)</span>.</p>
+<p>The constituency effects follow a hierarchical structure:</p>
 <p><span class="math display">\[
 \begin{aligned}
-\delta_{p,k} &amp;\sim \text{Normal}(0, \sigma_{\delta,p}) \\
-\sigma_{\delta,p} &amp;\sim \text{Exponential}(1)
+\delta_{p,k} &amp;= \sigma_{\delta,p} \tilde{\delta}_{p,k} \text{ for } k &lt; K \\
+\delta_{p,K} &amp;= -\sum_{k=1}^{K-1} w_k\delta_{p,k} / w_K \\
+\tilde{\delta}_{p,k} &amp;\sim \text{Normal}(0, 1)
 \end{aligned}
 \]</span></p>
-<p>This structure allows for:</p>
+<p>where:</p>
 <ul>
-<li>Constituency-specific deviations from national support levels</li>
-<li>Party-specific scales of constituency variation (<span class="math inline">\(\sigma_{\delta,p}\)</span>)</li>
-<li>Partial pooling of information across constituencies</li>
-<li>Separate treatment of each party’s geographic distribution</li>
+<li><span class="math inline">\(\sigma_{\delta,p}\)</span> is the party-specific scale of constituency variation</li>
+<li><span class="math inline">\(w_k\)</span> represents constituency weights based on historical voting patterns</li>
+<li>The final constituency’s effect is determined by the weighted sum-to-zero constraint</li>
 </ul>
-<p>The constituency effects are constrained to sum to zero across constituencies for each party to ensure identifiability:</p>
-<p><span class="math display">\[
-\sum_{k=1}^K \delta_{p,k} = 0
-\]</span></p>
-<p>This constraint also prevents the constituency effects from absorbing national-level trends and ensures that the deviations represent relative differences across constituencies.</p>
+<p>This structure ensures that:</p>
+<ol type="1">
+<li>Constituency effects are properly weighted by constituency size</li>
+<li>The sum-to-zero constraint holds when accounting for constituency weights</li>
+<li>Each party can have different patterns of geographic variation (<span class="math inline">\(\sigma_{\delta,p}\)</span>)</li>
+<li>Information is shared across constituencies through the hierarchical prior</li>
+</ol>
 </section>
 <section id="integration-with-national-model" class="level4" data-number="2.1.5.2">
 <h4 data-number="2.1.5.2" class="anchored" data-anchor-id="integration-with-national-model"><span class="header-section-number">2.1.5.2</span> Integration with National Model</h4>
 <p>The constituency model is integrated with the national model through:</p>
 <ol type="1">
-<li>Shared national-level parameters (<span class="math inline">\(\beta_{p,t}\)</span>)</li>
+<li>Shared national-level support trajectories (<span class="math inline">\(\beta_{p,t}\)</span>)</li>
 <li>Common house effects (<span class="math inline">\(\gamma_{p,h}\)</span>)</li>
-<li>Joint estimation of overdispersion parameters (<span class="math inline">\(\phi_h\)</span>)</li>
+<li>Joint estimation of dispersion parameters (<span class="math inline">\(\phi_h\)</span>)</li>
 </ol>
-<p>This allows constituency-level polls to inform national-level estimates and vice versa, while accounting for systematic differences between constituencies.</p>
+<p>This allows constituency-level polls to inform national-level estimates while accounting for systematic geographic differences in party support.</p>
 </section>
 <section id="prediction" class="level4" data-number="2.1.5.3">
 <h4 data-number="2.1.5.3" class="anchored" data-anchor-id="prediction"><span class="header-section-number">2.1.5.3</span> Prediction</h4>
+<p>The model generates both national and constituency-level predictions:</p>
+<p><span class="math display">\[
+\begin{aligned}
+y^{\text{rep}}_{\text{national}} &amp;\sim \text{Dirichlet-Multinomial}(\text{softmax}(\beta_T), \phi_1) \\
+y^{\text{rep}}_{k} &amp;\sim \text{Dirichlet-Multinomial}(\text{softmax}(\beta_T + \delta_k), \phi_1)
+\end{aligned}
+\]</span></p>
+<p>These predictions incorporate uncertainty in: - National support trends - Constituency-specific deviations - House effects - Overdispersion at both national and constituency levels</p>
+</section>
+<section id="prediction-1" class="level4" data-number="2.1.5.4">
+<h4 data-number="2.1.5.4" class="anchored" data-anchor-id="prediction-1"><span class="header-section-number">2.1.5.4</span> Prediction</h4>
 <p>The model generates both national-level predictions and constituency-specific predictions:</p>
 <ul>
 <li>National: <span class="math inline">\(y^{\text{rep}}_{\text{national}}\)</span> represents overall party support</li>

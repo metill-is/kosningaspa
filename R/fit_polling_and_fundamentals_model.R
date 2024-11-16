@@ -344,6 +344,14 @@ last_poll_date <- today()
 dir.create(here("data", as.character(last_poll_date)), showWarnings = FALSE)
 write_parquet(y_rep_draws, here("data", as.character(last_poll_date), "y_rep_draws.parquet"))
 
+y_rep_draws |>
+  filter(dags == max(dags)) |> 
+  summarise(
+    p_in = mean(value >= 0.05),
+    .by = flokkur
+  ) |>
+  arrange(desc(p_in))
+
 #### Predicting The Newest Poll ####
 
 theme_set(theme_metill(type = "blog"))

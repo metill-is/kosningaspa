@@ -29,7 +29,7 @@ for (i in seq_along(fit_dates)) {
   results[[i]] <- fit_model_at_date_2021(
     cutoff_date = fit_date,
     weight_time = 180,
-    weight_desired = 0.3
+    weight_desired = 0.50
   ) |>
     mutate(
       fit_date = fit_date

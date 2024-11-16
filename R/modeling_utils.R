@@ -83,7 +83,7 @@ fit_model_at_date <- function(
     refresh = 100,
     init = 0,
     iter_warmup = 1000,
-    iter_sampling = 1000
+    iter_sampling = 2000
   )
 
   draws <- fit$draws("election_prediction") |>
