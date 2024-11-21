@@ -18,8 +18,8 @@ colors <- tribble(
   "Annað", "grey50"
 )
 
-seats_draws <- read_parquet(here("data", today(), "seats_draws.parquet"))
-y_rep <- read_parquet(here("data", today(), "y_rep_draws.parquet"))
+seats_draws <- read_parquet(here("data", "seats_draws.parquet"))
+y_rep <- read_parquet(here("data", "y_rep_draws.parquet"))
 
 
 table_dat <- y_rep |>
@@ -28,8 +28,8 @@ table_dat <- y_rep |>
   ) |>
   summarise(
     median_votes = median(value),
-    lower_votes = quantile(value, 0.025),
-    upper_votes = quantile(value, 0.975),
+    lower_votes = quantile(value, 0.05),
+    upper_votes = quantile(value, 0.95),
     .by = c(flokkur)
   ) |>
   inner_join(
@@ -40,8 +40,8 @@ table_dat <- y_rep |>
       ) |>
       summarise(
         median_seats = median(seats),
-        lower_seats = quantile(seats, 0.025),
-        upper_seats = quantile(seats, 0.975),
+        lower_seats = quantile(seats, 0.05),
+        upper_seats = quantile(seats, 0.95),
         .by = flokkur
       )
   ) |>

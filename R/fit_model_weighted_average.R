@@ -12,13 +12,10 @@ library(metill)
 theme_set(theme_metill())
 
 box::use(
-  R / data[
+  R / prepare_data[
     read_polling_data,
-    read_fundamentals_data,
-    read_constituency_data
-  ],
-  R / stan_data[
-    prepare_stan_data
+    prepare_stan_data,
+    read_fundamentals_data
   ]
 )
 
@@ -42,24 +39,12 @@ fundamentals_data <- fundamentals_data |>
     by = "date"
   )
 
-constituency_data <- read_constituency_data() |>
-  mutate(var = NA) |>
-  drop_na() |>
-  select(-var)
-
-polling_data$fyrirtaeki |> levels()
-
-stan_data <- prepare_stan_data(
-  polling_data,
-  fundamentals_data,
-  constituency_data
-)
+stan_data <- prepare_stan_data(polling_data, fundamentals_data)
 
 stan_data$desired_weight <- 0.33
 stan_data$weight_time <- 180
-stan_data$last_poll_days <- 27
-stan_data$last_poll_house <- 7
-stan_data$n_last_poll <- 1000
+
+
 
 
 str(stan_data)
@@ -76,7 +61,6 @@ fit <- model$sample(
   refresh = 100
 )
 
-fit$summary("tau_stjornarslit")
 
 
 fit$summary("sigma") |>
@@ -101,7 +85,7 @@ fit$summary("y_rep", mean, ~ quantile(.x, c(0.05, 0.95))) |>
   mutate(
     t = str_match(variable, "y_rep\\[(.*),.*\\]")[, 2] |> parse_number(),
     p = str_match(variable, "y_rep\\[.*,(.*)\\]")[, 2] |> parse_number(),
-    flokkur = colnames(stan_data$y_n)[p],
+    flokkur = colnames(stan_data$y)[p],
     dags = dates[t]
   ) |>
   group_by(dags) |>
@@ -137,7 +121,7 @@ fit$draws("y_rep") |>
   mutate(
     t = str_match(name, "y_rep\\[(.*),.*\\]")[, 2] |> parse_number(),
     p = str_match(name, "y_rep\\[.*,(.*)\\]")[, 2] |> parse_number(),
-    flokkur = colnames(stan_data$y_n)[p],
+    flokkur = colnames(stan_data$y)[p],
     dags = dates[t]
   ) |>
   filter(dags == max(dags)) |>
@@ -199,7 +183,7 @@ y_rep_draws <- fit$draws("y_rep") |>
   mutate(
     t = str_match(name, "y_rep\\[(.*),.*\\]")[, 2] |> parse_number(),
     p = str_match(name, "y_rep\\[.*,(.*)\\]")[, 2] |> parse_number(),
-    flokkur = colnames(stan_data$y_n)[p],
+    flokkur = colnames(stan_data$y)[p],
     dags = dates[t]
   ) |>
   select(
@@ -225,7 +209,7 @@ fit$summary("gamma") |>
   mutate(
     p = str_match(variable, "gamma\\[(.*),.*\\]")[, 2] |> parse_number(),
     h = str_match(variable, "gamma\\[.*,(.*)\\]")[, 2] |> parse_number(),
-    flokkur = colnames(stan_data$y_n)[p],
+    flokkur = colnames(stan_data$y)[p],
     fyrirtaeki = levels(polling_data$fyrirtaeki)[h]
   ) |>
   filter(h != 1) |>

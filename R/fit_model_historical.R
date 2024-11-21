@@ -3,68 +3,53 @@ library(glue)
 library(arrow)
 library(here)
 box::use(
-  R / modeling_utils[fit_model_at_date],
-  R / data[read_polling_data]
+  R / modeling_utils[fit_model_at_date]
 )
 
-polling_data <- read_polling_data()
+fit_dates <- seq.Date(
+  from = clock::date_build(2024, 5, 30),
+  to = clock::date_build(2024, 11, 1),
+  by = "2 weeks"
+)
 
-fit_dates <- polling_data |>
-  arrange(desc(date)) |>
-  pull(date) |>
-  unique() |>
-  head(25)
 
-results <- list()
-
-for (i in seq_along(fit_dates)) {
+for (i in seq(3, 12)) {
   fit_date <- fit_dates[i]
 
-  results[[i]] <- fit_model_at_date(
-    cutoff_date = fit_date
-  ) |>
-    mutate(
-      fit_date = fit_date
+  fit <- fit_model_at_date(
+    cutoff_date = fit_date,
+    tau_f = 9.5
+  )
+
+  draws <- fit$summary(
+    c(
+      "tau_stjornarslit",
+      "alpha_f",
+      "beta0",
+      "beta_lag_f",
+      "beta_inc_years_f",
+      "beta_vnv_f",
+      "beta_growth_f",
+      "beta_stjornarslit",
+      "phi_inv",
+      "phi_f_inv",
+      "gamma",
+      "sigma",
+      "y_rep"
     )
+  ) |>
+    as_tibble()
 
   dir.create(
-    here("data", "historical_results", fit_date),
-    recursive = TRUE,
+    here("results", "fit_historical", glue("fit_date={fit_date}")),
     showWarnings = FALSE
   )
-  write_csv(
-    results[[i]],
-    here("data", "historical_results", fit_date, "results.csv")
+
+  write_parquet(
+    draws,
+    here("results", "fit_historical", glue("fit_date={fit_date}"), "part-0.parquet")
   )
+
+  rm(draws, fit)
+  gc()
 }
-
-
-library(ggplot2)
-results |>
-  bind_rows() |>
-  write_csv(here("data/historical_results.csv"))
-
-
-results |>
-  bind_rows() |>
-  ggplot(aes(x = fit_date, y = median)) +
-  geom_segment(
-    aes(
-      xend = fit_date,
-      y = lower,
-      yend = upper,
-      alpha = -coverage,
-      group = coverage
-    ),
-    linewidth = 3
-  ) +
-  geom_segment(
-    aes(
-      x = fit_date - 0.4,
-      xend = fit_date + 0.4,
-      y = median,
-      yend = median,
-    )
-  ) +
-  facet_wrap(vars(flokkur)) +
-  theme_bw()

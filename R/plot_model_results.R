@@ -8,7 +8,7 @@ make_plot <- function() {
   Sys.setlocale("LC_ALL", "is_IS.UTF-8")
 
   box::use(
-    R / data[
+    R / prepare_data[
       read_polling_data
     ]
   )
@@ -53,6 +53,8 @@ make_plot <- function() {
     ) |>
     mutate(
       fyrirtaeki = fct_relevel(fyrirtaeki, "Kosning")
+    ) |> 
+    filter( dags <= date_build(2024, 11, 3)
     )
 
   poll_data |>
@@ -62,7 +64,7 @@ make_plot <- function() {
       max_dags = max(dags)
     )
 
-  d <- read_parquet(here("data", "2024-10-31", "y_rep_draws.parquet")) |>
+  d <- read_parquet(here("data", "2024-11-03", "y_rep_draws.parquet")) |>    # recreate the 7th of november prediction
     summarise(
       mean = median(value),
       q5 = quantile(value, 0.05),
@@ -87,7 +89,7 @@ make_plot <- function() {
 
 
 
-  coverage_data <- read_parquet(here("data", "2024-10-31", "y_rep_draws.parquet")) |>
+  coverage_data <- read_parquet(here("data", "2024-11-03", "y_rep_draws.parquet")) |>  # recreate the 7th of november prediction
     reframe(
       coverage = c(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95),
       lower = quantile(value, 0.5 - coverage / 2),

@@ -7,12 +7,11 @@ library(arrow)
 library(glue)
 library(ggtext)
 library(geomtextpath)
-library(gt)
 Sys.setlocale("LC_ALL", "is_IS.UTF-8")
 
-theme_set(theme_metill(type = "blog"))
+theme_set(theme_metill())
 
-today_date <- Sys.Date()
+today_date <- clock::date_build(2024, 11, 7)    # recreate the 7th of november prediction
 vote_date <- clock::date_build(2024, 11, 30)
 days_until_vote <- as.numeric(vote_date - today_date)
 
@@ -33,12 +32,10 @@ colors <- tribble(
   "Miðflokkurinn", "#08306b",
   "Flokkur Fólksins", "#FBB829",
   "Sósíalistaflokkurinn", "#67000d",
-  "Annað", "grey30",
-  "Lýðræðisflokkurinn", "grey30"
+  "Annað", "grey50"
 )
 
 coverage_data <- read_parquet(here("data", "2024-11-03", "y_rep_draws.parquet")) |>
-  filter(dags == max(dags)) |>
   reframe(
     mean = median(value),
     coverage = c(0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9),
@@ -48,16 +45,6 @@ coverage_data <- read_parquet(here("data", "2024-11-03", "y_rep_draws.parquet"))
   ) |>
   inner_join(
     colors
-  ) |>
-  mutate(
-    flokkur = if_else(
-      flokkur == "Annað",
-      "Lýðræðisflokkurinn",
-      flokkur
-    ),
-    flokkur = str_to_sentence(flokkur),
-    flokkur_ordered = glue("<b style='color:{litur}'>{flokkur}</b>"),
-    flokkur_ordered = fct_reorder(flokkur_ordered, mean)
   )
 
 write_parquet(
@@ -69,25 +56,40 @@ write_parquet(
   )
 )
 
+labels <- coverage_data |>
+  filter(dags == max(dags)) |>
+  filter(
+    coverage == 0.9
+  ) |>
+  mutate_at(
+    vars(mean, lower, upper),
+    round,
+    digits = 3
+  ) |>
+  summarise(
+    label = glue("{percent(lower)}-{percent(upper)}"),
+    mean = unique(mean),
+    .by = c(flokkur, litur)
+  ) |>
+  mutate(
+    flokkur_ordered = glue("<b style='color:{litur}'>{flokkur} ({label})</b>"),
+    flokkur_ordered = fct_reorder(flokkur_ordered, mean)
+  ) |>
+  select(flokkur, litur, flokkur_ordered)
 
 p <- coverage_data |>
   filter(
     dags == max(dags)
+  ) |>
+  inner_join(
+    labels,
+    by = join_by(flokkur, litur)
   ) |>
   ggplot(aes(
     y = flokkur_ordered,
     color = litur,
     group = paste(flokkur, coverage)
   )) +
-  annotate(
-    geom = "segment",
-    x = seq(0.1, 0.25, 0.05),
-    xend = seq(0.1, 0.25, 0.05),
-    y = 0,
-    yend = 10.3,
-    alpha = 0.2,
-    linewidth = 0.2
-  ) +
   geom_segment(
     aes(
       x = lower,
@@ -132,99 +134,34 @@ p <- coverage_data |>
   ) +
   scale_color_identity() +
   scale_x_continuous(
-    breaks = c(0.05, seq(0, 0.25, 0.05)),
+    breaks = c(0.05, seq(0, 0.3, 0.1)),
     labels = label_percent(),
-    limits = c(0, 0.25),
+    limits = c(0, 0.3),
     guide = ggh4x::guide_axis_truncated(
       trunc_lower = 0,
-      trunc_upper = 0.25
-    ),
-    expand = expansion(mult = c(0, 0.01))
+      trunc_upper = 0.30
+    )
   ) +
   scale_y_discrete(
-    guide = ggh4x::guide_axis_truncated(),
-    expand = expansion()
+    guide = ggh4x::guide_axis_truncated()
   ) +
   scale_alpha_continuous(
     range = c(0, 0.3)
   ) +
   theme(
     legend.position = "none",
-    axis.text.y = element_markdown(size = 12),
-    plot.margin = margin(0, 0, 0, 0)
+    axis.text.y = element_markdown(size = 12)
   ) +
   labs(
     x = NULL,
-    y = NULL
-  )
-
-
-table <- coverage_data |>
-  filter(
-    dags == max(dags),
-    coverage == 0.9
-  ) |>
-  select(flokkur, mean, lower, upper) |>
-  arrange(desc(mean)) |>
-  gt(process_md = TRUE) |>
-  fmt_percent(
-    columns = mean:upper,
-    decimals = 0
-  ) |>
-  cols_label(
-    flokkur = "",
-    mean = "Spá",
-    lower = "Neðri",
-    upper = "Efri"
-  ) |>
-  tab_spanner(
-    label = md("90% Óvissubil"),
-    columns = lower:upper
-  ) |>
-  tab_options(
-    table.background.color = "transparent",
-    column_labels.hidden = FALSE,
-    table.border.top.style = "0px",
-    table.border.bottom.style = "0px",
-    table.font.size = "14px",
-    # table_body.hlines.style = "0px",
-    table_body.border.bottom.style = "0px",
-    table_body.border.top.style = "0px"
-  ) |>
-  opt_table_font(
-    font = google_font("Lato"),
-    weight = "bold"
-  )
-
-for (row in seq_len(nrow(colors))) {
-  table <- table |>
-    tab_style(
-      style = cell_text(
-        color = colors$litur[row],
-        weight = "bold",
-        font = google_font("Lato")
-      ),
-      locations = cells_body(
-        rows = flokkur == str_to_sentence(colors$flokkur[row])
-      )
-    )
-}
-
-
-
-p_tab <- p + wrap_table(table, space = "fixed") +
-  plot_annotation(
+    y = NULL,
     title = glue("Fylgisspá þegar {days_until_vote} dagar eru til kosninga"),
-    subtitle = "Spáð fylgi stjórnmálaflokkanna 30. nóvember",
-    theme = theme(
-      plot.title = element_text(margin = margin(-20, 5, 5, 5)),
-      plot.subtitle = element_text(margin = margin(5, 5, -10, 5)),
-      plot.margin = margin(-15, 0, -30, 0)
-    )
+    subtitle = "Línustrik tákna miðgildi spár og hver kassi er jafn líklegur til að raungerast",
+    caption = caption
   )
 
 ggsave(
-  here("Figures", "Preds", glue("election_prediction_table_{today_date}.png")),
+  here("Figures", "Preds", glue("election_prediction_no_polling_bias_{today_date}.png")),
   width = 8,
   height = 0.4 * 8,
   scale = 1.4

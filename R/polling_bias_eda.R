@@ -12,8 +12,9 @@ library(metill)
 theme_set(theme_metill())
 
 box::use(
-  R / data[
-    read_polling_data
+  R / prepare_data[
+    read_polling_data,
+    prepare_stan_data
   ]
 )
 
@@ -30,7 +31,7 @@ p <- data |>
     .by = c(date, fyrirtaeki)
   ) |>
   filter(
-    flokkur == "Vinstri Græn"
+    flokkur == "Sjálfstæðisflokkurinn"
   ) |>
   select(-n) |>
   mutate(
@@ -90,13 +91,13 @@ p <- data |>
     x = NULL,
     y = NULL,
     title = "Villa í könnunum eftir því hversu langt var til kosninga",
-    subtitle = "Vinstri Græn"
+    subtitle = "Sjálfstæðisflokkurinn"
   )
 
 p
 
 ggsave(
-  here("Figures", "xv_error.png"),
+  here("Figures", "xd_error.png"),
   p,
   width = 8,
   height = 0.621 * 8,
