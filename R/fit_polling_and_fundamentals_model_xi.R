@@ -26,12 +26,11 @@ election_date <- date_build(2024, 11, 30)
 
 polling_data <- read_polling_data() |>
   filter(
-    date >= date_build(2016, 1, 1),
+    date >= date_build(2017, 10, 25),
   ) |>
   mutate(
     fyrirtaeki = droplevels(fyrirtaeki)
   )
-
 
 unique(polling_data$flokkur)
 max(polling_data$date)
@@ -65,7 +64,7 @@ levels(polling_data$fyrirtaeki)
 stan_data$desired_weight <- 0.22
 stan_data$weight_time <- 180
 stan_data$last_poll_days <- 9
-stan_data$last_poll_house <- 1
+stan_data$last_poll_house <- 7
 stan_data$n_last_poll <- 1400
 
 
@@ -75,7 +74,7 @@ rownames(stan_data$y_f)
 levels(polling_data$flokkur)
 
 model <- cmdstan_model(
-  here("Stan", "polling_and_fundamentals.stan")
+  here("Stan", "polling_and_fundamentals_xi.stan")
 )
 
 
@@ -85,8 +84,8 @@ fit <- model$sample(
   parallel_chains = 4,
   refresh = 100,
   init = 0,
-  iter_warmup = 400,
-  iter_sampling = 400
+  iter_warmup = 200,
+  iter_sampling = 200
 )
 
 # Polling Parameters
@@ -115,9 +114,9 @@ fit$summary("mu_log_sigma")
 fit$summary("tau_log_sigma")
 
 
-fit$summary("phi") |>
+fit$summary("xi") |>
   mutate(
-    house = levels(polling_data$fyrirtaeki)[-1]
+    house = levels(polling_data$fyrirtaeki)
   ) |>
   select(
     house, mean, q5, q95, rhat
@@ -212,12 +211,40 @@ fit$summary("Omega") |>
   )
 
 
+polling_data |>
+  mutate(
+    p = n / sum(n),
+    .by = c(date, fyrirtaeki)
+  ) |>
+  filter(flokkur == "Annað") |>
+  ggplot(aes(date, p)) +
+  geom_line()
 
 
 dates <- c(
   unique(polling_data$date),
   seq.Date(max(polling_data$date) + 1, election_date, by = "day")
 )
+
+d_beta <- fit$summary("beta")
+
+d_beta |>
+  mutate(
+    p = str_match(variable, "beta\\[(.*),.*\\]")[, 2] |> parse_number(),
+    t = str_match(variable, "beta\\[.*,(.*)\\]")[, 2] |> parse_number(),
+    flokkur = colnames(stan_data$y_n)[p + 1],
+    dags = dates[t]
+  ) |>
+  filter(
+    # dags >= clock::date_build(2021, 1, 1),
+    # flokkur %in% c("Framsóknarflokkurinn")
+  ) |>
+  ggplot(aes(dags, mean)) +
+  geom_ribbon(
+    aes(ymin = q5, ymax = q95, fill = flokkur),
+    alpha = 0.2
+  ) +
+  geom_line(aes(col = flokkur), linewidth = 1)
 
 d_pi <- fit$summary("pi_rep")
 
@@ -229,8 +256,8 @@ d_pi |>
     dags = dates[t]
   ) |>
   filter(
-    dags >= clock::date_build(2024, 8, 1),
-    # flokkur %in% c("Framsóknarflokkurinn")
+    dags >= clock::date_build(2016, 1, 1),
+    flokkur %in% c("Annað")
   ) |>
   ggplot(aes(dags, mean)) +
   geom_ribbon(
@@ -240,11 +267,16 @@ d_pi |>
   geom_line(aes(col = flokkur), linewidth = 1) +
   geom_point(
     data = polling_data |>
-      filter(date >= clock::date_build(2024, 8, 1)) |>
+      filter(
+        date >= clock::date_build(2016, 1, 1),
+      ) |>
       mutate(p = n / sum(n), .by = c(date, fyrirtaeki)) |>
-      mutate(flokkur = as.character(flokkur)) |>
-      select(dags = date, flokkur, konnun = p),
-    aes(y = konnun, col = flokkur),
+      mutate(
+        flokkur = as.character(flokkur)
+      ) |>
+      select(dags = date, flokkur, konnun = p) |>
+      filter(flokkur == "Annað"),
+    aes(y = konnun),
     size = 2
   )
 
@@ -256,122 +288,19 @@ d_pi |>
     dags = dates[t]
   ) |>
   filter(
-    dags == max(dags)
+    dags %in% c(max(dags), today() - 11)
   ) |>
-  select(flokkur, mean = median, q5, q95) |>
-  arrange(desc(mean)) |>
   mutate(
-    plot_col = mean,
-    .before = mean
+    mean = median,
+    q5 = q5,
+    q95 = q95,
+    interval_size = q95 - q5
   ) |>
-  gt() |>
-  cols_label(
-    flokkur = "Flokkur",
-    plot_col = "",
-    mean = "Miðgildi",
-    q5 = "Neðri",
-    q95 = "Efri"
-  ) |>
-  tab_spanner(
-    label = "90% Óvissubil",
-    columns = c(q5, q95)
-  ) |>
-  cols_align(
-    align = "left",
-    columns = 1
-  ) |>
-  fmt_percent(
-    decimals = 1
-  ) |>
-  gt_color_rows(
-    columns = c(mean, q5, q95),
-    palette = "Greys",
-    domain = c(0, 0.5)
-  ) |>
-  gt_plt_conf_int(
-    column = plot_col,
-    ci_columns = c(q5, q95),
-    ref_line = 0.05,
-    text_size = 0,
-    width = 30
-  ) |>
-  tab_header(
-    title = "Spáð fylgi stjórnmálaflokka"
+  select(dags, flokkur, interval_size) |>
+  pivot_wider(
+    names_from = dags,
+    values_from = interval_size
   )
-
-d_pi |>
-  mutate(
-    p = str_match(variable, "pi_rep\\[(.*),.*\\]")[, 2] |> parse_number(),
-    t = str_match(variable, "pi_rep\\[.*,(.*)\\]")[, 2] |> parse_number(),
-    flokkur = colnames(stan_data$y_n)[p],
-    dags = dates[t]
-  ) |>
-  filter(
-    dags == max(polling_data$date)
-  ) |>
-  select(flokkur, mean = median, q5, q95) |>
-  arrange(desc(mean)) |>
-  mutate(
-    plot_col = mean,
-    .before = mean
-  ) |>
-  mutate_at(
-    vars(mean, q5, q95),
-    ~ round(.x * 200) / 200
-  ) |>
-  gt() |>
-  cols_label(
-    flokkur = "Flokkur",
-    plot_col = "",
-    mean = "Miðgildi",
-    q5 = "Neðri",
-    q95 = "Efri"
-  ) |>
-  tab_spanner(
-    label = "90% Óvissubil",
-    columns = c(q5, q95)
-  ) |>
-  cols_align(
-    align = "left",
-    columns = 1
-  ) |>
-  fmt_percent(
-    decimals = 1,
-    drop_trailing_zeros = TRUE
-  ) |>
-  gt_color_rows(
-    columns = c(mean, q5, q95),
-    palette = "Greys",
-    domain = c(0, 0.5)
-  ) |>
-  gt_plt_conf_int(
-    column = plot_col,
-    ci_columns = c(q5, q95),
-    ref_line = 0.05,
-    text_size = 0,
-    width = 30
-  ) |>
-  tab_header(
-    title = "Spáð fylgi stjórnmálaflokka"
-  )
-
-d_pi |>
-  mutate(
-    p = str_match(variable, "pi_rep\\[(.*),.*\\]")[, 2] |> parse_number(),
-    t = str_match(variable, "pi_rep\\[.*,(.*)\\]")[, 2] |> parse_number(),
-    flokkur = colnames(stan_data$y_n)[p],
-    dags = dates[t]
-  ) |>
-  filter(
-    dags %in% c(max(dags), today() - 4)
-  ) |>
-  select(flokkur, dags, median, q5, q95) |>
-  mutate(
-    width = q95 - q5
-  ) |>
-  select(flokkur, dags, width) |>
-  pivot_wider(names_from = dags, values_from = width)
-
 
 d_yrep <- fit$summary("y_latent")
 
@@ -416,14 +345,19 @@ d_yrep |>
     dags = dates[t]
   ) |>
   filter(
-    dags %in% c(max(dags), today() - 4)
+    dags %in% c(max(dags), today() - 11)
   ) |>
-  select(flokkur, dags, median, q5, q95) |>
   mutate(
-    width = q95 / stan_data$n_pred - q5 / stan_data$n_pred
+    mean = median / stan_data$n_pred,
+    q5 = q5 / stan_data$n_pred,
+    q95 = q95 / stan_data$n_pred,
+    interval_size = q95 - q5
   ) |>
-  select(flokkur, dags, width) |>
-  pivot_wider(names_from = dags, values_from = width)
+  select(dags, flokkur, interval_size) |>
+  pivot_wider(
+    names_from = dags,
+    values_from = interval_size
+  )
 
 d_yrep |>
   mutate(
@@ -480,6 +414,7 @@ d_yrep |>
   tab_header(
     title = "Spáð fylgi stjórnmálaflokka"
   )
+xj
 
 y_rep_draws <- fit$draws("y_rep") |>
   as_draws_df() |>

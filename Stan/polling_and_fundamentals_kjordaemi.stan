@@ -68,6 +68,16 @@ data {
 transformed data {
   // Scale time differences to moderate impact of longer gaps
   vector[D - 1] time_scale = sqrt(time_diff);
+  vector[N_n] n_sample_n;
+  vector[N_k] n_sample_k;
+
+  for (n in 1:N_n) {
+    n_sample_n[n] = sum(y_n[n, ]);
+  }
+
+  for (n in 1:N_k) {
+    n_sample_k[n] = sum(y_k[n, ]);
+  }
 }
 
 parameters {
@@ -75,19 +85,26 @@ parameters {
   // National level parameters
   matrix[P - 1, D + pred_y_time_diff] z_beta_raw;  // Raw random walk innovations
   cholesky_factor_corr[P - 1] L_Omega;             // Cholesky factor of correlation matrix
-  vector[P - 1] beta0;                             // Initial support levels
-  vector<lower = 0>[P - 1] sigma;                  // Random walk scales
-  real<lower = 0> tau_stjornarslit;                // Scale for government collapse period
-
+  vector[P - 1] z_beta0;                             // Initial support levels
+  
   // Constituency level parameters
   matrix[P - 1, K - 1] delta_raw;                  // Raw constituency effects
   vector<lower = 0>[P - 1] sigma_delta;            // Constituency effect scales
+  
+  // House Effects Parameters
+  matrix[P - 2, H - 1] gamma_raw;                   // Raw house effects
+  vector[P - 2] mu_gamma;                           // Mean house effects
+  vector<lower = 0>[P - 2] sigma_gamma;             // Scale of house effects
+  
+  // Variance Parameters
+  real mu_log_sigma;                    // Population mean of log volatility
+  real<lower=0> tau_log_sigma;          // Population SD of log volatility
+  vector[P - 1] log_sigma_raw;            // Raw party-specific parameters
+  real<lower = 0> tau_stjornarslit;                // Scale for government collapse period
 
-  // House effects parameters
-  matrix[P - 1, H - 1] gamma_raw;                  // Raw house effects
-  vector[P - 1] mu_gamma;                          // Mean house effects
-  vector<lower = 0>[P - 1] sigma_gamma;            // House effect scales
-  vector<lower = 0>[H] phi_inv;                    // Inverse dispersion parameters
+  vector[H - 1] log_phi;
+  real mu_phi;
+  real<lower = 0> sigma_phi;
 
   /* Fundamentals Parameters */
   vector[P_f - 1] alpha_f_raw;                     // Party-specific intercepts
@@ -99,19 +116,22 @@ parameters {
 }
 
 transformed parameters {
-  // Convert inverse dispersions to dispersions
-  vector<lower = 0>[H] phi = pow(phi_inv, -1);
+  vector<lower=0>[P - 1] sigma = exp(mu_log_sigma + tau_log_sigma * log_sigma_raw);           // Party-specific volatilities
+  // Convert inverse dispersion parameters to dispersion parameters
+  
+  vector<lower = 0>[H - 1] phi = exp(mu_phi + sigma_phi * log_phi);
+
   real<lower = 0> phi_f = pow(phi_f_inv, -1);
   
   // Transform raw parameters into model parameters
-  matrix[P - 1, D + pred_y_time_diff] z_beta = L_Omega * z_beta_raw;
+  matrix[P - 1, D + pred_y_time_diff] z_beta = diag_pre_multiply(sigma, L_Omega) * z_beta_raw;
   matrix[P - 1, H] gamma;                     
   matrix[P - 1, D + pred_y_time_diff] beta;   
   vector[P_f] alpha_f;
   
   // Sum-to-zero constraint for fundamentals intercepts
   alpha_f[2:P_f] = alpha_f_raw;
-  alpha_f[1] = -sum(alpha_f[2:P_f]);
+  alpha_f[1] = 0;
   
   // Calculate variance parameters for combining models
   real<lower = 0> V_t;
@@ -128,54 +148,71 @@ transformed parameters {
   tau_f = sqrt(V_t * (1 - desired_weight) / desired_weight);
   
   // Set up house effects
-  for (p in 1:(P - 1)) {
-    gamma[p, 1] = 0;                      // Reference house effect set to 0
-    gamma[p, 2:H] = mu_gamma[p] + sigma_gamma[p] * gamma_raw[p, ];    
+  for (p in 1:(P - 2)) {
+    gamma[p, 1] = 0;                          // Reference house effect set to 0
+    gamma[p, 2:H] = mu_gamma[p] + sigma_gamma[p] * gamma_raw[p, ];  // Other house effects
   }
   
-  // Initialize end state and evolve support backwards
-  beta[ , D + pred_y_time_diff] = beta0;
-
-  // Forward prediction period
-  for (t in 1:pred_y_time_diff) {
-    real scale = (t <= days_between_stjornarslit_and_election) ? (1 + tau_stjornarslit) : 1;
-    beta[ , D + pred_y_time_diff - t] = beta[ , D + pred_y_time_diff - t + 1] + 
-      z_beta[, D + pred_y_time_diff - t + 1] .* sigma * scale;
+  gamma[P - 1, 1] = 0;
+  for (h in 2:H) {
+    gamma[P - 1, h] = -sum(gamma[1:(P - 2), h]);
   }
-
-  // Historical period evolution
-  for (t in 1:(D - 1)) {
-    beta[ , D - t] = beta[ , D - t + 1] + 
-      time_scale[D - t] * z_beta[, D - t + 1] .* sigma * 
-      (1 + tau_stjornarslit * month_before_election[D - t]);
-  }
-}
-
-model {
   // Calculate fundamentals predictions
   vector[P - 1] mu_pred = alpha_f[index_f[2:n_parties_f[D_f + 1], D_f + 1]] + 
-    beta_lag_f * x_f[index_f[2:n_parties_f[D_f + 1], D_f + 1], D_f + 1] + 
+    beta_lag_f * (x_f[index_f[2:n_parties_f[D_f + 1], D_f + 1], D_f + 1] - alpha_f[index_f[2:n_parties_f[D_f + 1], D_f + 1]]) + 
     beta_inc_years_f * incumbent_years[index_f[2:n_parties_f[D_f + 1], D_f + 1], D_f + 1] +
     beta_vnv_f * vnv[index_f[2:n_parties_f[D_f + 1], D_f + 1], D_f + 1] +
     beta_growth_f * growth[index_f[2:n_parties_f[D_f + 1], D_f + 1], D_f + 1];
 
+    vector[P - 1] beta0 = mu_pred + tau_f * z_beta0 .* sigma;
+  
+  // Initialize end state and evolve support backwards
+  beta[ , D + pred_y_time_diff] = beta0;
+
+  // Period between latest poll and elections
+  for (t in 1:pred_y_time_diff) {
+    real scale;
+    // Adjust volatility during government collapse period
+    if (t <= days_between_stjornarslit_and_election) {
+      scale = 1 + tau_stjornarslit;
+    } else {
+      scale = 1;
+    }
+    // Random walk evolution
+    beta[ , D + pred_y_time_diff - t] = beta[ , D + pred_y_time_diff - t + 1] + 
+      z_beta[, D + pred_y_time_diff - t + 1] * scale;
+  }
+
+  // Backward evolution through historical period
+  for (t in 1:(D - 1)) {
+    beta[ , D - t] = beta[ , D - t + 1] + 
+      time_scale[D - t] * z_beta[, D - t + 1] * 
+      (1 + tau_stjornarslit * month_before_election[D - t]);
+  }
+
+  
+}
+
+model {
   /* Prior Distributions */
   // House effects priors
   to_vector(gamma_raw) ~ std_normal();
   mu_gamma ~ std_normal();
-  sum(mu_gamma) ~ std_normal();
   sigma_gamma ~ exponential(1);
-  phi_inv ~ exponential(1);
-  for (h in 2:(H - 1)) {
-    sum(gamma_raw[ , h]) ~ std_normal();
-  }
-
+  
+  
   // Support evolution priors
   to_vector(z_beta_raw) ~ std_normal();
-  L_Omega ~ lkj_corr_cholesky(2);
-  sigma ~ exponential(1);                 
-  beta0 ~ normal(mu_pred, tau_f * sigma);
-  tau_stjornarslit ~ normal(0, 0.3);
+  L_Omega ~ lkj_corr_cholesky(10);
+  mu_log_sigma ~ normal(-2, 2);         // Prior centered on small volatility
+  tau_log_sigma ~ exponential(1);       // Weakly informative prior on variance
+  log_sigma_raw ~ std_normal();         // Unit normal for non-centered param         
+  z_beta0 ~ std_normal();
+  tau_stjornarslit ~ exponential(1);
+
+  log_phi ~ std_normal();
+  mu_phi ~ normal(1, 1);
+  sigma_phi ~ exponential(1);
 
   // Constituency effects priors
   to_vector(delta_raw) ~ std_normal();
@@ -184,18 +221,22 @@ model {
   /* Likelihood Functions */
   // National polling likelihood
   for (n in 1:N_n) {
-    vector[n_parties_n[n]] eta_n;
-    eta_n[2:n_parties_n[n]] = beta[1:(n_parties_n[n] - 1), date_n[n]] + 
-      gamma[1:(n_parties_n[n] - 1), house_n[n]];
-    eta_n[1] = -sum(eta_n[2:n_parties_n[n]]);
-    vector[n_parties_n[n]] pi_n = softmax(eta_n);
-    y_n[n, 1:n_parties_n[n]] ~ dirichlet_multinomial(pi_n[1:n_parties_n[n]] * phi[house_n[n]]);
+    vector[P] eta_n;
+    eta_n[2:P] = beta[, date_n[n]] + gamma[, house_n[n]];
+    eta_n[1] = -sum(eta_n[2:P]);
+    if (house_n[n] > 1) {
+      // Dirichlet-multinomial likelihood for poll counts
+      vector[n_parties_n[n]] pi_n = softmax(eta_n[1:n_parties_n[n]]);          // Convert to probabilities
+      y_n[n, 1:n_parties_n[n]] ~ dirichlet_multinomial(pi_n * phi[house_n[n] - 1]);
+    } else {
+      y_n[n, 1:n_parties_n[n]] ~ multinomial_logit(eta_n[1:n_parties_n[n]]);
+    }
   }
 
   // Constituency polling likelihood
   for (n in 1:N_k) {
     matrix[P - 1, K] delta;
-    vector[n_parties_k[n]] eta_k;
+    vector[P] eta_k;
 
     // Calculate constituency effects with sum-to-zero constraint
     for (p in 1:(P - 1)) {
@@ -205,13 +246,17 @@ model {
     }
     
     // Combine national trends, house effects, and constituency effects
-    eta_k[2:n_parties_k[n]] = beta[1:(n_parties_k[n] - 1), date_k[n]] + 
-      gamma[1:(n_parties_k[n] - 1), house_k[n]] + 
-      delta[1:(n_parties_k[n] - 1), constituency_k[n]];
-    eta_k[1] = -sum(eta_k[2:n_parties_k[n]]);
+    eta_k[2:P] = beta[1:(P - 1), date_k[n]] + 
+      gamma[1:(P - 1), house_k[n]] + 
+      delta[1:(P - 1), constituency_k[n]];
+    eta_k[1] = -sum(eta_k[2:P]);
     
-    vector[n_parties_k[n]] pi_k = softmax(eta_k);
-    y_k[n, 1:n_parties_k[n]] ~ dirichlet_multinomial(pi_k * phi[house_k[n]]);
+    if (house_k[n] > 1) {
+      vector[n_parties_k[n]] pi_k = softmax(eta_k[1:n_parties_k[n]]);
+      y_k[n, 1:n_parties_k[n]] ~ dirichlet_multinomial(pi_k * phi[house_k[n] - 1]);
+    } else {
+      y_k[n, 1:n_parties_k[n]] ~ multinomial_logit(eta_k[1:n_parties_k[n]]);
+    }
   }
 
   /* Fundamentals Likelihood */
@@ -222,11 +267,12 @@ model {
 
   for (d in 1:D_f) { 
     vector[n_parties_f[d]] mu_d;
-    mu_d[1:n_parties_f[d]] = alpha_f[index_f[1:n_parties_f[d], d]] + 
-      beta_lag_f * x_f[index_f[1:n_parties_f[d], d], d] + 
-      beta_inc_years_f * incumbent_years[index_f[1:n_parties_f[d], d], d] +
-      beta_vnv_f * vnv[index_f[1:n_parties_f[d], d], d] +
-      beta_growth_f * growth[index_f[1:n_parties_f[d], d], d];
+    mu_d[2:n_parties_f[d]] = alpha_f[index_f[2:n_parties_f[d], d]] + 
+      beta_lag_f * x_f[index_f[2:n_parties_f[d], d], d] + 
+      beta_inc_years_f * incumbent_years[index_f[2:n_parties_f[d], d], d] +
+      beta_vnv_f * vnv[index_f[2:n_parties_f[d], d], d] +
+      beta_growth_f * growth[index_f[2:n_parties_f[d], d], d];
+    mu_d[1] = -sum(mu_d[2:n_parties_f[d]]);
     vector[n_parties_f[d]] pi_d = softmax(mu_d);
     y_f[index_f[1:n_parties_f[d], d], d] ~ dirichlet_multinomial(pi_d * phi_f);
   }
@@ -277,7 +323,7 @@ generated quantities {
     eta_d[1] = -sum(eta_d[2:n_parties_n_rep[d]]);
     pi_d = softmax(eta_d);
     y_rep_national[d, 1:n_parties_n_rep[d]] = 
-      dirichlet_multinomial_rng(pi_d * phi[1], n_pred);
+      multinomial_logit_rng(eta_d[1:n_parties_n_rep[d]], n_pred);
   }
 
   // Generate future predictions
@@ -287,7 +333,7 @@ generated quantities {
     eta_d[2:P] = beta[, D + d];
     eta_d[1] = -sum(eta_d[2:P]);
     pi_d = softmax(eta_d);
-    y_rep_national[D + d, ] = dirichlet_multinomial_rng(pi_d * phi[1], n_pred);
+    y_rep_national[D + d, ] = multinomial_logit_rng(eta_d[1:P], n_pred);
   }
 
   // Generate constituency-level predictions
@@ -298,7 +344,7 @@ generated quantities {
     eta_k[2:P] = beta[, D + pred_y_time_diff] + delta_pred[, k];
     eta_k[1] = -sum(eta_k[2:P]);
     pi_k = softmax(eta_k);
-    y_pred_constituency[k, ] = dirichlet_multinomial_rng(pi_k * phi[1], n_pred_k[k]);
+    y_pred_constituency[k, ] = multinomial_logit_rng(eta_k[1:P], n_pred_k[k]);
   }
 
   // Generate constituency-level replications
@@ -319,7 +365,13 @@ generated quantities {
 
     eta_k[1] = -sum(eta_k[2:n_parties_k_rep[n]]);
     pi_k = softmax(eta_k);
+    if (house_k[n] > 1) {
     y_rep_k[n, 1:n_parties_k_rep[n]] = 
-      dirichlet_multinomial_rng(pi_k * phi[house_k[n]], sum(y_k[n, ]));
+      dirichlet_multinomial_rng(pi_k * phi[house_k[n] - 1], sum(y_k[n, ]));
+    } else {
+      y_rep_k[n, 1:n_parties_k_rep[n]] = 
+        multinomial_logit_rng(eta_k[1:n_parties_k_rep[n]], sum(y_k[n, ]));
+    }
   }
 }
+

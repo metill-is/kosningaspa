@@ -45,7 +45,7 @@ seats_draws |>
       geom_col() +
       scale_x_continuous(
         expand = expansion(),
-        breaks = breaks_width(1),
+        breaks = breaks_width(2),
         guide = guide_axis_truncated()
       ) +
       scale_y_continuous(

@@ -31,7 +31,6 @@ polling_data <- read_polling_data() |>
   )
 
 
-
 unique(polling_data$flokkur)
 max(polling_data$date)
 
@@ -47,7 +46,8 @@ fundamentals_data <- fundamentals_data |>
 # update_constituency_data()
 constituency_data <- read_constituency_data() |>
   filter(
-    date > date_build(2021, 9, 25)
+    date >= date_build(2021, 9, 25)
+    # date < date_build(2024, 10, 1)
   ) |>
   drop_na() |>
   mutate(
@@ -56,6 +56,13 @@ constituency_data <- read_constituency_data() |>
     kjordaemi = as_factor(kjordaemi)
   ) |>
   arrange(flokkur, date, kjordaemi)
+
+constituency_data |>
+  distinct(date, fyrirtaeki) |>
+  anti_join(
+    polling_data |>
+      distinct(date, fyrirtaeki)
+  )
 
 stan_data <- prepare_stan_data(
   polling_data,
@@ -85,8 +92,8 @@ obs_k <- rep(1:N_obs_k, each = ncol(constituency_weights))
 
 
 stan_data$constituency_weights <- constituency_weights
-stan_data$constituency_weights_pred <- constituency_weights[1, ] |> as.numeric()
-stan_data$desired_weight <- 0.15
+stan_data$constituency_weights_pred <- constituency_weights[3, ] |> as.numeric()
+stan_data$desired_weight <- 0.22
 stan_data$weight_time <- 180
 stan_data$N_obs_k <- N_obs_k
 stan_data$obs_k <- obs_k
@@ -97,7 +104,6 @@ model <- cmdstan_model(
   here("Stan", "polling_and_fundamentals_kjordaemi.stan")
 )
 
-
 fit <- model$sample(
   data = stan_data,
   chains = 4,
@@ -105,7 +111,7 @@ fit <- model$sample(
   refresh = 100,
   init = 0,
   iter_warmup = 1000,
-  iter_sampling = 1000
+  iter_sampling = 2000
 )
 
 
@@ -115,6 +121,9 @@ fit$summary("beta0")
 fit$summary("sigma")
 fit$summary("tau_stjornarslit")
 fit$summary("tau_f")
+fit$summary("phi")
+fit$summary("phi_scale")
+fit$summary("sigma")
 
 #### Constituency Parameters ####
 fit$summary("sigma_delta") |>
@@ -123,29 +132,12 @@ fit$summary("sigma_delta") |>
   ) |>
   select(flokkur, mean, q5, q95)
 
-deltas <- fit$draws("delta") |>
-  as_draws_df() |>
-  as_tibble() |>
-  pivot_longer(
-    c(-.chain, -.iteration, -.draw)
-  ) |>
+deltas <- fit$summary("delta_raw") |>
   mutate(
-    p = str_match(name, "delta\\[(.*),.*\\]")[, 2] |> parse_number(),
-    k = str_match(name, "delta\\[.*,(.*)\\]")[, 2] |> parse_number(),
+    p = str_match(variable, "delta_raw\\[(.*),.*\\]")[, 2] |> parse_number(),
+    k = str_match(variable, "delta_raw\\[.*,(.*)\\]")[, 2] |> parse_number(),
     flokkur = levels(constituency_data$flokkur)[p + 1],
-    kjordaemi = levels(constituency_data$kjordaemi)[k],
-    weight = constituency_weights[k]
-  )
-
-deltas |>
-  select(flokkur, kjordaemi, .draw, value, weight) |>
-  arrange(.draw, flokkur, kjordaemi) |>
-  mutate(
-    weighted = value * weight
-  ) |>
-  summarise(
-    sum = sum(weighted),
-    .by = c(flokkur, .draw)
+    kjordaemi = levels(constituency_data$kjordaemi)[k]
   )
 
 deltas |>
@@ -157,14 +149,31 @@ deltas |>
     vars(kjordaemi)
   )
 
-fit$summary("delta") |>
+fit$summary("delta_raw") |>
   mutate(
-    p = str_match(variable, "delta\\[(.*),.*\\]")[, 2] |> parse_number(),
-    k = str_match(variable, "delta\\[.*,(.*)\\]")[, 2] |> parse_number(),
+    p = str_match(variable, "delta_raw\\[(.*),.*\\]")[, 2] |> parse_number(),
+    k = str_match(variable, "delta_raw\\[.*,(.*)\\]")[, 2] |> parse_number(),
     flokkur = levels(constituency_data$flokkur)[p + 1],
     kjordaemi = levels(constituency_data$kjordaemi)[k]
   ) |>
-  ggplot(aes(mean, kjordaemi)) +
+  select(flokkur, kjordaemi, median, q5, q95) |>
+  pivot_longer(c(median, q5, q95)) |>
+  pivot_wider(
+    names_from = kjordaemi,
+    values_from = value
+  ) |>
+  mutate(
+    Suður = -rowSums(across(-c(flokkur, name)))
+  ) |>
+  pivot_longer(
+    c(-flokkur, -name),
+    names_to = "kjordaemi",
+  ) |>
+  pivot_wider(
+    names_from = name,
+    values_from = value
+  ) |>
+  ggplot(aes(median, kjordaemi)) +
   geom_vline(xintercept = 0, lty = 2) +
   geom_point() +
   geom_linerange(aes(xmin = q5, xmax = q95)) +
@@ -238,7 +247,11 @@ fit$summary("Omega") |>
 
 dates <- c(
   unique(c(polling_data$date, constituency_data$date)),
-  seq.Date(max(c(polling_data$date, constituency_data$date)) + 1, election_date, by = "day")
+  seq.Date(
+    max(c(polling_data$date, constituency_data$date)) + 1,
+    election_date,
+    by = "day"
+  )
 )
 
 d_yrep_national <- fit$summary("y_rep_national")
@@ -263,7 +276,7 @@ d_yrep_national |>
     by = join_by(dags, flokkur),
     relationship = "many-to-many"
   ) |>
-  filter(dags >= clock::date_build(2024, 1, 14)) |>
+  filter(dags >= clock::date_build(2024, 8)) |>
   ggplot(aes(dags, mean)) +
   geom_ribbon(
     aes(ymin = q5, ymax = q95, fill = flokkur),
@@ -295,6 +308,10 @@ d_yrep_national |>
     plot_col = mean,
     .before = mean
   ) |>
+  mutate_at(
+    vars(mean, q5, q95),
+    ~ round(.x * 200) / 200
+  ) |>
   gt() |>
   cols_label(
     flokkur = "Flokkur",
@@ -312,7 +329,8 @@ d_yrep_national |>
     columns = 1
   ) |>
   fmt_percent(
-    decimals = 0
+    decimals = 1,
+    drop_trailing_zeros = TRUE
   ) |>
   gt_color_rows(
     columns = c(mean, q5, q95),
@@ -490,7 +508,7 @@ ggsave(
   p,
   width = 8,
   height = 0.7 * 8,
-  scale = 1.3
+  scale = 1.4
 )
 
 #### Gamma ####
@@ -557,7 +575,7 @@ p <- fit$summary("gamma") |>
 p
 
 ggsave(
-  here("Figures", "gamma.png"),
+  here("Figures", "gamma_kjordaemi.png"),
   p,
   width = 8,
   height = 1.2 * 8,

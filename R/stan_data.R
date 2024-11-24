@@ -106,6 +106,8 @@ prepare_polling_data <- function(polling_data, constituency_data, election_date)
   stjornarslit <- cumsum(dates > stjornarslit_dags)
   stjornarslit <- 1 * (stjornarslit == 1)
   post_stjornarslit <- 1 * (dates > stjornarslit_dags)
+  xm <- cumsum(dates >= date_build(2017, 09, 21))
+  xm <- 1 * (xm == 1)
 
   time_diff <- c(NA, diff(dates))[-1]
 
@@ -296,6 +298,7 @@ prepare_polling_data <- function(polling_data, constituency_data, election_date)
     pred_y_time_diff = pred_y_time_diff,
     stjornarslit = stjornarslit,
     post_stjornarslit = post_stjornarslit,
+    xm = xm,
     n_election = n_election,
     n_pred = as.integer(n_election),
     # Kjördæmi level
@@ -346,7 +349,7 @@ prepare_fundamentals_data <- function(fundamentals_data) {
     ) |>
     mutate(
       logit_p = log(p) - log(1 - p),
-      logit_p = logit_p - mean(logit_p, na.rm = TRUE),
+      logit_p = logit_p - mean(logit_p),
       .by = year
     ) |>
     select(year, flokkur, logit_p) |>

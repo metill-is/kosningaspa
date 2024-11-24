@@ -131,7 +131,8 @@ fit_model_at_date_2021 <- function(
       select,
       mutate,
       reframe,
-      if_else
+      if_else,
+      count
     ],
     tidyr[drop_na, pivot_longer],
     here[here],
@@ -161,9 +162,10 @@ fit_model_at_date_2021 <- function(
       date <= cutoff_date
     ) |>
     mutate(
-      flokkur = droplevels(flokkur),
+      flokkur = fct_recode(flokkur, "Annað" = "Sósíalistaflokkurinn"),
       fyrirtaeki = droplevels(fyrirtaeki)
-    )
+    ) |>
+    count(flokkur, date, fyrirtaeki, wt = n, name = "n")
 
   # Read fundamentals data
   fundamentals_data <- read_fundamentals_data() |>

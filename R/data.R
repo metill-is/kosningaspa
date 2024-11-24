@@ -59,7 +59,7 @@ get_sheet_data <- function(sheet) {
   box::use(
     googlesheets4[read_sheet, gs4_auth],
     janitor[clean_names],
-    dplyr[mutate, select, coalesce]
+    dplyr[mutate, select, coalesce, if_else]
   )
   gs4_auth(email = Sys.getenv("GOOGLE_MAIL"))
   read_sheet(
@@ -73,9 +73,10 @@ get_sheet_data <- function(sheet) {
       hlutfall = hlutfall / sum(hlutfall, na.rm = TRUE),
       hlutfall = if_else(
         flokkur == "Annað",
-        1 - sum(hlutfall[!flokkur %in% c("Annað", "Lýðræðisflokkurinn")]),
+        pmax(0.01, 1 - sum(hlutfall[!flokkur %in% c("Annað", "Lýðræðisflokkurinn")])),
         hlutfall
       ),
+      hlutfall = hlutfall / sum(hlutfall, na.rm = TRUE),
       n = hlutfall * fjoldi_alls,
       .by = c(ar, manudur, dagur, fyrirtaeki)
     ) |>
@@ -111,16 +112,41 @@ get_felo_data <- function() {
       date = fyrstidagur + (sidastidagur - fyrstidagur) / 2
     ) |>
     select(
-      date, fyrirtaeki, D:Other
+      date, n, svarhlutfall, fyrirtaeki, D:Other
+    ) |>
+    mutate(
+      svarhlutfall = coalesce(svarhlutfall, 100) / 100,
+      n = n,
+      n = n * svarhlutfall
+    ) |>
+    select(-svarhlutfall) |>
+    mutate(
+      J = if_else(
+        (fyrirtaeki == "MMR") &
+          (date >= date_build(2018, 11, 10)) &
+          (date <= date_build(2020, 8, 30)),
+        Other,
+        J
+      ),
+      Other = if_else(
+        (fyrirtaeki == "MMR") &
+          (date >= date_build(2018, 11, 10)) &
+          (date <= date_build(2020, 8, 30)),
+        1,
+        Other
+      ),
+      Other = coalesce(Other, 1),
+      Other = pmax(1, Other)
     ) |>
     pivot_longer(
-      c(-date, -fyrirtaeki),
+      c(-date, -fyrirtaeki, -n),
       names_to = "bokstafur",
-      values_to = "n",
+      values_to = "p",
       values_transform = list(
-        "n" = as.numeric
+        "p" = as.numeric
       )
     ) |>
+    distinct(date, fyrirtaeki, bokstafur, p, n) |>
     left_join(
       party_tibble(),
       by = join_by(bokstafur)
@@ -130,10 +156,18 @@ get_felo_data <- function() {
       litur = coalesce(litur, "grey50")
     ) |>
     summarise(
-      n = sum(n, na.rm = TRUE),
-      .by = c(date, fyrirtaeki, flokkur)
+      p = sum(p, na.rm = TRUE),
+      .by = c(date, fyrirtaeki, flokkur, n)
     ) |>
-    drop_na()
+    drop_na() |>
+    mutate(
+      p = p / sum(p, na.rm = TRUE),
+      .by = c(date, fyrirtaeki)
+    ) |>
+    mutate(
+      n = n * p
+    ) |>
+    select(-p)
 }
 #' @export
 get_election_data <- function() {

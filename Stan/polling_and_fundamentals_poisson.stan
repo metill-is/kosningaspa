@@ -66,20 +66,21 @@ parameters {
   cholesky_factor_corr[P - 1] L_Omega;              // Cholesky factor of correlation matrix
   vector[P - 1] z_beta0;                              // Initial party support levels
 
+  matrix[P - 2, N] z_obs_error;
+  vector<lower = 0>[H - 1] sigma_obs_error_raw;
+
   // House Effects Parameters
   matrix[P - 2, H - 1] gamma_raw;                   // Raw house effects
   vector[P - 2] mu_gamma;                           // Mean house effects
   vector<lower = 0>[P - 2] sigma_gamma;             // Scale of house effects
+
+  vector<lower = 0>[H] phi_inv;
   
   // Variance Parameters
   real mu_log_sigma;                    // Population mean of log volatility
   real<lower=0> tau_log_sigma;          // Population SD of log volatility
   vector[P - 1] log_sigma_raw;            // Raw party-specific parameters
-  //vector<lower = 0>[H - 1] phi_raw;                    
-  //real<lower = 0> phi_scale;
-  vector[H - 1] log_phi;
-  real mu_phi;
-  real<lower = 0> sigma_phi;
+
   real<lower = 0> tau_stjornarslit;                // Scale factor for government collapse period
   
   // Fundamentals Model Parameters
@@ -95,26 +96,16 @@ transformed parameters {
   vector<lower=0>[P - 1] sigma = exp(mu_log_sigma + tau_log_sigma * log_sigma_raw);           // Party-specific volatilities
   
 
-  // Convert inverse dispersion parameters to dispersion parameters
-  //vector<lower = 0>[H] phi;
-  //phi[2:H] = phi_raw;
-  //phi[1] = 2e4;
-  //vector<lower = 0>[N] phi_n;        // Polling dispersion
-  //for (n in 1:N) {
-  //  phi_n[n] = phi[house_n[n]] + phi_scale / sqrt(n_sample_n[n]);
-  //}
-  // vector<lower = 0>[H] phi = pow(phi_inv, -1);
+  vector<lower = 0>[H] phi = pow(phi_inv, -1);
   real<lower = 0> phi_f = pow(phi_f_inv, -1);         // Fundamentals dispersion
-  vector<lower = 0>[H - 1] phi = exp(mu_phi + sigma_phi * log_phi);
+  
   // Transform raw parameters into model parameters
-  matrix[P - 1, D + pred_y_time_diff] z_beta = diag_pre_multiply(sigma, L_Omega) * z_beta_raw;  // Correlated random walk innovations
   matrix[P - 1, H] gamma;                     // House effects matrix
-  matrix[P - 1, D + pred_y_time_diff] beta;   // Party support trajectories
   vector[P_f] alpha_f;                        // Party-specific intercepts for fundamentals
   
   // Sum-to-zero constraint for party intercepts
   alpha_f[2:P_f] = alpha_f_raw;
-  alpha_f[1] = -sum(alpha_f[2:P_f]);
+  alpha_f[1] = 0;
   
   // Variables for combining polling and fundamentals
   real<lower = 0> V_t;                        // Total variance at weight_time
@@ -137,21 +128,35 @@ transformed parameters {
     gamma[p, 1] = 0;                          // Reference house effect set to 0
     gamma[p, 2:H] = mu_gamma[p] + sigma_gamma[p] * gamma_raw[p, ];  // Other house effects
   }
-
+  
   gamma[P - 1, 1] = 0;
-
+  
   for (h in 2:H) {
     gamma[P - 1, h] = -sum(gamma[1:(P - 2), h]);
   }
-
-
+  
+  
   // Calculate predicted values from fundamentals model
   vector[P - 1] mu_pred = alpha_f[index_f[2:P, D_f + 1]] + 
-    beta_lag_f * (x_f[index_f[2:P, D_f + 1], D_f + 1] - alpha_f[index_f[2:P, D_f + 1]]) + 
-    beta_inc_years_f * incumbent_years[index_f[2:P, D_f + 1], D_f + 1] +
-    beta_vnv_f * vnv[index_f[2:P, D_f + 1], D_f + 1] +
-    beta_growth_f * growth[index_f[2:P, D_f + 1], D_f + 1];
+  beta_lag_f * (x_f[index_f[2:P, D_f + 1], D_f + 1] - alpha_f[index_f[2:P, D_f + 1]]) + 
+  beta_inc_years_f * incumbent_years[index_f[2:P, D_f + 1], D_f + 1] +
+  beta_vnv_f * vnv[index_f[2:P, D_f + 1], D_f + 1] +
+  beta_growth_f * growth[index_f[2:P, D_f + 1], D_f + 1];
+  
+  matrix[P - 1, N] obs_error;
+  vector<lower = 0>[H] sigma_obs_error;
+  sigma_obs_error[1] = 0;
+  sigma_obs_error[2:H] = sigma_obs_error_raw;
 
+  for (n in 1:N) {
+    obs_error[2:(n_parties_n[n] - 1), n] = sigma_obs_error[house_n[n]] * z_obs_error[1:(n_parties_n[n] - 2), n];
+    obs_error[1, n] = -sum(obs_error[2:(n_parties_n[n] - 1), n]);
+  }
+
+
+
+  //matrix[P - 1, D + pred_y_time_diff] z_beta = diag_pre_multiply(sigma, L_Omega) * z_beta_raw;  // Correlated random walk innovations
+  matrix[P - 1, D + pred_y_time_diff] beta;   // Party support trajectories
   vector[P - 1] beta0 = mu_pred + tau_f * z_beta0 .* sigma;
   
   // Initialize end state
@@ -168,13 +173,13 @@ transformed parameters {
     }
     // Random walk evolution
     beta[ , D + pred_y_time_diff - t] = beta[ , D + pred_y_time_diff - t + 1] + 
-      z_beta[, D + pred_y_time_diff - t + 1] * scale;
+      sigma .* z_beta_raw[, D + pred_y_time_diff - t + 1] * scale;
   }
   
   // Backward evolution through historical period
   for (t in 1:(D - 1)) {
     beta[ , D - t] = beta[ , D - t + 1] + 
-      time_scale[D - t] * z_beta[, D - t + 1] *
+      time_scale[D - t] * sigma .* z_beta_raw[, D - t + 1] *
       (1 + tau_stjornarslit * month_before_election[D - t]);
   }
 
@@ -195,13 +200,13 @@ model {
   tau_log_sigma ~ exponential(1);       // Weakly informative prior on variance
   log_sigma_raw ~ std_normal();         // Unit normal for non-centered param
   z_beta0 ~ std_normal();
-  tau_stjornarslit ~ exponential(1);         // Prior for collapse period scale
-  //phi_raw ~ normal(0, 20);                   // Dispersion parameter
-  //phi_scale ~ normal(0, 10);
-  log_phi ~ std_normal();
-  mu_phi ~ normal(1, 1);
-  sigma_phi ~ exponential(1);
-  
+  tau_stjornarslit ~ normal(0, 0.1);
+
+
+  to_vector(z_obs_error) ~ std_normal();
+  sigma_obs_error_raw ~ exponential(1);
+
+  phi_inv ~ exponential(1);
 
   /* Polling Data Likelihood */
   for (n in 1:N) {
@@ -209,13 +214,9 @@ model {
     // Linear predictor combining latent support and house effects
     eta_n[2:P] = beta[, date_n[n]] + gamma[ , house_n[n]];
     eta_n[1] = -sum(eta_n[2:P]);             // Sum-to-zero constraint
-    if (house_n[n] > 1) {
-      // Dirichlet-multinomial likelihood for poll counts
-      vector[n_parties_n[n]] pi_n = softmax(eta_n[1:n_parties_n[n]]);          // Convert to probabilities
-      y_n[n, 1:n_parties_n[n]] ~ dirichlet_multinomial(pi_n * phi[house_n[n] - 1]);
-    } else {
-      y_n[n, 1:n_parties_n[n]] ~ multinomial_logit(eta_n[1:n_parties_n[n]]);
-    }
+    vector[n_parties_n[n]] pi_n = softmax(eta_n[1:n_parties_n[n]]);
+    y_n[n, 1:n_parties_n[n]] ~ neg_binomial_2(pi_n * n_sample_n[n], phi[house_n[n]]);
+    
   }
 
   /* Fundamentals Priors and Likelihood */
@@ -234,9 +235,8 @@ model {
       beta_vnv_f * vnv[index_f[2:n_parties_f[d], d], d] +
       beta_growth_f * growth[index_f[2:n_parties_f[d], d], d];
     mu_d[1] = -sum(mu_d[2:n_parties_f[d]]);
-      
-    vector[n_parties_f[d]] pi_d = softmax(mu_d);
-    y_f[index_f[1:n_parties_f[d], d], d] ~ dirichlet_multinomial(pi_d * phi_f);
+
+    y_f[index_f[1:n_parties_f[d], d], d] ~ multinomial_logit(mu_d[1:n_parties_f[d]]);
   }
 }
 
@@ -244,7 +244,6 @@ generated quantities {
   // Arrays to store simulated data
   array[D + pred_y_time_diff, P] int<lower = 0> y_latent;      // Replicated data for all time points
   matrix[P, D + pred_y_time_diff] pi_rep;    // Replicated probabilities for all time points
-  array[P] int<lower = 0> y_rep_newest_poll;                // Replicated data for most recent poll
   corr_matrix[P - 1] Omega = L_Omega * L_Omega';           // Convert Cholesky factor to correlation matrix
 
   for (d in 1:(D + pred_y_time_diff)) {
@@ -257,7 +256,7 @@ generated quantities {
     vector[P] eta_d;
     // Construct linear predictor for all parties
     eta_d[2:P] = beta[, d];                                // Use estimated party support
-    eta_d[1] = -sum(eta_d[2:P]);                          // Sum-to-zero constraint
+    eta_d[1] = 0;                          // Sum-to-zero constraint
     vector[n_parties_n_rep[d]] pi_d = softmax(eta_d[1:n_parties_n_rep[d]]);                       // Convert to probabilities
     // Generate synthetic poll data
     y_latent[d, 1:n_parties_n_rep[d]] = multinomial_logit_rng(eta_d[1:n_parties_n_rep[d]], n_pred);
@@ -267,20 +266,11 @@ generated quantities {
   for (d in (D + 1):(D + pred_y_time_diff)) {
     vector[P] eta_d;
     eta_d[2:P] = beta[, d];
-    eta_d[1] = -sum(eta_d[2:P]);
+    eta_d[1] = 0;
     vector[P] pi_d = softmax(eta_d);
     y_latent[d, 1:P] = multinomial_logit_rng(eta_d, n_pred);
     pi_rep[1:P, d] = pi_d;
   }
-
-  // Generate prediction for most recent poll
-  vector[P] eta_p;
-  // Construct linear predictor including house effects
-  eta_p[2:P] = beta[, D + pred_y_time_diff - last_poll_days] + gamma[ , last_poll_house];
-  eta_p[1] = -sum(eta_p[2:P]);                            // Sum-to-zero constraint
-  vector[P] pi_p = softmax(eta_p);                        // Convert to probabilities
-  // Generate synthetic poll data with house-specific dispersion
-  y_rep_newest_poll = dirichlet_multinomial_rng(pi_p * phi[last_poll_house], n_last_poll);
 }
 
 

@@ -30,7 +30,7 @@ create_weight_plot <- function(tau_stjornarslit = 0.24) {
 
   # Calculate days until election
   election_date <- clock::date_build(2024, 11, 30)
-  current_date <- today()
+  current_date <- clock::date_build(2024, 11, 11)
   days_until_election <- as.numeric(election_date - current_date)
 
   # Calculate current fundamentals weight
@@ -90,7 +90,7 @@ create_weight_plot <- function(tau_stjornarslit = 0.24) {
       title = "Weight of Fundamentals Model Over Time",
       subtitle = paste(
         "τ_stjornarslit =", tau_stjornarslit,
-        ", Target weight = 15% at t=180"
+        ", Target weight = 30% at t=180"
       )
     ) +
     theme_minimal()

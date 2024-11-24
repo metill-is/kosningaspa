@@ -38,6 +38,11 @@ data {
 transformed data {
   vector[D - 1] time_scale = sqrt(time_diff);
   vector[D] time_to_election;
+  vector[N] n_sample_n;
+
+  for (n in 1:N) {
+    n_sample_n[n] = sum(y_n[n, ]);
+  }
 
   // Calculate time to election for each date
   time_to_election[D] = pred_y_time_diff;
@@ -54,7 +59,7 @@ parameters {
   
   
   // House Effects Parameters
-  matrix[P - 1, H - 1] gamma_raw;                   // Raw house effects
+  matrix[P - 2, H - 1] gamma_raw;                   // Raw house effects
   vector[P - 2] mu_gamma;                           // Mean house effects
   vector<lower = 0>[P - 2] sigma_gamma;             // Scale of house effects
 
@@ -62,7 +67,8 @@ parameters {
   real mu_log_sigma;                    // Population mean of log volatility
   real<lower=0> tau_log_sigma;          // Population SD of log volatility
   vector[P-1] log_sigma_raw;            // Raw party-specific parameters
-  vector<lower = 0>[H] phi_inv;
+  vector<lower = 0>[H - 1] phi_raw;                     
+  real<lower = 0> phi_scale;
   real<lower = 0> tau_stjornarslit;
 
 
@@ -76,10 +82,16 @@ parameters {
 }
 
 transformed parameters {
-  vector<lower=0>[P-1] sigma = exp(mu_log_sigma + tau_log_sigma * log_sigma_raw);           // Party-specific volatilities
-  vector<lower = 0>[H] phi = pow(phi_inv, -1);
+  vector<lower=0>[P - 1] sigma = exp(mu_log_sigma + tau_log_sigma * log_sigma_raw);           // Party-specific volatilities
+  vector<lower = 0>[H] phi;
+  phi[2:H] = phi_raw;
+  phi[1] = 1e4;
+  vector<lower = 0>[N] phi_n;        // Polling dispersion
+  for (n in 1:N) {
+    phi_n[n] = phi[house_n[n]] + phi_scale / sqrt(n_sample_n[n]);
+  }
   real<lower = 0> phi_f = pow(phi_f_inv, -1);
-  matrix[P - 1, D + pred_y_time_diff] z_beta = L_Omega * z_beta_raw;
+  matrix[P - 1, D + pred_y_time_diff] z_beta = diag_pre_multiply(sigma, L_Omega) * z_beta_raw;
   matrix[P - 1, H] gamma;                     
   matrix[P - 1, D + pred_y_time_diff] beta;   
   vector[P_f] alpha_f;
@@ -88,11 +100,11 @@ transformed parameters {
   real<lower = 0> V_t;
   real<lower = 0> tau_f;
   vector[P - 1] beta0;
-  vector[P - 1] mu_pred = alpha_f[index_f[2:n_parties_f[D_f + 1], D_f + 1]] + 
-    beta_lag_f * x_f[index_f[2:n_parties_f[D_f + 1], D_f + 1], D_f + 1] + 
-    beta_inc_years_f * incumbent_years[index_f[2:n_parties_f[D_f + 1], D_f + 1], D_f + 1] +
-    beta_vnv_f * vnv[index_f[2:n_parties_f[D_f + 1], D_f + 1], D_f + 1] +
-    beta_growth_f * growth[index_f[2:n_parties_f[D_f + 1], D_f + 1], D_f + 1];
+  vector[P - 1] mu_pred = alpha_f[2:9] + 
+    beta_lag_f * x_f[2:9, D_f + 1] + 
+    beta_inc_years_f * incumbent_years[2:9, D_f + 1] +
+    beta_vnv_f * vnv[2:9, D_f + 1] +
+    beta_growth_f * growth[2:9, D_f + 1];
   
   // Calculate V(t) based on weight_time and tau_stjornarslit
   V_t = weight_time;
@@ -132,12 +144,12 @@ transformed parameters {
       scale = 1;
     }
     beta[ , D + pred_y_time_diff - t] = beta[ , D + pred_y_time_diff - t + 1] + 
-      z_beta[, D + pred_y_time_diff - t + 1] .* sigma * scale;
+      z_beta[, D + pred_y_time_diff - t + 1] * scale;
   }
 
   for (t in 1:(D - 1)) {
     beta[ , D - t] = beta[ , D - t + 1] + 
-      time_scale[D - t] * z_beta[, D - t + 1] .* sigma * (1 + tau_stjornarslit * month_before_election[D - t]);
+      time_scale[D - t] * z_beta[, D - t + 1] * (1 + tau_stjornarslit * month_before_election[D - t]);
   }
 
   
@@ -160,15 +172,16 @@ model {
   z_beta0 ~ std_normal();
   tau_stjornarslit ~ exponential(1);
   // Prior for the Dirichlet-multinomial scale parameter
-  phi_inv ~ exponential(1);
+  phi_raw ~ normal(0, 10);                   // Dispersion parameter
+  phi_scale ~ normal(0, 10);
 
   // Likelihood (Dirichlet-multinomial observation model)
   for (n in 1:N) {
     vector[P] eta_n;
     eta_n[2:P] = beta[, date_n[n]] + gamma[ , house_n[n]];  // Linear predictor for softmax
-    eta_n[1] = -sum(eta_n[2:P]);
-    vector[P] pi_n = softmax(eta_n);
-    y_n[n, 1:n_parties_n[n]] ~ dirichlet_multinomial(pi_n[1:n_parties_n[n]] * phi[house_n[n]]);                // Polling data likelihood
+    eta_n[1] = 0;
+    vector[n_parties_n[n]] pi_n = softmax(eta_n[1:n_parties_n[n]]);
+    y_n[n, 1:n_parties_n[n]] ~ dirichlet_multinomial(pi_n * phi_n[n]);                // Polling data likelihood
   }
 
   /* Fundamentals */
@@ -180,11 +193,12 @@ model {
 
   for (d in 1:D_f) { 
     vector[n_parties_f[d]] mu_d;
-    mu_d[1:n_parties_f[d]] = alpha_f[index_f[1:n_parties_f[d], d]] + 
-      beta_lag_f * x_f[index_f[1:n_parties_f[d], d], d] + 
-      beta_inc_years_f * incumbent_years[index_f[1:n_parties_f[d], d], d] +
-      beta_vnv_f * vnv[index_f[1:n_parties_f[d], d], d] +
-      beta_growth_f * growth[index_f[1:n_parties_f[d], d], d];
+    mu_d[2:n_parties_f[d]] = alpha_f[index_f[2:n_parties_f[d], d]] + 
+      beta_lag_f * x_f[index_f[2:n_parties_f[d], d], d] + 
+      beta_inc_years_f * incumbent_years[index_f[2:n_parties_f[d], d], d] +
+      beta_vnv_f * vnv[index_f[2:n_parties_f[d], d], d] +
+      beta_growth_f * growth[index_f[2:n_parties_f[d], d], d];
+    mu_d[1] = 0;
     vector[n_parties_f[d]] pi_d = softmax(mu_d);
     y_f[index_f[1:n_parties_f[d], d], d] ~ dirichlet_multinomial(pi_d * phi_f);
   }
@@ -195,7 +209,7 @@ generated quantities {
   
   vector[P] eta_d;
   eta_d[2:P] = beta[, D + pred_y_time_diff];
-  eta_d[1] = -sum(eta_d[2:P]);
+  eta_d[1] = 0;
   vector[P] pi_d = softmax(eta_d);
   election_prediction = dirichlet_multinomial_rng(pi_d * phi[1], n_pred);
 }

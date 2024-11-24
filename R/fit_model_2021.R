@@ -29,7 +29,7 @@ for (i in seq_along(fit_dates)) {
   results[[i]] <- fit_model_at_date_2021(
     cutoff_date = fit_date,
     weight_time = 180,
-    weight_desired = 0.50
+    weight_desired = 0.33
   ) |>
     mutate(
       fit_date = fit_date
@@ -43,6 +43,13 @@ library(ggplot2)
 
 p <- results |>
   bind_rows() |>
+  mutate(
+    flokkur = if_else(
+      flokkur == "Annað",
+      "Sósíalistaflokkurinn",
+      flokkur
+    )
+  ) |>
   inner_join(
     polling_data |>
       filter(
@@ -91,6 +98,13 @@ p <- results |>
   distinct(flokkur, median, fit_date) |>
   filter(fit_date == max(fit_date)) |>
   select(-fit_date) |>
+  mutate(
+    flokkur = if_else(
+      flokkur == "Annað",
+      "Sósíalistaflokkurinn",
+      flokkur
+    )
+  ) |>
   inner_join(
     polling_data |>
       filter(
@@ -162,12 +176,20 @@ results |>
   distinct(flokkur, median, fit_date) |>
   filter(fit_date == max(fit_date)) |>
   select(-fit_date) |>
+  mutate(
+    flokkur = if_else(
+      flokkur == "Annað",
+      "Sósíalistaflokkurinn",
+      flokkur
+    )
+  ) |>
   inner_join(
     polling_data |>
       filter(
         fyrirtaeki == "Kosning",
         year(date) == 2021
       ) |>
+      count(flokkur, wt = n, name = "n") |>
       mutate(
         kosning = n / sum(n)
       ) |>
@@ -180,6 +202,7 @@ results |>
         year(date) == 2021
       ) |>
       filter(date == max(date), .by = fyrirtaeki) |>
+      count(flokkur, fyrirtaeki, wt = n, name = "n") |>
       mutate(
         p = n / sum(n),
         .by = fyrirtaeki
@@ -221,12 +244,20 @@ results |>
   distinct(flokkur, median, fit_date) |>
   filter(fit_date == max(fit_date)) |>
   select(-fit_date) |>
+  mutate(
+    flokkur = if_else(
+      flokkur == "Annað",
+      "Sósíalistaflokkurinn",
+      flokkur
+    )
+  ) |>
   inner_join(
     polling_data |>
       filter(
         fyrirtaeki == "Kosning",
         year(date) == 2021
       ) |>
+      count(flokkur, wt = n, name = "n") |>
       mutate(
         kosning = n / sum(n)
       ) |>
@@ -239,6 +270,7 @@ results |>
         year(date) == 2021
       ) |>
       filter(date == max(date), .by = fyrirtaeki) |>
+      count(flokkur, fyrirtaeki, wt = n, name = "n") |>
       mutate(
         p = n / sum(n),
         .by = fyrirtaeki
@@ -257,9 +289,7 @@ results |>
     err = abs(err)
   ) |>
   arrange(desc(kosning)) |>
-  group_by(name) |>
-  top_n(9, kosning) |>
-  ungroup() |>
+  # filter(flokkur != "Annað", flokkur != "Sósíalistaflokkurinn") |>
   summarise(
     mean_mae = mean(err),
     median_mae = median(err),
