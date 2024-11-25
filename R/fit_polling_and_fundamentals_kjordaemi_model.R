@@ -31,6 +31,7 @@ polling_data <- read_polling_data() |>
   )
 
 
+
 unique(polling_data$flokkur)
 max(polling_data$date)
 
@@ -110,8 +111,8 @@ fit <- model$sample(
   parallel_chains = 4,
   refresh = 100,
   init = 0,
-  iter_warmup = 1000,
-  iter_sampling = 2000
+  iter_warmup = 500,
+  iter_sampling = 500
 )
 
 
@@ -121,8 +122,15 @@ fit$summary("beta0")
 fit$summary("sigma")
 fit$summary("tau_stjornarslit")
 fit$summary("tau_f")
-fit$summary("phi")
-fit$summary("phi_scale")
+fit$summary("phi") |>
+  mutate(
+    fyrirtaeki = levels(polling_data$fyrirtaeki)[-1]
+  ) |>
+  select(fyrirtaeki, median, q5, q95) |>
+  arrange(desc(median))
+fit$summary("mu_phi")
+fit$summary("sigma_phi")
+
 fit$summary("sigma")
 
 #### Constituency Parameters ####

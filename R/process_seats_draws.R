@@ -8,6 +8,7 @@ library(gt)
 library(gtExtras)
 library(patchwork)
 theme_set(theme_metill())
+
 colors <- tribble(
   ~flokkur, ~litur,
   "Sjálfstæðisflokkurinn", "#377eb8",
@@ -22,7 +23,7 @@ colors <- tribble(
   "Annað", "grey50"
 )
 
-seats_draws <- read_parquet(here("data", today(), "seats_draws.parquet"))
+seats_draws <- read_parquet(here("data", today() - 1, "seats_draws.parquet"))
 
 seats_draws |>
   summarise(
@@ -281,7 +282,39 @@ seats_draws |>
   )
 
 
-
+seats_draws |>
+  filter(
+    flokkur %in% c(
+      "Viðreisn",
+      "Flokkur Fólksins",
+      "Samfylkingin"
+    )
+  ) |>
+  count(.draw, wt = seats, name = "seats") |>
+  count(seats) |>
+  mutate(
+    prop = n / sum(n),
+    col = if_else(seats >= 32, "Meirihluti", "Minnihluti")
+  ) |>
+  ggplot(aes(seats, prop, fill = col)) +
+  geom_col() +
+  geom_text(
+    data = ~ summarise(
+      .x,
+      perc = mean(seats >= 32) |> round(1),
+      min_seats = min(seats),
+      max_y = max(prop),
+      label = paste0(perc * 100, "% líkur á meirihluta")
+    ),
+    aes(x = min_seats, y = 0.8 * max_y, label = label),
+    vjust = -1,
+    inherit.aes = FALSE,
+    hjust = 0,
+    size = 5
+  ) +
+  labs(
+    title = "CFS"
+  )
 
 
 seats_draws |>

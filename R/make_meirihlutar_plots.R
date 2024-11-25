@@ -50,106 +50,115 @@ library(ggridges)
 fit_date <- clock::date_build(2024, 11, 18)
 
 caption <- str_c(
-  "¹Líkur á að flokkur hljóti meiri en 5% atkvæða og eigi þannig rétt á jöfnunarþingsætum", "\n",
-  "Nánast öruggt: >99%, Mjög líklegt: 80-99%, Líklegra en ekki: 60-80%, Helmingslíkur: 40-60%, Nokkrar líkur: 20-40%, Ólíklegt: <20%", "\n",
+  "¹Nánast öruggt: >99%, Mjög líklegt: 80-99%, Líklegra en ekki: 60-80%, Helmingslíkur: 40-60%, Nokkrar líkur: 20-40%, Ólíklegt: <20%", "\n",
   "Unnið af Brynjólfi Gauta Guðrúnar Jónssyni, ásamt Agnari Frey Helgasyni, Hafsteini Einarssyni og Rafael Daniel Vias", "\n",
   "Frekari greiningar og útskýringar á aðferðafræði má nálgast á www.metill.is"
 )
 
-d <- read_parquet(
-  here("data", "2024-11-23", "seats_draws.parquet")
+box::use(
+  R / party_utils[party_tibble]
 )
 
-read_parquet(
-  here("data", "2024-11-23", "y_rep_draws_constituency.parquet")
-) |>
-  filter(dags == max(dags)) |> 
-  filter(
-    value == max(value),
-    .by = .draw
-  ) |> 
-  count(flokkur) |> 
-  mutate(p = n / sum(n)) |> 
-  arrange(desc(p))
-
-support <- read_parquet(
-  here("data", "2024-11-23", "y_rep_draws_constituency.parquet")
-) |>
-  filter(dags == max(dags)) |> 
-  summarise(
-    p_in = mean(value > 0.05),
-    .by = flokkur
-  ) |> 
-  mutate(
-    flokkur = if_else(
-      flokkur == "Annað",
-      "Lýðræðisflokkurinn",
-      flokkur) |> 
-      str_to_sentence()
-  )
-
-plot_dat <- d |> 
+draws <- d |> 
   count(.draw, flokkur, wt = seats, name = "seats") |> 
-  count(flokkur, seats) |> 
-  mutate(
-    p = n / sum(n),
-    .by = flokkur
-  ) |> 
-  mutate(
-    flokkur = if_else(
-      flokkur == "Annað",
-      "Lýðræðisflokkurinn",
-      flokkur) |> 
-      str_to_sentence()
-  ) |> 
   inner_join(
-    colors,
-    by = "flokkur"
+    party_tibble() |> 
+      mutate(
+        bokstafur = if_else(
+          flokkur == "Annað",
+          "L",
+          bokstafur
+        )
+      )
   ) |> 
+  select(.draw, bokstafur, seats) |> 
+  pivot_wider(
+    names_from = bokstafur, values_from = seats
+  )  |> 
   mutate(
-    flokkur_ordered = glue("<b style='color:{litur}'>{flokkur}</b>"),
-    flokkur_ordered = fct_reorder(flokkur_ordered, seats * p, sum)
+    BCJS = B + C + J + S,
+    BCPS = B + C + P + S,
+    BCS = B + C + S,
+    BCSV = B + C + S + V,
+    BDM = B + D + M,
+    CD = C + D,
+    CDM = C + D + M,
+    CDS = C + D + S,
+    CFS = C + F + S,
+    CMS = C + M + S,
+    CS = C + S,
+    DFM = D + F + M,
+    DFS = D + M + S,
+    DM = D + M,
+    DS = D + S
+  ) |> 
+  select(-(L:C)) |> 
+  pivot_longer(c(-.draw), names_to = "flokkur", values_to = "seats")
+
+plot_dat <- draws |> 
+  count(flokkur, seats) |> 
+  mutate(p = n / sum(n), .by = flokkur) |> 
+  mutate(
+    flokkur_ordered = fct_reorder(flokkur, seats * p, sum),
+    col = factor(1 * (seats >= 32))
   )
 
-#### Sharing ####
+
+
+colors <- party_tibble()$litur
+names(colors) <- party_tibble()$bokstafur
+
+add_colours <- function(flokkur) {
+  str_split(flokkur, pattern = "")[[1]] |> 
+    map(
+      function(x) {
+        glue(
+          "<b style='color:{colors[x]};'>{x}</b>"
+        )
+      }
+    ) |> 
+    str_c(collapse = "")
+}
+
+n_fl <- length(unique(plot_dat$flokkur))
 
 p <- plot_dat |> 
-  filter(p > 0.005) |> 
   mutate(
-    p = if_else(
-      seats == 0, 
-      p * 0.75, 
-      p
-    ),
-    p = if_else(
-      (seats == 0) & (flokkur == "Vinstri græn"),
-      p * 0.25,
-      p
-    ),
     p1 = p / max(p),
     .by = flokkur
   ) |> 
-  ggplot(aes(seats, flokkur_ordered, fill = litur)) +
+  mutate(
+    flokkur_ordered = map_chr(flokkur, add_colours) |> 
+      fct_reorder(seats * p, sum)
+  ) |> 
+  ggplot(aes(seats, flokkur_ordered)) +
   annotate(
     geom = "segment",
-    x = seq(0, 20, by = 2),
-    xend = seq(0, 20, by = 2),
+    x = 32,
+    xend = 32,
     y = 0.5,
-    yend = 11,
-    linewidth = 0.2,
-    alpha = 0.1
+    yend = n_fl + 1.5,
+    linewidth = 0.7,
+    alpha = 0.4,
+    lty = 2
   ) +
   geom_rect(
     aes(
       xmin = seats - 0.5,
       xmax = seats + 0.5,
       ymin = as.integer(flokkur_ordered),
-      ymax = as.integer(flokkur_ordered) + p1 * 0.95
+      ymax = as.integer(flokkur_ordered) + p1 * 0.95,
+      fill = col
     ),
     col = "#fdfcfc",
     linewidth = 0.4
   ) +
-  scale_fill_identity() +
+  scale_fill_manual(
+    values = c(
+      "grey60",
+      "grey20"
+    )
+  ) +
   scale_x_continuous(
     breaks = breaks_width(2),
     labels = label_number(accuracy = 1),
@@ -160,13 +169,13 @@ p <- plot_dat |>
     expand = expansion()
   ) +
   coord_cartesian(
-    xlim = c(0, 20),
-    ylim = c(0.5, 11),
+    xlim = c(14, 46),
+    ylim = c(0.5, n_fl + 1),
     clip = "on"
   ) +
   theme(
     legend.position = "none",
-    axis.text.y = element_markdown(size = 18),
+    axis.text.y = element_markdown(size = 22),
     plot.margin = margin(0, 0, 0, 0)
   ) +
   labs(
@@ -174,18 +183,15 @@ p <- plot_dat |>
     y = NULL
   )
 
-table_dat <- plot_dat |> 
+
+
+table_dat <- draws |> 
   summarise(
-    mean = sum(seats * p),
-    median = min(seats[cumsum(p) > 0.5]),
+    median = median(seats),
+    mean = mean(seats),
+    p_in = mean(seats >= 32),
     .by = flokkur
-  ) |> 
-  select(
-    flokkur, median, mean
-  ) |> 
-  inner_join(
-    support
-  ) |> 
+  )|> 
   arrange(desc(mean)) |> 
   mutate(
     p_in = case_when(
@@ -209,8 +215,12 @@ table <- table_dat |>
   cols_label(
     flokkur = "",
     median = "Miðgildi",
-    p_in = "Fylgi>5%¹"
+    p_in = "≥32¹"
   ) |>
+  tab_spanner(
+    label = "Þingsæti",
+    columns = 2:4
+  ) |> 
   cols_align("center") |>
   cols_hide(flokkur) |>
   tab_options(
@@ -218,7 +228,7 @@ table <- table_dat |>
     column_labels.hidden = FALSE,
     table.border.top.style = "0px",
     table.border.bottom.style = "0px",
-    table.font.size = px(20),
+    table.font.size = px(22),
     # table_body.hlines.style = "0px",
     table_body.border.bottom.style = "0px",
     table_body.border.top.style = "0px"
@@ -228,48 +238,38 @@ table <- table_dat |>
     weight = "bold"
   ) |>
   opt_horizontal_padding(0) |>
-  opt_vertical_padding(1.6)
-
-
-
-for (row in seq_len(nrow(colors))) {
-  table <- table |>
-    tab_style(
-      style = cell_text(
-        color = colors$litur[row],
-        weight = "bold",
-        font = google_font("Lato")
-      ),
-      locations = cells_body(
-        rows = flokkur == str_to_sentence(colors$flokkur[row])
-      )
-    )
-}
-
+  opt_vertical_padding(1)
 
 
 p_tab <- p + wrap_table(table, space = "fixed")
 
 p_tab_sharing <- p_tab +
   plot_annotation(
-    title = "Þingsætaspá Metils",
+    title = "Samanlögð þingsætaspá Metils",
+    subtitle = "Myndin sýnir dreifingu sætafjölda, en ekki líkur á að flokkar vilji vinna saman",
     caption = caption,
     theme = theme(
       plot.title = element_text(
         size = 30,
-        margin = margin(5, 5, -20, 5)
+        margin = margin(5, 5, 5, 5)
+      ),
+      plot.subtitle = element_text(
+        margin = margin(0, 5, -5, 5)
       )
     )
   )
 
+p_tab_sharing
+
 ggsave(
   plot = p_tab_sharing,
-  filename = here("Figures", "Historical", "Sharing", glue("{fit_date}_seats.png")),
+  filename = here("Figures", "Historical", "Sharing", glue("{fit_date}_majority_seats.png")),
   width = 8,
-  height = 0.55 * 8,
+  height = 0.621 * 8,
   scale = 1.4,
   bg = "#fdfcfc"
 )
+
 
 #### No Title/Subtitle
 
@@ -280,10 +280,14 @@ table <- table_dat |>
     columns = median,
     decimals = 0
   ) |>
+  tab_spanner(
+    label = "Þingsæti",
+    columns = 2:4
+  ) |> 
   cols_label(
     flokkur = "",
     median = "Miðgildi",
-    p_in = "Fylgi>5%¹"
+    p_in = "≥32¹"
   ) |>
   cols_align("center") |>
   cols_hide(flokkur) |>
@@ -292,7 +296,7 @@ table <- table_dat |>
     column_labels.hidden = FALSE,
     table.border.top.style = "0px",
     table.border.bottom.style = "0px",
-    table.font.size = px(20),
+    table.font.size = px(22),
     # table_body.hlines.style = "0px",
     table_body.border.bottom.style = "0px",
     table_body.border.top.style = "0px"
@@ -302,31 +306,15 @@ table <- table_dat |>
     weight = "bold"
   ) |>
   opt_horizontal_padding(0) |>
-  opt_vertical_padding(1.9)
+  opt_vertical_padding(1.3)
 
-
-
-for (row in seq_len(nrow(colors))) {
-  table <- table |>
-    tab_style(
-      style = cell_text(
-        color = colors$litur[row],
-        weight = "bold",
-        font = google_font("Lato")
-      ),
-      locations = cells_body(
-        rows = flokkur == str_to_sentence(colors$flokkur[row])
-      )
-    )
-}
 
 
 
 p_tab <- p + wrap_table(table, space = "fixed") +
   plot_annotation(
     caption = str_c(
-      "¹Líkur á að flokkur hljóti meiri en 5% atkvæða og eigi þannig rétt á jöfnunarþingsætum.", "\n",
-      "Nánast öruggt: >99%, Mjög líklegt: 80-99%, Líklegra en ekki: 60-80%, Helmingslíkur: 40-60%, Nokkrar líkur: 20-40%, Ólíklegt: <20%"
+      "¹Nánast öruggt: >99%, Mjög líklegt: 80-99%, Líklegra en ekki: 60-80%, Helmingslíkur: 40-60%, Nokkrar líkur: 20-40%, Ólíklegt: <20%"
     )
   )
 
@@ -336,18 +324,18 @@ p_tab <- p + wrap_table(table, space = "fixed") +
 
 ggsave(
   plot = p_tab,
-  filename = here("Figures", "Historical", "Background", glue("{fit_date}_seats_background.png")),
+  filename = here("Figures", "Historical", "Background", glue("{fit_date}_majority_seats_background.png")),
   width = 8,
-  height = 0.55 * 8,
+  height = 0.621 * 8,
   scale = 1.4,
   bg = "#fdfcfc"
 )
 
 ggsave(
   plot = p_tab,
-  filename = here("Figures", "Historical", "Transparent", glue("{fit_date}_seats_transparent.png")),
+  filename = here("Figures", "Historical", "Transparent", glue("{fit_date}_majority_seats_transparent.png")),
   width = 8,
-  height = 0.55 * 8,
+  height = 0.621 * 8,
   scale = 1.4,
   bg = "transparent"
 )

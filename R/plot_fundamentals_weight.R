@@ -12,7 +12,7 @@ calc_V <- function(t, tau_stjornarslit) {
 }
 
 # Function to calculate tau_f for our chosen parameters
-calc_tau_f <- function(tau_stjornarslit, w = 0.15, t = 180) {
+calc_tau_f <- function(tau_stjornarslit, w = 0.3, t = 180) {
   V_t <- calc_V(t, tau_stjornarslit)
   return(sqrt(V_t * (1 - w) / w))
 }
@@ -30,7 +30,7 @@ create_weight_plot <- function(tau_stjornarslit = 0.24) {
 
   # Calculate days until election
   election_date <- clock::date_build(2024, 11, 30)
-  current_date <- clock::date_build(2024, 11, 11)
+  current_date <- clock::date_build(2024, 11, 18)
   days_until_election <- as.numeric(election_date - current_date)
 
   # Calculate current fundamentals weight
