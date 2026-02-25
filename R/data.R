@@ -84,7 +84,38 @@ get_sheet_data <- function(sheet) {
       date,
       fyrirtaeki,
       flokkur,
-      n
+      n,
+      lokadagur,
+      p = hlutfall
+    )
+}
+
+#' @export
+get_sheet_data_raw <- function(sheet) {
+  box::use(
+    googlesheets4[read_sheet, gs4_auth],
+    janitor[clean_names],
+    dplyr[mutate, select, coalesce, if_else]
+  )
+  gs4_auth(email = Sys.getenv("GOOGLE_MAIL"))
+  read_sheet(
+    Sys.getenv("POLLING_SHEET_URL"),
+    sheet = sheet
+  ) |>
+    janitor::clean_names() |>
+    mutate(
+      dagur = coalesce(dagur, 15),
+      date = clock::date_build(ar, manudur, dagur),
+      n = hlutfall * fjoldi_alls,
+      .by = c(ar, manudur, dagur, fyrirtaeki)
+    ) |>
+    select(
+      date,
+      fyrirtaeki,
+      flokkur,
+      n,
+      lokadagur,
+      p = hlutfall
     )
 }
 
@@ -93,7 +124,7 @@ get_felo_data <- function() {
   box::use(
     googlesheets4[read_sheet, gs4_auth],
     janitor[clean_names],
-    dplyr[mutate, select, coalesce, left_join, join_by, summarise],
+    dplyr[mutate, select, coalesce, left_join, join_by, summarise, distinct],
     tidyr[drop_na, pivot_longer],
     lubridate[dmy]
   )
@@ -178,14 +209,14 @@ get_election_data <- function() {
   d <- tribble(
     ~date, ~flokkur, ~p,
     # 2021
-    date_build(2021, 09, 25), "Samfylkingin", 0.099,
-    date_build(2021, 09, 25), "Sjálfstæðisflokkurinn", 0.244,
-    date_build(2021, 09, 25), "Miðflokkurinn", 0.054,
-    date_build(2021, 09, 25), "Framsóknarflokkurinn", 0.173,
-    date_build(2021, 09, 25), "Vinstri Græn", 0.126,
-    date_build(2021, 09, 25), "Flokkur Fólksins", 0.088,
-    date_build(2021, 09, 25), "Viðreisn", 0.083,
-    date_build(2021, 09, 25), "Píratar", 0.086,
+    date_build(2021, 09, 25), "Samfylkingin", 0.0993,
+    date_build(2021, 09, 25), "Sjálfstæðisflokkurinn", 0.2439,
+    date_build(2021, 09, 25), "Miðflokkurinn", 0.0545,
+    date_build(2021, 09, 25), "Framsóknarflokkurinn", 0.1727,
+    date_build(2021, 09, 25), "Vinstri Græn", 0.1257,
+    date_build(2021, 09, 25), "Flokkur Fólksins", 0.0885,
+    date_build(2021, 09, 25), "Viðreisn", 0.0833,
+    date_build(2021, 09, 25), "Píratar", 0.0863,
     date_build(2021, 09, 25), "Sósíalistaflokkurinn", 0.041,
     # 2017
     date_build(2017, 10, 28), "Samfylkingin", 0.1205,

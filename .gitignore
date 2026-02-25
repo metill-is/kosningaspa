@@ -3,9 +3,40 @@
 .Rdata
 .httr-oauth
 .DS_Store
+**/.DS_Store
 .quarto
-**/**draws.csv
 /.quarto/
 data-raw/
 data/
+**/**draws.csv
 **/**.parquet
+
+# Compiled Stan binaries (recompiled automatically by cmdstanr)
+Stan/base_model
+Stan/base_model_no_polling_bias
+Stan/fundamentals
+Stan/polling_and_fundamentals
+Stan/polling_and_fundamentals_*
+Stan/polling_watch
+!Stan/*.stan
+
+# Quarto build artifacts
+_freeze/
+site_libs/
+*_cache/
+*-preview.html
+*.out.ipynb
+
+# Generated docs (regenerated via quarto render)
+docs/
+!docs/CLAUDE.md
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# Generated figures (date-stamped outputs)
+Figures/Historical/
+Figures/post_analysis/
+
+# Model output cache
+results/

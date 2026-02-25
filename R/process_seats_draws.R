@@ -23,7 +23,9 @@ colors <- tribble(
   "Annað", "grey50"
 )
 
-seats_draws <- read_parquet(here("data", today() - 1, "seats_draws.parquet"))
+seats_draws <- read_parquet(here("data", today(), "seats_draws.parquet"))
+
+write_rds(seats_draws, here("data", today(), "seats_draws.rds"))
 
 seats_draws |>
   summarise(
@@ -73,6 +75,45 @@ seats_draws |>
     n_seats = 1:6
   ) |>
   summarise(
+    prop = mean(kjordaemi_seats >= n_seats),
+    .by = c(flokkur, kjordaemi, n_seats)
+  ) |>
+  filter(
+    (prop >= 0.0005) | (n_seats == 1)
+  ) |>
+  arrange(n_seats, kjordaemi) |>
+  pivot_wider(names_from = n_seats, values_from = prop) |>
+  group_by(kjordaemi) |>
+  gt() |>
+  cols_label(
+    flokkur = ""
+  ) |>
+  sub_missing(
+    columns = -c(kjordaemi, flokkur),
+    missing_text = ""
+  ) |>
+  fmt_percent(
+    columns = -c(kjordaemi, flokkur),
+    decimals = 0
+  ) |>
+  tab_spanner(
+    label = "Fjöldi sæta",
+    columns = -c(kjordaemi, flokkur)
+  ) |>
+  tab_style(
+    location = cells_row_groups(),
+    style = cell_text(
+      weight = "bold",
+      size = px(20)
+    )
+  ) |>
+  gtsave(here("Figures", "seats_by_n_seats_kjordaemakjor.png"))
+
+seats_draws |>
+  crossing(
+    n_seats = 1:6
+  ) |>
+  summarise(
     prop = mean(seats >= n_seats),
     .by = c(flokkur, kjordaemi, n_seats)
   ) |>
@@ -81,10 +122,10 @@ seats_draws |>
   ) |>
   arrange(n_seats, kjordaemi) |>
   pivot_wider(names_from = n_seats, values_from = prop) |>
-  group_by(flokkur) |>
+  group_by(kjordaemi) |>
   gt() |>
   cols_label(
-    kjordaemi = ""
+    flokkur = ""
   ) |>
   sub_missing(
     columns = -c(kjordaemi, flokkur),
@@ -107,6 +148,73 @@ seats_draws |>
   ) |>
   gtsave(here("Figures", "seats_by_n_seats.png"))
 
+p <- seats_draws |>
+  crossing(
+    n_seats = 1:6
+  ) |>
+  summarise(
+    prop = mean(seats >= n_seats),
+    .by = c(flokkur, kjordaemi, n_seats)
+  ) |>
+  filter(
+    (prop >= 0.005) | (n_seats == 1)
+  ) |>
+  arrange(n_seats, kjordaemi) |>
+  mutate(
+    flokkur = if_else(
+      flokkur == "Annað",
+      "Lýðræðisflokkurinn",
+      flokkur
+    ) |> 
+      str_to_sentence()
+  ) |> 
+  arrange(flokkur) |> 
+  pivot_wider(names_from = n_seats, values_from = prop) |>
+  group_by(kjordaemi2 = kjordaemi) |>
+  group_map(
+    \(x, ...) {
+      x |> 
+        gt() |>
+        tab_header(
+          title = unique(x$kjordaemi)
+        ) |> 
+        cols_label(
+          flokkur = ""
+        ) |>
+        sub_missing(
+          columns = -c(kjordaemi, flokkur),
+          missing_text = ""
+        ) |>
+        fmt_percent(
+          columns = -c(kjordaemi, flokkur),
+          decimals = 0
+        ) |>
+        tab_spanner(
+          label = "Fjöldi sæta",
+          columns = -c(kjordaemi, flokkur)
+        ) |>
+        tab_style(
+          location = cells_row_groups(),
+          style = cell_text(
+            weight = "bold",
+            size = px(20)
+          )
+        ) |> 
+        tab_options(
+          table.background.color = "transparent"
+        ) |> 
+        patchwork::wrap_table(space = "free")
+    }
+  ) |> 
+  patchwork::wrap_plots() 
+
+ggsave(
+  plot = p,
+  filename = "Figures/kjordaemasaeti.png",
+  width = 8,
+  height = 0.621 * 8,
+  scale = 2
+)
 
 seats_draws |>
   filter(

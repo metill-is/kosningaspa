@@ -89,12 +89,13 @@ parameters {
   
   // Constituency level parameters
   matrix[P - 1, K - 1] delta_raw;                  // Raw constituency effects
-  vector<lower = 0>[P - 1] sigma_delta;            // Constituency effect scales
+  vector<lower = 0>[P - 1] sigma_delta;             // Constituency effect scales
   
   // House Effects Parameters
   matrix[P - 2, H - 1] gamma_raw;                   // Raw house effects
   vector[P - 2] mu_gamma;                           // Mean house effects
   vector<lower = 0>[P - 2] sigma_gamma;             // Scale of house effects
+  
   
   // Variance Parameters
   real mu_log_sigma;                    // Population mean of log volatility
@@ -102,6 +103,7 @@ parameters {
   vector[P - 1] log_sigma_raw;            // Raw party-specific parameters
   real<lower = 0> tau_stjornarslit;                // Scale for government collapse period
 
+  // vector<lower = 0>[H - 1] phi;
   vector[H - 1] log_phi;
   real mu_phi;
   real<lower = 0> sigma_phi;
@@ -211,8 +213,9 @@ model {
   tau_stjornarslit ~ exponential(1);
 
   log_phi ~ std_normal();
-  mu_phi ~ normal(1, 1);
-  sigma_phi ~ exponential(1);
+  mu_phi ~ normal(0, 1);
+  sigma_phi ~ normal(0, 1);
+  // phi ~ exponential(1);
 
   // Constituency effects priors
   to_vector(delta_raw) ~ std_normal();
@@ -279,6 +282,14 @@ model {
 }
 
 generated quantities {
+  real<lower = 0, upper = 1> mu_gamma_weight;
+  mu_gamma_weight = beta_rng(40, 60);
+  vector[P - 1] mu_gamma_pred;
+  mu_gamma_pred[1:(P - 2)] = mu_gamma;   
+  mu_gamma_pred[P - 1] = - sum(mu_gamma);
+  mu_gamma_pred[1:(P - 3)] /= sqrt(3.0);
+  mu_gamma_pred[P - 2] /= sqrt(2.0);
+  mu_gamma_pred *= mu_gamma_weight;
   // Calculate correlation matrix from Cholesky factor
   corr_matrix[P - 1] Omega = L_Omega * L_Omega';
   
@@ -319,7 +330,7 @@ generated quantities {
     vector[n_parties_n_rep[d]] eta_d;
     vector[n_parties_n_rep[d]] pi_d;
     
-    eta_d[2:n_parties_n_rep[d]] = beta[1:(n_parties_n_rep[d] - 1), d];
+    eta_d[2:n_parties_n_rep[d]] = beta[1:(n_parties_n_rep[d] - 1), d] + mu_gamma_pred[1:(n_parties_n_rep[d] - 1)];
     eta_d[1] = -sum(eta_d[2:n_parties_n_rep[d]]);
     pi_d = softmax(eta_d);
     y_rep_national[d, 1:n_parties_n_rep[d]] = 
@@ -330,7 +341,7 @@ generated quantities {
   for (d in 1:pred_y_time_diff) {
     vector[P] eta_d;
     vector[P] pi_d;
-    eta_d[2:P] = beta[, D + d];
+    eta_d[2:P] = beta[, D + d] + mu_gamma_pred;
     eta_d[1] = -sum(eta_d[2:P]);
     pi_d = softmax(eta_d);
     y_rep_national[D + d, ] = multinomial_logit_rng(eta_d[1:P], n_pred);
@@ -341,7 +352,7 @@ generated quantities {
     vector[P] eta_k;
     vector[P] pi_k;
     
-    eta_k[2:P] = beta[, D + pred_y_time_diff] + delta_pred[, k];
+    eta_k[2:P] = beta[, D + pred_y_time_diff] + delta_pred[, k] + mu_gamma_pred;
     eta_k[1] = -sum(eta_k[2:P]);
     pi_k = softmax(eta_k);
     y_pred_constituency[k, ] = multinomial_logit_rng(eta_k[1:P], n_pred_k[k]);
@@ -361,7 +372,8 @@ generated quantities {
 
     eta_k[2:n_parties_k_rep[n]] = beta[1:(n_parties_k_rep[n] - 1), date_k[n]] + 
         gamma[1:(n_parties_k_rep[n] - 1), house_k[n]] + 
-        delta[1:(n_parties_k_rep[n] - 1), constituency_k[n]];
+        delta[1:(n_parties_k_rep[n] - 1), constituency_k[n]] +
+        mu_gamma_pred[1:(n_parties_k_rep[n] - 1)];
 
     eta_k[1] = -sum(eta_k[2:n_parties_k_rep[n]]);
     pi_k = softmax(eta_k);

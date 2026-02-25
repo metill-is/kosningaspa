@@ -46,7 +46,7 @@ colors <- tribble(
   )
 
 d <- read_parquet(
-  here("data", "2024-11-23", "y_rep_draws_constituency.parquet")
+  here("data", "2024-11-30", "y_rep_draws_constituency.parquet")
 ) |>
   filter(
     dags == max(dags)
@@ -59,10 +59,12 @@ d <- read_parquet(
     .by = c(flokkur)
   ) |>
   mutate(
-    fit_date = clock::date_build(2024, 11, 18)
+    fit_date = clock::date_build(2024, 11, 29)
   )
 
-digits <- 0
+d |> write_csv(here("data", "nyjasta_spa_fylgi.csv"))
+
+digits <- 1
 
 
 #### Plots with title and subtitle ####
@@ -184,11 +186,18 @@ plots <- d |>
           coverage == 0.9
         ) |>
         select(flokkur, median, lower, upper) |>
+        #mutate_at(
+        #  vars(median, lower, upper),
+        #  ~ round(200 * .x) / 200
+        #) |> 
         arrange(desc(median)) |>
         gt(process_md = TRUE) |>
         fmt_percent(
           columns = median:upper,
-          decimals = digits
+          decimals = digits,
+          drop_trailing_zeros = TRUE, 
+          sep_mark = ".",
+          dec_mark = ","
         ) |>
         cols_label(
           flokkur = "",

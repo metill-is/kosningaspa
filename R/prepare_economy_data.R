@@ -22,7 +22,7 @@ country_table <- tribble(
 )
 
 box::use(
-  R / prepare_data[read_fundamentals_data]
+  R / data[read_fundamentals_data]
 )
 
 fundamentals_data <- read_fundamentals_data()

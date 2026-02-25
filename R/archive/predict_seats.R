@@ -15,13 +15,7 @@ seats_tibble <- tribble(
   "Norðvestur", 6, 1
 )
 
-draw <- read_csv("data/constituency_data.csv") |> 
-  filter(
-    fyrirtaeki == "Kosning",
-    year(date) == 2021
-  ) |> 
-  select(-date, -fyrirtaeki) |> 
-  rename(votes = n)
+
 
 calculate_seats <- function(draw) {
 
@@ -135,13 +129,6 @@ read_parquet(here("data", today(), "constituency_predictions.parquet")) |>
 draws <- read_parquet(here("data", today(), "constituency_predictions.parquet")) |>
   select(.draw, flokkur, kjordaemi, votes = value) |>
   arrange(kjordaemi, flokkur)
-
-# Til að geta þæginlega labbað í gegnum fallið að ofan
-draw <- draws |>
-  filter(.draw == 1) |>
-  select(-.draw)
-
-
 
 d <- draws |>
   group_by(.draw) |>

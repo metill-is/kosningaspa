@@ -1,6 +1,8 @@
 library(ggplot2)
 library(dplyr)
 library(lubridate)
+library(metill)
+theme_set(theme_metill())
 
 # Function to calculate V(t)
 calc_V <- function(t, tau_stjornarslit) {
@@ -30,7 +32,7 @@ create_weight_plot <- function(tau_stjornarslit = 0.24) {
 
   # Calculate days until election
   election_date <- clock::date_build(2024, 11, 30)
-  current_date <- clock::date_build(2024, 11, 18)
+  current_date <- clock::date_build(2024, 10, 30)
   days_until_election <- as.numeric(election_date - current_date)
 
   # Calculate current fundamentals weight
@@ -62,7 +64,7 @@ create_weight_plot <- function(tau_stjornarslit = 0.24) {
       geom = "text",
       x = days_until_election,
       y = current_weight,
-      label = sprintf("Today: %.1f%%", current_weight * 100),
+      label = sprintf("1 month prior: %.1f%%", current_weight * 100),
       hjust = 1.2,
       vjust = 1
     ) +
@@ -92,9 +94,14 @@ create_weight_plot <- function(tau_stjornarslit = 0.24) {
         "τ_stjornarslit =", tau_stjornarslit,
         ", Target weight = 30% at t=180"
       )
-    ) +
-    theme_minimal()
+    )
 }
 
 # Generate plot
 create_weight_plot(tau_stjornarslit = 1.7)
+ggsave(
+  "figures/fundamentals_weight.png",
+  width = 8,
+  height = 0.621 * 8,
+  scale = 1.2
+)

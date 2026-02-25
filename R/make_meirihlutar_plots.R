@@ -47,7 +47,7 @@ colors <- tribble(
   )
 
 library(ggridges)
-fit_date <- clock::date_build(2024, 11, 18)
+fit_date <- clock::date_build(2024, 11, 29)
 
 caption <- str_c(
   "¹Nánast öruggt: >99%, Mjög líklegt: 80-99%, Líklegra en ekki: 60-80%, Helmingslíkur: 40-60%, Nokkrar líkur: 20-40%, Ólíklegt: <20%", "\n",
@@ -58,6 +58,10 @@ caption <- str_c(
 box::use(
   R / party_utils[party_tibble]
 )
+
+d <- read_parquet(
+  here("data", "2024-11-30", "seats_draws.parquet")
+) 
 
 draws <- d |> 
   count(.draw, flokkur, wt = seats, name = "seats") |> 
@@ -76,10 +80,13 @@ draws <- d |>
     names_from = bokstafur, values_from = seats
   )  |> 
   mutate(
+    BCFS = B + C + F + S,
     BCJS = B + C + J + S,
     BCPS = B + C + P + S,
     BCS = B + C + S,
+    BCJSP = B + C + J + S + P,
     BCSV = B + C + S + V,
+    BDFM = B + D + F + M,
     BDM = B + D + M,
     CD = C + D,
     CDM = C + D + M,
@@ -89,7 +96,6 @@ draws <- d |>
     CS = C + S,
     DFM = D + F + M,
     DFS = D + M + S,
-    DM = D + M,
     DS = D + S
   ) |> 
   select(-(L:C)) |> 
@@ -136,8 +142,8 @@ p <- plot_dat |>
     geom = "segment",
     x = 32,
     xend = 32,
-    y = 0.5,
-    yend = n_fl + 1.5,
+    y = 1,
+    yend = n_fl + 1,
     linewidth = 0.7,
     alpha = 0.4,
     lty = 2
@@ -152,6 +158,17 @@ p <- plot_dat |>
     ),
     col = "#fdfcfc",
     linewidth = 0.4
+  ) +
+  geom_segment(
+    data = ~ distinct(.x, flokkur_ordered),
+    aes(
+      y = as.integer(flokkur_ordered),
+      yend = as.integer(flokkur_ordered),
+      x = 18, 
+      xend = 44
+    ),
+    linewidth = 0.05,
+    alpha = 1
   ) +
   scale_fill_manual(
     values = c(
@@ -169,13 +186,13 @@ p <- plot_dat |>
     expand = expansion()
   ) +
   coord_cartesian(
-    xlim = c(14, 46),
-    ylim = c(0.5, n_fl + 1),
-    clip = "on"
+    xlim = c(18, 44),
+    ylim = c(1, n_fl + 1),
+    clip = "off"
   ) +
   theme(
     legend.position = "none",
-    axis.text.y = element_markdown(size = 22),
+    axis.text.y = element_markdown(size = 22, vjust = 0.2),
     plot.margin = margin(0, 0, 0, 0)
   ) +
   labs(
@@ -192,10 +209,10 @@ table_dat <- draws |>
     p_in = mean(seats >= 32),
     .by = flokkur
   )|> 
-  arrange(desc(mean)) |> 
+  arrange(desc(p_in)) |> 
   mutate(
     p_in = case_when(
-      p_in >= 0.992 ~ "Nánast öruggt",
+      p_in >= 0.99 ~ "Nánast öruggt",
       p_in >= 0.8 ~ "Mjög líklegt",
       p_in >= 0.6 ~ "Líklegri en ekki",
       p_in >= 0.4 ~ "Helmingslíkur",
@@ -238,7 +255,7 @@ table <- table_dat |>
     weight = "bold"
   ) |>
   opt_horizontal_padding(0) |>
-  opt_vertical_padding(1)
+  opt_vertical_padding(1.05)
 
 
 p_tab <- p + wrap_table(table, space = "fixed")
@@ -265,9 +282,10 @@ ggsave(
   plot = p_tab_sharing,
   filename = here("Figures", "Historical", "Sharing", glue("{fit_date}_majority_seats.png")),
   width = 8,
-  height = 0.621 * 8,
+  height = 0.7 * 8,
   scale = 1.4,
-  bg = "#fdfcfc"
+  bg = "#fdfcfc",
+  dpi = 320
 )
 
 
@@ -306,7 +324,7 @@ table <- table_dat |>
     weight = "bold"
   ) |>
   opt_horizontal_padding(0) |>
-  opt_vertical_padding(1.3)
+  opt_vertical_padding(1.35)
 
 
 
@@ -326,7 +344,7 @@ ggsave(
   plot = p_tab,
   filename = here("Figures", "Historical", "Background", glue("{fit_date}_majority_seats_background.png")),
   width = 8,
-  height = 0.621 * 8,
+  height = 0.7 * 8,
   scale = 1.4,
   bg = "#fdfcfc"
 )
@@ -335,7 +353,7 @@ ggsave(
   plot = p_tab,
   filename = here("Figures", "Historical", "Transparent", glue("{fit_date}_majority_seats_transparent.png")),
   width = 8,
-  height = 0.621 * 8,
+  height = 0.7 * 8,
   scale = 1.4,
   bg = "transparent"
 )

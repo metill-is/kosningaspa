@@ -7,7 +7,7 @@ manuscript:
   code-links:
     - text: Stan Model
       icon: file-code
-      href: Stan/base_model.stan
+      href: Stan/polling_and_fundamentals_kjordaemi.stan
 
 
 format:

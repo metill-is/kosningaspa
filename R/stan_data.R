@@ -76,8 +76,6 @@ prepare_polling_data <- function(polling_data, constituency_data, election_date)
     forcats[fct_relevel, as_factor]
   )
 
-  election_date <- date_build(2024, 11, 30)
-
   election_dates <- date_build(
     c(2016, 2017, 2021, 2024),
     c(10, 10, 09, 11),
@@ -125,10 +123,6 @@ prepare_polling_data <- function(polling_data, constituency_data, election_date)
 
   y_n <- polling_data |>
     select(date, fyrirtaeki, flokkur, n) |>
-    # anti_join(
-    #  constituency_data,
-    #  by = c("date", "fyrirtaeki")
-    # ) |>
     mutate(
       n = as.integer(n)
     ) |>
@@ -137,10 +131,6 @@ prepare_polling_data <- function(polling_data, constituency_data, election_date)
     as.matrix()
 
   house_n <- polling_data |>
-    # anti_join(
-    #   constituency_data,
-    #   by = c("date", "fyrirtaeki")
-    # ) |>
     pivot_wider(names_from = flokkur, values_from = n, values_fill = 0) |>
     mutate(
       house = as.numeric(fyrirtaeki)
@@ -148,10 +138,6 @@ prepare_polling_data <- function(polling_data, constituency_data, election_date)
     pull(house)
 
   date_n <- polling_data |>
-    # anti_join(
-    #   constituency_data,
-    #   by = c("date", "fyrirtaeki")
-    # ) |>
     pivot_wider(names_from = flokkur, values_from = n, values_fill = 0) |>
     mutate(
       date = as.numeric(factor(date, levels = levels(date_factor)))
@@ -170,10 +156,6 @@ prepare_polling_data <- function(polling_data, constituency_data, election_date)
     sum()
 
   n_parties <- polling_data |>
-    # anti_join(
-    #   constituency_data,
-    #   by = c("date", "fyrirtaeki")
-    # ) |>
     summarise(
       n_parties = sum(n != 0),
       .by = c(date, fyrirtaeki)
@@ -193,10 +175,6 @@ prepare_polling_data <- function(polling_data, constituency_data, election_date)
     )
 
   n_parties_n_rep <- polling_data |>
-    # anti_join(
-    #   constituency_data,
-    #   by = c("date", "fyrirtaeki")
-    # ) |>
     summarise(
       n_parties = sum(n != 0),
       .by = c(date, fyrirtaeki)
@@ -500,5 +478,98 @@ prepare_fundamentals_data <- function(fundamentals_data) {
     n_parties_f = n_parties_fundamentals,
     max_n_parties_f = max(n_parties_fundamentals),
     time_diff_f = time_diff_f
+  )
+}
+
+
+#' @export
+prepare_polling_watch_data <- function(polling_data) {
+  box::use(
+    dplyr[
+      distinct,
+      select,
+      mutate,
+      pull,
+      arrange,
+      filter,
+      summarise
+    ],
+    tidyr[pivot_wider],
+    forcats[as_factor, fct_drop]
+  )
+
+  polling_data <- polling_data |>
+    mutate(
+      fyrirtaeki = fct_drop(fyrirtaeki),
+      flokkur = fct_drop(flokkur)
+    )
+
+  dates <- sort(unique(polling_data$date))
+  date_factor <- factor(dates)
+
+  time_diff <- as.numeric(diff(dates))
+
+  D <- length(dates)
+  P <- length(unique(polling_data$flokkur))
+  H <- length(unique(polling_data$fyrirtaeki))
+  N <- polling_data |>
+    distinct(fyrirtaeki, date) |>
+    nrow()
+
+  y_n <- polling_data |>
+    select(date, fyrirtaeki, flokkur, n) |>
+    mutate(n = as.integer(n)) |>
+    pivot_wider(names_from = flokkur, values_from = n, values_fill = 0) |>
+    select(-date, -fyrirtaeki) |>
+    as.matrix()
+
+  house_n <- polling_data |>
+    pivot_wider(names_from = flokkur, values_from = n, values_fill = 0) |>
+    mutate(house = as.numeric(fyrirtaeki)) |>
+    pull(house)
+
+  date_n <- polling_data |>
+    pivot_wider(names_from = flokkur, values_from = n, values_fill = 0) |>
+    mutate(date = as.numeric(factor(date, levels = levels(date_factor)))) |>
+    pull(date)
+
+  n_parties_n <- polling_data |>
+    summarise(
+      n_parties = sum(n != 0),
+      .by = c(date, fyrirtaeki)
+    ) |>
+    arrange(date) |>
+    pull(n_parties)
+
+  n_election <- polling_data |>
+    filter(fyrirtaeki == "Kosning") |>
+    filter(date == max(date)) |>
+    pull(n) |>
+    sum()
+
+  party_names <- colnames(y_n)
+
+  date_mapping <- tibble::tibble(
+    index = seq_along(dates),
+    date = dates
+  )
+
+  stan_data <- list(
+    D = D,
+    P = P,
+    H = H,
+    N = N,
+    y_n = y_n,
+    house_n = house_n,
+    date_n = date_n,
+    n_parties_n = n_parties_n,
+    time_diff = time_diff,
+    n_pred = as.integer(n_election)
+  )
+
+  list(
+    stan_data = stan_data,
+    date_mapping = date_mapping,
+    party_names = party_names
   )
 }

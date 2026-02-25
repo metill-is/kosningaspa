@@ -11,6 +11,8 @@ library(clock)
 library(metill)
 theme_set(theme_metill())
 
+
+
 box::use(
   R / data[
     read_polling_data,
@@ -27,9 +29,10 @@ election_date <- date_build(2024, 11, 30)
 
 polling_data <- read_polling_data() |>
   filter(
-    date >= date_build(2016, 1, 1)
-  )
-
+    date >= date_build(2016, 1, 1),
+    (fyrirtaeki != "Gallup") | (date <= clock::date_build(2024, 11, 10))
+  ) |> 
+  select(-lokadagur, -p)
 
 
 unique(polling_data$flokkur)
@@ -47,8 +50,9 @@ fundamentals_data <- fundamentals_data |>
 # update_constituency_data()
 constituency_data <- read_constituency_data() |>
   filter(
-    date >= date_build(2021, 9, 25)
-    # date < date_build(2024, 10, 1)
+    date >= date_build(2021, 9, 25),
+    date != date_build(2024, 11, 15),
+    (fyrirtaeki != "Gallup") | (date <= clock::date_build(2024, 11, 10))
   ) |>
   drop_na() |>
   mutate(
@@ -92,14 +96,33 @@ N_obs_k <- nrow(constituency_weights)
 obs_k <- rep(1:N_obs_k, each = ncol(constituency_weights))
 
 
+n_pred_thjodskra <- tibble(
+  kjordaemi = c("Norðvestur", "Norðaustur", "Suður", "Suðvestur", "Reykjavík Suður", "Reykjavík Norður"),
+  kjorsokn = c(82.0, 81.0,78.8, 81.2, 79.2, 78.8) / 100,
+  kjorskra = c(22348, 31039, 40994, 79052, 47503, 47486)
+) |> 
+  slice(5, 6, 4, 1, 2, 3) |> 
+  mutate(
+    n = kjorskra * kjorsokn,
+    p = n / sum(n),
+    n_2021 = stan_data$n_pred_k,
+    p_2021 = n_2021 / sum(n_2021)
+  ) |> 
+  pull(n) |> 
+  as.integer()
+
+stan_data$n_pred_k <- n_pred_thjodskra
+
 stan_data$constituency_weights <- constituency_weights
-stan_data$constituency_weights_pred <- constituency_weights[3, ] |> as.numeric()
+stan_data$constituency_weights_pred <- constituency_weights[1, ] |> as.numeric()
 stan_data$desired_weight <- 0.22
 stan_data$weight_time <- 180
 stan_data$N_obs_k <- N_obs_k
 stan_data$obs_k <- obs_k
 
 str(stan_data)
+
+
 
 model <- cmdstan_model(
   here("Stan", "polling_and_fundamentals_kjordaemi.stan")
@@ -111,9 +134,40 @@ fit <- model$sample(
   parallel_chains = 4,
   refresh = 100,
   init = 0,
-  iter_warmup = 500,
-  iter_sampling = 500
+  iter_warmup = 200,
+  iter_sampling = 200
 )
+
+
+
+
+mu_pred <- fit$summary("mu_pred") |> 
+  mutate(
+    flokkur = levels(polling_data$flokkur)[-1]
+  ) |> 
+  select(flokkur, mean) 
+
+bind_rows(
+  tibble(
+    flokkur = "Annað",
+    mean = -sum(mu_pred$mean)
+  ),
+  mu_pred
+) |> 
+  mutate(
+    p = exp(mean) / (sum(exp(mean)))
+  ) |> 
+  inner_join(
+    polling_data |> 
+      filter(
+        fyrirtaeki == "Kosning",
+        year(date) == 2021
+      ) |> 
+      mutate(p = n / sum(n)) |> 
+      select(flokkur, n_2021 = n, p_2021 = p)
+  ) |> 
+  arrange(desc(p))
+
 
 
 #### Polling Parameters ####
@@ -155,38 +209,6 @@ deltas |>
   geom_linerange(aes(xmin = q5, xmax = q95)) +
   facet_wrap(
     vars(kjordaemi)
-  )
-
-fit$summary("delta_raw") |>
-  mutate(
-    p = str_match(variable, "delta_raw\\[(.*),.*\\]")[, 2] |> parse_number(),
-    k = str_match(variable, "delta_raw\\[.*,(.*)\\]")[, 2] |> parse_number(),
-    flokkur = levels(constituency_data$flokkur)[p + 1],
-    kjordaemi = levels(constituency_data$kjordaemi)[k]
-  ) |>
-  select(flokkur, kjordaemi, median, q5, q95) |>
-  pivot_longer(c(median, q5, q95)) |>
-  pivot_wider(
-    names_from = kjordaemi,
-    values_from = value
-  ) |>
-  mutate(
-    Suður = -rowSums(across(-c(flokkur, name)))
-  ) |>
-  pivot_longer(
-    c(-flokkur, -name),
-    names_to = "kjordaemi",
-  ) |>
-  pivot_wider(
-    names_from = name,
-    values_from = value
-  ) |>
-  ggplot(aes(median, kjordaemi)) +
-  geom_vline(xintercept = 0, lty = 2) +
-  geom_point() +
-  geom_linerange(aes(xmin = q5, xmax = q95)) +
-  facet_wrap(
-    vars(flokkur)
   )
 
 
@@ -253,6 +275,9 @@ fit$summary("Omega") |>
     scales = "free_y"
   )
 
+
+fit$summary("mu_gamma_pred")
+
 dates <- c(
   unique(c(polling_data$date, constituency_data$date)),
   seq.Date(
@@ -260,7 +285,9 @@ dates <- c(
     election_date,
     by = "day"
   )
-)
+) |> 
+  unique()
+
 
 d_yrep_national <- fit$summary("y_rep_national")
 
@@ -284,7 +311,7 @@ d_yrep_national |>
     by = join_by(dags, flokkur),
     relationship = "many-to-many"
   ) |>
-  filter(dags >= clock::date_build(2024, 8)) |>
+  filter(dags >= clock::date_build(2024, 10)) |>
   ggplot(aes(dags, mean)) +
   geom_ribbon(
     aes(ymin = q5, ymax = q95, fill = flokkur),
@@ -316,10 +343,10 @@ d_yrep_national |>
     plot_col = mean,
     .before = mean
   ) |>
-  mutate_at(
-    vars(mean, q5, q95),
-    ~ round(.x * 200) / 200
-  ) |>
+  #mutate_at(
+  #  vars(mean, q5, q95),
+  #  ~ round(.x * 200) / 200
+  #) |>
   gt() |>
   cols_label(
     flokkur = "Flokkur",
@@ -382,10 +409,19 @@ y_rep_draws <- fit$draws("y_rep_national") |>
 
 
 
+
 write_parquet(y_rep_draws, here("data", as.character(today()), "y_rep_draws_constituency.parquet"))
 
 
+y_rep_draws |> 
+  filter(dags == max(dags)) |> 
+  summarise(
+    p_yfir5 = mean(value >= 0.05),
+    .by = flokkur
+  )
+
 #### Constituency Y-Rep Draws ####
+
 
 d <- fit$summary("y_rep_k") |>
   mutate(
