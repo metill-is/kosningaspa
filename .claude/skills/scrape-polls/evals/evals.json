@@ -1,0 +1,26 @@
+{
+  "skill_name": "scrape-polls",
+  "evals": [
+    {
+      "id": 0,
+      "name": "fill-real-gap-april-2026",
+      "prompt": "It's April 27th 2026. The post-election polls in ~/kosningaspa/R/scrape_polls.R last entry is 24 Feb 2026 Maskína. Capacent Gallup publishes Þjóðarpúls roughly the 15th of each month so there should be three new Gallup polls (Feb / Mar / Apr) and probably one or two Maskína polls. Find them, verify against the source articles, and add them to the tribble in scrape_polls.R. Then regenerate data/post_election_polls.csv. Don't refit the model and don't touch the metill-platform — those are my next steps.",
+      "expected_output": "tribble in R/scrape_polls.R has new verified rows; data/post_election_polls.csv regenerated; clean hand-off summary",
+      "files": []
+    },
+    {
+      "id": 1,
+      "name": "no-new-polls",
+      "prompt": "Hey can you check if there are any new polls to add? I want to make sure the Fylgisvakt is showing fresh data.",
+      "expected_output": "skill discovers nothing new (assuming gap was filled in eval 0) and reports cleanly without running the scraper or modifying any files",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "single-new-gallup",
+      "prompt": "I think Þjóðarpúls dropped this morning — RÚV usually publishes around 16:00 on the 15th. Add it.",
+      "expected_output": "skill scopes the search narrowly (latest Gallup only), verifies one article, adds one row to tribble; doesn't churn through Maskína side",
+      "files": []
+    }
+  ]
+}

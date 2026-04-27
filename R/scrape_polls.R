@@ -3,6 +3,8 @@ library(rvest)
 library(here)
 library(clock)
 
+Sys.setlocale("LC_ALL", "is_IS.UTF-8")
+
 box::use(
   R / party_utils[party_tibble]
 )
@@ -53,12 +55,16 @@ get_hardcoded_polls <- function() {
     "2025-11-16",  "Gallup",    10332,     31.1,  16.5,  5.6,   12.8,  19.5,  5.2,   3.3,   3.2,   2.3,
     "2025-12-15",  "Gallup",    10000,     30.9,  16.8,  5.2,   10.9,  21.7,  5.5,   3.4,   3.6,   1.6,
     "2026-01-15",  "Gallup",    10000,     31.2,  17.1,  5.4,   11.3,  20.8,  5.3,   3.4,   3.1,   1.9,
+    "2026-02-15",  "Gallup",    9958,      28.5,  18.1,  6.6,   10.9,  20.3,  5.8,   2.7,   4.2,   2.5,
+    "2026-03-16",  "Gallup",    10000,     30.0,  19.5,  4.7,   10.0,  20.6,  5.8,   2.8,   4.3,   1.9,
     # Maskína polls (visir.is) — approximate values noted in comments
     "2024-12-12",  "Maskína",   2803,      23.0,  16.0,  8.0,   16.0,  9.0,   11.0,  5.0,   4.0,   6.0,
     "2025-10-09",  "Maskína",   1765,      29.0,  16.0,  6.0,   16.0,  14.0,  6.0,   5.0,   4.0,   3.0,
     "2025-11-10",  "Maskína",   1500,      29.0,  15.0,  7.0,   13.0,  17.0,  5.6,   5.0,   5.0,   3.0,
     "2026-01-11",  "Maskína",   886,       27.0,  13.5,  7.1,   14.1,  22.2,  4.3,   4.1,   3.7,   4.1,
-    "2026-02-24",  "Maskína",   1993,      27.2,  16.2,  7.0,   13.4,  19.0,  4.8,   5.2,   4.1,   3.1
+    "2026-02-24",  "Maskína",   1993,      27.2,  16.2,  7.0,   13.4,  19.0,  4.8,   5.2,   4.1,   3.1,
+    "2026-03-08",  "Maskína",   2617,      25.5,  16.1,  7.1,   14.0,  18.4,  5.8,   5.0,   4.4,   3.5,
+    "2026-04-05",  "Maskína",   1786,      27.7,  18.1,  7.2,   12.8,  16.4,  5.8,   4.7,   4.3,   3.0
   )
 
   parties <- party_code_to_name()
@@ -111,64 +117,67 @@ get_gallup_article_urls <- function() {
 }
 
 parse_gallup_article <- function(url) {
-  tryCatch({
-    page <- read_html(url)
+  tryCatch(
+    {
+      page <- read_html(url)
 
-    text <- page |>
-      html_elements("article, .article-body, .news-single__body, main") |>
-      html_text2() |>
-      paste(collapse = " ")
+      text <- page |>
+        html_elements("article, .article-body, .news-single__body, main") |>
+        html_text2() |>
+        paste(collapse = " ")
 
-    if (nchar(text) < 200) {
-      text <- page |> html_text2()
-    }
+      if (nchar(text) < 200) {
+        text <- page |> html_text2()
+      }
 
-    results <- tibble(bokstafur = character(), pct = numeric())
+      results <- tibble(bokstafur = character(), pct = numeric())
 
-    for (code in names(party_stems)) {
-      stem <- party_stems[code]
-      # Party name followed by percentage within ~150 chars
-      pattern <- paste0("(?i)(", stem, ").{0,150}?(\\d+[,.]\\d+)\\s*%")
-      m <- str_match(text, pattern)
+      for (code in names(party_stems)) {
+        stem <- party_stems[code]
+        # Party name followed by percentage within ~150 chars
+        pattern <- paste0("(?i)(", stem, ").{0,150}?(\\d+[,.]\\d+)\\s*%")
+        m <- str_match(text, pattern)
 
-      if (!is.na(m[1, 3])) {
-        pct <- str_replace(m[1, 3], ",", ".") |> as.numeric()
-        if (pct > 0 & pct < 60) {
-          results <- bind_rows(results, tibble(bokstafur = code, pct = pct))
+        if (!is.na(m[1, 3])) {
+          pct <- str_replace(m[1, 3], ",", ".") |> as.numeric()
+          if (pct > 0 & pct < 60) {
+            results <- bind_rows(results, tibble(bokstafur = code, pct = pct))
+          }
         }
       }
-    }
 
-    # Extract sample size
-    n_match <- str_match(
-      text,
-      "(?i)(?:fjöldi\\s+svarenda|svarendur|úrtak)[^\\d]{0,50}?(\\d[\\d\\.]*\\d)"
-    )
-    n_total <- if (!is.na(n_match[1, 2])) {
-      str_remove_all(n_match[1, 2], "\\.") |> as.numeric()
-    } else {
-      NA_real_
-    }
-
-    # Extract collection dates
-    date_match <- str_match(
-      text,
-      "(?i)(\\d+)\\.\\s*(\\w+)\\s*(\\d{4})\\s*(?:til|-)\\s*(\\d+)\\.\\s*(\\w+)\\s*(\\d{4})"
-    )
-
-    if (nrow(results) >= 7) {
-      list(
-        results = results,
-        n_total = n_total,
-        url = url
+      # Extract sample size
+      n_match <- str_match(
+        text,
+        "(?i)(?:fjöldi\\s+svarenda|svarendur|úrtak)[^\\d]{0,50}?(\\d[\\d\\.]*\\d)"
       )
-    } else {
+      n_total <- if (!is.na(n_match[1, 2])) {
+        str_remove_all(n_match[1, 2], "\\.") |> as.numeric()
+      } else {
+        NA_real_
+      }
+
+      # Extract collection dates
+      date_match <- str_match(
+        text,
+        "(?i)(\\d+)\\.\\s*(\\w+)\\s*(\\d{4})\\s*(?:til|-)\\s*(\\d+)\\.\\s*(\\w+)\\s*(\\d{4})"
+      )
+
+      if (nrow(results) >= 7) {
+        list(
+          results = results,
+          n_total = n_total,
+          url = url
+        )
+      } else {
+        NULL
+      }
+    },
+    error = function(e) {
+      message("Error fetching ", url, ": ", e$message)
       NULL
     }
-  }, error = function(e) {
-    message("Error fetching ", url, ": ", e$message)
-    NULL
-  })
+  )
 }
 
 scrape_gallup <- function(existing_dates = NULL) {
@@ -263,62 +272,65 @@ get_maskina_article_urls <- function() {
 }
 
 parse_maskina_article <- function(url) {
-  tryCatch({
-    page <- read_html(url)
+  tryCatch(
+    {
+      page <- read_html(url)
 
-    text <- page |>
-      html_elements("article, .article-body, main, .article__body") |>
-      html_text2() |>
-      paste(collapse = " ")
+      text <- page |>
+        html_elements("article, .article-body, main, .article__body") |>
+        html_text2() |>
+        paste(collapse = " ")
 
-    if (nchar(text) < 200) {
-      text <- page |> html_text2()
-    }
+      if (nchar(text) < 200) {
+        text <- page |> html_text2()
+      }
 
-    # Check this is actually a Maskína national poll (not Reykjavik municipal)
-    if (str_detect(text, "(?i)borgarstj|reykjav.k.rborg|sveitarstj")) {
-      return(NULL)
-    }
+      # Check this is actually a Maskína national poll (not Reykjavik municipal)
+      if (str_detect(text, "(?i)borgarstj|reykjav.k.rborg|sveitarstj")) {
+        return(NULL)
+      }
 
-    results <- tibble(bokstafur = character(), pct = numeric())
+      results <- tibble(bokstafur = character(), pct = numeric())
 
-    for (code in names(party_stems)) {
-      stem <- party_stems[code]
-      pattern <- paste0("(?i)(", stem, ").{0,150}?(\\d+[,.]\\d+)\\s*%")
-      m <- str_match(text, pattern)
+      for (code in names(party_stems)) {
+        stem <- party_stems[code]
+        pattern <- paste0("(?i)(", stem, ").{0,150}?(\\d+[,.]\\d+)\\s*%")
+        m <- str_match(text, pattern)
 
-      if (!is.na(m[1, 3])) {
-        pct <- str_replace(m[1, 3], ",", ".") |> as.numeric()
-        if (pct > 0 & pct < 60) {
-          results <- bind_rows(results, tibble(bokstafur = code, pct = pct))
+        if (!is.na(m[1, 3])) {
+          pct <- str_replace(m[1, 3], ",", ".") |> as.numeric()
+          if (pct > 0 & pct < 60) {
+            results <- bind_rows(results, tibble(bokstafur = code, pct = pct))
+          }
         }
       }
-    }
 
-    # Extract sample size
-    n_match <- str_match(
-      text,
-      "(?i)(?:fjöldi\\s+svarenda|svarendur|svöruðu|þátttakend)[^\\d]{0,50}?(\\d[\\d\\.]*\\d)"
-    )
-    n_total <- if (!is.na(n_match[1, 2])) {
-      str_remove_all(n_match[1, 2], "\\.") |> as.numeric()
-    } else {
-      NA_real_
-    }
-
-    if (nrow(results) >= 5) {
-      list(
-        results = results,
-        n_total = n_total,
-        url = url
+      # Extract sample size
+      n_match <- str_match(
+        text,
+        "(?i)(?:fjöldi\\s+svarenda|svarendur|svöruðu|þátttakend)[^\\d]{0,50}?(\\d[\\d\\.]*\\d)"
       )
-    } else {
+      n_total <- if (!is.na(n_match[1, 2])) {
+        str_remove_all(n_match[1, 2], "\\.") |> as.numeric()
+      } else {
+        NA_real_
+      }
+
+      if (nrow(results) >= 5) {
+        list(
+          results = results,
+          n_total = n_total,
+          url = url
+        )
+      } else {
+        NULL
+      }
+    },
+    error = function(e) {
+      message("Error fetching ", url, ": ", e$message)
       NULL
     }
-  }, error = function(e) {
-    message("Error fetching ", url, ": ", e$message)
-    NULL
-  })
+  )
 }
 
 scrape_maskina <- function(existing_dates = NULL) {
@@ -363,8 +375,10 @@ scrape_maskina <- function(existing_dates = NULL) {
 
       all_polls <- bind_rows(all_polls, poll)
       message("    -> Found ", nrow(parsed$results), " parties, n=", parsed$n_total)
-      message("    -> Percentages: ",
-              paste(parsed$results$bokstafur, "=", parsed$results$pct, collapse = ", "))
+      message(
+        "    -> Percentages: ",
+        paste(parsed$results$bokstafur, "=", parsed$results$pct, collapse = ", ")
+      )
     } else {
       message("    -> Could not parse / not a national poll")
     }

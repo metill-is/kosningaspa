@@ -1,0 +1,22 @@
+[
+  {"query": "Gallup just published the new Þjóðarpúls — RÚV usually drops it around the 16th. Can you add it to the data set and regenerate the CSV before I refit the model?", "should_trigger": true},
+  {"query": "Hey is the Fylgisvakt page up to date? It's been a few weeks since I checked and Samfylkingin's number on the site looks suspiciously old", "should_trigger": true},
+  {"query": "Saw on Vísir that Maskína has a new national poll out today (the one with Samfylking and Sjálfstæðisflokk both moving). Want to fold it in before I refit?", "should_trigger": true},
+  {"query": "Mánaðarleg uppfærsla á fylginu plís — það er kominn 17. og Gallup birti í morgun", "should_trigger": true},
+  {"query": "any new polls since the last refresh? we're due", "should_trigger": true},
+  {"query": "Þjóðarpúlsinn er kominn — visir.is/g/2026XX og ruv.is/.../2026-04-15-..., baéði stór og afgerandi breyting fyrir Miðflokk", "should_trigger": true},
+  {"query": "I want to fill the polling gap between Feb and now — last entry in scrape_polls.R is 24 Feb so there should be 2-3 Gallup and 1-2 Maskína we're missing", "should_trigger": true},
+  {"query": "Could you check ruv.is for any new Þjóðarpúls articles I might have missed and add them if there are some? The polling-watch model is starting to look stale on the Fylgisvakt", "should_trigger": true},
+  {"query": "the metill.is fylgisvakt timeseries cuts off in February — needs the latest polls in", "should_trigger": true},
+  {"query": "Refit the polling-watch Stan model on whatever data is currently in data/post_election_polls.csv — I'm not adding new polls, just want to rerun the fit because I changed the prior on sigma_phi", "should_trigger": false},
+  {"query": "Run the platform regenerate script in metill-platform after I commit the new polls — should be `uv run python scripts/regenerate_kosningaspa.py` from the repo root, right?", "should_trigger": false},
+  {"query": "There's a new MMR poll out about the EU referendum question — 54% vs 38%, n=1042. Add it to the ESBvaktin claim DB", "should_trigger": false},
+  {"query": "What did the last Maskína poll say about Samfylkingin's support among 18-29 year-olds? Just want the number, not a recompute", "should_trigger": false},
+  {"query": "Add a constituency-level interaction term to the Stan model for the next refit — I want the inter-election polling watch to also surface regional drift", "should_trigger": false},
+  {"query": "Update the althingi-content pipeline with this week's parliamentary debates — that's the Þingfréttir refresh, not the Fylgisvakt one", "should_trigger": false},
+  {"query": "I want a comparison plot of Capacent Gallup's accuracy in the Nov 2024 election versus Maskína's — using the historical pre-election polling data, not adding anything new", "should_trigger": false},
+  {"query": "Push the kosningaspa repo to GitHub and open a PR with the v2 skill changes I made today", "should_trigger": false},
+  {"query": "What's the trend for Miðflokkurinn since the 2024 election? Just summarise the existing post_election_polls.csv data", "should_trigger": false},
+  {"query": "Update the pre-election polling data in the Google Sheet with this week's Gallup before next month's refit run — note this is the upstream sheet, not the post-election tribble", "should_trigger": false},
+  {"query": "Generate a forest plot of the latest fylgisvakt snapshot in PNG format using the existing draws — no new data, just a render of what's already there", "should_trigger": false}
+]
