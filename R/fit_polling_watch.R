@@ -54,8 +54,10 @@ polling_data <- bind_rows(pre_election, post_election) |>
   arrange(date, fyrirtaeki, flokkur)
 
 unique(polling_data$flokkur)
-cat("Date range:", as.character(min(polling_data$date)),
-    "to", as.character(max(polling_data$date)), "\n")
+cat(
+  "Date range:", as.character(min(polling_data$date)),
+  "to", as.character(max(polling_data$date)), "\n"
+)
 cat("Polls:", polling_data |> distinct(date, fyrirtaeki) |> nrow(), "\n")
 
 prepared <- prepare_polling_watch_data(polling_data)
@@ -76,7 +78,7 @@ fit <- model$sample(
   refresh = 100,
   init = 0,
   iter_warmup = 500,
-  iter_sampling = 500
+  iter_sampling = 1000
 )
 
 fit$summary("sigma")
