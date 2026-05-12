@@ -38,10 +38,11 @@ If you write only to the CSV, your changes vanish on the next run. Always edit t
 
 ## Where the data actually lives
 
-Two reliable sources, in order of preference:
+Three reliable sources. Use whichever is freshest:
 
-1. **RÚV's canonical poll list at `https://www.ruv.is/kosningar/kannanir-a-landsvisu`.** The page embeds a `window.pollsArray` JavaScript variable containing every poll RÚV has on file, with per-party `ratio` to 6 decimal places, the firm name, the canonical Icelandic title (e.g. "Þjóðarpúls Gallup mars 2026", "Maskína 23. mars 2026"), and a publication date. **This is the cleanest source.** Read it via `mcp__Claude_in_Chrome__javascript_tool` running `JSON.stringify(window.pollsArray)`.
-2. **The original article on RÚV (`ruv.is/frettir/innlent/...`) or Vísir (`visir.is/g/...`)** — used to verify the field period and the sample size, which the JSON blob doesn't carry.
+1. **RÚV's canonical poll list at `https://www.ruv.is/kosningar/kannanir-a-landsvisu`.** The page embeds a `window.pollsArray` JavaScript variable containing every poll RÚV has on file, with per-party `ratio` to 6 decimal places, the firm name, the canonical Icelandic title (e.g. "Þjóðarpúls Gallup mars 2026", "Maskína 23. mars 2026"), and a publication date. **The cleanest source when it's up to date.** Read it via `mcp__Claude_in_Chrome__javascript_tool` running `JSON.stringify(window.pollsArray)`.
+2. **Gallup's own site at `https://www.gallup.is/frettir/` and the Þjóðarpúls PDF.** Gallup typically publishes the Þjóðarpúls on gallup.is several days before RÚV picks it up — in May 2026 the lag was ≥ 8 days. The news listing at `gallup.is/frettir/` shows the latest articles; each Þjóðarpúls article links through to a PDF viewer page (`gallup.is/<slug>/`) whose iframe `src` points at the actual PDF (`gallup.is/documents/<id>/Puls_MMYY_Fylgi_flokka.pdf`, where `MMYY` is the publication month, e.g. `0526` = May 2026). **The PDF is authoritative for methodology** — it states the field period (e.g. "1. - 29. apríl 2026"), heildarúrtak, and response rate that the RÚV blob doesn't carry. Fetch it with `curl` and read it directly. There's also an internal Looker dashboard at `gallup.is/data/geytenbr/sso/` showing the time series, but its raw CSV download is gated and the embedded iframe is cross-origin; the news article + PDF path is more reliable.
+3. **The original article on RÚV (`ruv.is/frettir/innlent/...`) or Vísir (`visir.is/g/...`)** — used to verify Maskína's field period and svarendur count (Maskína has no equivalent of gallup.is). For Gallup, the PDF (source #2) is better than the RÚV article for methodology.
 
 The R scraper (`scrape_polls.R::scrape_gallup` / `scrape_maskina`) historically did article-body regex against the tag pages on RÚV and Vísir. **Both tag pages now lazy-load via JavaScript and `rvest` sees nothing**, so the scraper silently returns empty results. Don't rely on it for discovery; treat it as a deprecated fallback.
 
@@ -59,18 +60,17 @@ That's the lower bound for what to look for.
 
 ### 2. Pull the canonical poll list from RÚV
 
-In Chrome, navigate to `https://www.ruv.is/kosningar/kannanir-a-landsvisu`. The page hydrates `window.pollsArray` after a brief delay (~2 seconds), so wait before reading or you'll get an empty array. Bundle the wait + read into one round-trip:
+In Chrome, navigate to `https://www.ruv.is/kosningar/kannanir-a-landsvisu`. The page hydrates `window.pollsArray` after a brief delay (~2 seconds), so wait before reading or you'll get an empty array. Note that top-level `await` is not allowed in the eval context — use a promise:
 
 ```javascript
-await new Promise(r => setTimeout(r, 2500));
-return JSON.stringify(window.pollsArray);
+new Promise(r => setTimeout(() => r(JSON.stringify(window.pollsArray)), 2500))
 ```
 
 Use `mcp__Claude_in_Chrome__javascript_tool`. This returns a clean JSON list of every poll RÚV has on file (~50 entries), each with `identifier`, `text`, `shorttext`, `type`, `date`, `ispoll`, `calculator`, plus per-party `ratio` to 6 decimal places.
 
 Filter to entries dated *after* the last tribble entry per firm, and where the firm is **Gallup** or **Maskína** (skip Prósent and Félagsvísindastofnun).
 
-If nothing's newer than the existing tribble, stop and report "no new polls". Don't go hunting through articles for nothing.
+If nothing's newer than the existing tribble in `pollsArray`, **don't immediately report "no new polls"** — RÚV can lag Gallup's own publication. Also check `gallup.is/frettir/` for a Þjóðarpúls article newer than the last tribble entry (the news listing is server-rendered, so `get_page_text` works); if one exists, follow its "Skoða PDF" link to find the PDF URL embedded in an iframe, then fetch and read the PDF for the values and methodology. Skip the gallup.is check if the user has confirmed nothing's been published.
 
 ### 3. Verify each candidate against its source article
 
@@ -154,6 +154,8 @@ Don't run the hand-off commands. Stan fits take minutes; the user picks the mome
 - **Cross-poll articles.** When a Gallup article references the previous month's Maskína numbers (or vice versa), the article's "headline" percentages and the "comparison" percentages may both appear. The JSON blob isolates each poll cleanly, but if you fall back to article-body parsing, watch for the trap.
 - **N+1 month publication.** "Þjóðarpúls Gallup febrúar 2026" is published in early March and reports a 2 Feb – 1 Mar field period. The existing tribble uses *previous-month-15th* as a stand-in date (e.g., the Jan reading is `2026-01-15`). Match that pattern: midpoint of February → `2026-02-15`, not `2026-03-03`.
 - **Article structure changes.** RÚV and Vísir restructure their CMS occasionally. If the JSON blob at `kannanir-a-landsvisu` ever stops being a `window` variable (or gets renamed), check the page's `<script>` blocks for any inline JSON before going to article-body parsing.
+- **RÚV lags Gallup's own publication.** Gallup publishes the Þjóðarpúls PDF on gallup.is on the day of release; RÚV's pollsArray and tag page can be a week or more behind. If a user mentions a Gallup poll that isn't in `pollsArray`, check `gallup.is/frettir/` before concluding the user is mistaken.
+- **Gallup PDF URL pattern.** `gallup.is/documents/<id>/Puls_MMYY_Fylgi_flokka.pdf` where `MMYY` is the *publication* month (May 2026 → `0526`), reporting the previous month's field period. The `<id>` is opaque (e.g. `2237` for May 2026) — find it by reading the iframe `src` on the PDF viewer page, don't try to guess it.
 - **Polls before the last election.** Don't add anything dated before 2024-11-30. Pre-election polls live in a Google Sheet and feed a different model.
 - **The deprecated R scraper.** `Rscript -e 'source("R/scrape_polls.R"); update_post_election_polls(scrape = TRUE)'` will report "No new Gallup articles found" and may silently drop Maskína nationals — that's a known rvest-vs-JS-lazy-load issue, not a real "no polls". Trust the `pollsArray` JSON, not the scraper.
 
