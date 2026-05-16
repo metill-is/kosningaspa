@@ -1,0 +1,55 @@
+election_date,party_letter,party_name,votes,pct,seats,total_seats,total_valid_votes
+2002-05-25,R,Reykjavíkurlistinn,35938,52.57,8,15,68364
+2002-05-25,D,Sjálfstæðisflokkurinn,27516,40.25,6,15,68364
+2002-05-25,F,Frjálslyndi flokkurinn og óháðir,4141,6.06,1,15,68364
+2002-05-25,A,Höfuðborgarsamtökin,397,0.58,0,15,68364
+2002-05-25,Æ,Vinstri hægri snú,246,0.36,0,15,68364
+2002-05-25,H,Húmanistaflokkurinn,126,0.18,0,15,68364
+2006-05-27,D,Sjálfstæðisflokkurinn,27823,42.87,7,15,64895
+2006-05-27,S,Samfylkingin,17750,27.35,4,15,64895
+2006-05-27,V,Vinstri græn,8739,13.47,2,15,64895
+2006-05-27,F,Frjálslyndi flokkurinn og óháðir,6527,10.06,1,15,64895
+2006-05-27,B,Framsóknarflokkurinn,4056,6.25,1,15,64895
+2010-05-29,Æ,Besti flokkurinn,20666,34.72,6,15,59523
+2010-05-29,D,Sjálfstæðisflokkurinn,20006,33.61,5,15,59523
+2010-05-29,S,Samfylkingin,11344,19.06,3,15,59523
+2010-05-29,V,Vinstri græn,4255,7.15,1,15,59523
+2010-05-29,B,Framsóknarflokkurinn,1629,2.74,0,15,59523
+2010-05-29,E,Reykjavíkurframboðið,681,1.14,0,15,59523
+2010-05-29,H,Listi um heiðarleika og almannahagsmuni,668,1.12,0,15,59523
+2010-05-29,F,Frjálslyndi flokkurinn og óháðir,274,0.46,0,15,59523
+2014-05-31,S,Samfylkingin,17426,31.88,5,15,54655
+2014-05-31,D,Sjálfstæðisflokkurinn,14041,25.69,4,15,54655
+2014-05-31,Æ,Björt framtíð,8539,15.62,2,15,54655
+2014-05-31,B,Framsókn og flugvallarvinir,5865,10.73,2,15,54655
+2014-05-31,V,Vinstri græn,4553,8.33,1,15,54655
+2014-05-31,Þ,Píratar,3238,5.92,1,15,54655
+2014-05-31,T,Dögun,774,1.42,0,15,54655
+2014-05-31,R,Alþýðufylkingin,219,0.40,0,15,54655
+2018-05-26,D,Sjálfstæðisflokkurinn,18146,30.77,8,23,58966
+2018-05-26,S,Samfylkingin,15260,25.88,7,23,58966
+2018-05-26,C,Viðreisn,4812,8.16,2,23,58966
+2018-05-26,P,Píratar,4556,7.73,2,23,58966
+2018-05-26,J,Sósíalistaflokkurinn,3758,6.37,1,23,58966
+2018-05-26,M,Miðflokkurinn,3615,6.13,1,23,58966
+2018-05-26,V,Vinstri græn,2700,4.58,1,23,58966
+2018-05-26,F,Flokkur fólksins,2509,4.25,1,23,58966
+2018-05-26,B,Framsóknarflokkurinn,1870,3.17,0,23,58966
+2018-05-26,K,Kvennahreyfingin,528,0.90,0,23,58966
+2018-05-26,H,Höfuðborgarlistinn,365,0.62,0,23,58966
+2018-05-26,O,Borgin okkar Reykjavík,228,0.39,0,23,58966
+2018-05-26,Y,Karlalistinn,203,0.34,0,23,58966
+2018-05-26,R,Alþýðufylkingin,149,0.25,0,23,58966
+2018-05-26,Þ,Frelsisflokkurinn,142,0.24,0,23,58966
+2018-05-26,E,Íslenska þjóðfylkingin,125,0.21,0,23,58966
+2022-05-14,D,Sjálfstæðisflokkurinn,14686,24.50,6,23,59949
+2022-05-14,S,Samfylkingin,12164,20.29,5,23,59949
+2022-05-14,B,Framsóknarflokkurinn,11227,18.73,4,23,59949
+2022-05-14,P,Píratar,6970,11.63,3,23,59949
+2022-05-14,J,Sósíalistaflokkurinn,4618,7.70,2,23,59949
+2022-05-14,C,Viðreisn,3111,5.19,1,23,59949
+2022-05-14,F,Flokkur fólksins,2701,4.51,1,23,59949
+2022-05-14,V,Vinstri græn,2396,4.00,1,23,59949
+2022-05-14,M,Miðflokkurinn,1467,2.45,0,23,59949
+2022-05-14,Y,Ábyrg framtíð,475,0.79,0,23,59949
+2022-05-14,E,"Reykjavík, besta borgin",134,0.22,0,23,59949

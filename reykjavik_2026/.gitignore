@@ -1,0 +1,19 @@
+/.quarto/
+**/*.quarto_ipynb
+
+# Cmdstanr outputs and compiled binaries
+fit_state.rds
+fit_run.log
+model
+test_mlogit
+*.exe
+
+# Regenerated plots (PNG outputs from plots.R)
+figures/
+
+# Platform export outputs
+exports/
+
+# R session artifacts
+.Rhistory
+.RData
