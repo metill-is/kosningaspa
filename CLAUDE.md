@@ -8,13 +8,32 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Authors: Brynjólfur Gauti Guðrúnar Jónsson, Rafael Daniel Vias, Hafsteinn Einarsson, Agnar Freyr Helgason.
 
+## Repository Layout
+
+The repo is code-first. Modelling code lives at the top level; written outputs are nested under `writing/`, each as a self-contained Quarto project.
+
+```
+.
+├── R/              # model-fitting and analysis modules (box::use imports)
+├── Stan/           # Bayesian model source (.stan)
+├── data/           # date-stamped parquet snapshots (gitignored)
+├── data-raw/       # raw CSV from Google Sheets (gitignored)
+├── Figures/        # generated plots, shared across writing outputs
+├── results/        # local model output cache (gitignored)
+└── writing/
+    └── manuscript/ # methodological manuscript (Quarto `manuscript` type)
+```
+
+To add a new writing output (book chapter, conference paper, etc.), create `writing/<name>/` with its own `_quarto.yml`. Each output renders independently and can target different formats (docx, pdf, html). Reference shared assets with `../../` paths (e.g. `bibliography: ../manuscript/references.bib` or `../../Figures/foo.png`).
+
 ## Key Commands
 
-### Render the Quarto manuscript
+### Render a writing output
+Each `writing/<name>/` is its own Quarto project. Render from inside that directory:
 ```bash
-quarto render
+cd writing/manuscript && quarto render
 ```
-Output goes to `docs/`. The project uses `execute: freeze: true` so R code isn't re-run unless explicitly unfrozen.
+Output goes to `writing/manuscript/docs/` (per the project's `output-dir`). `execute: freeze: true` means R code is not re-run unless you pass `--execute` or delete `_freeze/`.
 
 ### Run the full model fitting pipeline
 The main entry point is `R/fit_polling_and_fundamentals_kjordaemi_model.R`. **This is an interactive script** — run it line-by-line or in sections in R/RStudio, not via `Rscript` or `source()`.

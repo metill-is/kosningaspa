@@ -27,9 +27,8 @@ site_libs/
 *-preview.html
 *.out.ipynb
 
-# Generated docs (regenerated via quarto render)
-docs/
-!docs/CLAUDE.md
+# Generated docs (regenerated via quarto render) — per writing project
+writing/*/docs/
 
 # Claude Code local settings
 .claude/
