@@ -1,0 +1,26 @@
+project:
+  type: default
+  output-dir: docs
+
+format:
+  # docx is the primary target: editors round-trip the chapter via track changes.
+  # Drop the press template at ./iskosbok-template.docx (e.g. ~/Downloads/metill-iskosbok.docx),
+  # then uncomment reference-doc so heading styles, captions, and bibliography match the book.
+  docx:
+    # reference-doc: iskosbok-template.docx
+    toc: true
+    number-sections: false
+  html:
+    toc: true
+    number-sections: false
+    theme: cosmo
+    embed-resources: true
+
+bibliography: ../manuscript/references.bib
+lang: is
+
+execute:
+  freeze: auto
+
+editor: source
+engine: knitr

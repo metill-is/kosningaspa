@@ -1,0 +1,55 @@
+---
+title: "Kosningaspá Metils"
+subtitle: "Bayesísk líkanagerð fyrir Alþingiskosningar"
+author:
+  - name: Brynjólfur Gauti Guðrúnar Jónsson
+    affiliation: Háskóli Íslands
+  - name: Hafsteinn Einarsson
+    affiliation: Háskóli Íslands
+  - name: Agnar Freyr Helgason
+    affiliation: Háskóli Íslands
+abstract: |
+  [Útdráttur — 150--250 orð. Hver eru meginatriðin sem kaflinn fjallar um, hvaða aðferð er notuð og hverjar eru helstu niðurstöður?]
+keywords:
+  - kosningaspár
+  - skoðanakannanir
+  - Bayesísk tölfræði
+  - Alþingiskosningar
+---
+
+## Inngangur
+
+[Inngangur að kosningaspám og því sjónarhorni sem Kosningaspá Metils gefur á íslenskt stjórnmálalandslag. Bakgrunnur, helstu spurningar og hvers vegna efnið skiptir máli fyrir lesendur bókarinnar.]
+
+## Aðferðafræði í stuttu máli
+
+[Stutt yfirlit yfir aðferðafræði — fyrir tæknilegri útlistun, sjá fræðigreinina [@metill-manuscript]. Almenn lýsing á íslensku er einnig í [@metill-umlikanid].]
+
+### Skoðanakannanir og þróun fylgis
+
+[Hvernig líkanið fylgist með fylgi flokkanna yfir tíma og leiðréttir fyrir kerfisbundnum skekkjum hjá könnunaraðilum.]
+
+### Grunnbreytur og söguleg gögn
+
+[Hvernig efnahagsbreytur, ríkisstjórnarþátttaka og fyrri kosningaúrslit fléttast inn í spána.]
+
+## Niðurstöður Alþingiskosninga 2024
+
+[Yfirlit yfir spána fyrir Alþingiskosningarnar 2024 — sjónrænar framsetningar úr `../../Figures/` (vísa með `![Mynd](../../Figures/...)`{fig-alt="..."}).]
+
+### Spá um fylgi flokkanna
+
+### Spá um þingsæti og ríkisstjórnarmöguleika
+
+## Túlkun og samhengi
+
+[Hvað sýndi líkanið um íslensk stjórnmál fyrir kosningarnar? Hvar var spáin nákvæm og hvar ekki? Hvað segir þetta okkur um hlutverk skoðanakannana á Íslandi?]
+
+## Niðurlag
+
+[Helstu lærdómar og hugleiðingar um framtíð kosningaspáa á Íslandi.]
+
+## Heimildir {.unnumbered}
+
+::: {#refs}
+:::
