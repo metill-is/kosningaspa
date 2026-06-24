@@ -42,6 +42,7 @@ Interactive fitting scripts (e.g., `fit_*.R`) also use `library()` for heavy dep
 | `make_new_prediction_plots_seats.R` | `seats_draws.parquet` | Seat forecast plots |
 | `make_meirihlutar_plots.R` | `seats_draws.parquet` | Coalition majority probability plots |
 | `make_polling_watch_plots.R` | `polling_watch_draws.parquet` + raw polling data | Time series + snapshot plots |
+| `make_correlation_plots.R` | `polling_watch_omega.parquet` | Clustered marginal + partial (precision) correlation heatmap of the latent RW innovations |
 | `plot_model_results.R` | Model fit object + polling data | Diagnostic plots |
 | `plot_fundamentals_weight.R` | Model parameters | Fundamentals weight curve |
 | `make_historical_prediction_plots.R` | Historical backtesting output | Backtesting comparison plots |
