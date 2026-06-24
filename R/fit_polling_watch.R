@@ -1,3 +1,9 @@
+# WHY: under a C locale (e.g. headless Rscript) string matching against the
+# Icelandic party names fails, so the fct_relevel() below silently no-ops and the
+# softmax reference party becomes Samfylkingin instead of the intended Annað --
+# which shifts the latent S/D ordering. Pin a UTF-8 locale so headless == interactive.
+Sys.setlocale("LC_ALL", "en_US.UTF-8")
+
 library(tidyverse)
 library(here)
 library(cmdstanr)
@@ -52,6 +58,13 @@ polling_data <- bind_rows(pre_election, post_election) |>
     )
   ) |>
   arrange(date, fyrirtaeki, flokkur)
+
+# Guard: the softmax reference party must be Annað. If this fails the locale fix
+# above did not take and the fit would silently use the wrong reference (see WHY note).
+stopifnot(
+  "reference party is not Annað — fct_relevel no-opped (check LC_ALL locale)" =
+    levels(polling_data$flokkur)[1] == "Annað"
+)
 
 unique(polling_data$flokkur)
 cat(
