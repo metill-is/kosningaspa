@@ -1,7 +1,9 @@
-# WHY: under a C locale (e.g. headless Rscript) string matching against the
-# Icelandic party names fails, so the fct_relevel() below silently no-ops and the
-# softmax reference party becomes Samfylkingin instead of the intended Annað --
-# which shifts the latent S/D ordering. Pin a UTF-8 locale so headless == interactive.
+# WHY: under a C locale (headless Rscript) string matching against the Icelandic
+# party names fails, so the fct_relevel() below silently no-ops. Pin a UTF-8 locale
+# so the size-descending party order takes effect. polling_watch_v4 is
+# reference-invariant, so party order does NOT change results -- but ordering parties
+# largest->smallest (the tiny "Annað" residual LAST) keeps the sum-to-zero geometry
+# well-conditioned: 0% max-treedepth, vs ~60-100% when the boundary party sits early.
 Sys.setlocale("LC_ALL", "en_US.UTF-8")
 
 library(tidyverse)
@@ -43,27 +45,31 @@ polling_data <- bind_rows(pre_election, post_election) |>
       as_factor(fyrirtaeki),
       "Kosning"
     ),
+    # Size-descending order (largest first, tiny "Annað" residual last) for sampling
+    # efficiency. Reference-invariant, so this does not affect results.
     flokkur = fct_relevel(
       as_factor(flokkur),
-      "Annað",
-      "Sjálfstæðisflokkurinn",
-      "Framsóknarflokkurinn",
       "Samfylkingin",
-      "Vinstri Græn",
-      "Píratar",
-      "Viðreisn",
-      "Flokkur Fólksins",
+      "Sjálfstæðisflokkurinn",
       "Miðflokkurinn",
-      "Sósíalistaflokkurinn"
+      "Viðreisn",
+      "Framsóknarflokkurinn",
+      "Flokkur Fólksins",
+      "Vinstri Græn",
+      "Sósíalistaflokkurinn",
+      "Píratar",
+      "Annað"
     )
   ) |>
   arrange(date, fyrirtaeki, flokkur)
 
-# Guard: the softmax reference party must be Annað. If this fails the locale fix
-# above did not take and the fit would silently use the wrong reference (see WHY note).
+# Guard: size-descending order must have taken (largest first, "Annað" last) so the
+# sum-to-zero geometry stays well-conditioned. If this fails the locale fix above did
+# not take; the order is invariant for results but matters for sampling speed.
 stopifnot(
-  "reference party is not Annað — fct_relevel no-opped (check LC_ALL locale)" =
-    levels(polling_data$flokkur)[1] == "Annað"
+  "party order not size-descending — fct_relevel no-opped (check LC_ALL locale)" =
+    levels(polling_data$flokkur)[1] == "Samfylkingin" &&
+      tail(levels(polling_data$flokkur), 1) == "Annað"
 )
 
 unique(polling_data$flokkur)
@@ -81,7 +87,7 @@ party_names <- prepared$party_names
 str(stan_data)
 
 model <- cmdstan_model(
-  here("Stan", "polling_watch.stan")
+  here("Stan", "polling_watch_v4.stan")
 )
 
 fit <- model$sample(
@@ -124,6 +130,21 @@ pi_draws <- fit$draws("pi_smooth") |>
 output_dir <- here("data", as.character(today()))
 dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
 write_parquet(pi_draws, here(output_dir, "polling_watch_draws.parquet"))
+
+# Party-space innovation correlation (Omega) draws, labelled by party, for the
+# correlation/precision analysis. polling_watch_v4 gives a reference-invariant P x P Omega.
+omega_draws <- fit$draws("Omega") |>
+  as_draws_df() |>
+  as_tibble() |>
+  pivot_longer(c(-.chain, -.iteration, -.draw), names_to = "variable", values_to = "value") |>
+  mutate(
+    i = str_match(variable, "Omega\\[(.*),.*\\]")[, 2] |> parse_number(),
+    j = str_match(variable, "Omega\\[.*,(.*)\\]")[, 2] |> parse_number(),
+    flokkur_i = party_names[i],
+    flokkur_j = party_names[j]
+  ) |>
+  select(.chain, .iteration, .draw, flokkur_i, flokkur_j, value)
+write_parquet(omega_draws, here(output_dir, "polling_watch_omega.parquet"))
 
 # Quick summary check
 pi_draws |>

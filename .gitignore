@@ -17,8 +17,9 @@ Stan/base_model_no_polling_bias
 Stan/fundamentals
 Stan/polling_and_fundamentals
 Stan/polling_and_fundamentals_*
-Stan/polling_watch
+Stan/polling_watch*
 !Stan/*.stan
+!Stan/*.md
 
 # Quarto build artifacts
 _freeze/
