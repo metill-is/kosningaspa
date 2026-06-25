@@ -83,6 +83,7 @@ prepared <- prepare_polling_watch_data(polling_data)
 stan_data <- prepared$stan_data
 date_mapping <- prepared$date_mapping
 party_names <- prepared$party_names
+house_names <- prepared$house_names
 
 str(stan_data)
 
@@ -131,6 +132,10 @@ output_dir <- here("data", as.character(today()))
 dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
 write_parquet(pi_draws, here(output_dir, "polling_watch_draws.parquet"))
 
+# Persist the full fit so the entire posterior can be re-queried (any parameter,
+# any draw) without re-fitting: readRDS(...)$draws("gamma"), etc.
+fit$save_object(here(output_dir, "polling_watch_fit.rds"))
+
 # Party-space innovation correlation (Omega) draws, labelled by party, for the
 # correlation/precision analysis. polling_watch_v4 gives a reference-invariant P x P Omega.
 omega_draws <- fit$draws("Omega") |>
@@ -145,6 +150,36 @@ omega_draws <- fit$draws("Omega") |>
   ) |>
   select(.chain, .iteration, .draw, flokkur_i, flokkur_j, value)
 write_parquet(omega_draws, here(output_dir, "polling_watch_omega.parquet"))
+
+# House effects (gamma) draws, labelled by firm + party. gamma[1] is the election
+# anchor (pinned to 0), so keep only the polling houses (h > 1). On the softmax
+# log-odds scale: positive => the house systematically over-states that party
+# relative to the election-anchored latent trend. Zero-sum across parties per house.
+gamma_draws <- fit$draws("gamma") |>
+  as_draws_df() |>
+  as_tibble() |>
+  pivot_longer(c(-.chain, -.iteration, -.draw), names_to = "variable", values_to = "value") |>
+  mutate(
+    h = str_match(variable, "gamma\\[(.*),.*\\]")[, 2] |> parse_number(),
+    p = str_match(variable, "gamma\\[.*,(.*)\\]")[, 2] |> parse_number(),
+    fyrirtaeki = house_names[h],
+    flokkur = party_names[p]
+  ) |>
+  filter(h > 1) |>
+  select(.chain, .iteration, .draw, fyrirtaeki, flokkur, value)
+write_parquet(gamma_draws, here(output_dir, "polling_watch_gamma.parquet"))
+
+# Shared industry bias (mu_gamma): the lean common to every polling house, per party.
+mu_gamma_draws <- fit$draws("mu_gamma") |>
+  as_draws_df() |>
+  as_tibble() |>
+  pivot_longer(c(-.chain, -.iteration, -.draw), names_to = "variable", values_to = "value") |>
+  mutate(
+    p = str_match(variable, "mu_gamma\\[(.*)\\]")[, 2] |> parse_number(),
+    flokkur = party_names[p]
+  ) |>
+  select(.chain, .iteration, .draw, flokkur, value)
+write_parquet(mu_gamma_draws, here(output_dir, "polling_watch_mu_gamma.parquet"))
 
 # Quick summary check
 pi_draws |>

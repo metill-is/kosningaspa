@@ -1,9 +1,10 @@
 #' @export
 prepare_stan_data <- function(
-    polling_data,
-    fundamentals_data,
-    constituency_data,
-    election_date = date_build(2024, 11, 30)) {
+  polling_data,
+  fundamentals_data,
+  constituency_data,
+  election_date = date_build(2024, 11, 30)
+) {
   box::use(
     dplyr[
       distinct,
@@ -94,8 +95,6 @@ prepare_polling_data <- function(polling_data, constituency_data, election_date)
   month_before_election <- 1 * (time_before_election <= 47)
 
 
-
-
   stjornarslit_dags <- date_build(2024, 10, 14)
   days_between_stjornarslit_and_election <- as.numeric(election_date - stjornarslit_dags)
 
@@ -183,9 +182,6 @@ prepare_polling_data <- function(polling_data, constituency_data, election_date)
     left_join(n_parties_n_rep, by = "date") |>
     fill(n, .direction = "down") |>
     pull(n)
-
-
-
 
 
   #### Kjördæmi level ####
@@ -456,7 +452,6 @@ prepare_fundamentals_data <- function(fundamentals_data) {
     as.matrix()
 
 
-
   time_diff_f <- fundamentals_data |>
     drop_na(voteshare_prior) |>
     distinct(year) |>
@@ -548,6 +543,7 @@ prepare_polling_watch_data <- function(polling_data) {
     sum()
 
   party_names <- colnames(y_n)
+  house_names <- levels(polling_data$fyrirtaeki)
 
   date_mapping <- tibble::tibble(
     index = seq_along(dates),
@@ -570,6 +566,7 @@ prepare_polling_watch_data <- function(polling_data) {
   list(
     stan_data = stan_data,
     date_mapping = date_mapping,
-    party_names = party_names
+    party_names = party_names,
+    house_names = house_names
   )
 }

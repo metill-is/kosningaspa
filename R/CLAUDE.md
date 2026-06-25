@@ -32,7 +32,7 @@ Interactive fitting scripts (e.g., `fit_*.R`) also use `library()` for heavy dep
 | `fit_polling_and_fundamentals_kjordaemi_model.R` | `polling_and_fundamentals_kjordaemi.stan` | `y_rep_draws_constituency.parquet`, `seats_draws.parquet` |
 | `fit_polling_and_fundamentals_model.R` | `polling_and_fundamentals.stan` | National-level draws |
 | `fit_fundamentals_model.R` | `fundamentals.stan` | Fundamentals-only draws |
-| `fit_polling_watch.R` | `polling_watch.stan` | `polling_watch_draws.parquet` |
+| `fit_polling_watch.R` | `polling_watch_v4.stan` | `polling_watch_draws.parquet` (pi_smooth), `polling_watch_omega.parquet` (Omega), `polling_watch_gamma.parquet` (house effects), `polling_watch_mu_gamma.parquet` (industry bias), `polling_watch_fit.rds` (full fit, re-queryable) |
 
 ### Visualization Scripts (read parquet outputs, produce PNGs)
 
@@ -43,6 +43,7 @@ Interactive fitting scripts (e.g., `fit_*.R`) also use `library()` for heavy dep
 | `make_meirihlutar_plots.R` | `seats_draws.parquet` | Coalition majority probability plots |
 | `make_polling_watch_plots.R` | `polling_watch_draws.parquet` + raw polling data | Time series + snapshot plots |
 | `make_correlation_plots.R` | `polling_watch_omega.parquet` | Clustered marginal + partial (precision) correlation heatmap of the latent RW innovations |
+| `make_house_effects_plot.R` | `polling_watch_gamma.parquet` + `polling_watch_mu_gamma.parquet` + `polling_watch_draws.parquet`; 2024 election result as a pp baseline | Three house/industry-bias forest plots: logit scale, pp vs last election, pp vs current fylgisvakt (`polling_watch_house_effects{,_pp,_pp_current}.png`) |
 | `plot_model_results.R` | Model fit object + polling data | Diagnostic plots |
 | `plot_fundamentals_weight.R` | Model parameters | Fundamentals weight curve |
 | `make_historical_prediction_plots.R` | Historical backtesting output | Backtesting comparison plots |
