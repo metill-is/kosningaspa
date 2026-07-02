@@ -1,6 +1,5 @@
 ---
-title: "Kosningaspá Metils"
-subtitle: "Bayesísk líkanagerð fyrir Alþingiskosningar"
+title: "Kosningaspá Metils: Hvenær er hægt að spá fyrir um kosningaúrslit?"
 author:
   - name: Brynjólfur Gauti Guðrúnar Jónsson
     affiliation: Háskóli Íslands
@@ -8,48 +7,139 @@ author:
     affiliation: Háskóli Íslands
   - name: Agnar Freyr Helgason
     affiliation: Háskóli Íslands
-abstract: |
-  [Útdráttur — 150--250 orð. Hver eru meginatriðin sem kaflinn fjallar um, hvaða aðferð er notuð og hverjar eru helstu niðurstöður?]
-keywords:
-  - kosningaspár
-  - skoðanakannanir
-  - Bayesísk tölfræði
-  - Alþingiskosningar
+lang: is
 ---
 
-## Inngangur
+Þann 13. október 2024 tilkynnti Bjarni Benediktsson forsætisráðherra á blaðamannafundi að hann hefði slitið stjórnarsamstarfinu og hygðist leggja fyrir forseta tillögu um þingkosningar í lok nóvember. Á fréttavakt RÚV, líkt og á öðrum fjölmiðlum, var fylgst náið með stöðu mála og greint jafnóðum frá helstu vendingum. „Bjarni Benediktsson slítur ríkisstjórnarsamstarfinu," hljóðaði fyrirsögnin kl. 15.37. Aðeins 72 mínútum síðar var komin önnur: „Svona stóðu leikar í síðustu skoðanakönnun".[^1]
 
-[Inngangur að kosningaspám og því sjónarhorni sem Kosningaspá Metils gefur á íslenskt stjórnmálalandslag. Bakgrunnur, helstu spurningar og hvers vegna efnið skiptir máli fyrir lesendur bókarinnar.]
+Að staða forsætisráðherra sé greind frá sjónarhorni stöðu flokks hans í könnunum ætti ekki að koma neinum á óvart. Fylgiskannanir eru eitt algengasta viðfangsefni fjölmiðla í aðdraganda kosninga, hvort sem okkur líkar það betur eða verr. Þegar mikið er um að vera leita fjölmiðlar og áhugafólk um stjórnmál í kannanir til að fá vísbendingar um hvernig vindarnir blása og hvernig fylgi stjórnmálaflokka er líklegt til að þróast. En kannanir eru ekki gallalausar. Þær geta verið ónákvæmar, sveiflukenndar og jafnvel skekktar á kerfisbundinn hátt.[^2] Hvaða könnun á maður þá að taka mark á? Hvað ef margar kannanir benda í sömu átt, þýðir það að úrslitin liggi í augum uppi? Og hvenær í aðdraganda kosninga fer fylgi flokka yfirhöfuð að gefa raunhæfa mynd af því sem koma skal?
 
-## Aðferðafræði í stuttu máli
+Spár um úrslit kosninga eru tilraun til að svara þessum spurningum með kerfisbundnum hætti. Slíkar spár eiga sér langa hefð í Bandaríkjunum, Bretlandi og fleiri löndum, en þær hafa lengstum ekki verið gerðar á Íslandi. Fyrir alþingiskosningarnar 2024 birtum við kosningaspá Metils, nýja gerð kosningaspár fyrir íslenskar þingkosningar sem byggir á og blandar saman gögnum úr fylgiskönnunum og svokölluðum grunnþáttum. Þessir þættir ná fyrst og fremst yfir stöðu efnahagsmála og pólitískar aðstæður sem hafa sögulega haft áhrif á niðurstöður kosninga. Þar á meðal er sá mótbyr sem sitjandi ríkisstjórnir mæta nær undantekningarlaust í þingkosningum, eins og fjallað er um í kafla 2 fyrr í bókinni. Líkanið okkar leiðréttir jafnframt fyrir þekktum kerfisbundnum skekkjum (e. polling error) í íslenskum fylgiskönnunum. Eina sambærilega framtakið hér á landi er brautryðjendastarf Baldurs Héðinssonar með kosningaspa.is, sem byggir fyrst og fremst á samantekt fylgiskannana og sögulegri nákvæmni þeirra.
 
-[Stutt yfirlit yfir aðferðafræði — fyrir tæknilegri útlistun, sjá fræðigreinina [@metill-manuscript]. Almenn lýsing á íslensku er einnig í [@metill-umlikanid].]
+Kosningaspár eru ekki kristalskúlur. Það sem þær gera er að taka saman þær upplýsingar sem eru aðgengilegar á hverjum tíma og sameina þær á gegnsæjan hátt og með skýrum óvissumörkum. Þannig geta þær gefið okkur heildstæðari mynd af stöðu mála og skerpt umræðuna um líklegar útkomur kosninga. Þegar fjölmiðlar greina frá nýjustu könnun sem sýnir tiltekinn flokk með 17% fylgi, þá segir slík tala lítið ein og sér. Kosningaspá Metils setur töluna í samhengi við allar aðrar mælingar, sögulegt mynstur og þekktar skekkjur og gefur okkur þannig betra mat á því hvar flokkurinn stendur raunverulega. Kosningaspáin vinnur líka gegn því sem mætti kalla „kappreiðablaðamennsku" (e. *horse race journalism*), þar sem örlitlar sveiflur á mældu fylgi flokka eru túlkaðar sem stórtíðindi. Þegar það á sér stað er oftar en ekki um að ræða hversdagslegan mun á aðferðafræði milli könnunaraðila eða eðlilega tölfræðilega óvissu frekar en raunverulega breytingu á viðhorfum fólks.
 
-### Skoðanakannanir og þróun fylgis
+Þegar uppi var staðið reyndist árangur Metils prýðilegur. Frá fyrstu birtingu Metils þann 8. nóvember 2024, 22 dögum fyrir kosningar, reyndist spá Metils ætíð vera nær úrslitum kosninga en fylgiskannanir sem birtust um svipað leyti. Þó fylgiskönnunum sé vissulega ekki ætlað að spá fyrir um úrslit kosninga þá teljum við þetta upplýsandi samanburð þegar kemur að því að meta gagnsemi líkansins í samhengi við umræður um líkleg úrslit kosninga. Meðalfrávik lokaspár Metils frá fylgi flokka í kosningum reyndist svo vera 1,0%, sem var sambærilegt við forspárgildi síðustu könnunar Gallup en þó nokkuð betra en árangur annarra könnunaraðila.
 
-[Hvernig líkanið fylgist með fylgi flokkanna yfir tíma og leiðréttir fyrir kerfisbundnum skekkjum hjá könnunaraðilum.]
+Í þessum kafla rekjum við hvað grunnþáttalíkön eru og hvers vegna fylgiskannanir einar og sér geta gefið skakka mynd af stöðu mála ef þær eru notaðar sem kosningaspár, áður en við útskýrum hvernig þetta tvennt er fléttað saman í kosningaspá Metils. Í framhaldinu skoðum við þróun kosningaspárinnar í aðdraganda kosninganna og loks hversu vel hún spáði fyrir um úrslit kosninganna.
 
-### Grunnbreytur og söguleg gögn
+# Undirstöður grunnþáttalíkana
 
-[Hvernig efnahagsbreytur, ríkisstjórnarþátttaka og fyrri kosningaúrslit fléttast inn í spána.]
+Grunnþáttalíkön (e. *fundamentals models*) eru kosningaspár sem byggja á einfaldri hugmynd: niðurstöður kosninga endurspegla pólitískar og efnahagslegar aðstæður. Ef við þekkjum þessar aðstæður þá ættum við að geta spáð fyrir um úrslit kosninga jafnvel áður en kosningabaráttan hefst. Líkön af þessu tagi voru fyrst þróuð á áttunda áratugnum í tengslum við bandarískar forsetakosningar en hafa síðar verið notuð til að spá fyrir um kosningar í Bretlandi, Frakklandi, Þýskalandi og víðar.[^3]
 
-## Niðurstöður Alþingiskosninga 2024
+Grunnþáttalíkön byggja á tölfræðilegri greiningu (oftast aðhvarfsgreiningu) sem áætlar hvernig efnahagslegar og pólitískar aðstæður hafa tengst úrslitum fyrri kosninga. Þá er hægt að nota niðurstöður greiningarinnar til að spá fyrir um næstu kosningar með því að setja inn núverandi gildi þeirra breyta sem líkanið byggir á. Tökum eitt einfaldasta og frægasta líkanið sem dæmi: „Brauð og friðar"-líkan (e. *Bread-and-Peace model*) Douglas Hibbs fyrir bandarísku forsetakosningarnar.[^4] Líkanið notar einungis tvær breytur til að spá fyrir um fylgi flokks sitjandi forseta. Annars vegar er það mælikvarði á stöðu efnahagsmála, sem Hibbs fangar með mælikvarða á vöxt ráðstöfunartekna á mann yfir kjörtímabilið. Þessi þáttur er vel studdur af rannsóknum í stjórnmálafræði á áhrifum efnahagsmála á gengi sitjandi forseta og ríkisstjórna í vestrænum lýðræðisríkjum.[^5] Hins vegar er það fjöldi bandarískra hermanna sem hafa fallið í erlendum stríðsátökum á kjörtímabilinu, en Hibbs færir rök fyrir því að kjósendur refsi þeim flokki sem hóf stríð á erlendri grundu fyrir slíkt mannfall. Með þessum tveimur breytum einum saman tekst Hibbs að spá ágætlega fyrir um úrslit flestra forsetakosninga á seinni hluta tuttugustu aldarinnar. Þó að líkanið sé auðvitað ekki óskeikult þá er ótrúlegt hvað tvær einfaldar mælingar á efnahagslegri frammistöðu og mannfalli í stríði koma okkur langt í að spá fyrir um úrslit bandarískra forsetakosninga. En stjórnmálin eru síbreytileg og ekki er víst að þetta einfalda líkan muni duga til að spá fyrir um kosningaúrslit framtíðarinnar.
 
-[Yfirlit yfir spána fyrir Alþingiskosningarnar 2024 — sjónrænar framsetningar úr `../../Figures/` (vísa með `![Mynd](../../Figures/...)`{fig-alt="..."}).]
+Önnur grunnþáttalíkön nota ýmist aðrar mælingar, til dæmis á stöðu efnahagsmála, eða fleiri breytur, svo sem vinsældir sitjandi forseta eða hve mörg kjörtímabil flokkur sitjandi forseta hefur setið.[^6] Síðastnefnda breytan er sérstaklega áhugaverð því hún fangar svokallaðan stjórnarkostnað ríkisstjórna (e. *cost of ruling*), þá vel þekktu niðurstöðu að sitjandi ríkisstjórnir og ríkisstjórnarflokkar tapa að jafnaði fylgi á milli kosninga, bæði á Íslandi og annars staðar. Vopnuð þeirri þekkingu (og án þess að þurfa að reiða okkur á fylgiskannanir) þá hefðum við getað vænst þess að ríkisstjórnarflokkarnir þrír (Sjálfstæðisflokkur, Framsóknarflokkur og Vinstri græn) myndu tapa fylgi í kosningunum 2024, eins og raunin varð.[^7]
 
-### Spá um fylgi flokkanna
+Þetta endurspeglar líka einn meginkost grunnþáttalíkana: hagtölur, hvaða flokkar eru í stjórn, hversu lengi þeir hafa verið í stjórn og ýmsar aðrar breytur sem eru nýttar í þessum tilgangi, eru aðgengilegar löngu áður en kosningabaráttan hefst og oftast líka áður en fylgistölur í könnunum fara að gefa svipaða mynd af stöðu mála og þá sem birtist þegar talið er úr kjörkössunum. Það gerir okkur kleift að spá fyrir um úrslit kosninga löngu fyrir kjördag, þegar fylgiskannanir einar og sér eru ekki endilega áreiðanleg vísbending um hvað síðar muni verða.[^8]
 
-### Spá um þingsæti og ríkisstjórnarmöguleika
+Þrátt fyrir þetta hafa grunnþáttalíkön ýmsar takmarkanir, sérstaklega þegar kemur að fjölflokkakerfum eins og því íslenska. Í tveggja flokka kerfi, eins og því bandaríska, er nægjanlegt að spá fyrir um fylgi flokks sitjandi forseta (til dæmis Repúblikana árið 2028) til að spá fyrir um úrslit kosninganna, því það fylgi sem sá flokkur fær ekki fer svo til allt til hins flokksins (Demókrata). Í fjölflokkakerfi þarf hins vegar að spá fyrir um hvern flokk sérstaklega, sem flækir málið verulega.[^9] Ef Vinstri grænn forsætisráðherra leiðir samsteypustjórn með Sjálfstæðisflokki og Framsókn, þá er ekki augljóst hvort einn, tveir eða jafnvel allir flokkarnir þrír tapi fylgi ef illa árar í efnahagsmálum. Enn síður er augljóst hvaða stjórnarandstöðuflokkur myndi auka fylgi sitt við slíkar aðstæður. Vegna þessa eru grunnþáttalíkön ein og sér ekki nægjanleg til að spá vel fyrir um úrslit kosninga í fjölflokkakerfum. Til þess þurfum við einnig að styðjast við fylgiskannanir, eins og við skoðum nánar í næsta kafla.
 
-## Túlkun og samhengi
+# Hvers vegna er munur á könnunum og kosningaúrslitum?
 
-[Hvað sýndi líkanið um íslensk stjórnmál fyrir kosningarnar? Hvar var spáin nákvæm og hvar ekki? Hvað segir þetta okkur um hlutverk skoðanakannana á Íslandi?]
+Í bókinni *Lognmolla í ólgusjó* er fjallað ítarlega um ástæður þess að þær fylgistölur sem við sjáum í aðdraganda kosninga eru ekki nákvæmlega þær sömu og við sjáum koma upp úr kjörkössunum þegar talið er. Í stuttu máli má rekja að könnunin nær til úrtaks en ekki þýðis allra kjósenda, ekki kjósa allir sem hafa rétt til þess, flestar fylgiskannanir eru gerðar á skömmum tíma á netinu, könnunaraðilar notast við ólíkar aðferðir og þegar haft er samband við fólk er alls ekki öruggt að það hafi áhuga á að taka þátt í könnuninni.[^10] Þó er alls ekki víst að þessi atriði leiði af sér kerfisbundinn mun, til þess þarf að vera fylgni milli þátttöku og mælinga í könnunum og útkomunnar, s.s. hvaða flokk viðkomandi ætlar að kjósa.[^11] Til að mynda hefur skapast mikil umræða um hvort stuðningsmenn tiltekinna flokka og frambjóðenda séu feimnir við að tjá skoðanir sínar, en rannsóknir benda til þess að það sé alla jafna lítið vandamál, en að hitt sé erfiðara að ná til úrtaks sem endurspeglar þýðið.[^12]
 
-## Niðurlag
+Helsta skýringin á kerfisbundnum mun milli kannana og kosningaúrslita er samt sú einfaldasta: kannanir eru framkvæmdar fyrir kosningar og margt getur breyst á lokametrum kosningabaráttunnar. Könnun sem er framkvæmd mánuði fyrir kosningar er að jafnaði lengra frá úrslitunum en sambærileg könnun gerð dagana fyrir kosningar.[^13] Kosningaspár reyna að gera ráð fyrir þessari þróun. Fyrir vikið er óvissubilið, sem vísar í dreifingu mögulegra kosningaúrslita, í kosningaspá talsvert mikið þegar langt er í kosningar, en minnkar þegar nær dregur. Sambærilegt óvissubil fyrir fylgiskönnun er mun minna, enda er spurt „hvaða flokk myndir þú kjósa ef kosið væri í [dag]{.underline}" óháð því hversu langt er til kosninga.
 
-[Helstu lærdómar og hugleiðingar um framtíð kosningaspáa á Íslandi.]
+En hvað með hin vandamálin, er einhvern veginn hægt að draga úr kerfisbundnum skekkjum sem tengjast því hverjir taka þátt í könnunum og hvernig þeim er svarað? Til að bregðast við því er alla jafna notast við tölfræðilega aðferð sem kallast vigtun. Þegar kannanagögn eru vigtuð er dreifingar gilda á lykilbreytum á borð við kyn, aldur, búsetu og menntunarstig í könnuninni og þær bornar saman við sömu dreifingu í þýðinu, til að mynda með því að styðjast við gögn frá Hagstofu Íslands. En þessi bakgrunnur fólks skýrir ekki nema lítinn hluta af því hvers vegna kjósendur velja ákveðinn flokk og því er ekki víst að vigtun ein og sér nægi til að draga úr kerfisbundnum skekkjum í fylgiskönnunum.[^14][^15]
 
-## Heimildir {.unnumbered}
+Dugi vigtun ekki til þarf að leita annarra leiða til að meta umfang kerfisbundinnar skekkju og leita leiða til að draga úr henni. Við vitum að stjórnmálin breytast hratt og það er alls ekki víst að skekkja sem mælist í einum kosningum muni endurtaka sig í þeim næstu. Þess vegna veigra umsjónarmenn kosningaspáa sér oft við því að reyna að „leiðrétta" kerfisbundnar skekkjur í mælingum. En í fjölflokkakerfi líkt og á Íslandi, þar sem kosningar hafa farið fram með skömmu millibili á síðustu árum, er hægt að færa góð rök fyrir því að sumir flokkar séu alla jafna of- eða vanmældir í fylgiskönnunum.
 
-::: {#refs}
-:::
+Í Kosningaspá Metils reyndum við að taka tillit til þess og leggja mat á hversu líklegt væri að kannanir mæli ákveðinn flokk rétt. Til að mynda var Flokkur fólksins mældur of lágt í könnunum 2016, 2017 og 2021. Fyrir vikið mat Kosningaspá Metils líkurnar á því að flokkurinn fengi hærra hlutfall atkvæða í kosningum en könnunum og reynt var að leiðrétta fyrir það. Þessi viðbót -- að leiðrétta ekki aðeins fyrir áhrifum einstakra könnunaraðila (e. house effects) heldur líka kannanaaðila almennt (e. industry effects) -- er eitt helsta fræðilega framlag Kosningaspár Metils. En hvernig er hægt að samnýta þennan eiginleika, grunnþáttalíkanið og kannanagögn almennt? Því er svarað í næsta undirkafla.
+
+# Hvernig fléttast grunnþættir og kannanir saman í kosningaspá Metils?
+
+Kosningaspá Metils felur í sér tölfræðilega samþættingu grunnþáttalíkans og tímaraðalíkans sem byggir á kannanagögnum. Eðli málsins samkvæmt er aðferðafræðin nokkuð tæknileg, en hún byggir á rannsóknum sem meðal annars hafa verið nýttar til að spá fyrir um úrslit þýskra kosninga.[^16] Lesendur sem hafa lítinn áhuga á tölfræðilíkönum geta farið beint í næsta hluta kaflans, þar sem við skoðum hversu vel gekk að spá fyrir um úrslit alþingiskosninganna sem fram fóru í nóvember 2024.
+
+Tölfræðilíkanið á bak við kosningaspá Metils er samblanda tvenns konar tölfræðilíkana: annars vegar grunnþáttalíkans sem byggir á sögulegum gögnum um efnahag og sögulegt gengi flokka í fyrri kosningum og hins vegar tímaraðalíkans sem notar fylgiskannanir, leiðréttir fyrir mögulegum kerfisbundnum frávikum þeirra (sjá hér að ofan) og uppfærir spána eftir því sem nær dregur kjördegi. Með því að tengja saman tvenns konar tölfræðilíkön og gefa þeim mismikið vægi eftir því hve langt er í kosningar, ætti kosningaspá sem þessi að skila áreiðanlegri spám en hvort líkan myndi gera eitt og sér, sérstaklega þegar lengra væri í kosningar.
+
+En hvernig metur líkanið þessi kerfisbundnu frávik? Til þess þurfum við söguleg viðmið. Við nýtum fylgiskannanir frá öllum helstu íslensku könnunaraðilunum sem Gallup, MMR, Maskínu, Félagsvísindastofnun og Prósent sem birtar voru fyrir þrjár síðustu þingkosningar: 2016, 2017 og 2021 og fram til kosninganna 2024. Þessar kannanir eru notaðar sem nálgun á fylgi stjórnmálaflokka, en eina raunverulega mælingin á fylginu eru kosningar. Því nær sem könnun birtist kosningum, því líkari ættu niðurstöður hennar að vera niðurstöðum kosninga. Við væntumst þess þó ekki að kannanir passi að öllu leyti við niðurstöður kosninga, en líkanið gerir ráð fyrir að fylgi breytist með tímanum og þróist eins og tímaröð.
+
+Skekkjurnar sem líkanið leiðréttir fyrir eru í raun tvenns konar. Líkanið lítur á hverja fylgiskönnun sem samsetningu af raunverulegu fylgi flokks og tveimur kerfisbundnum frávikum: annars vegar fráviki sem er sérstakt fyrir hvern könnunaraðila (e. house effects) — tilhneigingu eins fyrirtækis til að mæla tiltekinn flokk hærra eða lægra en önnur — og hins vegar fráviki sem allir könnunaraðilar deila fyrir tiltekinn flokk (e. industry effects), kerfisbundinni skekkju sem gengur í sömu átt þvert á öll fyrirtækin. Með því að bera saman fylgiskannanir fyrri ára við þau úrslit sem á endanum komu upp úr kjörkössunum getur líkanið lagt mat á hvort tveggja — hversu langt og í hvaða átt fylgi hvers flokks hefur að jafnaði skekkst — og fært það mat yfir á komandi kosningar. 
+
+Flokkur fólksins er gott dæmi. Í lokakönnunum fyrir kosningarnar 2024 mældu allir fjórir könnunaraðilarnir flokkinn of lágt: Félagsvísindastofnun vanmat fylgi hans um 3,3 prósentustig, Gallup um 1,2, Maskína um 4,7 og Prósent um 2,6. Að meðaltali nam vanmatið tæpum þremur prósentustigum — ekki tilviljanakennd sveifla, heldur kerfisbundin skekkja sem gekk í sömu átt hjá öllum. Þar sem líkanið hafði lært af fyrri kosningum að Flokkur fólksins er iðulega vanmældur í könnunum hækkaði það spá sína fyrir flokkinn umfram það sem kannanirnar gáfu til kynna. Lokaspá Metils vanmat fylgi flokksins aðeins um 0,6 prósentustig og var þar með nær úrslitunum en nokkur einstök lokakönnun. 
+
+Þessi leiðrétting er þó ekki gerð skilyrðislaust. Líkanið gengur ekki út frá því að skekkja fyrri ára endurtaki sig að fullu, enda getur fylgi flokka — og hegðun kjósenda þeirra — breyst milli kosninga. Þess vegna er aðeins hluti sögulegu skekkjunnar færður yfir á spána, um 40% hennar fremur en hún öll. Þetta er meðvituð varúðarráðstöfun: leiðréttingin dregur spána í rétta átt þegar sögulega mynstrið heldur sér, en veldur ekki stórum frávikum þegar svo er ekki. Eins og við sjáum síðar getur sú varkárni þó reynst tvíeggjað sverð.
+
+Tímaraðalíkön byggja á einfaldri hugmynd: mælingin á hverjum tíma er tengd þeirri á undan. Fylgi flokks tekur sjaldan stökk milli daga; það er yfirleitt svipað og daginn áður, að viðbættri einhverri breytingu. Líkanið metur hversu stórar þessar breytingar eru að jafnaði og getur þannig flutt upplýsingar milli nálægra tímapunkta — ný könnun skerpir ekki aðeins matið á deginum sem hún birtist, heldur einnig á dögunum í kring. Til að rekja slíka röð þarf þó að byrja einhvers staðar. Venjan er að meta fyrsta punkt raðarinnar og vinna sig áfram þaðan, og uppfæra matið jafnóðum og fleiri kannanir berast.
+
+Kosningaspá Metils snýr þessu við. Í stað þess að leggja mat á upphafspunktinn og spá sig áfram inn í óvissa framtíð byrjar líkanið á hinum endanum: það notar grunnþáttalíkanið til að leggja mat á endapunkt raðarinnar, kjördaginn sjálfan, og lætur fylgiskannanirnar fylla inn í leiðina þangað. Grunnþættirnir gefa fyrstu kjölfestu um hvar fylgið er líklegt til að lenda, en hver ný könnun togar svo í þá spá. Því nær sem dregur kjördegi, því meira vægi fá kannanirnar og því minna vega grunnþættirnir. Hvernig það vægi færist nákvæmlega yfir tíma er ákvörðun sem liggur hjá þeim sem smíða líkanið.
+
+Á @fig-grunnvaegi má sjá að stikar voru valdir þannig að vægi grunnþáttalíkansins var 30% þegar 180 dagar voru til kosninganna, en að það hafi minnkað hægt og rólega fram að stjórnarslitum. Á myndinni sést jafnframt að óvissan í fylgismatinu jókst eftir stjórnarslit og vægi grunnþáttalíkansins fór því að minnka hraðar. Aukin óvissa endurspeglar hinn pólitíska veruleika. Þegar stjórnarslit eiga sér stað og boðað er til kosninga fer kosningabaráttan á fullt og kjósendur fara að fylgjast betur með stjórnmálunum. Þegar stjórnarslitin urðu hafði vægið fallið niður í 23,6%, en tveimur vikum fyrir kjördag var það komið niður í 8,4%. Í lokaspá Metils nóttina fyrir kjördag var það 0,7% á móti 99,3% vægi tímaraðalíkansins. Með öðrum orðum má segja að lokaspáin byggi að nánast öllu leyti á kannanagögnum, bæði nýjum könnunum og sögulegum frávikum.
+
+![Vægi grunnþáttalíkansins í kosningaspá Metils sem fall af fjölda daga til kjördags. Stikarnir voru kvarðaðir þannig að vægið væri 30% þegar 180 dagar væru til kosninganna. Þrír blámerktir punktar sýna vægið á degi stjórnarslitanna (13. október 2024), tveimur vikum fyrir kjördag og í lokaspá Metils. Eftir stjórnarslitin dró hraðar úr vægi grunnþáttalíkansins.](figures/fundamentals_weight_2weeks.png){#fig-grunnvaegi}
+
+Að lokum er rétt að nefna einn eiginleika tímaraðahlutans til viðbótar. Líkanið lítur ekki á fylgi flokkanna sem óháðar stærðir, heldur gerir ráð fyrir að þær hreyfist saman. Þegar fylgi flæðir frá einum flokki rennur það sjaldnast jafnt til allra hinna, heldur fremur til flokka sem standa honum nærri í hugum kjósenda. Með því að meta þessa fylgni milli flokka getur líkanið nýtt nýja könnun fyrir einn flokk til að skerpa á mati sínu á öðrum, og endurspeglar þannig betur hvernig fylgi færist í raun milli flokka.
+
+# Hversu vel spáði líkanið fyrir um úrslit kosninganna?
+
+Þegar athugað er hversu vel kosningaspár ganga eftir er gjarnan reiknað svokallað meðalfrávik (e. *mean absolute error*). Það sýnir einfaldlega hversu langt frá lokafylgi flokkanna spáin var að meðaltali. Sem dæmi: Ef Sjálfstæðisflokknum er spáð 15% fylgi en hann fær svo 19,4% upp úr kjörkössunum, þá er munurinn 3,4 prósentustig. Með því að taka þetta frávik fyrir alla flokka og reikna meðaltalið sjáum við hversu nálægt raunverulegum úrslitum spáin var þegar á hólminn var komið.
+
+Fyrsta spá Metils birtist 7. nóvember 2024, 23 dögum fyrir kjördag. Þá var meðalfrávik hennar 1,8 prósentustig. Spáin var svo uppfærð fimm sinnum fram að kosningum: 8., 16., 23., 28. og 29. nóvember.
+
+Þann 16. nóvember var meðalfrávik spárinnar frá úrslitum kosninganna komið í 1,3 prósentustig. Til samanburðar má nefna að í fylgiskönnun frá 11. nóvember hafði Sjálfstæðisflokkurinn mælst með 12% fylgi og Viðreisn með 21,6%, en kosningaspá Metils frá 16. nóvember spáði Sjálfstæðisflokknum 17% fylgi og Viðreisn 16% á kjördegi. Lokaúrslitin -- Sjálfstæðisflokkurinn með 19,4% og Viðreisn með 15,8% -- lágu nær spá Metils.
+
+Lokaspá Metils birtist að kvöldi 29. nóvember, nóttina fyrir kjördag. Hún hafði þróast jafnt og þétt yfir mánuðinn í takt við nýjar fylgiskannanir og vægi grunnþáttahlutarins var þá mun minna en í fyrstu birtingu.
+
+Markmið kosningaspár og fylgiskönnunar eru í eðli sínu ólík: spáin reynir að segja fyrir um úrslit kosninganna, en könnun mælir stuðning kjósenda við flokka á því tímabili sem könnun fer fram (sem getur verið heil vika eða jafnvel lengri tími). Samanburður á lokaspá Metils og lokakönnunum kannanaaðila er samt sem áður gagnlegur, enda voru báðir aðilar að reyna að gefa lesendum eins skýra mynd af stöðu mála og kostur var skömmu fyrir kjördag.
+
+![Meðalfrávik lokaspáa Metils og Kosningaspa.is auk lokakannana fjögurra könnunaraðila frá úrslitum kosninganna 2024. Meðalfrávikið byggir á fylgi allra flokka sem náðu yfir 1% fylgi.](figures/final_mae_transparent.png){#fig-final-mae}
+
+@fig-final-mae sýnir meðalfrávik lokaspár Metils, lokakannana fjögurra könnunaraðila og kosningaspár kosningaspa.is. Metill og Gallup mældust bæði með 1,0 prósentustiga frávik en kosningaspa.is var skammt undan með 1,2 prósentustig, en lokakannanir Félagsvísindastofnunar, Maskínu og Prósents mældust með 1,4, 1,5 og 1,7 prósentustiga frávik. Slík frávik eru í raun fyrirsjáanleg þegar kannanir byggja á úrtaki nokkur hundruð eða þúsund manns, og þar að auki getur margt breyst á lokametrum kosningabaráttunnar. Í sögulegu samhengi voru kannanirnar 2024 með besta móti: til samanburðar mældist meðalfrávik lokakönnunar Gallup um 1,3 prósentustig í aðdraganda kosninganna 2021 og meðalfrávik allra helstu könnunaraðila það ár var nálægt 2,0 prósentustigum.
+
+![Frávik spá- og könnunaraðila frá fylgi hvers flokks í kosningunum 2024.](figures/fravik_flokkar2_transparent.png){#fig-flokkar}
+
+Þegar frávikin eru greind á flokksgrundvelli sjáum við kerfisbundið mynstur. Sjálfstæðisflokkurinn og Flokkur fólksins fengu meira fylgi í kosningunum en flestar kannanir höfðu gefið til kynna, en Sósíalistaflokkurinn minna. Í tilfelli þessara þriggja flokka endaði spá Metils nær réttum úrslitum. Á móti kemur að Metill vanmat fylgi Samfylkingarinnar en kannanir gerðu það ekki. Bæði kannanir og kosningaspá Metils ofmátu Pírata og Vinstri græna. Flokkarnir fengu báðir minna en 5% atkvæða og enga þingmenn, sem gæti bent til þess að einhverjir stuðningsmenn flokkanna hafi kosið aðra flokka taktískt. Fylgi Viðreisnar var að jafnaði hærra í lokakönnunum en í kosningunum, en líkanið hefur togað fylgið of langt niður og endað á að vanmeta fylgið.
+
+Framsóknarflokkurinn sýnir hina hliðina á þessari leiðréttingu. Ólíkt Flokki fólksins komu lokakannanir nokkuð nálægt kjörfylgi Framsóknar árið 2024 — að meðaltali var fylgi flokksins hvorki of- né vanmetið að ráði. En Framsókn hefur sögulega verið vanmetin í könnunum, og því hækkaði líkanið spá sína fyrir flokkinn í samræmi við þá reynslu. Þegar skekkjan endurtók sig ekki að þessu sinni endaði Metill á að ofmeta fylgi Framsóknar um 1,3 prósentustig, á meðan kannanirnar sjálfar lágu nær úrslitunum. Hér vann sama leiðréttingin og bætti spána fyrir Flokk fólksins gegn nákvæmni hennar fyrir Framsókn. 
+
+![Þróun meðalfráviks Metils og annarra aðila frá byrjun nóvember fram að kjördegi.](figures/time_series_transparent.png){#fig-time-series}
+
+Loks er gagnlegt að skoða hvernig meðalfrávikið þróaðist í aðdraganda kosninganna, sem má sjá á @fig-time-series. Strax í fyrstu birtu spá Metils þann 8. nóvember var spáin talsvert nær úrslitunum en kannanir sem birtust um svipað leyti. Til að gæta sanngirnis, þá er mikilvægt að ítreka aftur að fylgiskannanir eru ekki kosningaspár, heldur mat á stöðunni á hverjum tíma. Þær eru hins vegar gjarnan túlkaðar sem líkleg úrslit kosninga og því er samanburðurinn við Metil gagnlegur. Meðalfrávik spár Metils lækkaði jafnt og þétt yfir mánuðinn, úr 1,8 prósentustigum í fyrstu birtingu niður í 1,0 prósentustig í lokaspánni.
+
+# Niðurlag
+
+Kosningaspá Metils 2024 var skemmtileg tilraun, þar sem reynt var að setja fylgisþróun yfir kjörtímabilið og sérstaklega í kosningabaráttunni í nýtt samhengi. Heilt yfir teljum við að árangur Metils í kosningunum 2024 styðji þá tilgátu sem líkanið byggir á: að samþætt nýting fylgiskannana og grunnþátta geti gefið nákvæmari mynd af líklegum kosningaúrslitum en hvor gagnauppspretta fyrir sig.
+
+Samþætting grunnþátta- og tímaraðalíkana er engin nýlunda í kosningaspárfræðunum, til að mynda hafa spár FiveThirtyEight (Nate Silver) og the Economist um forsetakosningar í Bandaríkjunum vakið mikla umræðu. Það sem aðgreinir kosningaspá Metils frá þessum líkönum er að í henni er leiðrétt fyrir ætluðum kerfisbundnum skekkjum í fylgismati, þvert á alla könnunaraðila.
+
+Niðurstöðurnar sýna þó líka að þessi aðferð er ekki fullkomin. Vanmat á fylgi Samfylkingar og ofmat á fylgi Framsóknarflokks sýnir að enn má bæta aðferðina. Þessar skekkjur má að hluta rekja til kerfisbundinna ákvarðana líkansins, einkum hvernig það nýtir fylgiskannanir frá 2016, 2017 og 2021 til að meta hversu mikið hver flokkur er alla jafna of- eða vanmældur. Þegar pólítískt landslag breytist hratt, líkt og í aðdraganda kosninganna 2024, er ekki sjálfgefið að gögn frá fyrri kosningum gefi rétta mynd.
+
+Þó margt hafi gengið vel í þessari frumraun kosningaspár Metils er ljóst að hægt er að gera betur þegar kemur að næstu kosningum. Tvær spurningar skipta þar mestu máli. Hin fyrri lýtur að því hvernig kerfisbundin frávik kannana þróast yfir tíma. Eru þau viðvarandi eiginleikar íslenska flokka- og kannanalandslagsins eða getur kerfisbundin tilfærsla fylgis milli stjórnmálaflokka breytt frávikunum? Með öðrum orðum snýst þetta um hvort það séu kerfisbundin frávik í mati á fylgi flokkanna sjálfra eða hvort þetta snúist frekar um hegðun kjósenda flokkanna þegar kemur að því að svara könnunum. Seinni spurningin snýst um hvort hægt sé að bæta grunnþáttahlutann með fleiri breytum sem fanga betur sérstöðu íslenskra stjórnmála og áhrif efnahagsaðstæðna á fylgi flokkanna.
+
+Reynslan frá 2024 sýnir hvers vegna fyrri spurningin er svo áleitin. Sama leiðréttingin og færði spána fyrir Flokk fólksins nær úrslitunum dró hana frá þeim fyrir Framsókn. Að meta hversu mikið flokkur hefur að jafnaði verið of- eða vanmældur er eitt; að vita fyrir fram hvort það mynstur haldi sér í næstu kosningum er annað og mun vandasamara. Það er einmitt þar sem helstu framfaramöguleikar líkansins liggja. 
+
+Spurningar um forspárgildi kosningaspáa og kannana eru þó ekki einungis tæknilegar. Þær snerta beint hvernig kjósendur taka ákvarðanir, hvernig fjölmiðlar segja frá pólítísku ástandi og hvernig pólítísk umræða mótast í aðdraganda kosninga. Kosningaspá Metils er ein leið til að færa þessar umræður á fastari grundvöll og við væntum þess að hún verði áfram þróuð á næstu árum.
+
+Að lokum má spyrja hvort nokkur þörf sé á fylgiskönnunum fyrst kosningaspá Metils komst svona nálægt úrslitunum? Svarið við því er augljóst JÁ! Kannanir eru inntak kosningaspárinnar, sérstaklega þegar styttist í kjördag, án þeirra væri grunnþáttalíkanið eitt grundvöllur spárinnar. Það er því fagnaðarefni að kannanir hafi verið jafn nálægt úrslitum alþingiskosninganna 2024 og raun ber vitni.
+
+[^1]: Ingibjörg Sara Guðmundsdóttir o.fl., "Sjálfstæðisflokkur slítur ríkisstjórnarsamstarfinu -- Bjarni vill kosningar 30. nóvember," *RÚV*, 13. október, 2024, <https://www.ruv.is/frettir/innlent/2024-10-13-sjalfstaedisflokkur-slitur-rikisstjornarsamstarfinu-bjarni-vill-kosningar-30-november-424511>.
+
+[^2]: Agnar Freyr Helgason og Eva H. Önnudóttir, „Fylgiskannanir: Ónákvæmar, ómarktækar, leiðandi og villandi?", í *Lognmolla í ólgusjó: Alþingiskosningarnar 2021 og kjósendur í áranna rás*, ritstj. Hulda Þórisdóttir o.fl. (Háskólaútgáfan, 2024).
+
+[^3]: Ágætis yfirlit um þessa tegund líkana má finna í Michael S. Lewis-Beck o.fl., „Election Forecasting: Political Economy Models", *International Journal of Forecasting* 41, tbl. 4 (2025): 1655--65, <https://doi.org/10.1016/j.ijforecast.2025.02.006>; en jafnframt er fjallað um þessa tegund í samhengi við aðrar tegundir kosningaspálíkana í Helmut Norpoth, „Predicting Elections", í *The Oxford Handbook of Behavioral Political Science*, ritstj. Alex Mintz og Lesley G. Terris (Oxford University Press, 2024), <https://doi.org/10.1093/oxfordhb/9780190634131.013.24>.
+
+[^4]: Douglas A. Hibbs Jr., „Bread and Peace Voting in U.S. Presidential Elections", *Public Choice* 104, tbl. 1 (2000): 149--80, <https://doi.org/10.1023/A:1005292312412>.
+
+[^5]: Sjá til dæmis í Mary Stegmaier o.fl., „The Economic Voter Decides", í *Oxford Research Encyclopedia of Politics*, ritstj. Erin Hannah (Oxford Academic, 2019), <https://doi.org/10.1093/acrefore/9780190228637.013.931>.
+
+[^6]: Sjá til dæmis í Alan I. Abramowitz, „Will Time for Change Mean Time for Trump?", *PS: Political Science & Politics* 49, tbl. 4 (2016): 659--660.
+
+[^7]: Hafsteinn Einarsson, Ólafur Þ. Harðarson, Agnar Freyr Helgason, Jón Gunnar Ólafsson, Eva H. Önnudóttir og Hulda Þórisdóttir, „The 2024 Alþingi election: Is extreme electoral volatility the new norm?", *Icelandic Review of Politics and Administration* 21, tbl. 1 (2025): 1--34, <https://doi.org/10.13177/irpa.a.2025.21.1.1>.
+
+[^8]: Agnar Freyr Helgason og Eva H. Önnudóttir, „Fylgiskannanir".
+
+[^9]: Sjá nánar um þetta í Daniel Walther, „Picking the winner(s): Forecasting elections in multiparty systems", *Electoral Studies* 40 (desember 2015): 1--13, <https://doi.org/10.1016/j.electstud.2015.06.003>.
+
+[^10]: Agnar Freyr Helgason og Eva H. Önnudóttir, „Fylgiskannanir".
+
+[^11]: Hafsteinn Einarsson, „Áhrif blandaðrar gagnaöflunar á brottfall í Íslensku kosningarannsókninni 2021", *Icelandic Review of Politics and Administration* 20, tbl. 1 (2024): 139--56, <https://doi.org/10.13177/irpa.a.2024.20.1.7>.
+
+[^12]: Christopher Prosser og Jonathan Mellon, „The Twilight of the Polls? A Review of Trends in Polling Accuracy and the Causes of Polling Misses", *Government and Opposition* 53 (2018): 757--90, <https://doi.org/10.1017/gov.2018.7>.
+
+[^13]: Will Jennings og Christopher Wlezien, „Election polling errors across time and space", *Nature Human Behaviour* 2 (2018): 276--83, <https://doi.org/10.1038/s41562-018-0315-6>.
+
+[^14]: Ólafur Þ. Harðarson, Agnar Freyr Helgason og Hafsteinn Einarsson, „Hver kaus hvað? Flokkaflakk, félagslegir þættir, málefni og kosningahegðun", í *Lognmolla í ólgusjó: Alþingiskosningarnar 2021 og kjósendur í áranna rás*, ritstj. Hulda Þórisdóttir o.fl. (Háskólaútgáfan, 2024).
+
+[^15]: Hafsteinn Einarsson og Agnar Freyr Helgason, „Evaluating Nonresponse and Non-Sampling Error Trends in Election Studies", *Electoral Studies* 95 (júní 2025): 1--11, <https://doi.org/10.1016/j.electstud.2025.102934>.
+
+[^16]: Lukas F. Stoetzer o.fl., „Forecasting Elections in Multiparty Systems: A Bayesian Approach Combining Polls and Fundamentals", *Political Analysis* 27, tbl. 2 (2019): 255--62, <https://doi.org/10.1017/pan.2018.49>.
