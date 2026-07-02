@@ -16,6 +16,7 @@ data {
   array[N] int<lower = 1, upper = H> house_n;
   array[N] int<lower = 1, upper = D> date_n;
   array[N] int<lower = 1, upper = P> n_parties_n;
+  array[N, P] int<lower = 0, upper = P> party_index_n; // Column ids of reported parties per poll (0-padded tail)
 
   vector[D - 1] time_diff;
   int<lower = 1> n_pred;
@@ -75,11 +76,14 @@ model {
   for (n in 1:N) {
     int k = n_parties_n[n];
     vector[P] eta = beta[date_n[n]] + gamma[house_n[n]];
+    // Gather reported parties by identity (party_index_n), not the first-k slice.
+    array[k] int cols = party_index_n[n, 1:k];
+    array[k] int y_obs = y_n[n, cols];
     if (house_n[n] > 1) {
-      vector[k] pi_n = softmax(eta[1:k]);
-      y_n[n, 1:k] ~ dirichlet_multinomial(pi_n * phi[house_n[n] - 1]);
+      vector[k] pi_n = softmax(eta[cols]);
+      y_obs ~ dirichlet_multinomial(pi_n * phi[house_n[n] - 1]);
     } else {
-      y_n[n, 1:k] ~ multinomial_logit(eta[1:k]);
+      y_obs ~ multinomial_logit(eta[cols]);
     }
   }
 }

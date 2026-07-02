@@ -8,6 +8,7 @@ data {
   array[N] int<lower = 1, upper = H> house_n;  // House indicator for each poll
   array[N] int<lower = 1, upper = D> date_n;   // Date indicator for each poll
   array[N] int<lower = 1, upper = P> n_parties_n;  // Number of parties in each poll
+  array[N, P] int<lower = 0, upper = P> party_index_n; // Column ids of reported parties per poll (0-padded tail)
 
   vector[D - 1] time_diff;                 // Time differences between consecutive dates
   int<lower = 1> n_pred;                   // Sample size for posterior predictions
@@ -93,13 +94,18 @@ model {
     eta[2:P] = beta[, date_n[n]] + gamma[, house_n[n]];
     eta[1] = -sum(eta[2:P]);
 
+    // Gather reported parties by identity (party_index_n), not the first-k slice.
+    int k = n_parties_n[n];
+    array[k] int cols = party_index_n[n, 1:k];
+    vector[k] eta_obs = eta[cols];
+    array[k] int y_obs = y_n[n, cols];
     if (house_n[n] > 1) {
       // Dirichlet-multinomial for polls (overdispersed)
-      vector[n_parties_n[n]] pi_n = softmax(eta[1:n_parties_n[n]]);
-      y_n[n, 1:n_parties_n[n]] ~ dirichlet_multinomial(pi_n * phi[house_n[n] - 1]);
+      vector[k] pi_n = softmax(eta_obs);
+      y_obs ~ dirichlet_multinomial(pi_n * phi[house_n[n] - 1]);
     } else {
       // Multinomial for election results (no overdispersion)
-      y_n[n, 1:n_parties_n[n]] ~ multinomial_logit(eta[1:n_parties_n[n]]);
+      y_obs ~ multinomial_logit(eta_obs);
     }
   }
 }

@@ -12,6 +12,7 @@ data {
   array[N] int<lower = 1, upper = D> date_n;   // When each poll was conducted
   array[N] int<lower = 1, upper = P> n_parties_n;  // Number of parties included in each poll
   array[N] int<lower = 1, upper = P> n_parties_n_rep;  // Number of parties included in each poll
+  array[N, P] int<lower = 0, upper = P> party_index_n; // Column ids of reported parties per poll (0-padded tail)
   
   // Time-related vectors
   vector[D] stjornarslit;                  // Indicator for government collapse period
@@ -209,12 +210,19 @@ model {
     // Linear predictor combining latent support and house effects
     eta_n[2:P] = beta[, date_n[n]] + gamma[ , house_n[n]];
     eta_n[1] = -sum(eta_n[2:P]);             // Sum-to-zero constraint
+    // Gather reported parties by identity (party_index_n) rather than the first
+    // n_parties_n columns, so an interior drop maps eta/counts to the correct
+    // parties. eta_n is the full sum-to-zero P-vector (position 1 = reference).
+    int k = n_parties_n[n];
+    array[k] int cols = party_index_n[n, 1:k];
+    vector[k] eta_obs = eta_n[cols];
+    array[k] int y_obs = y_n[n, cols];
     if (house_n[n] > 1) {
       // Dirichlet-multinomial likelihood for poll counts
-      vector[n_parties_n[n]] pi_n = softmax(eta_n[1:n_parties_n[n]]);          // Convert to probabilities
-      y_n[n, 1:n_parties_n[n]] ~ dirichlet_multinomial(pi_n * phi[house_n[n] - 1]);
+      vector[k] pi_n = softmax(eta_obs);          // Convert to probabilities
+      y_obs ~ dirichlet_multinomial(pi_n * phi[house_n[n] - 1]);
     } else {
-      y_n[n, 1:n_parties_n[n]] ~ multinomial_logit(eta_n[1:n_parties_n[n]]);
+      y_obs ~ multinomial_logit(eta_obs);
     }
   }
 

@@ -11,7 +11,8 @@ data {
   array[N] int<lower = 1, upper = H> house_n;  // Which polling house conducted each poll
   array[N] int<lower = 1, upper = D> date_n;   // When each poll was conducted
   array[N] int<lower = 1, upper = P> n_parties_n;  // Number of parties included in each poll
-  
+  array[N, P] int<lower = 0, upper = P> party_index_n; // Column ids of reported parties per poll (0-padded tail)
+
   // Time-related vectors
   vector[D] stjornarslit;                  // Indicator for government collapse period
   vector[D] post_stjornarslit;             // Indicator for post-collapse period
@@ -183,8 +184,12 @@ model {
     eta_n[2:P] = beta[, date_n[n]] + gamma[ , house_n[n]];
     eta_n[1] = -sum(eta_n[2:P]);             // Sum-to-zero constraint
     vector[P] pi_n = softmax(eta_n);          // Convert to probabilities
+    // Gather reported parties by identity (party_index_n), not the first-k slice.
+    int k = n_parties_n[n];
+    array[k] int cols = party_index_n[n, 1:k];
+    array[k] int y_obs = y_n[n, cols];
     // Dirichlet-multinomial likelihood for poll counts
-    y_n[n, 1:n_parties_n[n]] ~ dirichlet_multinomial(pi_n[1:n_parties_n[n]] * phi[house_n[n]]);
+    y_obs ~ dirichlet_multinomial(pi_n[cols] * phi[house_n[n]]);
   }
 
   /* Fundamentals Priors and Likelihood */

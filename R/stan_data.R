@@ -112,6 +112,22 @@ prepare_polling_data <- function(polling_data, constituency_data, election_date)
 
   pred_y_time_diff <- as.numeric(election_date - max_date)
 
+  # Identity index of the reported (nonzero) parties per poll, derived directly
+  # from the count matrix so it stays aligned with y_* row-for-row. Row i holds
+  # the global party column indices of the parties poll i reported, tail-padded
+  # with 0. Consumed by the Stan likelihood to gather by identity rather than
+  # slicing the first-k columns (which corrupts the likelihood on interior drops).
+  build_party_index <- function(mat) {
+    n_rows <- nrow(mat)
+    n_cols <- ncol(mat)
+    party_index <- matrix(0L, n_rows, n_cols)
+    for (i in seq_len(n_rows)) {
+      nz <- which(mat[i, ] != 0)
+      if (length(nz)) party_index[i, seq_along(nz)] <- nz
+    }
+    party_index
+  }
+
   #### National level ####
   D <- length(date_factor)
   P <- length(unique(polling_data$flokkur))
@@ -123,7 +139,7 @@ prepare_polling_data <- function(polling_data, constituency_data, election_date)
   y_n <- polling_data |>
     select(date, fyrirtaeki, flokkur, n) |>
     mutate(
-      n = as.integer(n)
+      n = as.integer(round(n))
     ) |>
     pivot_wider(names_from = flokkur, values_from = n, values_fill = 0) |>
     select(-date, -fyrirtaeki) |>
@@ -154,13 +170,8 @@ prepare_polling_data <- function(polling_data, constituency_data, election_date)
     pull(n) |>
     sum()
 
-  n_parties <- polling_data |>
-    summarise(
-      n_parties = sum(n != 0),
-      .by = c(date, fyrirtaeki)
-    ) |>
-    arrange(date) |>
-    pull(n_parties)
+  n_parties_n <- as.integer(rowSums(y_n != 0))
+  party_index_n <- build_party_index(y_n)
 
   n_parties_n_rep <- polling_data |>
     filter(n > 0) |>
@@ -194,7 +205,7 @@ prepare_polling_data <- function(polling_data, constituency_data, election_date)
   y_k <- constituency_data |>
     select(date, fyrirtaeki, kjordaemi, flokkur, n) |>
     mutate(
-      n = as.integer(n)
+      n = as.integer(round(n))
     ) |>
     pivot_wider(names_from = flokkur, values_from = n, values_fill = 0) |>
     select(-date, -fyrirtaeki, -kjordaemi) |>
@@ -214,13 +225,8 @@ prepare_polling_data <- function(polling_data, constituency_data, election_date)
     ) |>
     pull(date)
 
-  n_parties_k <- constituency_data |>
-    summarise(
-      n_parties = sum(n != 0),
-      .by = c(date, kjordaemi, fyrirtaeki)
-    ) |>
-    arrange(date) |>
-    pull(n_parties)
+  n_parties_k <- as.integer(rowSums(y_k != 0))
+  party_index_k <- build_party_index(y_k)
 
 
   n_parties_k_rep <- constituency_data |>
@@ -265,7 +271,8 @@ prepare_polling_data <- function(polling_data, constituency_data, election_date)
     days_between_stjornarslit_and_election = days_between_stjornarslit_and_election,
     house_n = house_n,
     date_n = date_n,
-    n_parties_n = n_parties,
+    n_parties_n = n_parties_n,
+    party_index_n = party_index_n,
     n_parties_n_rep = n_parties_n_rep,
     time_diff = time_diff,
     month_before_election = month_before_election,
@@ -282,6 +289,7 @@ prepare_polling_data <- function(polling_data, constituency_data, election_date)
     house_k = house_k,
     date_k = date_k,
     n_parties_k = n_parties_k,
+    party_index_k = party_index_k,
     n_parties_k_rep = n_parties_k_rep,
     constituency_k = constituency_k,
     n_pred_k = n_pred_k
@@ -511,9 +519,20 @@ prepare_polling_watch_data <- function(polling_data) {
     distinct(fyrirtaeki, date) |>
     nrow()
 
+  build_party_index <- function(mat) {
+    n_rows <- nrow(mat)
+    n_cols <- ncol(mat)
+    party_index <- matrix(0L, n_rows, n_cols)
+    for (i in seq_len(n_rows)) {
+      nz <- which(mat[i, ] != 0)
+      if (length(nz)) party_index[i, seq_along(nz)] <- nz
+    }
+    party_index
+  }
+
   y_n <- polling_data |>
     select(date, fyrirtaeki, flokkur, n) |>
-    mutate(n = as.integer(n)) |>
+    mutate(n = as.integer(round(n))) |>
     pivot_wider(names_from = flokkur, values_from = n, values_fill = 0) |>
     select(-date, -fyrirtaeki) |>
     as.matrix()
@@ -528,13 +547,8 @@ prepare_polling_watch_data <- function(polling_data) {
     mutate(date = as.numeric(factor(date, levels = levels(date_factor)))) |>
     pull(date)
 
-  n_parties_n <- polling_data |>
-    summarise(
-      n_parties = sum(n != 0),
-      .by = c(date, fyrirtaeki)
-    ) |>
-    arrange(date) |>
-    pull(n_parties)
+  n_parties_n <- as.integer(rowSums(y_n != 0))
+  party_index_n <- build_party_index(y_n)
 
   n_election <- polling_data |>
     filter(fyrirtaeki == "Kosning") |>
@@ -559,6 +573,7 @@ prepare_polling_watch_data <- function(polling_data) {
     house_n = house_n,
     date_n = date_n,
     n_parties_n = n_parties_n,
+    party_index_n = party_index_n,
     time_diff = time_diff,
     n_pred = as.integer(n_election)
   )

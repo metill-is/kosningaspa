@@ -13,6 +13,7 @@ data {
   array[N_n] int<lower = 1, upper = D> date_n;   // Date indicator for each national poll
   array[N_n] int<lower = 1, upper = P> n_parties_n;     // Number of parties in each national poll
   array[N_n] int<lower = 1, upper = P> n_parties_n_rep; // Number of parties for replications
+  array[N_n, P] int<lower = 0, upper = P> party_index_n; // Column ids of reported parties per national poll (0-padded tail)
 
   // Time-related vectors
   vector[D] stjornarslit;                  // Indicator for government collapse period
@@ -35,6 +36,7 @@ data {
   array[N_k] int<lower = 1, upper = D> date_k;   // Date indicator for constituency polls
   array[N_k] int<lower = 1, upper = P> n_parties_k;     // Number of parties in constituency polls
   array[N_k] int<lower = 1, upper = P> n_parties_k_rep; // Number of parties for replications
+  array[N_k, P] int<lower = 0, upper = P> party_index_k; // Column ids of reported parties per constituency poll (0-padded tail)
   array[N_k] int<lower = 1, upper = K> constituency_k;  // Constituency indicator
   array[N_k] int<lower = 1, upper = N_obs_k> obs_k;     // Observation indicator
   array[K] int<lower = 1> n_pred_k;                     // Predictions per constituency
@@ -227,12 +229,20 @@ model {
     vector[P] eta_n;
     eta_n[2:P] = beta[, date_n[n]] + gamma[, house_n[n]];
     eta_n[1] = -sum(eta_n[2:P]);
+    // Gather the reported parties by identity (party_index_n), not by the first
+    // n_parties_n columns. eta_n is the full sum-to-zero P-vector (position 1 =
+    // reference), so gathering after reconstruction handles an interior drop —
+    // including a dropped reference party — correctly.
+    int k = n_parties_n[n];
+    array[k] int cols = party_index_n[n, 1:k];
+    vector[k] eta_obs = eta_n[cols];
+    array[k] int y_obs = y_n[n, cols];
     if (house_n[n] > 1) {
       // Dirichlet-multinomial likelihood for poll counts
-      vector[n_parties_n[n]] pi_n = softmax(eta_n[1:n_parties_n[n]]);          // Convert to probabilities
-      y_n[n, 1:n_parties_n[n]] ~ dirichlet_multinomial(pi_n * phi[house_n[n] - 1]);
+      vector[k] pi_n = softmax(eta_obs);                                       // Convert to probabilities
+      y_obs ~ dirichlet_multinomial(pi_n * phi[house_n[n] - 1]);
     } else {
-      y_n[n, 1:n_parties_n[n]] ~ multinomial_logit(eta_n[1:n_parties_n[n]]);
+      y_obs ~ multinomial_logit(eta_obs);
     }
   }
 
@@ -249,16 +259,24 @@ model {
     }
     
     // Combine national trends, house effects, and constituency effects
-    eta_k[2:P] = beta[1:(P - 1), date_k[n]] + 
-      gamma[1:(P - 1), house_k[n]] + 
+    eta_k[2:P] = beta[1:(P - 1), date_k[n]] +
+      gamma[1:(P - 1), house_k[n]] +
       delta[1:(P - 1), constituency_k[n]];
     eta_k[1] = -sum(eta_k[2:P]);
-    
+
+    // Gather reported parties by identity (party_index_k). Constituency polls are
+    // the ones that actually drop an interior party (small parties / a dropped
+    // reference in small kjordaemi), so this branch is where the positional slice
+    // corrupted the likelihood.
+    int k = n_parties_k[n];
+    array[k] int cols = party_index_k[n, 1:k];
+    vector[k] eta_obs = eta_k[cols];
+    array[k] int y_obs = y_k[n, cols];
     if (house_k[n] > 1) {
-      vector[n_parties_k[n]] pi_k = softmax(eta_k[1:n_parties_k[n]]);
-      y_k[n, 1:n_parties_k[n]] ~ dirichlet_multinomial(pi_k * phi[house_k[n] - 1]);
+      vector[k] pi_k = softmax(eta_obs);
+      y_obs ~ dirichlet_multinomial(pi_k * phi[house_k[n] - 1]);
     } else {
-      y_k[n, 1:n_parties_k[n]] ~ multinomial_logit(eta_k[1:n_parties_k[n]]);
+      y_obs ~ multinomial_logit(eta_obs);
     }
   }
 
