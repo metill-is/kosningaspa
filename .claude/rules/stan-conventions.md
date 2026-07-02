@@ -1,14 +1,15 @@
 ---
 paths:
-  - "Stan/**/*.stan"
+  - "**/*.stan"
 ---
 
-# Stan Model Conventions
+# Stan Model Conventions (Workspace-wide)
 
-- The production model is `polling_and_fundamentals_kjordaemi.stan`. Changes here affect live forecasts.
-- Use non-centered parameterizations (`_raw` suffix) for hierarchical parameters to improve sampling.
-- All observation models use Dirichlet-Multinomial likelihood unless explicitly noted otherwise.
-- House effects (`gamma`) must sum to zero within each polling firm — enforce via `sum_to_zero_vector` or manual subtraction.
-- The `generated quantities` block must produce `y_rep_*` posterior predictive draws for model checking.
-- Comment expected array dimensions in the `data` block (e.g., `int<lower=1> N; // number of polls`).
-- Test model changes by compiling with `cmdstan_model()` before running full sampling.
+- Use `cmdstanr` (not `rstan`) for all model compilation and sampling.
+- Non-centred parameterisations (`_raw` suffix) for hierarchical parameters.
+- Comment expected array dimensions in the `data` block.
+- `generated quantities` block must produce `y_rep_*` posterior predictive draws.
+- Test model changes by compiling with `cmdstan_model()` before running full MCMC.
+- Default MCMC settings: 4 chains, 1000 warmup, 1000 sampling iterations.
+- Sports models use Student's t likelihood (basketball/handball) or bivariate Poisson (football).
+- Election model uses Dirichlet-Multinomial likelihood with house effects summing to zero.
