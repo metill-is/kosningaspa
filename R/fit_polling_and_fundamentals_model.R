@@ -30,7 +30,8 @@ polling_data <- read_polling_data() |>
   ) |>
   mutate(
     fyrirtaeki = droplevels(fyrirtaeki)
-  )
+  ) |>
+  select(-lokadagur, -p)
 
 
 unique(polling_data$flokkur)
@@ -150,7 +151,6 @@ fit$summary("alpha_f") |>
   )
 
 
-
 fit$summary("beta_lag_f")
 
 
@@ -166,9 +166,7 @@ fit$draws(c("beta_vnv_f", "beta_growth_f")) |>
 fit$summary("tau_f")
 
 
-
 fit$summary("phi_f_inv")
-
 
 
 fit$summary("Omega") |>
@@ -210,8 +208,6 @@ fit$summary("Omega") |>
     vars(flokkur1),
     scales = "free_y"
   )
-
-
 
 
 dates <- c(
@@ -772,7 +768,6 @@ ggsave(
   height = 0.8 * 8,
   scale = 1.3
 )
-
 
 
 polling_data |>
