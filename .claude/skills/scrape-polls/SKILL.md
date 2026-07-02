@@ -38,11 +38,23 @@ If you write only to the CSV, your changes vanish on the next run. Always edit t
 
 ## Where the data actually lives
 
-Three reliable sources. Use whichever is freshest:
+Four reliable sources. Use whichever is freshest:
 
 1. **RÚV's canonical poll list at `https://www.ruv.is/kosningar/kannanir-a-landsvisu`.** The page embeds a `window.pollsArray` JavaScript variable containing every poll RÚV has on file, with per-party `ratio` to 6 decimal places, the firm name, the canonical Icelandic title (e.g. "Þjóðarpúls Gallup mars 2026", "Maskína 23. mars 2026"), and a publication date. **The cleanest source when it's up to date.** Read it via `mcp__Claude_in_Chrome__javascript_tool` running `JSON.stringify(window.pollsArray)`.
-2. **Gallup's own site at `https://www.gallup.is/frettir/` and the Þjóðarpúls PDF.** Gallup typically publishes the Þjóðarpúls on gallup.is several days before RÚV picks it up — in May 2026 the lag was ≥ 8 days. The news listing at `gallup.is/frettir/` shows the latest articles; each Þjóðarpúls article links through to a PDF viewer page (`gallup.is/<slug>/`) whose iframe `src` points at the actual PDF (`gallup.is/documents/<id>/Puls_MMYY_Fylgi_flokka.pdf`, where `MMYY` is the publication month, e.g. `0526` = May 2026). **The PDF is authoritative for methodology** — it states the field period (e.g. "1. - 29. apríl 2026"), heildarúrtak, and response rate that the RÚV blob doesn't carry. Fetch it with `curl` and read it directly. There's also an internal Looker dashboard at `gallup.is/data/geytenbr/sso/` showing the time series, but its raw CSV download is gated and the embedded iframe is cross-origin; the news article + PDF path is more reliable.
-3. **The original article on RÚV (`ruv.is/frettir/innlent/...`) or Vísir (`visir.is/g/...`)** — used to verify Maskína's field period and svarendur count (Maskína has no equivalent of gallup.is). For Gallup, the PDF (source #2) is better than the RÚV article for methodology.
+
+2. **Gallup's own site at `https://www.gallup.is/frettir/` and the Þjóðarpúls PDF.** Gallup typically publishes the Þjóðarpúls on gallup.is several days before RÚV picks it up — in May 2026 the lag was ≥ 8 days. The news listing at `gallup.is/frettir/` shows the latest articles; each Þjóðarpúls article links through to a PDF viewer page (`gallup.is/<slug>/`) whose iframe `src` points at the actual PDF. **The PDF is authoritative for methodology** — it states the field period (e.g. "1. - 29. apríl 2026"), heildarúrtak, and response rate that the RÚV blob doesn't carry. Fetch it with `curl` and read it directly. There's also an internal Looker dashboard at `gallup.is/data/geytenbr/sso/` showing the time series, but its raw CSV download is gated and the embedded iframe is cross-origin; the news article + PDF path is more reliable.
+
+   **PDF hosting paths (important):**
+   - **May 2025 onward:** `cdnx.gallup.is/media/documents/Puls_MMYY_Fylgi_flokka.pdf` — deterministic and URL-guessable (`MMYY` = publication month, e.g. `0526` = May 2026 PDF reporting April 2026 field period).
+   - **Pre-May 2025:** `gallup.is/documents/<opaque_id>/Puls_MMYY_Fylgi_flokka.pdf` — `<opaque_id>` is not enumerable; find it via the iframe `src` on the PDF viewer page, don't try to guess. For pre-May-2025 polls where this PDF can't be located, the next-month PDF's "comparison" column provides secondary confirmation.
+
+3. **Maskína's own site at `https://maskina.is/frettir/` and the Fylgi-Althingi PDF report.** Maskína publishes a PDF report for every **regular monthly Alþingi reading** at `maskina.is/wp-content/uploads/YYYY/MM/YYYY-MM-Fylgi-Althingi_Maskinuskyrsla.pdf` (sometimes with `-DD` date suffix when multiple). This is the analogue of Gallup's PDF and the authoritative source for `svarendur` and exact field period. Discover the URL via the news listing at `maskina.is/frettir/` (each monthly poll gets its own news article whose body links to the PDF — paginate via `/frettir/page/N/`) or via `WebSearch site:maskina.is "<month> <year>"`.
+
+   **Important: regular monthly vs commissioned side-publications.** Not every poll that appears under the "Maskína" brand goes through this channel. Maskína occasionally publishes commissioned polls for partner outlets — Vísir, Sýn (Stöð 2), Sýn's Kryddsíldarþáttur, etc. — that **don't** get their own Maskína-authored article or PDF, only the partner outlet's write-up. Examples: the 2025-11-10 reading was for Vísir; the 2026-02-24 was for Sýn. Both appear on the dashboard as monthly entries but Maskína never published a self-authored article or PDF for them. If `WebSearch site:maskina.is` returns nothing for a known poll date, assume it's a commissioned side-publication and accept the downstream article (source #4) as the canonical record.
+
+   There's also a public dashboard at [`maskina.is/fylgi-flokka-a-althingi/`](https://maskina.is/fylgi-flokka-a-althingi/) — a Tableau Public viz with five tabs covering every Maskína poll back to Nov 2021, including both regular monthly readings and commissioned ones. **Not programmatically scrapable** (Tableau renders to canvas, dropdown clicks go to canvas event handlers, no `.csv` endpoint, URL parameters for `Veldu mælingu` don't take effect because it's a filter on a data field rather than a parameter control). Useful for manual verification — switch the "Veldu mælingu" dropdown to a specific month to see `svarendur` in the "Bakgrunnur" panel of "Nýjasta mæling".
+
+4. **The downstream article on RÚV (`ruv.is/frettir/innlent/...`), Vísir (`visir.is/g/...`), or mbl.is (`mbl.is/frettir/innlent/...`).** Useful when the firm's own publication is delayed or you only have an indirect lead. Article bodies sometimes disclose `svarendur` and field period directly; when paywalled, per-party percentages can still be cross-checked via search snippets.
 
 The R scraper (`scrape_polls.R::scrape_gallup` / `scrape_maskina`) historically did article-body regex against the tag pages on RÚV and Vísir. **Both tag pages now lazy-load via JavaScript and `rvest` sees nothing**, so the scraper silently returns empty results. Don't rely on it for discovery; treat it as a deprecated fallback.
 
@@ -120,7 +132,36 @@ Two structural notes:
 - If a party isn't reported in the article (Maskína sometimes omits parties below 2%), use the value the JSON blob gives — `Other` is computed automatically as `100 − sum(named)`, so a literal `J = 0.0` for "didn't report" is fine.
 - Don't enter "Annað" / "Other" explicitly; the script appends a remainder row.
 
-### 7. Regenerate the CSV
+### 7. Update `data_sources.md`
+
+The provenance audit trail at `data_sources.md` (repo root) is the durable record of *where each tribble row came from*. It must stay in sync with the tribble — every row you added or changed in step 6 needs a matching row appended to the relevant pollster's table in `data_sources.md`.
+
+Row format:
+
+```markdown
+| Date | n_total | Source | Notes |
+|---|---|---|---|
+| 2026-04-15 | 10,484 | [PDF](https://www.gallup.is/documents/2237/Puls_0526_Fylgi_flokka.pdf) ([RÚV](https://www.ruv.is/frettir/innlent/2026-05-08-thjodarpuls-...)) | Fielded 1.–29. apríl 2026; úrtak 10.484, svh 43% |
+```
+
+Conventions for the row:
+
+- **Date**: same as the tribble (midpoint of fielding, YYYY-MM-DD).
+- **n_total**: same as the tribble, with comma thousands separator (e.g. `10,484`, not `10484`).
+- **Source**: primary URL first, secondary in parentheses if available.
+  - Gallup → `[PDF](gallup.is/documents/...)` first, `[RÚV](ruv.is/frettir/innlent/...)` second
+  - Maskína → `[Vísir](visir.is/g/...)`
+  - Use `_not found_` only as a last resort
+- **Notes**: terse, Icelandic field-period phrasing.
+  - Gallup template: `Fielded X.–Y. mánuður YYYY; úrtak N, svh P%`
+  - Maskína template: `Fielded X.–Y. mánuður YYYY; svarendur N`
+  - If `n_total` was defaulted or estimated (e.g. Gallup `10000` placeholder), flag it: `n estimated — methodology not disclosed`
+
+If you applied any **corrections** in step 3 (tribble date or n_total disagreed with the source), record the correction in the Notes column with **bold** prefix (`**CORRECTION: date was 2026-03-16, source says 2026-03-17**`) and add a one-line entry to the *Verification log* section at the bottom of `data_sources.md`.
+
+If `data_sources.md` doesn't exist (someone deleted it, fresh clone), regenerate the skeleton from the existing tribble — headers, the Conventions section, and a Verification log entry noting the rebuild. The other historical rows can be backfilled later via parallel agents; what matters most is that **every new poll lands in the tribble with provenance recorded in the same commit**.
+
+### 8. Regenerate the CSV
 
 ```bash
 Rscript -e 'source("R/scrape_polls.R"); update_post_election_polls(scrape = FALSE)'
@@ -128,7 +169,7 @@ Rscript -e 'source("R/scrape_polls.R"); update_post_election_polls(scrape = FALS
 
 Note `scrape = FALSE` — we already have the verified values; we only want the tribble → CSV transformation. Confirm the new rows show up at the tail of `data/post_election_polls.csv` (one row per party per poll).
 
-### 8. Hand off cleanly
+### 9. Hand off cleanly
 
 End with a structured summary so the user knows what changed and what's still pending:
 
