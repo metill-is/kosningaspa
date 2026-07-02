@@ -68,6 +68,7 @@ values.
 | 2026-03-16 | 10,746 | [PDF](https://cdnx.gallup.is/media/documents/Puls_0426_Fylgi_flokka.pdf) ([Gallup article](https://www.gallup.is/frettir/framsokn-tapar--fylgi/)) | Fielded 2.–31. mars 2026; úrtak 10.746, svh 42,3%. Tribble corrected 2026-05-20 (was 10,000 default) |
 | 2026-04-15 | 10,484 | [PDF](https://cdnx.gallup.is/media/documents/Puls_0526_Fylgi_flokka.pdf) ([Gallup article](https://www.gallup.is/frettir/sjalfstaedisflokkurinn-baetir-vid-sig-fylgi/)) | Fielded 1.–29. apríl 2026; úrtak 10.484, svh 40,4% |
 | 2026-05-15 | 12,979 | [RÚV (þröskuldsfrétt)](https://www.ruv.is/frettir/innlent/2026-06-01-flokkur-folksins-maelist-utan-things-476896) ([RÚV forsíðufrétt](https://www.ruv.is/frettir/innlent/2026-06-01-sjalfstaedisflokkurinn-staerri-en-samfylking-eftir-kosningar-476906)) | Fielded 30. apríl – 31. maí 2026; úrtak 12.979, svh 40,8%, vikmörk 0,4–1,3 pp. Þjóðarpúls maí 2026. **Gallup PDF (Puls_0626) not yet published at ingest — RÚV published ahead of gallup.is.** Full 9-party breakdown + methodology taken from the companion threshold article's interactive Highcharts data table (S 28,4 / D 23,5 / M 17,6 / C 10,6 / B 6,7 / V 4,3 / F 4,0 / J 2,6 / P 1,9); whole-month figure used per convention (poll also reports a pre/post-16 May municipal-election split — not ingested). Broadcast graphic (7 largest parties) cross-checks exactly |
+| 2026-06-15 | 12,102 | [RÚV](https://www.ruv.is/frettir/innlent/2026-07-01-bilid-minnkar-milli-samfylkingarinnar-og-sjalfstaedisflokksins-480049) ([Gallup dashboard](https://www.gallup.is/data/geytenbr/sso/)) | Fielded 1.–30. júní 2026; úrtak 12.102, svh 38,5%, vikmörk 0,5–1,4 pp. Þjóðarpúls júní 2026. **Gallup PDF (Puls_0726) not yet published at ingest — RÚV published ahead of gallup.is.** 8 parties + methodology from the RÚV article's embedded Highcharts `pollData` (S 26,2 / D 24,9 / M 15,1 / C 11,4 / B 5,3 / V 5,0 / F 4,6 / J 4,3). **Píratar omitted from the RÚV article/chart** (first Gallup reading where RÚV drops P) but present in Gallup's own Looker dashboard at **P 2,7%** — that value used, giving Annað 0,5% (in line with the 0,4–0,6% recent norm). |
 
 ### Maskína (national)
 
@@ -234,3 +235,32 @@ these rules; this file is the durable artefact the skill produces.
     table exactly for S/D/M/C/B/V/F; the data table + article text supply
     the two sub-5% parties the broadcast omits (J 2,6 / P 1,9). Sum of the
     9 named = 99,6, so Annað ≈ 0,4 (computed by the script).
+
+- **[2026-07-01]** Ingested Þjóðarpúls Gallup júní 2026 (tribble
+  `2026-06-15`, úrtak 12.102, svh 38,5%, fielded 1.–30. júní 2026).
+  Notable for this ingest:
+  - **RÚV published ahead of gallup.is again.** The Gallup PDF `Puls_0726`
+    404s on `cdnx.gallup.is` and no Þjóðarpúls júní article exists on
+    `gallup.is/frettir/` yet (latest party-support article there is the
+    2 June reading). Second month running that RÚV beats the PDF. Re-cite
+    once it appears at
+    `https://cdnx.gallup.is/media/documents/Puls_0726_Fylgi_flokka.pdf`.
+  - **Values from the article's embedded `__NEXT_DATA__`, not Chrome.** The
+    RÚV article is a Next.js page; the full per-party breakdown ships in the
+    Highcharts `pollData` array and the methodology line in a `raw_code_block`
+    inside the server-rendered `__NEXT_DATA__` payload. `curl` + JSON parse
+    gave exact values without needing the Chrome extension (which was
+    disconnected this session).
+  - **Píratar omitted from the RÚV article/chart, recovered from Gallup's
+    dashboard.** Neither the article body nor the chart `pollData` carried a
+    Píratar value (first Gallup reading where RÚV drops P; previous month P
+    was 1,9%). Initially entered as `P = 0.0` (source-fidelity), which pushed
+    `sumNamed` to 96,8 vs the recent 99,4–99,6 norm — a red flag. Gallup's own
+    Looker dashboard (`gallup.is/data/geytenbr/sso/`, "Þróun á fylgi flokka
+    til Alþingis") shows **Píratar 2,7%** for June. Tribble corrected to
+    `P = 2.7`, which restores Annað to 0,5% (normal band) and `sumNamed` to
+    99,5. The RÚV chart simply omits sub-3% Píratar; the underlying Gallup
+    measurement carries it.
+  - **Cross-check:** the 9 named parties now sum to 99,5 (S 26,2 / D 24,9 /
+    M 15,1 / C 11,4 / B 5,3 / V 5,0 / F 4,6 / J 4,3 / P 2,7); seats in the RÚV
+    chart (S 19 / D 18 / M 11 / C 8 / B 4 / V 3, rest 0) total 63.
