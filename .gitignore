@@ -40,3 +40,13 @@ Figures/post_analysis/
 
 # Model output cache
 results/
+
+# Local MCP config (Claude Code)
+.mcp.json
+
+# Fit run logs and stray R plot output
+*.log
+Rplots.pdf
+
+# Scratch / ad-hoc verification files
+scratch_*
