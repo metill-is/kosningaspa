@@ -1,9 +1,38 @@
 # WHY: under a C locale (headless Rscript) string matching against the Icelandic
 # party names fails, so the fct_relevel() below silently no-ops. Pin a UTF-8 locale
-# so the size-descending party order takes effect. polling_watch_v4 is
-# reference-invariant, so party order does NOT change results -- but ordering parties
-# largest->smallest (the tiny "Annað" residual LAST) keeps the sum-to-zero geometry
-# well-conditioned: 0% max-treedepth, vs ~60-100% when the boundary party sits early.
+# so the party order comes out the same headless as interactive.
+#
+# The order itself is only a determinism convention -- NOT a tuning knob. Measured
+# 2026-08-19, three fits on current data at matched settings:
+#   * Results are invariant. Reordering moves posterior medians by <=0.01pp, LESS
+#     than a reseed of the same order does (<=0.02pp). polling_watch_v4's
+#     reference invariance holds comfortably.
+#   * Sampling is unaffected too. An earlier version of this comment claimed
+#     0% max-treedepth here vs ~60-100% with the tiny "Annað" residual placed
+#     early; that does not reproduce. Annað-FIRST scored 1.0%, in between two
+#     runs of the order below (9.0% and 0.0%).
+#   * Max-treedepth warnings come from step-size adaptation variance, not from
+#     ordering and not from initial values. This posterior needs a fixed distance
+#     per trajectory, which at the adapted step size costs almost exactly 511
+#     leapfrog steps = 2^9 -- i.e. it sits ON a power-of-two boundary, with only
+#     one doubling of headroom under the default cap of 10. Any chain that adapts
+#     a slightly smaller epsilon spills over. Measured on the 2026-08-19 fit:
+#         chain 1  eps 0.00718   0.0% at cap   511 leapfrog
+#         chain 2  eps 0.00752   0.0% at cap   511 leapfrog
+#         chain 3  eps 0.00650  25.7% at cap   742 leapfrog   <- 12% smaller eps
+#         chain 4  eps 0.00743   0.0% at cap   511 leapfrog
+#     No divergences, rhat 1.00, posterior unaffected -- the cap is binding, not
+#     the geometry misbehaving.
+#
+#     Better inits (e.g. Pathfinder) will NOT help: init = 0 starts all chains at
+#     the SAME point, so the epsilon spread is pure adaptation RNG, with no
+#     starting-point variation to remove. Drawing a separate Pathfinder init per
+#     chain would add between-chain variation that does not currently exist.
+#     If you want to attack the spread directly the knob is term_buffer (default
+#     50 iterations is the whole sample behind the final epsilon). We instead take
+#     the simpler route: max_treedepth = 11 is set on the sample() call below, so
+#     the occasional conservative chain completes its trajectory rather than being
+#     truncated. Do not reorder parties chasing this.
 Sys.setlocale("LC_ALL", "en_US.UTF-8")
 
 library(tidyverse)
@@ -45,8 +74,11 @@ polling_data <- bind_rows(pre_election, post_election) |>
       as_factor(fyrirtaeki),
       "Kosning"
     ),
-    # Size-descending order (largest first, tiny "Annað" residual last) for sampling
-    # efficiency. Reference-invariant, so this does not affect results.
+    # Fixed party order. Immaterial to both results and sampling speed (see the
+    # measurement note at the top of this file) -- pinned purely so the fit is
+    # reproducible and locale-independent. Sorting this by party size would be a
+    # no-op: in the RAW polls Samfylkingin still leads Sjalfstaedisflokkurinn at
+    # every recent window; D leads only in the house-effect-corrected latent.
     flokkur = fct_relevel(
       as_factor(flokkur),
       "Samfylkingin",
@@ -63,11 +95,11 @@ polling_data <- bind_rows(pre_election, post_election) |>
   ) |>
   arrange(date, fyrirtaeki, flokkur)
 
-# Guard: size-descending order must have taken (largest first, "Annað" last) so the
-# sum-to-zero geometry stays well-conditioned. If this fails the locale fix above did
-# not take; the order is invariant for results but matters for sampling speed.
+# Guard: the relevel must actually have taken. Party order does not change results,
+# so a no-op here is not a correctness bug -- but it means the locale pin above
+# failed, which is worth catching loudly before it breaks something that does care.
 stopifnot(
-  "party order not size-descending — fct_relevel no-opped (check LC_ALL locale)" =
+  "party order not applied — fct_relevel no-opped (check LC_ALL locale)" =
     levels(polling_data$flokkur)[1] == "Samfylkingin" &&
       tail(levels(polling_data$flokkur), 1) == "Annað"
 )
@@ -98,7 +130,22 @@ fit <- model$sample(
   refresh = 100,
   init = 0,
   iter_warmup = 500,
-  iter_sampling = 1000
+  iter_sampling = 1000,
+  # This posterior legitimately needs ~511 leapfrog steps = 2^9 per trajectory, so
+  # the default cap of 10 leaves a single doubling of headroom and any chain that
+  # adapts a slightly small step size gets truncated. See the note at the top of
+  # this file.
+  #
+  # Verified 2026-08-19 on seed 20260819 (a seed that truncates under the default):
+  # nothing reaches depth 11, so the warning is gone -- but the chain that used to
+  # be cut off (eps 0.00625) genuinely wants depth 10 on 81% of its transitions and
+  # now runs 960 leapfrog steps instead of being stopped. That is the point: a
+  # truncated NUTS trajectory is a trajectory stopped before its U-turn, which
+  # biases exploration. It is NOT free, though -- the well-adapted chains are
+  # unchanged at 511 steps, but the slow chain's sampling goes 204s -> 399s, so
+  # wall-clock rose 458s -> 586s (+28%). Bought with that: min ESS 3665 -> 4324
+  # (+18%), still 0 divergences, rhat 1.000. Worth it for a monthly job.
+  max_treedepth = 11
 )
 
 fit$summary("sigma")
