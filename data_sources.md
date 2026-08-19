@@ -68,7 +68,8 @@ values.
 | 2026-03-16 | 10,746 | [PDF](https://cdnx.gallup.is/media/documents/Puls_0426_Fylgi_flokka.pdf) ([Gallup article](https://www.gallup.is/frettir/framsokn-tapar--fylgi/)) | Fielded 2.–31. mars 2026; úrtak 10.746, svh 42,3%. Tribble corrected 2026-05-20 (was 10,000 default) |
 | 2026-04-15 | 10,484 | [PDF](https://cdnx.gallup.is/media/documents/Puls_0526_Fylgi_flokka.pdf) ([Gallup article](https://www.gallup.is/frettir/sjalfstaedisflokkurinn-baetir-vid-sig-fylgi/)) | Fielded 1.–29. apríl 2026; úrtak 10.484, svh 40,4% |
 | 2026-05-15 | 12,979 | [RÚV (þröskuldsfrétt)](https://www.ruv.is/frettir/innlent/2026-06-01-flokkur-folksins-maelist-utan-things-476896) ([RÚV forsíðufrétt](https://www.ruv.is/frettir/innlent/2026-06-01-sjalfstaedisflokkurinn-staerri-en-samfylking-eftir-kosningar-476906)) | Fielded 30. apríl – 31. maí 2026; úrtak 12.979, svh 40,8%, vikmörk 0,4–1,3 pp. Þjóðarpúls maí 2026. **Gallup PDF (Puls_0626) not yet published at ingest — RÚV published ahead of gallup.is.** Full 9-party breakdown + methodology taken from the companion threshold article's interactive Highcharts data table (S 28,4 / D 23,5 / M 17,6 / C 10,6 / B 6,7 / V 4,3 / F 4,0 / J 2,6 / P 1,9); whole-month figure used per convention (poll also reports a pre/post-16 May municipal-election split — not ingested). Broadcast graphic (7 largest parties) cross-checks exactly |
-| 2026-06-15 | 12,102 | [RÚV](https://www.ruv.is/frettir/innlent/2026-07-01-bilid-minnkar-milli-samfylkingarinnar-og-sjalfstaedisflokksins-480049) ([Gallup dashboard](https://www.gallup.is/data/geytenbr/sso/)) | Fielded 1.–30. júní 2026; úrtak 12.102, svh 38,5%, vikmörk 0,5–1,4 pp. Þjóðarpúls júní 2026. **Gallup PDF (Puls_0726) not yet published at ingest — RÚV published ahead of gallup.is.** 8 parties + methodology from the RÚV article's embedded Highcharts `pollData` (S 26,2 / D 24,9 / M 15,1 / C 11,4 / B 5,3 / V 5,0 / F 4,6 / J 4,3). **Píratar omitted from the RÚV article/chart** (first Gallup reading where RÚV drops P) but present in Gallup's own Looker dashboard at **P 2,7%** — that value used, giving Annað 0,5% (in line with the 0,4–0,6% recent norm). |
+| 2026-06-15 | 12,102 | [PDF](https://cdnx.gallup.is/media/documents/Puls_0726_Fylgi_flokka.pdf) ([RÚV](https://www.ruv.is/frettir/innlent/2026-07-01-bilid-minnkar-milli-samfylkingarinnar-og-sjalfstaedisflokksins-480049), [Gallup dashboard](https://www.gallup.is/data/geytenbr/sso/)) | Fielded 1.–30. júní 2026; úrtak 12.102, svh 38,5%, vikmörk 0,5–1,4 pp. Þjóðarpúls júní 2026. **Puls_0726 PDF has since appeared and is now the primary citation (re-cited 2026-08-19); its "Júní 2026" row confirms S 26,2 / D 24,9 / M 15,1 / C 11,4 / B 5,3 / V 5,0 / F 4,6 / J 4,3 exactly.** 8 parties + methodology from the RÚV article's embedded Highcharts `pollData` (S 26,2 / D 24,9 / M 15,1 / C 11,4 / B 5,3 / V 5,0 / F 4,6 / J 4,3). **Píratar omitted from the RÚV article/chart** (first Gallup reading where RÚV drops P) but present in Gallup's own Looker dashboard at **P 2,7%** — that value used, giving Annað 0,5% (in line with the 0,4–0,6% recent norm). |
+| 2026-07-17 | 13,167 | [PDF](https://cdnx.gallup.is/media/documents/Puls_0826_Fylgi_flokka.pdf) ([Gallup article](https://www.gallup.is/frettir/litlar-breytingar--a-fylgi/), [Vísir](https://www.visir.is/g/20262917133d/mark-taekur-munur-a-fylgi-sam-fylkingar-og-sjalf-staedis-flokks)) | Fielded 1. júlí – 3. ágúst 2026; úrtak 13.167, svh 37,2%, vikmörk 0,5–1,4 pp. Þjóðarpúls júlí 2026 (published 5 Aug as `Puls_0826`). 8 parties from the PDF's "Júlí 2026" row (S 27,9 / D 25,4 / M 14,6 / C 11,4 / B 5,8 / F 5,2 / V 3,9 / J 3,2). **Píratar omitted from the PDF table** — prose says only "rúmlega 2% Pírata"; exact **P 2,2%** taken from Vísir ("Sósíalistar njóta nú stuðnings 3,2 prósenta kjósenda miðað við könnunina og Píratar 2,2 prósenta"), giving Annað 0,4% (in the 0,4–0,6% recent norm). Date is the linear midpoint of the 1 Jul – 3 Aug span (17,5 → floored to the 17th, per the dominant tribble convention) |
 
 ### Maskína (national)
 
@@ -88,7 +89,8 @@ Three canonical sources, in order of preference:
 | 2026-02-24 | 1,993 | [mbl.is](https://www.mbl.is/frettir/innlent/2026/02/24/fylgi_midflokksins_laekkar/) | Maskína fyrir Sýn-fréttir; per-party % match tribble (S 27,2 / D 16,2 / M 19,0 / C 13,4 / F 4,8 / P 5,2 / V 4,1 / J 3,1 / B 7,0). **Side-publication for Sýn — not part of Maskína's regular monthly Alþingi series, so no Maskína-published PDF or news article exists (confirmed via news-pagination walk 2026-05-20: gap between Jan 12 and Mar 2). mbl paywalled. `n_total` 1,993 remains the agent's best estimate** |
 | 2026-03-08 | 2,617 | [Vísir](https://www.visir.is/g/20262859852d/fylgi-sam-fylkingar-ekki-verid-minna-i-eitt-ar) | Composite: 26. feb.–3. mars + 12.–19. mars + 16.–19. mars 2026; svarendur 2.617 |
 | 2026-04-05 | 1,786 | [Vísir](https://www.visir.is/g/20262871996d/sam-fylking-og-sjalf-staedis-flokkur-haekka-flugid) ([maskina.is](https://maskina.is/sjalfstaedisflokkurinn-a-uppleid-samfylkingin-afram-staerst-flokka-a-landsvisu/)) | Composite: 25.–31. mars + 8.–16. apríl 2026; svarendur 1.786 |
-| 2026-06-06 | 1,700 | [Vísir](https://www.visir.is/g/20262901108d/sjalf-staedis-flokkur-a-flugi-og-rikis-stjornin-aldrei-maelst-med-minna-fylgi) ([RÚV](https://www.ruv.is/frettir/innlent/2026-06-24-samfylkingin-staerst-en-sjalfstaedisflokkur-vinnur-a-479261)) | Fielded 2.–11. júní 2026; svarendur ~1.700. **Side-publication for Sýn — not part of Maskína's regular monthly Alþingi series, so no Maskína-published PDF. Per-party from RÚV interactive chart (S 25,2 / D 22,7 / M 14,2 / C 12,4 / B 8,5 / V 5,4 / F 4,1 / J 3,9 / P 3,5), sums to 99,9. `n_total` 1.700 from article ("rúmlega 1700 tóku afstöðu")** |
+| 2026-06-06 | 1,705 | [PDF](https://maskina.is/wp-content/uploads/2026/07/2026-06-Fylgi-Althingi_Maskinuskyrsla.pdf) ([maskina.is](https://maskina.is/sjalfstaedisflokkurinn-baetir-i/), [Vísir](https://www.visir.is/g/20262901108d/sjalf-staedis-flokkur-a-flugi-og-rikis-stjornin-aldrei-maelst-med-minna-fylgi), [RÚV](https://www.ruv.is/frettir/innlent/2026-06-24-samfylkingin-staerst-en-sjalfstaedisflokkur-vinnur-a-479261)) | Fielded 2.–11. júní 2026; svarendur 1.705. **CORRECTION: n_total was 1,700 (estimate from the Vísir phrase "rúmlega 1700 tóku afstöðu"); the Maskína PDF's `Gild svör` row gives exactly 1.705.** **Also corrects the prior "side-publication for Sýn — no Maskína-published PDF" note: this IS a regular monthly Alþingi reading** — maskina.is published "Sjálfstæðisflokkurinn bætir í" on 22 June 2026 with a linked PDF report, hosted (unusually) under the `/2026/07/` upload path, which is why the earlier pagination walk missed it. PDF confirms per-party exactly: S 25,2 / D 22,7 / M 14,2 / C 12,4 / B 8,5 / V 5,4 / F 4,1 / J 3,9 / P 3,5 |
+| 2026-07-02 | 963 | [PDF](https://maskina.is/wp-content/uploads/2026/07/2026-07-Fylgi-Althingi_Maskinuskyrsla.pdf) ([maskina.is](https://maskina.is/sjalfstaedisflokkurinn-a-flugi/), [Vísir](https://www.visir.is/g/20262912056d/sjalfstaedisflokkur-maelist-staerstur)) | Fielded 26. júní – 8. júlí 2026; svarendur 963 (91% gáfu upp afstöðu). Regular monthly reading, published 21–22 July. Per-party direct from the PDF's `Niðurstöður` table with raw counts: D 25,0 (240) / S 24,4 (235) / M 13,4 (129) / C 12,7 (122) / B 6,6 (64) / F 5,9 (57) / V 4,9 (47) / J 4,0 (39) / P 3,1 (30); `Gild svör` 963 = 100,0%, so Annað 0,0. First Maskína reading since the 2024 election with **D ahead of S**. **Field-period discrepancy: the maskina.is article says "frá 28. júní til 8. júlí" but the PDF methodology page says "26. júní til 8. júlí". PDF used (skill convention), and independently corroborated by [Vísir 30 July](https://www.visir.is/g/20262915223d/dregur-ur-anaegju-med-frammistodu-rikisstjornarflokkanna) on the same field wave ("framkvæmd dagana 26. júní til 8. júlí"). Midpoint 26 Jun–8 Jul = 2 July; the article's dates would give 3 July** |
 
 ---
 
@@ -126,6 +128,45 @@ these rules; this file is the durable artefact the skill produces.
 ---
 
 ## Verification log
+
+- **[2026-08-19]** Ingested 2 new polls; corrected 1 existing row; re-cited 1.
+  - **NEW — Þjóðarpúls Gallup júlí 2026** (tribble `2026-07-17`, úrtak 13.167,
+    svh 37,2%, fielded 1. júlí – 3. ágúst 2026). Primary source is the
+    `Puls_0826` PDF, guessed straight off the deterministic
+    `cdnx.gallup.is/media/documents/Puls_MMYY_Fylgi_flokka.pdf` pattern — no
+    browser needed. **Píratar again absent from the source table** (third
+    month running that P goes missing somewhere in the chain); the PDF prose
+    says only "rúmlega 2%". Recovered as **P 2,2%** from the Vísir write-up,
+    verified against the raw article HTML rather than a summariser. sumNamed
+    = 99,6 → Annað 0,4, inside the 0,4–0,6 norm.
+  - **NEW — Maskína júlí 2026** (tribble `2026-07-02`, svarendur 963, fielded
+    26. júní – 8. júlí 2026). Regular monthly reading with a full PDF report.
+    The PDF is a Tableau export whose text layer is per-character, so
+    `pdftotext` output is unreadable as prose; reconstructing rows by
+    y-coordinate from `pdftotext -bbox` recovered the `Niðurstöður` table
+    cleanly, with raw counts alongside percentages. Article-vs-PDF field-period
+    disagreement (28 vs 26 June) resolved in favour of the PDF, corroborated
+    by a second Vísir article on the same wave.
+  - **CORRECTION — Maskína `2026-06-06`: n_total 1,700 → 1,705.** The
+    June PDF exists after all, at
+    `maskina.is/wp-content/uploads/**2026/07**/2026-06-Fylgi-Althingi_Maskinuskyrsla.pdf`
+    — note the upload path month (07) differs from the report month (06),
+    which is why the 2026-05-20 pagination walk concluded no PDF existed and
+    filed the poll as a Sýn side-publication. That note is now corrected: it
+    is a regular monthly reading. Per-party values were already exact.
+  - **RE-CITED — Gallup `2026-06-15`:** `Puls_0726` has since been published
+    and replaces RÚV as the primary source. Its "Júní 2026" row confirms all
+    eight parties exactly, retroactively validating last month's ingest
+    (including the P 2,7% dashboard recovery, which the PDF still omits).
+  - **RÚV's `pollsArray` is badly stale** — newest entry `2026-04-20`, roughly
+    four months behind the tribble, so step 2 of the skill (RÚV as primary
+    discovery channel) produced nothing. Discovery ran off `gallup.is/frettir/`
+    + the guessable PDF path and `maskina.is/frettir/` instead. If RÚV stays
+    stale, the skill's source ordering should be flipped.
+  - **Confirmed no third poll in the gap.** Vísir's Skoðanakannanir tag was
+    walked for everything after 4 Aug: all five newer items are EU-referendum
+    polls ahead of the late-August þjóðaratkvæðagreiðsla, not party support.
+    `Puls_0926` 404s and no `2026-08` Maskína report exists yet.
 
 - **[2026-05-20]** Initial `data_sources.md` created. Skeleton populated
   from the 23-row `get_hardcoded_polls()` tribble (1 election anchor +
