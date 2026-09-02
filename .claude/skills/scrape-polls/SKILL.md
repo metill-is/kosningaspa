@@ -42,7 +42,24 @@ Four reliable sources. Use whichever is freshest:
 
 1. **RÚV's canonical poll list at `https://www.ruv.is/kosningar/kannanir-a-landsvisu`.** The page embeds a `window.pollsArray` JavaScript variable containing every poll RÚV has on file, with per-party `ratio` to 6 decimal places, the firm name, the canonical Icelandic title (e.g. "Þjóðarpúls Gallup mars 2026", "Maskína 23. mars 2026"), and a publication date. **The cleanest source when it's up to date.** Read it via `mcp__Claude_in_Chrome__javascript_tool` running `JSON.stringify(window.pollsArray)`.
 
-2. **Gallup's own site at `https://www.gallup.is/frettir/` and the Þjóðarpúls PDF.** Gallup typically publishes the Þjóðarpúls on gallup.is several days before RÚV picks it up — in May 2026 the lag was ≥ 8 days. The news listing at `gallup.is/frettir/` shows the latest articles; each Þjóðarpúls article links through to a PDF viewer page (`gallup.is/<slug>/`) whose iframe `src` points at the actual PDF. **The PDF is authoritative for methodology** — it states the field period (e.g. "1. - 29. apríl 2026"), heildarúrtak, and response rate that the RÚV blob doesn't carry. Fetch it with `curl` and read it directly. There's also an internal Looker dashboard at `gallup.is/data/geytenbr/sso/` showing the time series, but its raw CSV download is gated and the embedded iframe is cross-origin; the news article + PDF path is more reliable.
+2. **Gallup's own site at `https://www.gallup.is/frettir/` and the Þjóðarpúls PDF.** Gallup typically publishes the Þjóðarpúls on gallup.is several days before RÚV picks it up — in May 2026 the lag was ≥ 8 days. The news listing at `gallup.is/frettir/` shows the latest articles; each Þjóðarpúls article links through to a PDF viewer page (`gallup.is/<slug>/`) whose iframe `src` points at the actual PDF. **The PDF is authoritative for methodology** — it states the field period (e.g. "1. - 29. apríl 2026"), heildarúrtak, and response rate that the RÚV blob doesn't carry. Fetch it with `curl` and read it directly. **The PDF drops sub-3% parties from its table** (Píratar, every reading since June 2026) — recover those from source #2b below, not by guessing from the prose.
+
+2b. **Gallup's Looker back-end — the best source, and fully scriptable.** Verified working 2026-09-02. It carries *every* party to 2 dp, including the ones the PDF and RÚV drop, for every month back to 2021. Four steps, all `curl`:
+
+   ```bash
+   # 1. the page embeds a SIGNED Looker SSO url in its iframe src
+   curl -sL 'https://www.gallup.is/nidurstodur/thjodarpuls/fylgi-flokka-til-althingis/' -o page.html
+   # 2. follow that url with a cookie jar -> authenticates an anonymous embed session
+   curl -sL -c cj.txt -b cj.txt "<iframe src>" -o looker.html
+   # 3. read the csrf-token meta from looker.html, then get the dashboard definition
+   curl -s -b cj.txt -H "X-CSRF-Token: $CSRF" \
+     'https://gogn.gallup.is/api/internal/core/4.0/dashboards/gallup_dw::fylgi_til_althingis'
+   # 4. run the query id from the "Þróun á fylgi flokka til Alþingis" element
+   curl -s -b cj.txt -H "X-CSRF-Token: $CSRF" \
+     'https://gogn.gallup.is/api/internal/core/4.0/queries/<query_id>/run/json'
+   ```
+
+   Rows are keyed by `gallup_althingisfylgi.response_date` (the reading's **month-end**, e.g. `2026-08-31` for the 4.–31. ágúst fielding — *not* the tribble's midpoint date) with `…hlutfall` giving per-party percentages. Only the `/api/internal/` prefix works; `/api/4.0/` returns 401. Use this to recover dropped parties **and** to reconcile the whole Gallup block in one pass. Note the old claim that this dashboard was "gated and cross-origin" was wrong.
 
    **PDF hosting paths (important):**
    - **May 2025 onward:** `cdnx.gallup.is/media/documents/Puls_MMYY_Fylgi_flokka.pdf` — deterministic and URL-guessable (`MMYY` = publication month, e.g. `0526` = May 2026 PDF reporting April 2026 field period).
