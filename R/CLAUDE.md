@@ -55,6 +55,7 @@ Interactive fitting scripts (e.g., `fit_*.R`) also use `library()` for heavy dep
 |--------|---------|
 | `scrape_polls.R` | Scrapes polls, maintains hardcoded post-election polls → `data/post_election_polls.csv` |
 | `prepare_economy_data.R` | Fetches from hagstofa (Statistics Iceland) and eurostat → `data/economy_data.csv` |
+| `download_iskos.R` | Downloads the ÍSKOS (Icelandic National Election Study) voter surveys 1983–2021 and the open campaign panels from the GAGNÍS Dataverse → `data-raw/iskos/` (original `.sav` with value labels + codebooks, MD5-checked, `manifest.csv`); idempotent, skips restricted files. Each wave has current (`prtvoteYY`) and recalled previous vote (`prtfvoteYY`). 1983–2017 fall under the GAGNÍS non-commercial user terms; 2021 and the campaign panels are CC0 |
 | `post_analysis.R` | Post-election error analysis against actual results |
 | `compare_error.R` | Forecast error comparison across models |
 
