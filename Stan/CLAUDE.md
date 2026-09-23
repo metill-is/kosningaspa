@@ -13,7 +13,7 @@
 | `polling_and_fundamentals_historic.stan` | Backtesting variant for past elections | `R/modeling_utils.R` |
 | `fundamentals.stan` | Fundamentals-only (no polling data) | `R/fit_fundamentals_model.R` |
 | `base_model_no_polling_bias.stan` | Weighted average baseline (no house effects) | Comparison/baseline |
-| `polling_watch.stan` | Between-election polling smoother | `R/fit_polling_watch.R` |
+| `polling_watch_v4.stan` | Between-election polling smoother (production; the other `polling_watch*.stan` files are superseded or comparison variants, see `polling_watch_variants.md`) | `R/fit_polling_watch.R` |
 
 ## Model Architecture (production model)
 
@@ -48,7 +48,4 @@ model <- cmdstan_model("Stan/polling_and_fundamentals_kjordaemi.stan")
 
 ## Conventions
 
-- Data blocks should document expected dimensions in comments
-- Use `_raw` suffix for unconstrained parameterizations (e.g., `delta_raw` with non-centered parameterization)
-- Generated quantities block should produce `y_rep_*` posterior predictive draws
 - Use `softmax()` to convert unconstrained parameters to simplex

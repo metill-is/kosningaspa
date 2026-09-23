@@ -1,7 +1,5 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
 ## Project Overview
 
 **Kosningaspa** is a Bayesian election forecasting system for Icelandic parliamentary elections (Alþingi). It combines polling data, economic fundamentals, and constituency-level effects using Stan models to predict both vote shares and seat allocations across Iceland's 6 electoral districts.
@@ -10,39 +8,12 @@ Authors: Brynjólfur Gauti Guðrúnar Jónsson, Rafael Daniel Vias, Hafsteinn Ei
 
 ## Repository Layout
 
-The repo is code-first. Modelling code lives at the top level; written outputs are nested under `writing/`, each as a self-contained Quarto project.
-
-```
-.
-├── R/              # model-fitting and analysis modules (box::use imports)
-├── Stan/           # Bayesian model source (.stan)
-├── data/           # date-stamped parquet snapshots (gitignored)
-├── data-raw/       # raw CSV from Google Sheets (gitignored)
-├── Figures/        # generated plots, shared across writing outputs
-├── results/        # local model output cache (gitignored)
-└── writing/
-    └── manuscript/ # methodological manuscript (Quarto `manuscript` type)
-```
-
-To add a new writing output (book chapter, conference paper, etc.), create `writing/<name>/` with its own `_quarto.yml`. Each output renders independently and can target different formats (docx, pdf, html). Reference shared assets with `../../` paths (e.g. `bibliography: ../manuscript/references.bib` or `../../Figures/foo.png`).
+The repo is code-first. Modelling code lives at the top level; written outputs are nested under `writing/`, each as a self-contained Quarto project rendered from inside its own directory (manuscript: `writing/manuscript/CLAUDE.md`; adding an output: `.claude/rules/quarto-manuscript.md`).
 
 ## Key Commands
 
-### Render a writing output
-Each `writing/<name>/` is its own Quarto project. Render from inside that directory:
-```bash
-cd writing/manuscript && quarto render
-```
-Output goes to `writing/manuscript/docs/` (per the project's `output-dir`). `execute: freeze: true` means R code is not re-run unless you pass `--execute` or delete `_freeze/`.
-
 ### Run the full model fitting pipeline
 The main entry point is `R/fit_polling_and_fundamentals_kjordaemi_model.R`. **This is an interactive script** — run it line-by-line or in sections in R/RStudio, not via `Rscript` or `source()`.
-
-### Compile a Stan model
-```r
-library(cmdstanr)
-model <- cmdstan_model("Stan/polling_and_fundamentals_kjordaemi.stan")
-```
 
 ### Update data from Google Sheets
 Requires `GOOGLE_MAIL`, `POLLING_SHEET_URL`, and `FUNDAMENTALS_SHEET_URL` environment variables.
@@ -91,13 +62,10 @@ The codebase mixes English (code structure, documentation) and Icelandic (variab
 
 ## Dependencies
 
-Core R packages: `tidyverse`, `cmdstanr`, `posterior`, `bayesplot`, `arrow`, `googlesheets4`, `here`, `clock`, `box`, `metill` (custom theme package from Metill providing `theme_metill()`), `gt`, `gtExtras`, `ggiraph`, `scales`.
-
-Requires a working CmdStan installation for `cmdstanr`. No `renv.lock` — packages are installed manually.
+Packages are installed manually (no `renv.lock` or `DESCRIPTION`), so this is the install list: `tidyverse`, `cmdstanr`, `posterior`, `bayesplot`, `arrow`, `googlesheets4`, `here`, `clock`, `box`, `metill`, `gt`, `gtExtras`, `ggiraph`, `scales`. `cmdstanr` requires a working CmdStan installation. `metill` is the custom theme package from Metill providing `theme_metill()`.
 
 ## Important Notes
 
-- The `data/` directory and all `.parquet` files are gitignored. Model outputs live locally only.
-- Compiled Stan binaries (files without `.stan` extension in `Stan/`) are gitignored.
+- The `data/` directory (date-stamped parquet snapshots), `data-raw/` (raw CSV from Google Sheets), `results/` (local model output cache) and all `.parquet` files are gitignored. Model outputs live locally only. `Figures/` holds generated plots shared across writing outputs.
 - The working directory must be the project root for `box::use(R/...)` imports to resolve.
 - `R/archive/` and `Stan/archive/` contain experimental/superseded code — not used in production.

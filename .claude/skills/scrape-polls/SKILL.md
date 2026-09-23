@@ -40,7 +40,7 @@ If you write only to the CSV, your changes vanish on the next run. Always edit t
 
 Four reliable sources. Use whichever is freshest:
 
-1. **RÚV's canonical poll list at `https://www.ruv.is/kosningar/kannanir-a-landsvisu`.** The page embeds a `window.pollsArray` JavaScript variable containing every poll RÚV has on file, with per-party `ratio` to 6 decimal places, the firm name, the canonical Icelandic title (e.g. "Þjóðarpúls Gallup mars 2026", "Maskína 23. mars 2026"), and a publication date. **The cleanest source when it's up to date.** Read it via `mcp__Claude_in_Chrome__javascript_tool` running `JSON.stringify(window.pollsArray)`.
+1. **RÚV's canonical poll list at `https://www.ruv.is/kosningar/kannanir-a-landsvisu`.** The page embeds a `window.pollsArray` JavaScript variable containing every poll RÚV has on file, with per-party `ratio` to 6 decimal places, the firm name, the canonical Icelandic title (e.g. "Þjóðarpúls Gallup mars 2026", "Maskína 23. mars 2026"), and a publication date. **The cleanest source when it's up to date.** Read it via `javascript_tool` running `JSON.stringify(window.pollsArray)`.
 
 2. **Gallup's own site at `https://www.gallup.is/frettir/` and the Þjóðarpúls PDF.** Gallup typically publishes the Þjóðarpúls on gallup.is several days before RÚV picks it up — in May 2026 the lag was ≥ 8 days. The news listing at `gallup.is/frettir/` shows the latest articles; each Þjóðarpúls article links through to a PDF viewer page (`gallup.is/<slug>/`) whose iframe `src` points at the actual PDF. **The PDF is authoritative for methodology** — it states the field period (e.g. "1. - 29. apríl 2026"), heildarúrtak, and response rate that the RÚV blob doesn't carry. Fetch it with `curl` and read it directly. **The PDF drops sub-3% parties from its table** (Píratar, every reading since June 2026) — recover those from source #2b below, not by guessing from the prose.
 
@@ -95,7 +95,7 @@ In Chrome, navigate to `https://www.ruv.is/kosningar/kannanir-a-landsvisu`. The 
 new Promise(r => setTimeout(() => r(JSON.stringify(window.pollsArray)), 2500))
 ```
 
-Use `mcp__Claude_in_Chrome__javascript_tool`. This returns a clean JSON list of every poll RÚV has on file (~50 entries), each with `identifier`, `text`, `shorttext`, `type`, `date`, `ispoll`, `calculator`, plus per-party `ratio` to 6 decimal places.
+Use `javascript_tool`. This returns a clean JSON list of every poll RÚV has on file (~50 entries), each with `identifier`, `text`, `shorttext`, `type`, `date`, `ispoll`, `calculator`, plus per-party `ratio` to 6 decimal places.
 
 Filter to entries dated *after* the last tribble entry per firm, and where the firm is **Gallup** or **Maskína** (skip Prósent and Félagsvísindastofnun).
 
@@ -219,13 +219,13 @@ Don't run the hand-off commands. Stan fits take minutes; the user picks the mome
 
 ## Tooling cheat sheet
 
-For the verification step, the most useful Chrome MCP calls are:
+For the verification step, the most useful Chrome MCP tools are below, named without their server prefix, which differs by host (see the global `browser-control` skill):
 
-- `mcp__Claude_in_Chrome__tabs_context_mcp` — list available tabs (call once at the start)
-- `mcp__Claude_in_Chrome__navigate` — go to an article
-- `mcp__Claude_in_Chrome__get_page_text` — grab the body for reading
-- `mcp__Claude_in_Chrome__javascript_tool` — read `window.pollsArray` from RÚV (use the `setTimeout` wrap shown in Step 2; the variable is empty on first paint)
-- `mcp__Claude_in_Chrome__browser_batch` — bundle navigate + wait + read into one round-trip when you have a sequence
+- `tabs_context_mcp` — list available tabs (call once at the start)
+- `navigate` — go to an article
+- `get_page_text` — grab the body for reading
+- `javascript_tool` — read `window.pollsArray` from RÚV (use the `setTimeout` wrap shown in Step 2; the variable is empty on first paint)
+- `browser_batch` — bundle navigate + wait + read into one round-trip when you have a sequence
 
 `browser_batch` is the right tool when you're verifying several articles in a row — it cuts the latency of each individual MCP call.
 
