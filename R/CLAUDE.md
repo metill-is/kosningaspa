@@ -43,6 +43,7 @@ Interactive fitting scripts (e.g., `fit_*.R`) also use `library()` for heavy dep
 | `make_meirihlutar_plots.R` | `seats_draws.parquet` | Coalition majority probability plots |
 | `make_polling_watch_plots.R` | `polling_watch_draws.parquet` + raw polling data | Time series + snapshot plots |
 | `make_correlation_plots.R` | `polling_watch_omega.parquet` | Clustered marginal + partial (precision) correlation heatmap of the latent RW innovations |
+| `make_rw_innovation_cov_plots.R` | `polling_watch_fit.rds` (sigma, Omega, pi_smooth) | RW-innovation covariance/correlation and pseudo-inverse precision/partial correlation on the *identified* clr (C·Sz·C) and share (J·Sz·J') scales, per 30 days (`rw_innovation_{covariance,precision}.png`). `make_correlation_plots.R` plots the pre-centring Omega, which v4 does not identify |
 | `make_house_effects_plot.R` | `polling_watch_gamma.parquet` + `polling_watch_mu_gamma.parquet` + `polling_watch_draws.parquet`; 2024 election result as a pp baseline | Three house/industry-bias forest plots: logit scale, pp vs last election, pp vs current fylgisvakt (`polling_watch_house_effects{,_pp,_pp_current}.png`) |
 | `plot_model_results.R` | Model fit object + polling data | Diagnostic plots |
 | `plot_fundamentals_weight.R` | Model parameters | Fundamentals weight curve |
