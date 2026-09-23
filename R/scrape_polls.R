@@ -32,12 +32,13 @@ party_stems <- c(
 
 #### Hardcoded post-election polls ####
 # Gallup data from ruv.is (Þjóðarpúls): exact percentages
-# Maskína data from visir.is: approximate where noted
+# Maskína data: exact 1-dp values (PDF / maskina.is dashboard / Vísir)
 # 2024 election result from althingi.is / electionguide.org
 
 get_hardcoded_polls <- function() {
   # Wide format: each row is one poll with party abbreviation columns (%)
-  # Date is midpoint of collection period
+  # Date is floor(midpoint) of the collection period; four Maskína rows with an
+  # unpublished field period carry estimated dates (flagged in data_sources.md)
   polls_wide <- tribble(
     ~date,         ~fyrirtaeki, ~n_total,  ~S,    ~D,    ~B,    ~C,    ~M,    ~F,    ~P,    ~V,    ~J,
     # 2024 election result (Nov 30, 2024) — official results
@@ -64,17 +65,29 @@ get_hardcoded_polls <- function() {
     "2026-06-15",  "Gallup",    12102,     26.2,  24.9,  5.3,   11.4,  15.1,  4.6,   2.7,   5.0,   4.3,
     "2026-07-17",  "Gallup",    13167,     27.9,  25.4,  5.8,   11.4,  14.6,  5.2,   2.2,   3.9,   3.2,
     "2026-08-17",  "Gallup",    13836,     29.6,  26.8,  5.5,   9.7,   15.6,  4.8,   1.9,   3.6,   2.4,
-    # Maskína polls (visir.is) — approximate values noted in comments
-    "2024-12-12",  "Maskína",   2803,      23.0,  16.0,  8.0,   16.0,  9.0,   11.0,  5.0,   4.0,   6.0,
-    "2025-10-09",  "Maskína",   1765,      29.0,  16.0,  6.0,   16.0,  14.0,  6.0,   5.0,   4.0,   3.0,
-    "2025-11-10",  "Maskína",   1500,      29.0,  15.0,  7.0,   13.0,  17.0,  5.6,   5.0,   5.0,   3.0,
+    # Maskína polls — reconciled against Maskínuskýrsla PDFs and the maskina.is dashboard; provenance in data_sources.md
+    "2024-12-12",  "Maskína",   2803,      23.1,  16.3,  8.4,   16.5,  9.0,   10.6,  5.2,   3.8,   6.0,
+    "2025-01-11",  "Maskína",   966,       22.2,  19.3,  7.2,   14.0,  11.6,  12.9,  3.6,   3.1,   4.1,
+    "2025-02-19",  "Maskína",   2899,      21.9,  21.4,  7.3,   14.9,  11.5,  9.1,   3.2,   2.8,   5.5,
+    "2025-03-12",  "Maskína",   1899,      23.3,  24.3,  6.8,   14.8,  10.9,  8.5,   3.1,   3.3,   4.9,
+    "2025-04-15",  "Maskína",   1453,      26.2,  20.9,  7.2,   15.8,  10.3,  7.9,   3.9,   2.9,   4.9,
+    "2025-05-15",  "Maskína",   1962,      27.4,  18.9,  6.8,   16.8,  9.7,   7.2,   4.6,   3.6,   5.0,
+    "2025-06-22",  "Maskína",   876,       28.1,  17.3,  7.0,   15.3,  13.0,  6.6,   4.6,   3.7,   4.4,
+    "2025-07-13",  "Maskína",   1855,      31.2,  18.0,  6.8,   16.2,  9.9,   6.6,   5.0,   3.4,   2.9,
+    "2025-08-14",  "Maskína",   2228,      31.6,  18.6,  6.5,   16.1,  9.6,   6.3,   4.5,   4.2,   2.6,
+    "2025-09-11",  "Maskína",   1713,      31.9,  18.6,  6.3,   14.3,  9.1,   6.3,   5.8,   4.1,   3.5,
+    "2025-10-09",  "Maskína",   1765,      29.4,  15.9,  6.5,   16.1,  13.8,  6.3,   4.9,   4.0,   3.0,
+    "2025-11-10",  "Maskína",   1741,      29.1,  15.3,  6.6,   13.5,  17.3,  5.6,   4.9,   4.8,   2.8,
+    "2025-12-08",  "Maskína",   1893,      28.9,  15.1,  6.6,   13.3,  19.2,  4.8,   4.7,   4.3,   3.1,
     "2026-01-11",  "Maskína",   886,       27.0,  13.5,  7.1,   14.1,  22.2,  4.3,   4.1,   3.7,   4.1,
-    "2026-02-24",  "Maskína",   1993,      27.2,  16.2,  7.0,   13.4,  19.0,  4.8,   5.2,   4.1,   3.1,
+    "2026-02-10",  "Maskína",   1993,      27.2,  16.2,  7.0,   13.4,  19.0,  4.8,   5.2,   4.1,   3.1,
     "2026-03-08",  "Maskína",   2617,      25.5,  16.1,  7.1,   14.0,  18.4,  5.8,   5.0,   4.4,   3.5,
     "2026-04-05",  "Maskína",   1786,      27.7,  18.1,  7.2,   12.8,  16.4,  5.8,   4.7,   4.3,   3.0,
+    "2026-04-29",  "Maskína",   2810,      25.3,  19.8,  7.8,   14.4,  15.0,  4.7,   4.1,   5.3,   3.7,
     "2026-06-06",  "Maskína",   1705,      25.2,  22.7,  8.5,   12.4,  14.2,  4.1,   3.5,   5.4,   3.9,
     "2026-07-02",  "Maskína",   963,       24.4,  25.0,  6.6,   12.7,  13.4,  5.9,   3.1,   4.9,   4.0,
-    "2026-08-01",  "Maskína",   3172,      26.2,  25.1,  7.8,   11.5,  12.7,  5.2,   3.5,   4.2,   3.9
+    "2026-08-01",  "Maskína",   3172,      26.2,  25.1,  7.8,   11.5,  12.7,  5.2,   3.5,   4.2,   3.9,
+    "2026-09-02",  "Maskína",   4544,      27.5,  25.0,  7.5,   11.9,  13.0,  4.3,   3.3,   4.5,   3.0
   )
 
   parties <- party_code_to_name()
