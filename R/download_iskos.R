@@ -13,14 +13,15 @@
 # share derived material only with registered users). 2021 and the campaign surveys
 # are CC0. Downloading the GAGNÍS-terms files means accepting those terms.
 #
-# Run from the repo root:  Rscript R/download_iskos.R
+# Run from the repo root:  Rscript R/download_iskos.R [voter_survey|campaign_survey ...]
+# (optional args restrict the run to those surveys; the manifest keeps other surveys' rows).
 
 library(here)
 library(jsonlite)
 
-server <- "https://dataverse.rhi.hi.is"
+server <- "https://gagnis.hi.is"
 out_root <- here("data-raw", "iskos")
-pause_s <- 1
+pause_s <- 5
 options(timeout = 120)
 
 datasets <- data.frame(
@@ -31,12 +32,18 @@ datasets <- data.frame(
     "doi:10.34881/SZUY8A", "doi:10.34881/PZJCHA", "doi:10.34881/HVPGFX"
   )
 )
+surveys <- commandArgs(trailingOnly = TRUE)
+if (length(surveys)) datasets <- datasets[datasets$survey %in% surveys, ]
+stopifnot("no datasets selected" = nrow(datasets) > 0)
 
 md5_of <- function(path) unname(tools::md5sum(path))
 
 manifest <- list()
 for (k in seq_len(nrow(datasets))) {
   ds <- datasets[k, ]
+  # WHY: pause before EVERY request. A first run of ~115 back-to-back requests got this
+  # IP blocked by the hi.is firewall (2026-09-23; still blocked after 40 min, lifted by 09-25).
+  Sys.sleep(pause_s)
   meta <- fromJSON(
     sprintf("%s/api/datasets/:persistentId/?persistentId=%s", server, ds$doi),
     simplifyVector = FALSE
@@ -56,8 +63,6 @@ for (k in seq_len(nrow(datasets))) {
     } else if (file.exists(dest) && identical(md5_of(dest), df$md5)) {
       status <- "already_present"
     } else {
-      # Pause between downloads: ~100 back-to-back requests got this IP cut off by
-      # the hi.is firewall (all hi.is hosts timed out for a while afterwards).
       Sys.sleep(pause_s)
       url <- sprintf("%s/api/access/datafile/%s%s", server, df$id, if (tabular) "?format=original" else "")
       status <- tryCatch(
@@ -82,7 +87,15 @@ for (k in seq_len(nrow(datasets))) {
 }
 
 manifest <- do.call(rbind, manifest)
-write.csv(manifest, file.path(out_root, "manifest.csv"), row.names = FALSE, fileEncoding = "UTF-8")
+manifest_path <- file.path(out_root, "manifest.csv")
+if (file.exists(manifest_path)) {
+  old <- read.csv(manifest_path, fileEncoding = "UTF-8")
+  old <- old[!paste(old$survey, old$year) %in% paste(datasets$survey, datasets$year), ]
+  manifest_all <- rbind(old, manifest)
+} else {
+  manifest_all <- manifest
+}
+write.csv(manifest_all, manifest_path, row.names = FALSE, fileEncoding = "UTF-8")
 ok <- manifest$status %in% c("downloaded", "already_present")
 bad <- manifest$status %in% c("failed", "md5_mismatch")
 message(sprintf(
