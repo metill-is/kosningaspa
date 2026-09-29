@@ -45,6 +45,14 @@ Google Sheets → data.R (update_*) → CSV files in data/
                           make_new_prediction_plots.R → Figures/
 ```
 
+**Publishing to metill.is (Fylgisvakt).** This repo does not publish anything by
+itself. After a refit writes `data/<YYYY-MM-DD>/polling_watch_draws.parquet`, run
+`uv run --extra data python scripts/regenerate_kosningaspa.py` from
+`~/metill-platform`: it reads the newest dated folder here plus
+`data/post_election_polls.csv` and writes `data/fylgisvakt/{current,meta,timeseries}.json`
+there. Inspect the diff and ship it through a PR in that repo. The platform-side
+runbook and checks live in `~/metill-platform/.claude/rules/fylgisvakt.md`.
+
 ### Seat Allocation
 `R/election_utils.R` implements Iceland's electoral system:
 - `dhondt()` — D'Hondt method for regional seats
