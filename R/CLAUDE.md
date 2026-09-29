@@ -24,6 +24,7 @@ Interactive fitting scripts (e.g., `fit_*.R`) also use `library()` for heavy dep
 | `stan_data.R` | `prepare_stan_data()`, `prepare_polling_data()`, `prepare_fundamentals_data()`, `prepare_polling_watch_data()` | Each respective fitting script |
 | `election_utils.R` | `dhondt()`, `jofnunarsaeti()`, `seats_tibble()`, `calculate_seats()` | predict_seats.R, process_seats_draws.R |
 | `modeling_utils.R` | `fit_model_at_date()` | Historical backtesting scripts |
+| `flow_prior.R` | `flow_prior_target()`, `flow_exchange()`, `share_cov_target()`, `model_coords_target()`, `result_shares()`, `model_parties()`, `to_node()`, `read_switching()` — flow-informed RW-correlation prior target (Laplacian of ÍSKOS gross flows + non-voter reservoir → forecast-model clr coordinates → Omega_0 for a centred LKJ) | build_iskos_flow_targets.R |
 
 ### Model Fitting Scripts (interactive, run line-by-line)
 
@@ -57,6 +58,7 @@ Interactive fitting scripts (e.g., `fit_*.R`) also use `library()` for heavy dep
 | `prepare_economy_data.R` | Fetches from hagstofa (Statistics Iceland) and eurostat → `data/economy_data.csv` |
 | `download_iskos.R` | Downloads the ÍSKOS (Icelandic National Election Study) voter surveys 1983–2021 and the open campaign panels from the GAGNÍS Dataverse → `data-raw/iskos/` (original `.sav` with value labels + codebooks, MD5-checked, `manifest.csv`); idempotent, skips restricted files. Each wave has current (`prtvoteYY`) and recalled previous vote (`prtfvoteYY`). 1983–2017 fall under the GAGNÍS non-commercial user terms; 2021 and the campaign panels are CC0 |
 | `build_iskos_switching.R` | Builds election-to-election switching tables (recalled previous vote × current vote) from the 12 ÍSKOS voter surveys in `data-raw/iskos/` → gitignored `data/iskos/`: `switching_long.{parquet,csv}` (wave × weight scheme × cell; specific party + model group, which is the party if the fundamentals data names it for that election, else Annað), `validation.csv` (survey vs official shares), `label_map.csv` (crosswalk audit), `diagnostics.csv` (birth-year ineligibility). Parties are matched by value-label text, never code or letter; non-party answers via the turnout questions; eligibility at the previous election from year of birth. Derived from GAGNÍS-licensed data, so outputs stay out of git |
+| `build_iskos_flow_targets.R` | Builds Omega_0 targets (via `flow_prior.R`) for the 2016/2017/2021/2024/2028 forecasts, each from the previous cycle's ÍSKOS table, plus gamma = 2 and no-reservoir variants → gitignored `data/iskos/flow_targets.rds`; prints the 2024 Omega_0 and cycle-to-cycle stability |
 | `post_analysis.R` | Post-election error analysis against actual results |
 | `compare_error.R` | Forecast error comparison across models |
 
