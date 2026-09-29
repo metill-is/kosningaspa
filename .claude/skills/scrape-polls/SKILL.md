@@ -204,7 +204,7 @@ End with a structured summary so the user knows what changed and what's still pe
 
 ## Hand-off (run when ready)
 1. Refit polling watch:   Rscript R/fit_polling_watch.R
-2. Regenerate platform:   cd ~/metill-platform && uv run python scripts/regenerate_kosningaspa.py
+2. Regenerate platform:   in a worktree of ~/metill-platform at origin/main (never the shared checkout): ~/metill-platform/.venv/bin/python scripts/regenerate_kosningaspa.py, then push HEAD:main
 3. Review git diff and commit
 ```
 
@@ -243,4 +243,4 @@ For the verification step, the most useful Chrome MCP tools are below, named wit
 | List current tribble dates | `grep -E '^\s+"[0-9]{4}-' R/scrape_polls.R \| awk -F'"' '{printf "%s  %s\n",$2,$4}' \| sort` |
 | Regenerate CSV from tribble | `Rscript -e 'source("R/scrape_polls.R"); update_post_election_polls(scrape = FALSE)'` |
 | Refit polling-watch model (hand-off, don't run) | `Rscript R/fit_polling_watch.R` |
-| Regenerate platform JSON (hand-off, don't run) | `cd ~/metill-platform && uv run python scripts/regenerate_kosningaspa.py` |
+| Regenerate platform JSON (hand-off, don't run) | In a worktree at `origin/main` (never the shared checkout): `~/metill-platform/.venv/bin/python scripts/regenerate_kosningaspa.py`, then push `HEAD:main`. Bare `uv run` fails: `pyarrow` is in the `data` extra |
