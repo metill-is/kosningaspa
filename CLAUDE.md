@@ -72,6 +72,17 @@ The codebase mixes English (code structure, documentation) and Icelandic (variab
 
 Packages are installed manually (no `renv.lock` or `DESCRIPTION`), so this is the install list: `tidyverse`, `cmdstanr`, `posterior`, `bayesplot`, `arrow`, `googlesheets4`, `here`, `clock`, `box`, `metill`, `gt`, `gtExtras`, `ggiraph`, `scales`. `cmdstanr` requires a working CmdStan installation. `metill` is the custom theme package from Metill providing `theme_metill()`.
 
+## Obsidian Output
+
+Vault: `Metill` (MCP) / `~/Obsidian/Metill/`. Start with `load_topic` (vault `Metill`, query `kosningar`): it opens the strand hub `Kosningar/_MOC.md`, which covers this repo's forecast model plus the Fylgisvakt and Kosningakerfi pages built in `~/metill-platform`.
+
+- **Handoff:** `Kosningar/Kosningar Handoff.md` (current state, overwritten; `/done` routes here).
+- **Session notes:** vault-root `Sessions/` with `project: kosningar`.
+- **Model knowledge:** `Kosningar/Forecast model/` (incl. `model-lineage-and-known-issues.md`, `reference-invariance-fix.md`); the publish chain: `Kosningar/Fylgisvakt/fylgisvakt-publish-chain.md`.
+- **Data sources:** `Knowledge/Data Sources/Polls.md` and `Knowledge/Data Sources/ÍSKOS.md` (this repo's `data_sources.md` stays the per-poll provenance record).
+
+**Where knowledge goes:** what must be true at HEAD → `.claude/rules/` or `docs/` here; decisions, strategy, data-source facts, case histories and domain reference → the hub's folders in the vault; preferences and tooling gotchas → auto-memory, as one-line pointers. Never wikilink memory or rule files from the vault; cite them by absolute path.
+
 ## Important Notes
 
 - The `data/` directory (date-stamped parquet snapshots), `data-raw/` (raw CSV from Google Sheets), `results/` (local model output cache) and all `.parquet` files are gitignored. Model outputs live locally only. `Figures/` holds generated plots shared across writing outputs.
