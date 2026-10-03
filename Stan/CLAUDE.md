@@ -14,6 +14,7 @@
 | `fundamentals.stan` | Fundamentals-only (no polling data) | `R/fit_fundamentals_model.R` |
 | `base_model_no_polling_bias.stan` | Weighted average baseline (no house effects) | Comparison/baseline |
 | `polling_watch_v4.stan` | Between-election polling smoother (production; the other `polling_watch*.stan` files are superseded or comparison variants, see `polling_watch_variants.md`) | `R/fit_polling_watch.R` |
+| `polling_watch_v5_epoch.stan` | Experimental: v4 with pollster bias (industry `mu_gamma` and house effects) that random-walks across election epochs (`tau_mu`, `tau_house`, sampled or fixed; both 0 reproduces v4) | `R/fit_polling_watch_epoch.R` |
 
 ## Model Architecture (production model)
 
