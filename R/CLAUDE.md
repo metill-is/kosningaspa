@@ -33,7 +33,14 @@ Interactive fitting scripts (e.g., `fit_*.R`) also use `library()` for heavy dep
 | `fit_polling_and_fundamentals_kjordaemi_model.R` | `polling_and_fundamentals_kjordaemi.stan` | `y_rep_draws_constituency.parquet`, `seats_draws.parquet` |
 | `fit_polling_and_fundamentals_model.R` | `polling_and_fundamentals.stan` | National-level draws |
 | `fit_fundamentals_model.R` | `fundamentals.stan` | Fundamentals-only draws |
-| `fit_polling_watch.R` | `polling_watch_v4.stan` | `polling_watch_draws.parquet` (pi_smooth), `polling_watch_omega.parquet` (Omega), `polling_watch_gamma.parquet` (house effects), `polling_watch_mu_gamma.parquet` (industry bias), `polling_watch_fit.rds` (full fit, re-queryable) |
+
+### Polling-watch fit (Fylgisvakt; headless, run by hand)
+
+| Script | Stan Model | Output |
+|--------|-----------|--------|
+| `fit_polling_watch.R` | `polling_watch_v4.stan` (production; `polling_watch_v5_epoch.stan` is experimental and only fitted by `fit_polling_watch_epoch.R`) | `data/<YYYY-MM-DD>/` (gitignored): `polling_watch_draws.parquet` (pi_smooth), `polling_watch_omega.parquet` (Omega), `polling_watch_gamma.parquet` (house effects), `polling_watch_mu_gamma.parquet` (industry bias), `polling_watch_fit.rds` (full fit, re-queryable) |
+
+Run `Rscript R/fit_polling_watch.R` by hand after a poll ingest (`.claude/skills/scrape-polls`); it takes about 10 minutes. Nothing schedules it, and the scrape-polls skill hands it off rather than running it. It is stage 2 of the Fylgisvakt publish chain: `/Users/brynjolfurjonsson/metill-platform/scripts/regenerate_kosningaspa.py` then exports the newest dated fit to the JSON in `data/fylgisvakt/` there, and metill.is/fylgisvakt changes only after that JSON is committed, pushed and deployed.
 
 ### Visualization Scripts (read parquet outputs, produce PNGs)
 
