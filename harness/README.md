@@ -124,6 +124,70 @@ party with no list would, since the alr scores would take the log of that zero. 
 `tests/harness/test-scorer.R` checks that with a result reader that fails if it is called.
 The tests that pass the guard run in temporary git repositories.
 
+## Runs
+
+`R/harness/runs.R` keeps the record of each fit (spec §5.5, §5.7, §5.8): its id and
+directory, its frozen inputs, the keys that decide whether a finished run is reused, the
+diagnostics summary, the gate and the DIAG line. It fits nothing; the cell runner builds on
+it.
+
+**Ids and directories.** `run_id(arm, E, F, seed)` is `<arm>_<E>_<F>_s<seed>`, for example
+`r0_2024-11-30_2024-11-29_s1101`; an arm's name holds only letters, digits and hyphens.
+`run_dir(id)` is `results_root()/<id>`, and `results_root()` is `results/harness/` under the
+project root (gitignored), or `HARNESS_RESULTS` when that is set and not empty. The tests
+set it to a temporary directory and never write under the project.
+
+```
+results/harness/
+  <id>/
+    inputs/stan_data.json   the Stan data (cmdstanr::write_stan_json()), mode 0444
+    inputs/inputs.json      how the data were built, mode 0444
+    meta.json               written last by the runner: present means finished
+  _stale/<id>_<YYYYmmddHHMMSS>/   a retired run, kept as it was
+```
+
+`write_frozen_inputs(dir, stan_data, inputs_meta)` writes the two input files, makes them
+read-only and returns the sha256 of `stan_data.json`; it refuses a run whose `inputs/`
+exists, so frozen inputs are never rewritten in place. The runner adds the draws and
+`meta.json` beside them. `meta.json` holds the `expected_meta()` keys and more besides (the
+arm, E, F, the builder's meta, minutes, diagnostics, the gate and provenance).
+
+**Sha-skip.** `expected_meta()` lists the keys a finished run must match to be reused: the
+sha256 of the Stan file, the config and the Stan data, the seed, the warmup and sampling
+iterations, the sampler settings of `SAMPLER` (4 chains, `init = 0`, `max_treedepth = 12`)
+and `EXTRACT_VERSION`. `meta_mismatch(meta, expected)` returns the keys of `expected` whose
+values differ or are missing from `meta`, and ignores every other key of `meta`. Numbers
+compare by value, since a JSON round trip turns `0` into `0L`; every other value must be
+identical, so a number written as a string, a null or an NA is a mismatch. An empty result
+means the run is reused. Otherwise `retire_run(dir)` moves the directory under `_stale/`,
+never deleting it, and the cell is refitted. Bump `EXTRACT_VERSION` whenever the
+extraction changes, so that every finished run is refitted.
+
+**Diagnostics.** `summarise_diagnostics(params, scored, sampler)` takes the draws of every
+`parameters`-block variable, the draws of the scored quantities, and the sampler's
+per-chain divergences, treedepth hits, E-BFMI and deepest tree. It reports the max R-hat
+and the min bulk and tail ESS over parameters and scored quantities together (the plan's
+Decision 3) and over the scored quantities alone, the divergences and treedepth hits
+summed over chains, the deepest tree and the min E-BFMI. A variable with no R-hat or ESS,
+such as a constant entry of a Cholesky factor, is left out of the extremes. The deepest
+tree shows whether trajectories end by U-turn below `max_treedepth`.
+
+**The gate (spec §5.7).** `diagnostics_gate(d)` passes a cell if the max R-hat over
+parameters and scored quantities is at most 1.01, there are no divergences, and the min
+bulk ESS of the scored quantities is at least 400. Its `reasons` hold one line per failed
+rule with the value that failed it, for example `max R-hat 1.0234 > 1.01`,
+`divergent 2 > 0` or `min scored bulk ESS 399 < 400`; a missing value fails its rule. The
+spec gives a failing cell one rerun at twice the sampling iterations and counts a second
+failure against its arm; that rerun belongs to the scoring runbook, not to Phase 1.
+
+**DIAG.** Each finished run prints one line, `diag_line(id, minutes, d, gate)`:
+
+```
+DIAG run=<id> minutes=%.1f max_rhat=%.4f min_ess_bulk=%.0f min_ess_tail=%.0f divergent=%d treedepth_hits=%d max_depth=%d min_ebfmi=%.3f gate=PASS|FAIL
+```
+
+with R-hat and ESS over parameters and scored quantities together.
+
 ## Rebuilding the generated files
 
 From the project root: `LC_ALL=en_US.UTF-8 Rscript R/harness/build_phase0.R`. It verifies
