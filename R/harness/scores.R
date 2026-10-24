@@ -224,3 +224,131 @@ kd_to_nat <- function(eday_kd) {
     summarise(votes = sum(votes), .by = c(.chain, .iteration, .draw, flokkur)) |>
     mutate(share = votes / sum(votes), .by = .draw)
 }
+
+#' Kjördæmi scores of kjördæmi vote draws against the result.
+#' @param eday_kd a data frame (`.chain`, `.iteration`, `.draw`, `kjordaemi`, `flokkur`,
+#'   `votes`)
+#' @param truth_kd a data frame (`kjordaemi`, `flokkur`, `share`), the share being the
+#'   list's share of the valid votes in its kjördæmi; an error if it repeats a cell, or if a
+#'   (`kjordaemi`, `flokkur`) cell of either table has no match in the other
+#' @return a one-row tibble: `kd_cells` (the number of cells); `kd_crps` (100 × the mean
+#'   CRPS); `kd_mae_named` (100 × the MAE of medians over the `NAMED8` cells); `kd_w90`
+#'   (100 × the mean `q95 − q05`, type 7); `kd_cov90` (the cells whose truth lies within
+#'   [`q05`, `q95`]). Draw shares are taken within each (`.draw`, `kjordaemi`).
+#' @export
+kd_scores <- function(eday_kd, truth_kd) {
+  box::use(dplyr[mutate, summarise, first])
+  key <- function(d) paste(d$kjordaemi, d$flokkur, sep = " / ")
+  if (anyDuplicated(key(truth_kd))) stop("truth repeats a cell")
+  drawn <- unique(key(eday_kd))
+  unmatched <- c(setdiff(drawn, key(truth_kd)), setdiff(key(truth_kd), drawn))
+  if (length(unmatched)) stop("cells without a match: ", paste(unmatched, collapse = ", "))
+  shares <- mutate(eday_kd, share = votes / sum(votes), .by = c(.draw, kjordaemi))
+  shares$actual <- truth_kd$share[match(key(shares), key(truth_kd))]
+  kd <- summarise(shares,
+    median = stats::median(share),
+    q05 = stats::quantile(share, 0.05, type = 7, names = FALSE),
+    q95 = stats::quantile(share, 0.95, type = 7, names = FALSE),
+    crps = crps_draws(share, first(actual)),
+    actual = first(actual),
+    .by = c(kjordaemi, flokkur)
+  )
+  named <- kd$flokkur %in% NAMED8
+  tibble::tibble(
+    kd_cells = nrow(kd),
+    kd_crps = 100 * mean(kd$crps),
+    kd_mae_named = mean(abs(kd$median[named] - kd$actual[named])) * 100,
+    kd_w90 = 100 * mean(kd$q95 - kd$q05),
+    kd_cov90 = sum(kd$actual >= kd$q05 & kd$actual <= kd$q95)
+  )
+}
+
+#' Seat draws from kjördæmi vote draws.
+#' @param eday_kd a data frame (`.chain`, `.iteration`, `.draw`, `kjordaemi`, `flokkur`,
+#'   `votes`)
+#' @param layout the seat layout (`layout_for()`)
+#' @param ineligible lists that win no seat, passed to `calculate_seats()`
+#' @return a tibble (`.chain`, `.iteration`, `.draw`, `flokkur`, `seats`): each draw's
+#'   rows, sorted by `kjordaemi` then `flokkur`, go through `calculate_seats()`, and the
+#'   seats are summed per party; draws in `.chain`, `.iteration` order, integer `seats`
+#' @export
+seat_draws <- function(eday_kd, layout, ineligible = "Anna\u00f0") {
+  box::use(dplyr[arrange, select], R / election_utils[calculate_seats])
+  # WHY: D'Hondt ties break by row order; arrange() sorts in C order as the overdisp study and calculate_seats() do, not en_US.
+  rows <- eday_kd |>
+    select(.chain, .iteration, .draw, kjordaemi, flokkur, votes) |>
+    arrange(.chain, .iteration, .draw, kjordaemi, flokkur)
+  id <- paste(rows$.chain, rows$.iteration, rows$.draw)
+  per_draw <- lapply(split(seq_len(nrow(rows)), factor(id, levels = unique(id))), \(ix) {
+    s <- calculate_seats(rows[ix, c("flokkur", "kjordaemi", "votes")], layout, ineligible)
+    parties <- unique(s$flokkur)
+    tibble::tibble(
+      .chain = rows$.chain[ix[1]],
+      .iteration = rows$.iteration[ix[1]],
+      .draw = rows$.draw[ix[1]],
+      flokkur = parties,
+      seats = as.integer(vapply(parties, \(p) sum(s$seats[s$flokkur == p]), 0))
+    )
+  })
+  dplyr::bind_rows(unname(per_draw))
+}
+
+#' Share of draws in which the parties' seats sum to at least `majority`.
+#' @param seats seat draws (`seat_draws()`)
+#' @param parties the parties of the coalition; an error if one is absent from `seats`
+#' @param majority the seats a majority needs
+#' @return numeric(1)
+#' @export
+majority_prob <- function(seats, parties, majority = 32L) {
+  stopifnot(length(parties) > 0, !anyDuplicated(parties))
+  X <- wide_draws(seats, "seats")
+  absent <- setdiff(parties, colnames(X))
+  if (length(absent)) stop("parties absent from the draws: ", paste(absent, collapse = ", "))
+  mean(rowSums(X[, parties, drop = FALSE]) >= majority)
+}
+
+#' Seat scores of seat draws against the result, with the coalition-majority Brier score.
+#' @param seats seat draws (`seat_draws()`)
+#' @param actual the official seats: an integer vector named by the parties of `seats`, in
+#'   any order; an error if the names differ
+#' @param coalition the poll labels of the coalition whose majority is scored
+#' @param formed the poll labels of the coalition that formed, or NULL
+#' @param majority the seats a majority needs
+#' @return `list(summary, per_party)`. `per_party` has one row per party: `flokkur`, `crps`
+#'   (`crps_draws()` on seat counts), `median`, `q05` and `q95` (type 1) and `p_exact` (the
+#'   share of draws with the party's seats exact). `summary` is one row: `seat_crps` (the
+#'   sum of `crps`), `seat_abs_err` (the sum of |median − actual|), `seat_w90` (the mean
+#'   `q95 − q05`), `seat_cov90` (the parties whose seats lie within [`q05`, `q95`]),
+#'   `p_exact` (the share of draws with every party's seats exact), `p_majority`
+#'   (`majority_prob()` of `coalition`), `majority_outcome` (`sum(actual[coalition]) >=
+#'   majority`), `brier` = (p_majority − majority_outcome)² and `p_formed`
+#'   (`majority_prob()` of `formed`, NA when `formed` is NULL; reported, not scored)
+#' @export
+seat_scores <- function(seats, actual, coalition, formed = NULL, majority = 32L) {
+  X <- wide_draws(seats, "seats")
+  y <- unname(align_truth(X, actual))
+  q <- unname(apply(X, 2, stats::quantile, probs = c(0.05, 0.95), type = 1, names = FALSE))
+  exact <- X == rep(y, each = nrow(X))
+  per_party <- tibble::tibble(
+    flokkur = colnames(X),
+    crps = vapply(seq_len(ncol(X)), \(j) crps_draws(X[, j], y[j]), 0),
+    median = unname(apply(X, 2, stats::median)),
+    q05 = q[1, ],
+    q95 = q[2, ],
+    p_exact = unname(colMeans(exact))
+  )
+  p_majority <- majority_prob(seats, coalition, majority)
+  outcome <- sum(actual[coalition]) >= majority
+  summary <- tibble::tibble(
+    seat_crps = sum(per_party$crps),
+    seat_abs_err = sum(abs(per_party$median - y)),
+    seat_w90 = mean(per_party$q95 - per_party$q05),
+    seat_cov90 = sum(y >= per_party$q05 & y <= per_party$q95),
+    p_exact = mean(rowSums(!exact) == 0),
+    p_majority = p_majority,
+    majority_outcome = outcome,
+    brier = (p_majority - outcome)^2,
+    p_formed = if (is.null(formed)) NA_real_ else majority_prob(seats, formed, majority)
+  )
+  list(summary = summary, per_party = per_party)
+}
