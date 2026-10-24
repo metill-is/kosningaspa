@@ -23,7 +23,10 @@ manifest.
 From the project root: `LC_ALL=en_US.UTF-8 Rscript tests/run.R [filter]`, which runs the
 suite under testthat edition 3. Tests that need the snapshot call `skip_without_snapshot()`
 and skip without it. `tests/harness/test-generated.R` fails if a generated committed file
-that builds offline is not a fresh build.
+that builds offline is not a fresh build. Slow tests (the sweep of every forecast day in
+`tests/harness/test-sweep.R`, and later the Stan and seat-allocation tests) call
+`skip_unless_slow()` and run only with `HARNESS_SLOW=1` in the environment:
+`HARNESS_SLOW=1 LC_ALL=en_US.UTF-8 Rscript tests/run.R`.
 
 The R code in `R/harness/` and `R/election_utils.R` writes every non-ASCII character as a
 `\uXXXX` escape and gives a non-ASCII name with `stats::setNames()`, never as a name tag;

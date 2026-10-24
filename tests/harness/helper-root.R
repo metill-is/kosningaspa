@@ -12,3 +12,7 @@ snapshot_present <- function() {
 skip_without_snapshot <- function() {
   if (!snapshot_present()) testthat::skip("no harness snapshot: run snapshot_inputs()")
 }
+
+skip_unless_slow <- function() {
+  if (!identical(Sys.getenv("HARNESS_SLOW"), "1")) testthat::skip("slow test: set HARNESS_SLOW=1")
+}
