@@ -34,6 +34,8 @@ Read §5.4–§5.7 before Task 3.
 
 Each item below is a choice the spec leaves open, or one where the data contradicts the spec's wording. The plan runs on the defaults given, and a task can change each one cheaply before the freeze (Phase 3).
 
+**Ruled by Brynjólfur on 2026-10-24:** the defaults of Decisions 1–4 stand; Decision 5 as recorded below.
+
 1. **R0's fundamentals prior for a newcomer** (Sósíalistaflokkurinn in 2021, Miðflokkurinn in 2017). Production's model needs a prior for every party, and the spec doesn't say what a newcomer's should be.
    - Default (Task 8): the median debut share of the fundamentals rows with `new_party == 1` dated before E.
    - That gives 7,2 % at 2021, the 2021 study's 0,072, and 7,15 % at 2017 (via the training rows of `info_set()`, 2026-10-24).
