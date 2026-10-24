@@ -49,6 +49,15 @@ Box modules in `R/harness/`, imported as `R/harness/<module>`, with tests in `te
 | `fit_polling_and_fundamentals_model.R` | `polling_and_fundamentals.stan` | National-level draws |
 | `fit_fundamentals_model.R` | `fundamentals.stan` | Fundamentals-only draws |
 
+### Sampler checks for the production model (headless)
+
+| Script | Purpose |
+|--------|---------|
+| `sampler_check/fit_headless.R` | Fits `polling_and_fundamentals_kjordaemi.stan` (or any `--stan=` file) on the interactive script's `stan_data`, rebuilt field for field, optionally with the polls after a date dropped (`--cutoff=`, for sampler checks only: the election date and fundamentals stay as in the fit script); writes CmdStan CSVs, `timing.rds` and per-chain `diagnostics.csv` to `--out=` |
+| `sampler_check/equivalence.R` | Checks the centred δ / log σ reparameterisation (`delta_raw` → `delta_free`, `log_sigma_raw` → `log_sigma`) point by point: at posterior and off-posterior points, new log density minus (old log density minus log-Jacobian) must be constant, with each Jacobian term left out as a negative control; and both models' generated quantities, run at the posterior points with one seed, must agree |
+| `sampler_check/compare_fits.R` | Old vs new fit: `treedepth__` distribution, max R-hat, min bulk/tail ESS, ESS per minute and per 1,000 gradients, election-day share quantiles compared within MCSE |
+| `sampler_check/RESULTS.md` | Results of the centred δ / log σ + `max_treedepth = 12` change (24 Oct 2026), with the commands that reproduce them |
+
 ### Polling-watch fit (Fylgisvakt; headless, run by hand)
 
 | Script | Stan Model | Output |

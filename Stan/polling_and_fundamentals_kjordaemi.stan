@@ -90,7 +90,10 @@ parameters {
   vector[P - 1] z_beta0;                             // Initial support levels
   
   // Constituency level parameters
-  matrix[P - 1, K - 1] delta_raw;                  // Raw constituency effects
+  // delta_free and log_sigma are centred: the data pin both, so the non-centred forms made
+  // ridges with sigma_delta and mu_log_sigma that NUTS crossed slowly. The random walk
+  // (z_beta_raw) stays non-centred; centring it mixes far worse.
+  matrix[P - 1, K - 1] delta_free;                 // Constituency effects 1..K-1
   vector<lower = 0>[P - 1] sigma_delta;             // Constituency effect scales
   
   // House Effects Parameters
@@ -102,7 +105,7 @@ parameters {
   // Variance Parameters
   real mu_log_sigma;                    // Population mean of log volatility
   real<lower=0> tau_log_sigma;          // Population SD of log volatility
-  vector[P - 1] log_sigma_raw;            // Raw party-specific parameters
+  vector[P - 1] log_sigma;                // Party-specific log volatilities
   real<lower = 0> tau_stjornarslit;                // Scale for government collapse period
 
   // vector<lower = 0>[H - 1] phi;
@@ -120,7 +123,7 @@ parameters {
 }
 
 transformed parameters {
-  vector<lower=0>[P - 1] sigma = exp(mu_log_sigma + tau_log_sigma * log_sigma_raw);           // Party-specific volatilities
+  vector<lower=0>[P - 1] sigma = exp(log_sigma);           // Party-specific volatilities
   // Convert inverse dispersion parameters to dispersion parameters
   
   vector<lower = 0>[H - 1] phi = exp(mu_phi + sigma_phi * log_phi);
@@ -210,7 +213,7 @@ model {
   L_Omega ~ lkj_corr_cholesky(10);
   mu_log_sigma ~ normal(-2, 2);         // Prior centered on small volatility
   tau_log_sigma ~ exponential(1);       // Weakly informative prior on variance
-  log_sigma_raw ~ std_normal();         // Unit normal for non-centered param         
+  log_sigma ~ normal(mu_log_sigma, tau_log_sigma);
   z_beta0 ~ std_normal();
   tau_stjornarslit ~ exponential(1);
 
@@ -220,7 +223,9 @@ model {
   // phi ~ exponential(1);
 
   // Constituency effects priors
-  to_vector(delta_raw) ~ std_normal();
+  for (p in 1:(P - 1)) {
+    delta_free[p] ~ normal(0, sigma_delta[p]);
+  }
   sigma_delta ~ exponential(1);
 
   /* Likelihood Functions */
@@ -253,7 +258,7 @@ model {
 
     // Calculate constituency effects with sum-to-zero constraint
     for (p in 1:(P - 1)) {
-      delta[p, 1:(K - 1)] = sigma_delta[p] * delta_raw[p, ];
+      delta[p, 1:(K - 1)] = delta_free[p, ];
       delta[p, K] = -sum(delta[p, 1:(K - 1)] .* constituency_weights[obs_k[n], 1:(K - 1)]) / 
             constituency_weights[obs_k[n] , K];
     }
@@ -340,7 +345,7 @@ generated quantities {
 
   // Calculate constituency effects for predictions
   for (p in 1:(P - 1)) {
-    delta_pred[p, 1:(K - 1)] = sigma_delta[p] * delta_raw[p, ];
+    delta_pred[p, 1:(K - 1)] = delta_free[p, ];
     delta_pred[p, K] = -sum(to_vector(delta_pred[p, 1:(K - 1)]) .* constituency_weights_pred[1:(K - 1)]) / 
           constituency_weights_pred[K];
   }
@@ -385,7 +390,7 @@ generated quantities {
     vector[n_parties_k_rep[n]] pi_k;
 
     for (p in 1:(P - 1)) {
-      delta[p, 1:(K - 1)] = sigma_delta[p] * delta_raw[p, ];
+      delta[p, 1:(K - 1)] = delta_free[p, ];
       delta[p, K] = -sum(delta[p, 1:(K - 1)] .* constituency_weights[obs_k[n], 1:(K - 1)]) / 
             constituency_weights[obs_k[n] , K];
     }

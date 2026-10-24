@@ -134,8 +134,9 @@ fit <- model$sample(
   parallel_chains = 4,
   refresh = 100,
   init = 0,
-  iter_warmup = 200,
-  iter_sampling = 200
+  iter_warmup = 1000,
+  iter_sampling = 1000,
+  max_treedepth = 12
 )
 
 
@@ -194,10 +195,10 @@ fit$summary("sigma_delta") |>
   ) |>
   select(flokkur, mean, q5, q95)
 
-deltas <- fit$summary("delta_raw") |>
+deltas <- fit$summary("delta_free") |>
   mutate(
-    p = str_match(variable, "delta_raw\\[(.*),.*\\]")[, 2] |> parse_number(),
-    k = str_match(variable, "delta_raw\\[.*,(.*)\\]")[, 2] |> parse_number(),
+    p = str_match(variable, "delta_free\\[(.*),.*\\]")[, 2] |> parse_number(),
+    k = str_match(variable, "delta_free\\[.*,(.*)\\]")[, 2] |> parse_number(),
     flokkur = levels(constituency_data$flokkur)[p + 1],
     kjordaemi = levels(constituency_data$kjordaemi)[k]
   )
