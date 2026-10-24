@@ -64,6 +64,20 @@ national_row <- function(reading, X, y, zero_share) {
   tibble::add_column(out, reading = reading, zero_share = zero_share, .before = 1)
 }
 
+#' Batch-means standard errors of scores of whole draws of a long draws table.
+#' @param long a data frame with `.chain`, `.iteration` and `.draw`, `.draw` numbered across
+#'   chains, and a row per draw and cell
+#' @param score a function from the rows of some of the draws of `long` to a named numeric
+#'   vector
+#' @return a named numeric vector: `batch_se()` of `score` over the 16 blocks of `batch_of()`
+#'   of the draws' `.chain` and `.iteration`, the blocks of `national_row()`
+draws_se <- function(long, score) {
+  box::use(R / harness / scores[batch_of, batch_se])
+  ids <- unique(long[c(".chain", ".iteration", ".draw")])
+  ids <- ids[order(ids$.chain, ids$.iteration), ]
+  batch_se(\(x) score(long[long$.draw %in% x[, 1], ]), matrix(ids$.draw), batch_of(ids$.chain, ids$.iteration))
+}
+
 #' Score one forecast cell against its election result: the only function that may.
 #' @param run_dir a run directory with `meta.json` (`read_run_meta()`),
 #'   `eday_kjordaemi.parquet` (`.chain`, `.iteration`, `.draw`, `kjordaemi`, `flokkur`,
@@ -83,15 +97,23 @@ national_row <- function(reading, X, y, zero_share) {
 #'   - `gap_pp`: 100 × the largest absolute difference between the two readings'
 #'   posterior means;
 #'   - `per_party`: `party_scores()` of the scored reading, with `pit_se` from `batch_se()`;
-#'   - `kjordaemi`: `kd_scores()`;
+#'   - `kjordaemi`: `kd_scores()`, with the batch SEs `se_kd_crps` and `se_kd_cov90`;
 #'   - `seats` and `seats_per_party`: `seat_scores()` of
 #'   `seat_draws(eday_kjordaemi, layout_for(E), ineligible = "Annað")`, for the coalition
-#'   `coalition_event$parties`, with `formed = formed_coalition(E, read_coalitions())`.
+#'   `coalition_event$parties`, with `formed = formed_coalition(E, read_coalitions())`;
+#'   `seats` adds the batch SEs `se_seat_crps`, `se_seat_cov90` and `se_brier`.
 #'
-#'   In order, it reads `meta.json`, calls `freeze_guard(E, F, root)`, refuses a
-#'   confirmatory cell ("2017 cells are scored by the Tier C runbook, which writes
-#'   harness/CONFIRM.md"), calls `truth()`, stops with "no list at E: <party>" for a party
-#'   of `party_order` whose national result is 0, and only then reads the draws.
+#'   Every batch SE is `batch_se()` over the same 16 blocks of `batch_of()` of the draws'
+#'   chain and iteration, the score recomputed on each block's draws.
+#'
+#'   With the default `truth`, `cell_truth`, it stops unless `root` is `project_root()`:
+#'   that reader reads this project's results, whatever `root` is. Then, in order, it reads
+#'   `meta.json`, calls `freeze_guard(E, F, root)`, refuses a confirmatory cell ("2017
+#'   cells are scored by the Tier C runbook, which writes harness/CONFIRM.md"), stops with
+#'   "coalition event changed since the fit: refit <run>" unless `coalition_event(F,
+#'   read_coalitions())$parties` and meta.json's are the same set (the sha-skip does not
+#'   cover the event), calls `truth()`, stops with "no list at E: <party>" for a party of
+#'   `party_order` whose national result is 0, and only then reads the draws.
 #' @export
 score_cell <- function(run_dir, truth = cell_truth, root = project_root()) {
   # WHY: the default arguments are promises, forced after this import.
@@ -99,16 +121,24 @@ score_cell <- function(run_dir, truth = cell_truth, root = project_root()) {
     R / harness / constants[project_root],
     R / harness / truth[cell_truth],
     R / harness / freeze[freeze_guard, target_cell],
-    R / harness / tables[formed_coalition, read_coalitions],
+    R / harness / tables[coalition_event, formed_coalition, read_coalitions],
     R / harness / scores[wide_draws, kd_to_nat, party_scores, kd_scores, batch_of, batch_se],
     R / harness / scores[seat_draws, seat_scores],
     R / election_utils[layout_for]
   )
+  if (identical(truth, cell_truth) &&
+    !identical(normalizePath(root, mustWork = FALSE), normalizePath(project_root(), mustWork = FALSE))) {
+    stop("the default result reader reads this project's results, so root must be project_root(), not ", root)
+  }
   meta <- read_run_meta(run_dir)
   E <- meta$E
   freeze_guard(E, meta$F, root)
   cell <- target_cell(E, meta$F)
   if (cell$confirmatory) stop("2017 cells are scored by the Tier C runbook, which writes harness/CONFIRM.md")
+  coalitions <- read_coalitions()
+  if (!setequal(coalition_event(meta$F, coalitions)$parties, meta$coalition_event$parties)) {
+    stop("coalition event changed since the fit: refit ", basename(run_dir))
+  }
 
   result <- truth(E, meta$party_order)
   y <- result$nat
@@ -119,6 +149,8 @@ score_cell <- function(run_dir, truth = cell_truth, root = project_root()) {
   eday_nat <- arrow::read_parquet(file.path(run_dir, "eday_national.parquet"))
   # WHY: kd_scores() refuses a repeated (.draw, kjordaemi, flokkur) before kd_to_nat() pools by `.draw`.
   kjordaemi <- kd_scores(eday_kd, result$kd)
+  kd_se <- draws_se(eday_kd, \(d) unlist(kd_scores(d, result$kd)[c("kd_crps", "kd_cov90")]))
+  kjordaemi[c("se_kd_crps", "se_kd_cov90")] <- as.list(unname(kd_se[c("kd_crps", "kd_cov90")]))
   X <- wide_draws(kd_to_nat(eday_kd), "share")
   X_nat <- wide_draws(eday_nat, "share")
   national <- rbind(
@@ -132,11 +164,13 @@ score_cell <- function(run_dir, truth = cell_truth, root = project_root()) {
   per_party$pit_se <- unname(pit_se[per_party$flokkur])
 
   seats <- seat_draws(eday_kd, layout_for(E), ineligible = "Anna\u00f0")
-  scored_seats <- seat_scores(
-    seats, result$seats,
-    coalition = meta$coalition_event$parties,
-    formed = formed_coalition(E, read_coalitions())
-  )
+  coalition <- meta$coalition_event$parties
+  scored_seats <- seat_scores(seats, result$seats, coalition = coalition, formed = formed_coalition(E, coalitions))
+  seat_se <- draws_se(seats, \(d) {
+    unlist(seat_scores(d, result$seats, coalition = coalition)$summary[c("seat_crps", "seat_cov90", "brier")])
+  })
+  scored_seats$summary[c("se_seat_crps", "se_seat_cov90", "se_brier")] <-
+    as.list(unname(seat_se[c("seat_crps", "seat_cov90", "brier")]))
   list(
     cell = tibble::tibble(arm = meta$arm, E = E, F = meta$F, tag = cell$tag),
     national = national,

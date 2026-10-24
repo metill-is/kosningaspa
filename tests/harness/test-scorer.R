@@ -1,6 +1,7 @@
 box::use(
   R / harness / scorer[score_cell, read_run_meta],
-  R / harness / tables[read_coalitions, formed_coalition],
+  R / harness / truth[cell_truth],
+  R / harness / tables[read_coalitions, formed_coalition, coalition_event],
   R / harness / scores[wide_draws, kd_to_nat, national_scores, party_scores, kd_scores, batch_of, batch_se],
   R / harness / scores[seat_draws, seat_scores],
   R / election_utils[layout_for]
@@ -8,20 +9,26 @@ box::use(
 
 E24 <- as.Date("2024-11-30")
 F24 <- as.Date("2024-11-29")
-SHARES <- c(0.1, 0.45, 0.25, 0.2)
+D_B <- c("Sjálfstæðisflokkurinn", "Framsóknarflokkurinn")
+# WHY: shares that put the 2024-11-29 event, D + B, near a majority of the seats, so the Brier score and its SE vary.
+NOMINAL <- stats::setNames(c(0.255, 0.205, 0.195, 0.08, 0.06, 0.15, 0.12, 0.1, 0.05, 0.05), POLL_PARTIES)
 SE_SCORES <- c("crps10", "is90", "dss10", "mdss", "d2", "mae8", "cov50", "cov90")
 
+# A finished run of the cell (E, F) whose parties are Annað, the coalition that formed after E and the Brier
+# event: by default the table's event at F, as the fit records it, or `event` in its place.
 # WHY: jittered draws: constant ones make the alr covariance singular and break batch_se().
-fake_run <- function(E, F, env = parent.frame()) {
+fake_run <- function(E, F, env = parent.frame(), event = NULL) {
   E <- as.Date(E)
-  parties <- c("Annað", formed_coalition(E, read_coalitions()))
+  co <- read_coalitions()
+  table_event <- coalition_event(F, co)
+  parties <- c("Annað", intersect(POLL_PARTIES, c(formed_coalition(E, co), table_event$parties, event)))
   kd <- layout_for(E)$kjordaemi
   dir <- withr::local_tempdir(.local_envir = env)
   withr::local_seed(20261024)
   eday_kd <- tidyr::expand_grid(.chain = 1:4, .iteration = 1:40, kjordaemi = kd, flokkur = parties) |>
     dplyr::mutate(
       .draw = (.chain - 1L) * 40L + .iteration,
-      votes = as.integer(round(20000 * SHARES[match(flokkur, parties)] * exp(stats::rnorm(dplyr::n(), 0, 0.1))))
+      votes = as.integer(round(20000 * NOMINAL[flokkur] * exp(stats::rnorm(dplyr::n(), 0, 0.1))))
     ) |>
     dplyr::select(.chain, .iteration, .draw, kjordaemi, flokkur, votes)
   eday_nat <- kd_to_nat(eday_kd) |>
@@ -34,19 +41,23 @@ fake_run <- function(E, F, env = parent.frame()) {
     arm = "r0", E = format(E), F = format(as.Date(F)), seed = 1101L,
     party_order = parties, kjordaemi_levels = kd,
     n_pred = 200000, n_pred_k = as.list(stats::setNames(c(30000, 32000, 70000, 30000, 28000, 20000), kd)),
-    coalition_event = list(parties = parties[3:4], dropped = character(0)),
+    coalition_event = list(parties = if (is.null(event)) table_event$parties else event, dropped = table_event$dropped),
     diagnostics = list(rhat_max = 1.004)
   )
   jsonlite::write_json(meta, file.path(dir, "meta.json"), auto_unbox = TRUE, pretty = TRUE, digits = NA)
   dir
 }
 
+# The 2024 result of the fake run's parties: shares the same in every kjördæmi; D + B short of a majority.
 fixed_truth <- function(parties, kd) {
+  nat <- stats::setNames(c(0.04, 0.25, 0.2, 0.21, 0.16, 0.14), c("Annað", D_B, "Samfylkingin", "Viðreisn", "Flokkur Fólksins"))
+  seats <- stats::setNames(c(0L, 17L, 13L, 15L, 10L, 8L), names(nat))
+  stopifnot(setequal(parties, names(nat)))
   list(
-    nat = stats::setNames(c(0.12, 0.42, 0.25, 0.21), parties),
+    nat = nat[parties],
     kd = tidyr::expand_grid(kjordaemi = kd, flokkur = parties) |>
-      dplyr::mutate(votes = 1000L, share = rep(c(0.12, 0.42, 0.25, 0.21), length(kd))),
-    seats = stats::setNames(c(0L, 30L, 18L, 15L), parties)
+      dplyr::mutate(votes = 1000L, share = unname(nat[flokkur])),
+    seats = seats[parties]
   )
 }
 
@@ -96,8 +107,8 @@ test_that("read_run_meta gives n_pred_k as a named numeric and party_order as a 
   meta <- read_run_meta(run)
   kd <- layout_for(E24)$kjordaemi
   expect_identical(meta$n_pred_k, stats::setNames(c(30000, 32000, 70000, 30000, 28000, 20000), kd))
-  expect_identical(meta$party_order, c("Annað", "Samfylkingin", "Viðreisn", "Flokkur Fólksins"))
-  expect_identical(meta$coalition_event$parties, c("Viðreisn", "Flokkur Fólksins"))
+  expect_identical(meta$party_order, c("Annað", D_B, "Samfylkingin", "Viðreisn", "Flokkur Fólksins"))
+  expect_identical(meta$coalition_event$parties, D_B)
   expect_identical(meta$E, E24)
   expect_identical(meta$F, F24)
   expect_identical(meta$n_pred, 200000)
@@ -165,19 +176,61 @@ test_that("score_cell scores the kjördæmi aggregate and reports the eday readi
   pit_se <- batch_se(\(x) stats::setNames(party_scores(x, tr$nat)$pit, colnames(x)), X, block)
   expect_equal(s$per_party$pit_se, unname(pit_se[ps$flokkur]), tolerance = 1e-12)
 
-  expect_equal(s$kjordaemi, kd_scores(eday_kd, tr$kd), tolerance = 1e-12)
+  direct_kd <- kd_scores(eday_kd, tr$kd)
+  expect_named(s$kjordaemi, c(names(direct_kd), "se_kd_crps", "se_kd_cov90"))
+  expect_equal(s$kjordaemi[names(direct_kd)], direct_kd, tolerance = 1e-12)
+  # WHY: by hand: each long row's own block, the same 16 as the draws' (four per chain).
+  kd_block <- batch_of(eday_kd$.chain, eday_kd$.iteration)
+  expect_identical(sort(unique(kd_block)), 1:16)
+  kd_se <- batch_se(
+    \(x) unlist(kd_scores(eday_kd[x[, 1], ], tr$kd)[c("kd_crps", "kd_cov90")]), matrix(seq_len(nrow(eday_kd))), kd_block
+  )
+  se <- unlist(s$kjordaemi[c("se_kd_crps", "se_kd_cov90")])
+  expect_equal(unname(se), unname(kd_se[c("kd_crps", "kd_cov90")]), tolerance = 1e-12)
+  expect_true(all(is.finite(se) & se > 0), info = paste(names(se), se, collapse = "; "))
 
   seats <- seat_draws(eday_kd, layout_for(E24), ineligible = "Annað")
   expect_true(all(seats$seats[seats$flokkur == "Annað"] == 0))
-  direct_seats <- seat_scores(
-    seats, tr$seats,
-    coalition = c("Viðreisn", "Flokkur Fólksins"), formed = c("Samfylkingin", "Viðreisn", "Flokkur Fólksins")
-  )
-  expect_equal(s$seats, direct_seats$summary, tolerance = 1e-12)
+  formed <- c("Samfylkingin", "Viðreisn", "Flokkur Fólksins")
+  direct_seats <- seat_scores(seats, tr$seats, coalition = D_B, formed = formed)
+  expect_named(s$seats, c(names(direct_seats$summary), "se_seat_crps", "se_seat_cov90", "se_brier"))
+  expect_equal(s$seats[names(direct_seats$summary)], direct_seats$summary, tolerance = 1e-12)
   expect_equal(s$seats_per_party, direct_seats$per_party, tolerance = 1e-12)
   expect_gt(s$seats$p_majority, 0.05)
   expect_lt(s$seats$p_majority, 0.95)
-  expect_equal(s$seats$p_formed, 1)
+  seat_block <- batch_of(seats$.chain, seats$.iteration)
+  expect_identical(sort(unique(seat_block)), 1:16)
+  seat_se <- batch_se(
+    \(x) unlist(seat_scores(seats[x[, 1], ], tr$seats, coalition = D_B)$summary[c("seat_crps", "seat_cov90", "brier")]),
+    matrix(seq_len(nrow(seats))), seat_block
+  )
+  se <- unlist(s$seats[c("se_seat_crps", "se_seat_cov90", "se_brier")])
+  expect_equal(unname(se), unname(seat_se[c("seat_crps", "seat_cov90", "brier")]), tolerance = 1e-12)
+  expect_true(all(is.finite(se) & se > 0), info = paste(names(se), se, collapse = "; "))
+})
+
+test_that("score_cell stops when the Brier event in meta.json is not the table's, before it reads a result", {
+  fr <- frozen_root()
+  reader <- function(...) {
+    calls <<- calls + 1L
+    stop("truth read")
+  }
+  calls <- 0L
+  run <- fake_run(E24, F24, event = c(D_B, "Vinstri Græn"))
+  expect_error(score_cell(run, truth = reader, root = fr), paste("coalition event changed since the fit: refit", basename(run)),
+    fixed = TRUE
+  )
+  expect_equal(calls, 0L)
+  expect_error(score_cell(fake_run(E24, F24, event = rev(D_B)), truth = reader, root = fr), "truth read", fixed = TRUE)
+  expect_equal(calls, 1L)
+})
+
+test_that("score_cell with the default result reader refuses a root other than the project's", {
+  root_msg <- "the default result reader reads this project's results, so root must be project_root(), not "
+  fr <- frozen_root()
+  expect_error(score_cell(fake_run(E24, F24), root = fr), paste0(root_msg, fr), fixed = TRUE)
+  expect_error(score_cell(fake_run(E24, F24), truth = cell_truth, root = fr), paste0(root_msg, fr), fixed = TRUE)
+  expect_error(score_cell(fake_run(E24, F24), root = root()), "no freeze")
 })
 
 test_that("score_cell stops on a forecast party with no list at E before it reads a draw", {

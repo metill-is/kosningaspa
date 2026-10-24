@@ -82,7 +82,9 @@ meets a result.
 `score_cell(run_dir)` (`R/harness/scorer.R`) is the only function that scores a forecast
 cell against its result (spec §5.6–§5.7). It reads the run's `meta.json`, calls
 `freeze_guard(E, F)` (`R/harness/freeze.R`), and only once the guard passes reads the
-result (`cell_truth()`) and then the draws. The guard stops at the first failure:
+result (`cell_truth()`) and then the draws. With the default result reader, which reads
+this project's results, it refuses a `root` other than the project's, since the guard
+would otherwise check another repository's freeze. The guard stops at the first failure:
 
 1. (E, F) is not a cell of `TARGETS`;
 2. `harness/FREEZE.md` or `harness/FREEZE.sha256` does not exist;
@@ -114,12 +116,23 @@ What `score_cell()` returns, per cell:
   beside it, and `gap_pp` is the largest gap between the two readings' posterior means,
   in points. Each row carries batch-means SEs over 16 blocks (`batch_of()`, four per
   chain) of CRPS10, IS90, DSS10, mDSS, d², MAE8 and the 50% and 90% coverage counts.
-- `per_party` (with the PIT's batch SE), `kjordaemi` (`kd_scores()`), and `seats` and
-  `seats_per_party`: the seats of each draw allocated with Annað ineligible, scored for the
-  Brier coalition recorded in `meta.json`, with the majority probability of the coalition
-  that formed after E (`formed_coalition()`, hindsight that only `score_cell()` reads).
+- `per_party` (with the PIT's batch SE), `kjordaemi` (`kd_scores()`, with the batch SEs
+  `se_kd_crps` and `se_kd_cov90`), and `seats` and `seats_per_party`: the seats of each
+  draw allocated with Annað ineligible, scored for the Brier coalition recorded in
+  `meta.json`, with the majority probability of the coalition that formed after E
+  (`formed_coalition()`, hindsight that only `score_cell()` reads). `seats` carries the
+  batch SEs `se_seat_crps`, `se_seat_cov90` and `se_brier`.
 
-It stops with "no list at E" if a party the run forecasts has a national result of 0, as a
+Every batch SE is over the same 16 blocks: the score is recomputed on each block's draws,
+and its SE is their standard deviation over √16. So the tie rule of spec §5.7 (a
+difference under 2 × SE_diff) can be applied to every scored quantity, and coverage comes
+with its Monte Carlo error.
+
+Past the guard and the 2017 refusal, it recomputes the Brier event,
+`coalition_event(F, read_coalitions())`, and stops with "coalition event changed since the
+fit: refit <run>" unless its parties are those `meta.json` recorded: the sha-skip keys do
+not cover the event, so a reused run could otherwise be scored against an outdated one. It
+stops with "no list at E" if a party the run forecasts has a national result of 0, as a
 party with no list would, since the alr scores would take the log of that zero. Until Phase
 3 commits `FREEZE.md`, it refuses every target cell of this repository;
 `tests/harness/test-scorer.R` checks that with a result reader that fails if it is called.
