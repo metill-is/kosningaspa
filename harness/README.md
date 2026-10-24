@@ -200,6 +200,30 @@ with R-hat and ESS over parameters and scored quantities together. Its format is
 so it leaves out `na_scored`: a scored NA shows as `gate=FAIL` (and as `NA` in the
 extremes), and the gate's reasons are in `meta.json`.
 
+## R0's inputs
+
+`R/harness/r0.R` builds the Stan data of arm R0, production mapped to E (spec §5.4).
+`r0_production_inputs(info)` puts a cell's `info_set()` into the format production's fit
+script hands to `prepare_stan_data()` (`R/stan_data.R`): the `Kosning` rows and admitted
+national polls; the previous election's kjördæmi results and the admitted kjördæmi polls
+dated after it; the training rows, E's target rows and an Annað target row. The party order
+is Annað, then the cell's parties in `POLL_PARTIES` order; the houses are `Kosning`, then
+each house by its first admitted poll; the kjördæmi follow `R0_KJORDAEMI`, production's 2024
+order, so Suður closes δ in every cell. No house is filtered out.
+
+`r0_stan_data(info)` runs production's `prepare_stan_data()` on those inputs and then applies
+a fixed table of overrides, and only those (Task 8 of
+`docs/superpowers/plans/2026-10-24-v2-harness-phase1-scorer-r0.md`): the campaign length;
+`n_pred_k` and the prediction weights from the previous election's valid votes, by name; the
+kjördæmi weights of each date, by name; the fundamentals weight and its day; the hedge scale
+`mu_gamma_scale` (1/√n_e, 0 for a party new to the window); the parties active at each date
+(`n_active_d`, `active_index_d`); and the fundamentals prediction column, rebuilt for the
+cell's party order, with a newcomer at the median debut share of earlier new parties. The
+settings are in `harness/configs/r0.json` (`read_r0_config()`). A build whose data break a
+shape the Stan file relies on stops with "R0 input: <check>". `stjornarslit` and
+`post_stjornarslit` keep production's hard-coded 2024-10-14; the model declares them but
+never reads them.
+
 ## Rebuilding the generated files
 
 From the project root: `LC_ALL=en_US.UTF-8 Rscript R/harness/build_phase0.R`. It verifies
@@ -221,7 +245,8 @@ or `snapshot_manifest.csv`.
   results sources, `harness/sources/README.md` for the poll-fieldwork tables and the house
   map, the fieldwork corrections, the publication dates, the two correction tables
   (`poll_n_corrections.csv`, `fundamentals_corrections.csv`), the economy release dates,
-  the house table and the coalition events.
+  the house table and the coalition events. `harness/configs/` holds each arm's settings
+  (`r0.json`).
 - Generated and gitignored: `harness/snapshot/` and `harness/selftest/`.
 
 ## Target rows: the economy and the carried columns
