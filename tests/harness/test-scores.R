@@ -265,6 +265,18 @@ test_that("kd_scores refuses a truth that lacks a cell of the draws or adds one"
   expect_error(kd_scores(eday, rbind(truth, truth[1, ])), "repeats a cell")
 })
 
+test_that("kd_scores refuses draws that repeat a (.draw, kjordaemi, flokkur) cell", {
+  eday <- tidyr::expand_grid(.chain = 1:2, .iteration = 1:3, kd_base) |>
+    dplyr::mutate(.draw = (.chain - 1L) * 3L + .iteration)
+  truth <- kd_base |>
+    dplyr::mutate(share = votes / sum(votes), .by = kjordaemi) |>
+    dplyr::select(kjordaemi, flokkur, share)
+  expect_equal(kd_scores(eday, truth)$kd_crps, 0)
+  per_chain <- dplyr::mutate(eday, .draw = .iteration)
+  expect_error(kd_scores(per_chain, truth), "repeats a (.draw, kjordaemi, flokkur) cell", fixed = TRUE)
+  expect_error(kd_scores(rbind(eday, eday[1, ]), truth), "repeats a (.draw, kjordaemi, flokkur) cell", fixed = TRUE)
+})
+
 test_that("seat_draws sums calculate_seats() over kjördæmi, and Annað wins no seat by default", {
   d <- draw_with(c(Annað = 0.30, D = 0.30, S = 0.25, B = 0.15))
   one <- dplyr::mutate(d, .chain = 1L, .iteration = 1L, .draw = 1L)

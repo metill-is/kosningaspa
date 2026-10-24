@@ -227,7 +227,8 @@ kd_to_nat <- function(eday_kd) {
 
 #' Kjördæmi scores of kjördæmi vote draws against the result.
 #' @param eday_kd a data frame (`.chain`, `.iteration`, `.draw`, `kjordaemi`, `flokkur`,
-#'   `votes`)
+#'   `votes`), `.draw` numbered across chains; an error if it repeats a (`.draw`,
+#'   `kjordaemi`, `flokkur`) cell, as draws numbered within each chain would
 #' @param truth_kd a data frame (`kjordaemi`, `flokkur`, `share`), the share being the
 #'   list's share of the valid votes in its kjördæmi; an error if it repeats a cell, or if a
 #'   (`kjordaemi`, `flokkur`) cell of either table has no match in the other
@@ -239,6 +240,7 @@ kd_to_nat <- function(eday_kd) {
 kd_scores <- function(eday_kd, truth_kd) {
   box::use(dplyr[mutate, summarise, first])
   key <- function(d) paste(d$kjordaemi, d$flokkur, sep = " / ")
+  if (anyDuplicated(paste(eday_kd$.draw, key(eday_kd)))) stop("eday_kd repeats a (.draw, kjordaemi, flokkur) cell")
   if (anyDuplicated(key(truth_kd))) stop("truth repeats a cell")
   drawn <- unique(key(eday_kd))
   unmatched <- c(setdiff(drawn, key(truth_kd)), setdiff(key(truth_kd), drawn))

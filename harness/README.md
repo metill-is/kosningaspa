@@ -76,6 +76,54 @@ result before the freeze (spec §8), and the self-test keeps that rule: it re-sc
 the earlier study had already scored and published, not a harness arm's, so no harness arm
 meets a result.
 
+## The freeze and the 2017 locks
+
+`score_cell(run_dir)` (`R/harness/scorer.R`) is the only function that scores a forecast
+cell against its result (spec §5.6–§5.7). It reads the run's `meta.json`, calls
+`freeze_guard(E, F)` (`R/harness/freeze.R`), and only once the guard passes reads the
+result (`cell_truth()`) and then the draws. The guard stops at the first failure:
+
+1. (E, F) is not a cell of `TARGETS`;
+2. `harness/FREEZE.md` or `harness/FREEZE.sha256` does not exist;
+3. `FREEZE.sha256` does not list `harness/FREEZE.md`;
+4. a file it lists is missing or its sha256 differs (`verify_sha_list()`);
+5. the two files are not committed, that is tracked by git and unchanged against HEAD
+   (`is_committed()`).
+
+A 2017 cell, the confirmatory target, is locked until `harness/DECISION.md` and
+`harness/DECISION.sha256` pass checks 2–5 as well, and locked for good once
+`harness/CONFIRM.md` exists. Past both locks, `score_cell()` still refuses it: 2017 is
+scored once, by the Tier C runbook, which writes `CONFIRM.md`. Phase 1 has no such writer.
+
+A sha256 list holds the lines `shasum -a 256` writes (`<64 lowercase hex>  <path>`), with
+paths relative to the project root; lines that start with `#` and blank lines are skipped,
+and any other line is an error. To freeze, from the project root:
+
+```sh
+shasum -a 256 harness/FREEZE.md <every other frozen file> > harness/FREEZE.sha256
+```
+
+and commit both files. The list cannot hold its own sha256; the commit check covers it.
+
+What `score_cell()` returns, per cell:
+
+- `national`: the scored reading, `kd_aggregate`, sums the kjördæmi vote draws to national
+  shares (`kd_to_nat()`), with `zero_share = 0.5 / sum(n_pred_k)`. The `eday_national`
+  reading, the model's own national shares with `zero_share = 0.5 / n_pred`, is reported
+  beside it, and `gap_pp` is the largest gap between the two readings' posterior means,
+  in points. Each row carries batch-means SEs over 16 blocks (`batch_of()`, four per
+  chain) of CRPS10, IS90, DSS10, mDSS, d², MAE8 and the 50% and 90% coverage counts.
+- `per_party` (with the PIT's batch SE), `kjordaemi` (`kd_scores()`), and `seats` and
+  `seats_per_party`: the seats of each draw allocated with Annað ineligible, scored for the
+  Brier coalition recorded in `meta.json`, with the majority probability of the coalition
+  that formed after E (`formed_coalition()`, hindsight that only `score_cell()` reads).
+
+It stops with "no list at E" if a party the run forecasts has a national result of 0, as a
+party with no list would, since the alr scores would take the log of that zero. Until Phase
+3 commits `FREEZE.md`, it refuses every target cell of this repository;
+`tests/harness/test-scorer.R` checks that with a result reader that fails if it is called.
+The tests that pass the guard run in temporary git repositories.
+
 ## Rebuilding the generated files
 
 From the project root: `LC_ALL=en_US.UTF-8 Rscript R/harness/build_phase0.R`. It verifies

@@ -160,6 +160,22 @@ coalition_event <- function(F, coalitions) {
   list(parties = named_parties(lists), dropped = sort(lists[party_of_letter(lists) == "Anna\u00f0"]))
 }
 
+#' The coalition that formed after election E: the first cabinet row with
+#' `caretaker == FALSE` and `from > E`. It is hindsight, so only `score_cell()` calls it,
+#' after the freeze guard; `info_set()` never does.
+#' @param E one election (Date or ISO string)
+#' @param coalitions the `read_coalitions()` tibble
+#' @return poll-party labels in `POLL_PARTIES` order, letters that map to Annað dropped; an
+#'   error if no such row starts after E
+#' @export
+formed_coalition <- function(E, coalitions) {
+  E <- as.Date(E)
+  if (length(E) != 1 || is.na(E)) stop("E must be one date")
+  after <- which(!coalitions$caretaker & coalitions$from > E)
+  if (!length(after)) stop("no cabinet formed after ", format(E))
+  named_parties(list_letters(coalitions$parties[after[which.min(coalitions$from[after])]]))
+}
+
 #' The incumbents on day F, as `fundamentals_data.csv` codes them: the opening composition
 #' of the cabinet in office (its earliest row), so a party that left during the cabinet's
 #' term still counts.

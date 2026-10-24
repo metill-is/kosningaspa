@@ -94,6 +94,20 @@ test_that("incumbents_at takes the cabinet's opening composition", {
   expect_identical(coalition_event("2017-06-01", x)$parties, c("Sjálfstæðisflokkurinn", "Framsóknarflokkurinn"))
   expect_identical(incumbents_at("2017-06-01", x), c("Sjálfstæðisflokkurinn", "Framsóknarflokkurinn", "Vinstri Græn"))
 })
+box::use(R/harness/tables[formed_coalition])
+test_that("the formed coalition is the first non-caretaker cabinet that starts after E", {
+  expect_identical(formed_coalition(as.Date("2024-11-30"), co), c("Samfylkingin", "Viðreisn", "Flokkur Fólksins"))
+  for (E in c("2017-10-28", "2021-09-25")) {
+    expect_identical(formed_coalition(E, co), c("Sjálfstæðisflokkurinn", "Framsóknarflokkurinn", "Vinstri Græn"), label = E)
+  }
+  x <- read_coalitions(coalition_csv(withr::local_tempdir(), c(
+    "A,2016-01-01,2017-01-01,B;D,B,FALSE,u", "A,2017-01-01,2017-03-01,B;D,B,TRUE,u", "B,2017-03-01,,S;C;A,S,FALSE,u"
+  )))
+  expect_identical(formed_coalition("2016-12-01", x), c("Samfylkingin", "Viðreisn"))
+  expect_identical(formed_coalition("2015-12-31", x), c("Sjálfstæðisflokkurinn", "Framsóknarflokkurinn"))
+  expect_error(formed_coalition("2017-03-01", x), "no cabinet formed after 2017-03-01")
+  expect_error(formed_coalition(c("2016-12-01", "2016-12-02"), x), "one date")
+})
 test_that("read_coalitions stops on a gap, an overlap or a row that does not end after it starts", {
   dir <- withr::local_tempdir()
   expect_equal(nrow(read_coalitions(coalition_csv(dir, two_rows))), 2)
