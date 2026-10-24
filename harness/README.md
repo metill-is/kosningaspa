@@ -166,7 +166,7 @@ results/harness/
     key_diagnostics.csv     R-hat and ESS of the scored quantities and the kept parameters
     meta.json               written last by the runner: present means finished
   _stale/<id>_<YYYYmmddHHMMSS>/   a retired run, kept as it was
-  logs/                     the queue's logs: queue.log, preflight.log, <id>.log
+  logs/                     the queue's logs: queue.log, preflight.log, <id>.log, and its lock, queue.lock/
 ```
 
 The runner makes every file of a finished run read-only (mode 0444).
@@ -277,17 +277,29 @@ zsh R/harness/queue.sh <run_list> <iter_warmup> <iter_sampling>
 ```
 
 A run list holds one run per line, `lane arm E F seed` separated by whitespace, with lane
-A or B; lines starting with `#` are comments. `harness/runs/tier0.txt` is Tier 0's. The
-queue refuses to start while a `fit_cell.R` runs (`pgrep -f -- '--file=R/harness/fit_cell.R'`)
-unless `FORCE=1`. It runs the full slow suite as a preflight and stops if that fails, then
+A or B; lines starting with `#` are comments. `harness/runs/tier0.txt` is Tier 0's. The logs
+directory is `${HARNESS_RESULTS:-results/harness}/logs`. Before any fit the queue takes the
+lock `<logs>/queue.lock`, a directory holding its pid, and refuses to start while another
+queue holds it, while a `fit_cell.R` runs (`pgrep -f -- '--file=R/harness/fit_cell.R'`), or
+when `pgrep` fails and so cannot tell (an exit other than 0 or 1), unless `FORCE=1`. It runs
+the full slow suite as a preflight (`<logs>/preflight.log`) and stops if that fails, then
 runs lanes A and B side by side, each lane's runs one after another, each run's output in
-`<logs>/<id>.log`. The logs directory is `${HARNESS_RESULTS:-results/harness}/logs`.
-`queue.log` there gets `QUEUE START`, the preflight's verdict, a `start` and an
-`end <id> rc=<rc> <first DIAG|SKIP|STALE line>` line per run, and `QUEUE FINISHED`. It is
-appended to by every queue, so a watcher reads only what follows the last `QUEUE START`; and
-a watcher whose own command line holds the guard's pattern trips the guard. `DRY_RUN=1`
-prints `would run <lane> <arm> <E> <F> <seed>` per run and does nothing else. It exits 0 when every run exits 0, 1 when a run, the guard or the preflight fails, and 2 on
-a bad command line or run list.
+`<logs>/<id>.log`. `queue.log` there gets
+`QUEUE START <time> <list> <warmup> <sampling> (pid <pid>)`, the preflight's verdict, a `start` and an
+`end <id> rc=<rc> <first DIAG|SKIP|STALE line>` line per run, and one terminal line:
+`QUEUE FINISHED` once both lanes are done, or `QUEUE ABORTED rc=<rc> <reason> (pid <pid>)` on
+any other exit (a bad command line, a refusal, a failed preflight, SIGTERM or SIGINT). A
+refused queue writes only its `QUEUE ABORTED` line. The log is appended to by every queue, so
+a watcher reads only what follows the last `QUEUE START` and stops at `QUEUE FINISHED` or at a
+`QUEUE ABORTED` carrying that start's pid (a refused second queue's line carries its own); and
+a watcher whose own command line holds the guard's pattern trips the guard. On SIGTERM or
+SIGINT the queue stops the preflight or both lanes, so no further run starts; a fit already
+running finishes on its own (the guard's `pgrep` finds it). Every exit releases the lock but
+SIGKILL's, which leaves the lock and no terminal line: remove `<logs>/queue.lock` once no queue
+runs. `DRY_RUN=1` prints `would run <lane> <arm> <E> <F> <seed>` per run and does nothing
+else: no lock, guard, preflight, log or fit. It exits 0 when every run exits 0, 1 when a run,
+the lock, the guard or the preflight fails, 2 on a bad command line or run list, and 143 or
+130 on SIGTERM or SIGINT.
 
 ## Tier 0
 
@@ -302,7 +314,9 @@ nohup zsh R/harness/queue.sh harness/runs/tier0.txt 200 200 > results/harness/lo
 LC_ALL=en_US.UTF-8 Rscript R/harness/tier0_report.R r0 harness/runs/tier0.txt
 ```
 
-The last line, run once both runs are done, writes the report, `harness/tier0/<arm>.md`
+Both runs are done once `results/harness/logs/queue.log` ends in `QUEUE FINISHED`; a
+`QUEUE ABORTED` line with the queue's pid means it stopped first, and the line names why.
+The last command, run once both runs are done, writes the report, `harness/tier0/<arm>.md`
 (committed). `R/harness/tier0_report.R <arm> <run_list> [out]` is a plain script. For each run
 of the arm in the run list it reads only the run's `meta.json`, and writes one table row:
 

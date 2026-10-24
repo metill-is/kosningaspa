@@ -16,6 +16,25 @@ queue <- function(args) {
   withr::with_dir(root(), suppressWarnings(system2("zsh", c("R/harness/queue.sh", args), stdout = TRUE, stderr = TRUE)))
 }
 
+# An executable `name` in `dir` running `lines` under sh.
+stub <- function(dir, name, lines) {
+  writeLines(c("#!/bin/sh", lines), file.path(dir, name))
+  Sys.chmod(file.path(dir, name), "0755")
+}
+
+# Polls `ok()` every 0.1 s for up to 10 s; an error naming `what` if it never holds.
+wait_for <- function(ok, what) {
+  for (i in 1:100) {
+    if (isTRUE(ok())) {
+      return(invisible(TRUE))
+    }
+    Sys.sleep(0.1)
+  }
+  stop("timed out waiting for ", what)
+}
+
+ABORTED <- "^QUEUE ABORTED rc=[0-9]+ .* \\(pid [0-9]+\\)$"
+
 # A process whose command line holds the queue guard's pattern, as a running fit_cell.R's does.
 fake_fit <- function(env = parent.frame()) {
   p <- processx::process$new("sh", c("-c", "read x", GUARD), stdin = "|")
@@ -56,29 +75,94 @@ test_that("the queue refuses a bad command line or run list", {
   expect_match(out, "5 fields", fixed = TRUE, all = FALSE)
   out <- queue(c(file.path(lists, "absent.txt"), "200", "200"))
   expect_identical(attr(out, "status"), 2L)
+  results <- withr::local_tempdir()
+  withr::local_envvar(HARNESS_RESULTS = results, DRY_RUN = NA)
+  out <- queue(c(bad, "200", "200"))
+  expect_identical(attr(out, "status"), 2L)
+  log <- readLines(file.path(results, "logs", "queue.log"))
+  expect_length(log, 1)
+  expect_match(log, "^QUEUE ABORTED rc=2 .*5 fields .* \\(pid [0-9]+\\)$")
 })
 
 test_that("the queue will not start beside a running fit_cell.R unless FORCE=1, and stops on a failed preflight", {
   results <- withr::local_tempdir()
-  stub <- withr::local_tempdir()
-  writeLines(c("#!/bin/sh", "exit 3"), file.path(stub, "Rscript"))
-  Sys.chmod(file.path(stub, "Rscript"), "0755")
-  withr::local_envvar(HARNESS_RESULTS = results, DRY_RUN = NA, FORCE = NA, PATH = paste(stub, Sys.getenv("PATH"), sep = ":"))
+  bin <- withr::local_tempdir()
+  stub(bin, "Rscript", "exit 3")
+  withr::local_envvar(HARNESS_RESULTS = results, DRY_RUN = NA, FORCE = NA, PATH = paste(bin, Sys.getenv("PATH"), sep = ":"))
+  logs <- file.path(results, "logs")
   fake_fit()
   out <- queue(c("harness/runs/tier0.txt", "200", "200"))
   expect_identical(attr(out, "status"), 1L)
   expect_match(out, "a fit_cell.R is running", fixed = TRUE, all = FALSE)
-  expect_false(dir.exists(file.path(results, "logs")))
+  log <- readLines(file.path(logs, "queue.log"))
+  expect_length(log, 1)
+  expect_match(log, ABORTED)
+  expect_match(log, "^QUEUE ABORTED rc=1 a fit_cell.R is running ")
+  expect_false(dir.exists(file.path(logs, "queue.lock")))
+  expect_false(file.exists(file.path(logs, "preflight.log")))
 
   withr::local_envvar(FORCE = "1")
   out <- queue(c("harness/runs/tier0.txt", "200", "200"))
   expect_identical(attr(out, "status"), 1L)
+  log <- readLines(file.path(logs, "queue.log"))[-1]
+  expect_match(log[1], "^QUEUE START .* \\(pid [0-9]+\\)$")
+  expect_match(log[2], "^preflight FAIL rc=3 ")
+  expect_length(log, 3)
+  expect_match(log[3], "^QUEUE ABORTED rc=1 preflight failed \\(rc=3\\)")
+  expect_match(log[3], ABORTED)
+  expect_false(dir.exists(file.path(logs, "queue.lock")))
+  expect_true(file.exists(file.path(logs, "preflight.log")))
+})
+
+test_that("the queue's guard refuses to start when pgrep fails", {
+  results <- withr::local_tempdir()
+  bin <- withr::local_tempdir()
+  stub(bin, "Rscript", "exit 3")
+  withr::local_envvar(HARNESS_RESULTS = results, DRY_RUN = NA, FORCE = NA, PATH = paste(bin, Sys.getenv("PATH"), sep = ":"))
+  for (rc in c(2L, 3L, 127L)) {
+    stub(bin, "pgrep", paste("exit", rc))
+    out <- queue(c("harness/runs/tier0.txt", "200", "200"))
+    expect_identical(attr(out, "status"), 1L)
+    expect_match(out, paste0("the guard could not look for a running fit_cell.R (pgrep exit ", rc, ")"), fixed = TRUE, all = FALSE)
+    log <- readLines(file.path(results, "logs", "queue.log"))
+    expect_match(log[length(log)], paste0("^QUEUE ABORTED rc=1 the guard could not look .*pgrep exit ", rc))
+    expect_false(any(startsWith(log, "QUEUE START")))
+  }
+})
+
+test_that("a second queue is refused while the first holds the lock, and a killed queue logs QUEUE ABORTED", {
+  results <- withr::local_tempdir()
+  bin <- withr::local_tempdir()
+  go <- file.path(bin, "go")
+  calls <- file.path(bin, "calls.txt")
+  # WHY: the preflight waits for a file that never comes, so the first queue holds the lock in its preflight.
+  stub(bin, "Rscript", c('echo "$*" >> "$CALLS"', 'while [ ! -f "$GO" ]; do sleep 0.1; done', "exit 0"))
+  withr::local_envvar(
+    HARNESS_RESULTS = results, DRY_RUN = NA, FORCE = NA, GO = go, CALLS = calls,
+    PATH = paste(bin, Sys.getenv("PATH"), sep = ":")
+  )
+  lock <- file.path(results, "logs", "queue.lock")
+  first <- processx::process$new("zsh", c("R/harness/queue.sh", "harness/runs/tier0.txt", "200", "200"), wd = root())
+  withr::defer(first$kill())
+  wait_for(\() file.exists(calls) && any(grepl("tests/run.R", readLines(calls))), "the first queue's preflight")
+  expect_identical(readLines(file.path(lock, "pid")), as.character(first$get_pid()))
+
+  out <- queue(c("harness/runs/tier0.txt", "200", "200"))
+  expect_identical(attr(out, "status"), 1L)
+  expect_match(out, paste0("another queue holds ", lock, " (pid ", first$get_pid(), ")"), fixed = TRUE, all = FALSE)
+  expect_true(first$is_alive())
+  expect_true(dir.exists(lock))
+
+  first$signal(tools::SIGTERM)
+  first$wait(10000)
+  expect_false(first$is_alive())
+  expect_identical(first$get_exit_status(), 143L)
   log <- readLines(file.path(results, "logs", "queue.log"))
-  expect_match(log[1], "^QUEUE START ")
-  expect_match(log, "^preflight FAIL rc=3 ", all = FALSE)
-  expect_false(any(grepl("^(start|end) ", log)))
-  expect_false("QUEUE FINISHED" %in% log)
-  expect_true(file.exists(file.path(results, "logs", "preflight.log")))
+  expect_match(log[1], paste0("^QUEUE START .* \\(pid ", first$get_pid(), "\\)$"))
+  expect_match(log, paste0("^QUEUE ABORTED rc=1 another queue holds .* \\(pid [0-9]+\\)$"), all = FALSE)
+  expect_identical(log[length(log)], paste0("QUEUE ABORTED rc=143 killed (TERM) (pid ", first$get_pid(), ")"))
+  expect_false(dir.exists(lock))
+  expect_false(any(grepl("^(preflight|start|end) ", log)))
 })
 
 test_that("the queue runs each lane's runs in order, the lanes side by side, and logs how each ended", {
@@ -116,6 +200,7 @@ test_that("the queue runs each lane's runs in order, the lanes side by side, and
   expect_match(log[1], "^QUEUE START ")
   expect_identical(log[2], "preflight PASS")
   expect_identical(log[length(log)], "QUEUE FINISHED")
+  expect_false(dir.exists(file.path(results, "logs", "queue.lock")))
   ends <- sort(grep("^end ", log, value = TRUE))
   expect_identical(ends, c(
     "end r0_2021-09-25_2021-03-29_s12 rc=0 DIAG run=r0_2021-09-25_2021-03-29_s12 stub",

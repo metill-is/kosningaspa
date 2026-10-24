@@ -9,33 +9,71 @@
 # from the project root, its output in $LOGS/<id>.log. LOGS is
 # ${HARNESS_RESULTS:-<project root>/results/harness}/logs, as the runner's results_root().
 #
-# Before any fit it refuses to start while a fit_cell.R runs, unless FORCE=1, and runs the
-# full slow test suite as a preflight ($LOGS/preflight.log), stopping if that fails.
-# $LOGS/queue.log gets "QUEUE START ...", "preflight PASS" (or "preflight FAIL ..."), a
-# "start <lane> <id> <time>" and an "end <id> rc=<rc> <first DIAG|SKIP|STALE line>" per run,
-# and "QUEUE FINISHED". DRY_RUN=1 prints "would run <lane> <arm> <E> <F> <seed>" per run and
-# does nothing else: no guard, preflight, log or fit.
+# Before any fit it takes the lock $LOGS/queue.lock (a directory holding the queue's pid),
+# refuses to start while another queue holds it or a fit_cell.R runs (or when pgrep cannot
+# tell), unless FORCE=1, and runs the full slow test suite as a preflight
+# ($LOGS/preflight.log), stopping if that fails. $LOGS/queue.log gets
+# "QUEUE START <time> <list> <warmup> <sampling> (pid <pid>)", "preflight PASS" (or
+# "preflight FAIL ..."), a "start <lane> <id> <time>" and an
+# "end <id> rc=<rc> <first DIAG|SKIP|STALE line>" per run, and one terminal line: "QUEUE
+# FINISHED" once both lanes are done, or "QUEUE ABORTED rc=<rc> <reason> (pid <pid>)" on any
+# other exit (a bad command line, a refusal, a failed preflight, SIGTERM or SIGINT). A refused
+# queue writes only its QUEUE ABORTED line. On SIGTERM or SIGINT it stops the preflight or both
+# lanes, so no further run starts; a fit already running finishes on its own. The exit
+# releases the lock; only SIGKILL leaves it, and the line, behind. DRY_RUN=1 prints
+# "would run <lane> <arm> <E> <F> <seed>" per run and does nothing else: no lock, guard,
+# preflight, log or fit.
 #
-# Exit status: 0 when every run exits 0; 1 when a run, the guard or the preflight fails; 2 on
-# a bad command line or run list.
+# Exit status: 0 when every run exits 0; 1 when a run, the lock, the guard or the preflight
+# fails; 2 on a bad command line or run list; 143 or 130 on SIGTERM or SIGINT.
 emulate -R zsh
 setopt no_unset
 
-if (( $# != 3 )); then
-  print -u2 -r -- "usage: zsh R/harness/queue.sh <run_list> <iter_warmup> <iter_sampling>"
-  exit 2
-fi
+root=${0:A:h:h:h}
+LOGS=${HARNESS_RESULTS:-$root/results/harness}/logs
+lock=$LOGS/queue.lock
+finished=0
+owns_lock=0
+reason="exited"
+typeset -a children
+
+qlog() { print -r -- "$*" >> $LOGS/queue.log }
+now() { date '+%Y-%m-%d %H:%M:%S' }
+
+# The exit trap: stop the preflight or the lanes, release the lock, and write the terminal
+# line unless the queue finished or is a dry run.
+on_exit() {
+  local rc=$?
+  if (( ${#children} )); then
+    kill -TERM $children 2> /dev/null
+  fi
+  if (( owns_lock )); then
+    rm -f $lock/pid
+    rmdir $lock 2> /dev/null
+  fi
+  if (( ! finished )) && [[ ${DRY_RUN:-0} != 1 ]] && mkdir -p $LOGS 2> /dev/null; then
+    qlog "QUEUE ABORTED rc=$rc $reason (pid $$)"
+  fi
+}
+trap on_exit EXIT
+trap 'reason="killed (TERM)"; exit 143' TERM
+trap 'reason="interrupted (INT)"; exit 130' INT
+
+die() {
+  local rc=$1
+  shift
+  reason="$*"
+  print -u2 -r -- "$*"
+  exit $rc
+}
+
+(( $# == 3 )) || die 2 "usage: zsh R/harness/queue.sh <run_list> <iter_warmup> <iter_sampling>"
 list=${1:A}
 warmup=$2
 sampling=$3
-root=${0:A:h:h:h}
-if [[ ! -f $list || ! -r $list ]]; then
-  print -u2 -r -- "no run list: $1"
-  exit 2
-fi
+[[ -f $list && -r $list ]] || die 2 "no run list: $1"
 if [[ $warmup != <-> || $sampling != <-> ]]; then
-  print -u2 -r -- "iter_warmup and iter_sampling must be whole numbers: $warmup $sampling"
-  exit 2
+  die 2 "iter_warmup and iter_sampling must be whole numbers: $warmup $sampling"
 fi
 
 typeset -a runs fields
@@ -45,24 +83,12 @@ while IFS= read -r line || [[ -n $line ]]; do
   fields=(${=line})
   (( ${#fields} == 0 )) && continue
   [[ $fields[1] == \#* ]] && continue
-  if (( ${#fields} != 5 )); then
-    print -u2 -r -- "$list:$n: a run has 5 fields (lane arm E F seed): $line"
-    exit 2
-  fi
-  if [[ $fields[1] != (A|B) ]]; then
-    print -u2 -r -- "$list:$n: lane must be A or B: $line"
-    exit 2
-  fi
-  if [[ $fields[5] != <-> ]]; then
-    print -u2 -r -- "$list:$n: seed must be a whole number: $line"
-    exit 2
-  fi
+  (( ${#fields} == 5 )) || die 2 "$list:$n: a run has 5 fields (lane arm E F seed): $line"
+  [[ $fields[1] == (A|B) ]] || die 2 "$list:$n: lane must be A or B: $line"
+  [[ $fields[5] == <-> ]] || die 2 "$list:$n: seed must be a whole number: $line"
   runs+=("${(j: :)fields}")
 done < $list
-if (( ${#runs} == 0 )); then
-  print -u2 -r -- "no runs in $list"
-  exit 2
-fi
+(( ${#runs} > 0 )) || die 2 "no runs in $list"
 
 if [[ ${DRY_RUN:-0} == 1 ]]; then
   for r in $runs; do
@@ -71,24 +97,36 @@ if [[ ${DRY_RUN:-0} == 1 ]]; then
   exit 0
 fi
 
-if [[ ${FORCE:-0} != 1 ]] && pgrep -f -- '--file=R/harness/fit_cell.R' > /dev/null; then
-  print -u2 -r -- "a fit_cell.R is running (pgrep -f -- '--file=R/harness/fit_cell.R'); FORCE=1 starts anyway"
-  exit 1
+mkdir -p $LOGS || die 1 "cannot make $LOGS"
+if mkdir $lock 2> /dev/null; then
+  owns_lock=1
+  print -r -- $$ > $lock/pid
+elif [[ ${FORCE:-0} != 1 ]]; then
+  holder=$(cat $lock/pid 2> /dev/null)
+  die 1 "another queue holds $lock (pid ${holder:-unknown}); FORCE=1 starts anyway, and a queue killed by SIGKILL leaves the lock behind: remove it once no queue runs"
 fi
 
-cd $root || exit 1
-LOGS=${HARNESS_RESULTS:-$root/results/harness}/logs
-mkdir -p $LOGS || exit 1
-qlog() { print -r -- "$*" >> $LOGS/queue.log }
-now() { date '+%Y-%m-%d %H:%M:%S' }
+if [[ ${FORCE:-0} != 1 ]]; then
+  pgrep -f -- '--file=R/harness/fit_cell.R' > /dev/null 2>&1
+  found=$?
+  if (( found == 0 )); then
+    die 1 "a fit_cell.R is running (pgrep -f -- '--file=R/harness/fit_cell.R'); FORCE=1 starts anyway"
+  elif (( found != 1 )); then
+    die 1 "the guard could not look for a running fit_cell.R (pgrep exit $found); FORCE=1 starts anyway"
+  fi
+fi
 
-qlog "QUEUE START $(now) $list $warmup $sampling"
-HARNESS_SLOW=1 LC_ALL=en_US.UTF-8 Rscript tests/run.R > $LOGS/preflight.log 2>&1
+cd $root || die 1 "cannot cd to $root"
+qlog "QUEUE START $(now) $list $warmup $sampling (pid $$)"
+# WHY: in the background, so that a SIGTERM's trap runs at once rather than after the suite.
+HARNESS_SLOW=1 LC_ALL=en_US.UTF-8 Rscript tests/run.R > $LOGS/preflight.log 2>&1 &
+children=($!)
+wait $children[1]
 rc=$?
+children=()
 if (( rc != 0 )); then
   qlog "preflight FAIL rc=$rc ($LOGS/preflight.log)"
-  print -u2 -r -- "preflight failed (rc=$rc): see $LOGS/preflight.log"
-  exit 1
+  die 1 "preflight failed (rc=$rc): see $LOGS/preflight.log"
 fi
 qlog "preflight PASS"
 
@@ -113,9 +151,12 @@ run_lane A &
 lane_a=$!
 run_lane B &
 lane_b=$!
+children=($lane_a $lane_b)
 wait $lane_a
 rc_a=$?
 wait $lane_b
 rc_b=$?
+children=()
 qlog "QUEUE FINISHED"
+finished=1
 (( rc_a == 0 && rc_b == 0 ))
