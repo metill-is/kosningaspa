@@ -92,8 +92,8 @@ test_that("the Tier 0 report writes one row of diagnostics per run, non-finite v
   own <- gsub(out_dir, "", text, fixed = TRUE)
   # WHY: no column heading holds one of these words, so the whole report is checked.
   expect_false(any(grepl("share|mean|median|crps|mae", own, ignore.case = TRUE)))
-  # WHY: the decoy's value, 0.3141, in any rounding or as a percentage.
-  expect_false(any(grepl("314", own, fixed = TRUE)))
+  # WHY: the decoy's value, 0.3141, to two or more decimals, as a percentage, or times 1000 or 10000.
+  expect_false(any(grepl("0\\.31|31\\.4|31 ?%|314", own)))
   expect_identical(list.files(root("results"), recursive = TRUE, all.files = TRUE, include.dirs = TRUE), before)
 })
 
@@ -127,6 +127,28 @@ test_that("the Tier 0 report stops, writing nothing, on a run it cannot read", {
     m
   })
   fails_with("meta.json: diagnostics$max_rhat is not a number")
+  # WHY: NULL removes the field; NA is written as the string "NA", as fit_cell.R writes it.
+  for (pass in list(NULL, NA, "TRUE", c(TRUE, FALSE))) {
+    unlink(second, recursive = TRUE)
+    fake_run(results, "2024-11-30", "2024-11-29", 1101L, edit = \(m) {
+      m$gate$pass <- pass
+      m
+    })
+    fails_with("meta.json: gate$pass is not true or false")
+  }
+  for (reasons in list(NULL, 1, list(a = "x"), list("a", list(1)))) {
+    unlink(second, recursive = TRUE)
+    fake_run(results, "2024-11-30", "2024-11-29", 1101L, edit = \(m) {
+      m$gate$reasons <- reasons
+      m
+    })
+    fails_with("meta.json: gate$reasons is not a list of strings")
+  }
+
+  unlink(second, recursive = TRUE)
+  fake_run(results, "2024-11-30", "2024-09-01", 1101L)
+  writeLines(c("A r0 2021-09-25 2021-03-29 1102", "A r0 2024-11-30 2024-09-01 1101"), runs)
+  fails_with("run r0_2024-11-30_2024-09-01_s1101: not a forecast cell: E = 2024-11-30, F = 2024-09-01")
 
   writeLines("A v2 2024-11-30 2024-11-29 1101", runs)
   fails_with("no run of arm r0")

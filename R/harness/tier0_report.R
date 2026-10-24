@@ -15,7 +15,9 @@
 # Above the table it records the run list, the CmdStan and cmdstanr versions and the
 # max_treedepth of meta.json, and `sysctl -n hw.ncpu` read when it runs. It stops, writing
 # nothing, on a run list with no run of <arm>, a run with no meta.json, a meta.json of another
-# run, or a field that is missing or does not parse.
+# run, a cell that is not a forecast cell (the message names the run), or a field it reads
+# that is missing or does not parse: the gate's `pass` must be true or false and its
+# `reasons` a list of strings, possibly empty.
 if (!isTRUE(l10n_info()[["UTF-8"]])) stop("tier0_report.R needs a UTF-8 locale: run under LC_ALL=en_US.UTF-8", call. = FALSE)
 # WHY: the box path below is the working directory, so check it is the project root first.
 stopifnot("run from the project root (no R/harness/constants.R here)" = file.exists("R/harness/constants.R"))
@@ -90,6 +92,9 @@ run_row <- function(arm, E, F, seed) {
     !isTRUE(number(meta$seed, "seed") == as.numeric(seed))) {
     stop("the meta.json in ", dir, " is not of the run list's run ", id, call. = FALSE)
   }
+  tag <- tryCatch(target_cell(meta_E, meta_F)$tag, error = function(e) {
+    stop("run ", id, ": ", conditionMessage(e), call. = FALSE)
+  })
   d <- meta$diagnostics
   if (!is.list(d)) stop("meta.json: diagnostics is not an object", call. = FALSE)
   v <- lapply(stats::setNames(DIAGNOSTICS, DIAGNOSTICS), \(f) number(d[[f]], paste0("diagnostics$", f)))
@@ -101,18 +106,19 @@ run_row <- function(arm, E, F, seed) {
   bulk <- c(v$min_ess_bulk, v$min_ess_bulk_scored)
   tail <- c(v$min_ess_tail, v$min_ess_tail_scored)
 
+  if (!is.list(meta$gate)) stop("meta.json: gate is not an object", call. = FALSE)
   pass <- meta$gate$pass
-  reasons <- as.character(unlist(meta$gate$reasons))
-  gate <- if (isTRUE(pass)) {
-    "PASS"
-  } else if (isFALSE(pass)) {
-    paste(c("FAIL", if (length(reasons)) paste0(": ", paste(reasons, collapse = "; "))), collapse = "")
-  } else {
-    "NA"
+  if (!is.logical(pass) || length(pass) != 1 || is.na(pass)) {
+    stop("meta.json: gate$pass is not true or false", call. = FALSE)
   }
+  reasons <- meta$gate$reasons
+  # WHY: read_json() reads an empty array as list(), and an empty object as a named list().
+  if (is.list(reasons) && !length(reasons) && is.null(names(reasons))) reasons <- character(0)
+  if (!is.character(reasons)) stop("meta.json: gate$reasons is not a list of strings", call. = FALSE)
+  gate <- if (pass) "PASS" else paste0("FAIL", if (length(reasons)) paste0(": ", paste(reasons, collapse = "; ")))
   pair <- function(x) paste(x, collapse = "; ")
   cells <- c(
-    sprintf("%s, %s, %s", format(meta_E), format(meta_F), target_cell(meta_E, meta_F)$tag),
+    sprintf("%s, %s, %s", format(meta_E), format(meta_F), tag),
     sprintf("%.0f", number(meta$seed, "seed")),
     sprintf("%.0f + %.0f", warmup, sampling),
     sprintf("%.1f", minutes),

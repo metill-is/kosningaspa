@@ -326,8 +326,9 @@ recorded it (`Inf`, `NaN`, `NA`). The report holds sampler diagnostics only: no 
 quantile or score of a forecast appears in it, and `tests/harness/test-tier0-report.R` checks
 that none of the words share, mean, median, CRPS or MAE, nor the value of a forecast-like
 decoy field in its fixture, does. It stops, writing nothing, on a run list with no run of the
-arm, a run without `meta.json`, a `meta.json` of another run, or a field that is missing or
-does not parse.
+arm, a run without `meta.json`, a `meta.json` of another run, a cell that is not a forecast
+cell (naming the run), or a field it reads that is missing or does not parse, the gate's
+among them: `pass` must be true or false and `reasons` a list of strings, possibly empty.
 
 ## R0's inputs
 
