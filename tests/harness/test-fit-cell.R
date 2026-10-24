@@ -293,6 +293,16 @@ test_that("fit_cell.R fits a cell, skips it while meta.json matches, and retires
   expect_true(paste0("SKIP ", id, " (meta.json matches)") %in% out)
   expect_false(any(grepl("^(DIAG|STALE)", out)))
 
+  # WHY: the sha-skip hashes freshly built data; one that hashed the frozen file would call this run STALE.
+  Sys.chmod(inputs[1], "0644")
+  cat("\n", file = inputs[1], append = TRUE)
+  Sys.chmod(inputs[1], "0444")
+  expect_false(identical(digest::digest(file = inputs[1], algo = "sha256"), expected$data_sha256))
+  out <- fit()
+  expect_null(attr(out, "status"), info = shown(out))
+  expect_true(paste0("SKIP ", id, " (meta.json matches)") %in% out)
+  expect_false(any(grepl("^(DIAG|STALE)", out)))
+
   path <- file.path(dir, "meta.json")
   Sys.chmod(path, "0644")
   text <- readLines(path, encoding = "UTF-8")

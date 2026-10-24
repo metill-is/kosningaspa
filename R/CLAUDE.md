@@ -28,7 +28,7 @@ Interactive fitting scripts (e.g., `fit_*.R`) also use `library()` for heavy dep
 
 ### Harness (v2)
 
-Box modules in `R/harness/`, imported as `R/harness/<module>`, with tests in `tests/harness/` (`LC_ALL=en_US.UTF-8 Rscript tests/run.R`). They read only the snapshot and `harness/sources/` (`harness/README.md`). Their code, and `election_utils.R`'s, writes non-ASCII characters as `\uXXXX` escapes and non-ASCII names with `stats::setNames()`, so a module loaded under the C locale reads the same; comments keep their Icelandic. `tests/harness/test-escapes.R` enforces this (`harness/README.md`, Tests).
+Box modules in `R/harness/`, imported as `R/harness/<module>`, with tests in `tests/harness/` (`LC_ALL=en_US.UTF-8 Rscript tests/run.R`). They read the snapshot (`harness/snapshot/`, `harness/snapshot_manifest.csv`), `harness/sources/`, `harness/configs/`, the scorer self-test's inputs (`harness/selftest/`, `harness/selftest_manifest.csv`), `harness/truth/`, the freeze files (`harness/FREEZE.*`, `harness/DECISION.*`, `harness/CONFIRM.md`) and the run directories under `results/harness/` (their own output); anything else, the live `data/` included, only as the `src_root` that `snapshot_inputs()` or `selftest_inputs()` is given when its copy is taken (`harness/README.md`). Their code, and `election_utils.R`'s, writes non-ASCII characters as `\uXXXX` escapes and non-ASCII names with `stats::setNames()`, so a module loaded under the C locale reads the same; comments keep their Icelandic. `tests/harness/test-escapes.R` enforces this (`harness/README.md`, Tests).
 
 | Module | Exports | Role |
 |--------|---------|------|

@@ -158,7 +158,7 @@ meta <- c(
   provenance
 )
 tmp <- tempfile("meta-", tmpdir = dir, fileext = ".json")
-# WHY: na = "string" keeps an Inf R-hat as "Inf"; "null" would merge it with a missing value.
+# WHY: jsonlite writes a numeric NA, NaN or Inf as a string by default (na = "null" would merge them); na = "string" also writes a logical or character NA as "NA", not null.
 jsonlite::write_json(meta, tmp, auto_unbox = TRUE, pretty = TRUE, digits = NA, na = "string")
 if (!all(Sys.chmod(c(paths, key_path, tmp), mode = "0444"))) stop("could not make the outputs read-only")
 if (!file.rename(tmp, meta_path)) stop("could not move ", tmp, " to ", meta_path)

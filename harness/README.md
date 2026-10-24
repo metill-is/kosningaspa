@@ -183,7 +183,8 @@ arm, E, F, the builder's meta, minutes, diagnostics, the gate and provenance).
 **Sha-skip.** `expected_meta()` lists the keys a finished run must match to be reused: the
 sha256 of the Stan file, the config and the Stan data (`stan_data_sha()` of the freshly
 built data, never the hash of the run's own frozen file, which would compare the old data
-with itself), the seed, the warmup and sampling
+with itself; the slow `test-fit-cell.R` edits a run's frozen file and expects SKIP), the
+seed, the warmup and sampling
 iterations, the sampler settings of `SAMPLER` (4 chains, `init = 0`, `max_treedepth = 12`)
 and `EXTRACT_VERSION`. `meta_mismatch(meta, expected)` returns the keys of `expected` whose
 values differ or are missing from `meta`, and ignores every other key of `meta`. Numbers
@@ -264,8 +265,8 @@ data still hash as expected. After the extractor it summarises the diagnostics o
 (`scored_kd[<kjordaemi>,<flokkur>]`), writes `key_diagnostics.csv` (`variable`, `rhat`,
 `ess_bulk`, `ess_tail`) for those and the `param_draws` columns, and applies the gate.
 `meta.json` comes last: the expected keys, `arm`, `E`, `F`, `id`, the builder's meta
-(`n_pred_k` and `n_e` as objects named by kjördæmi and party), `minutes` (the sampling's
-wall time), `diagnostics`, `gate` (`pass`, `reasons`) and the provenance of `inputs.json`.
+(`n_pred_k` and `n_e` as objects named by kjördæmi and party), `minutes` (the fit's wall
+time, warmup and sampling), `diagnostics`, `gate` (`pass`, `reasons`) and the provenance of `inputs.json`.
 A non-finite number in `meta.json` is written as a string (`"Inf"`, `"NA"`), so an infinite
 R-hat stays distinct from a missing one; the gate fails on either. It prints the DIAG line
 and `DONE <dir>`, then deletes the CmdStan CSVs.
