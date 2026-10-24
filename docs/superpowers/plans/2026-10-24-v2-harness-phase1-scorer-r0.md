@@ -61,7 +61,7 @@ Each item below is a choice the spec leaves open, or one where the data contradi
      - At depth 10, every transition is cut off at the cap. At depth 12, every transition ends at its own U-turn at depth 11.
      - The slowest quantities are σ_δ and μ_log σ.
    - **Where the centring is.** It is a work-in-progress port that Brynjólfur held on 16 Oct. It sits on the local branch `kjordaemi-centred-delta-td12` (`3c044bf`, not on master), and its validation is unfinished.
-   - **Default:** not included. R0 stays master plus the three hooks (§5.4), sampled at depth 12.
+   - **Ruled by Brynjólfur on 2026-10-24: keep the default for now.** R0 is not centred. It stays master plus the three hooks (§5.4), sampled at depth 12, and the question is decided once Tier 0 reports.
    - **Why it matters.** §5.7 counts a cell that fails the gate twice as a failure for its arm, so a sampler artefact would count against R0 in the V2 decision. Under Decision 3's default scope, depth 12 alone sits on the 1.01 line at 1000 + 1000 (Tier 1 samples 2000), and the centring clears it. Under the scored-quantities scope, the slow scales are not gated.
    - **When to decide:** after Tier 0 (Task 11, which runs R0 uncentred at depth 12) and before the freeze (Phase 3). After the freeze, only bugs change an arm.
    - **If it is included,** the centring becomes a fourth change to R0's Stan file. Task 9's equality test then holds up to the log-Jacobian of the reparameterisation, which the test computes from the same draw.
