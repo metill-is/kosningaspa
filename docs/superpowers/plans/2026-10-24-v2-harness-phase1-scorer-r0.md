@@ -46,7 +46,25 @@ Each item below is a choice the spec leaves open, or one where the data contradi
    - Default (Task 7): every variable in the `parameters` block, plus the scored quantities. The overdisp study's `max_rhat` used that scope.
    - Under it, that study's `base_eve` fit has max R-hat 1,0129 at 4 × (1000 + 2000) and `max_treedepth` 10, so it would fail the gate.
    - The alternative is the scored quantities only.
+   - This interacts with Decision 5: R0's slowest quantities are hierarchical scales, which only the default scope gates.
 4. **The R54 escapes also cover `R/election_utils.R`.** The brief names `R/harness/`, but the harness loads `layout_for()` and `calculate_seats()` from this file, which has 12 non-ASCII literals. Default: included (Task 1).
+5. **Whether R0 includes the exact centring of δ and log σ.**
+   - **Background.** R0 runs §5.8's sampler budget, as every arm does, not production's fit-script settings (see Global Constraints).
+   - **What the sampler study measured** on the same posterior: 2024-eve data, 4 × (1000 + 1000), figures read from its report on 2026-10-24.
+
+     | Setting | Max R-hat | Min bulk ESS | Min-ESS per minute |
+     |---|---|---|---|
+     | Production, depth 10 | 1.022–1.025 | 171–222 | 1× |
+     | Depth 12 alone | 1.009–1.012 | 825–846 | 2.1× |
+     | Centring plus depth 12 | 1.004–1.006 | 1,295–1,501 | 3.6× |
+
+     - At depth 10, every transition is cut off at the cap. At depth 12, every transition ends at its own U-turn at depth 11.
+     - The slowest quantities are σ_δ and μ_log σ.
+   - **Where the centring is.** It is a work-in-progress port that Brynjólfur held on 16 Oct. It sits on the local branch `kjordaemi-centred-delta-td12` (`3c044bf`, not on master), and its validation is unfinished.
+   - **Default:** not included. R0 stays master plus the three hooks (§5.4), sampled at depth 12.
+   - **Why it matters.** §5.7 counts a cell that fails the gate twice as a failure for its arm, so a sampler artefact would count against R0 in the V2 decision. Under Decision 3's default scope, depth 12 alone sits on the 1.01 line at 1000 + 1000 (Tier 1 samples 2000), and the centring clears it. Under the scored-quantities scope, the slow scales are not gated.
+   - **When to decide:** after Tier 0 (Task 11, which runs R0 uncentred at depth 12) and before the freeze (Phase 3). After the freeze, only bugs change an arm.
+   - **If it is included,** the centring becomes a fourth change to R0's Stan file. Task 9's equality test then holds up to the log-Jacobian of the reparameterisation, which the test computes from the same draw.
 
 **Spec readings this plan takes** (no answer needed):
 - **The hedge.** Sósíalistaflokkurinn gets no hedge correction in 2021 (n_e = 0, §5.4's rule). The 2021 study floored the closing party at 1.
@@ -76,7 +94,11 @@ Each item below is a choice the spec leaves open, or one where the data contradi
   - Every R run is `LC_ALL=en_US.UTF-8 Rscript …`.
   - After Task 1, non-ASCII characters in R code under `R/harness/` and in `R/election_utils.R` are written as `\uXXXX` escapes, and name tags are ASCII (`stats::setNames()` for non-ASCII names). `tests/harness/test-escapes.R` enforces both.
   - Write JSON holding Icelandic text with `jsonlite::write_json()` (UTF-8) or Python's `json.dump(..., ensure_ascii = False)`, never by hand.
-- **Sampler (§5.8).** Every fit runs 4 chains with `parallel_chains = 4`, `init = 0` and `max_treedepth = 12`. Tier 0 runs 200 + 200 iterations. Seeds are fixed in the run list and recorded in `meta.json`.
+- **Sampler (§5.8).**
+  - Every fit runs 4 chains with `parallel_chains = 4`, `init = 0` and `max_treedepth = 12`.
+  - Tier 0 runs 200 + 200 iterations. From Tier 1 on, every arm runs 1000 + 2000; iterations are never cut for one arm alone (§6.9).
+  - R0 does not inherit production's fit-script settings (4 × (200 + 200) at the default `max_treedepth` of 10, `R/fit_polling_and_fundamentals_kjordaemi_model.R:131-139`).
+  - Seeds are fixed in the run list and recorded in `meta.json`.
 - **Slow tests.**
   - Tests that compile Stan, sweep every day, or allocate seats for 8000 draws call `skip_unless_slow()` (Task 2). They run only with `HARNESS_SLOW=1`.
   - Each task's "full suite" step means `HARNESS_SLOW=1 LC_ALL=en_US.UTF-8 Rscript tests/run.R`.
@@ -575,13 +597,14 @@ test_that("score_cell refuses every target cell while the repo has no freeze, be
 - `meta_mismatch(meta, expected)` → the names of the keys whose values differ, or are missing from `meta`. `character(0)` means the run can be reused.
 - `retire_run(dir)` → moves `dir` to `results_root()/_stale/<id>_<YYYYmmddHHMMSS>` and returns the new path.
 - `summarise_diagnostics(params, scored, sampler)`:
-  - `params` and `scored` are posterior `draws_array`s. `sampler` is `list(num_divergent, num_max_treedepth, ebfmi)`, one value per chain, as from `fit$diagnostic_summary()`.
-  - It returns `list(max_rhat, max_rhat_scored, min_ess_bulk, min_ess_tail, min_ess_bulk_scored, min_ess_tail_scored, divergent, treedepth_hits, min_ebfmi)`.
+  - `params` and `scored` are posterior `draws_array`s.
+  - `sampler` is `list(num_divergent, num_max_treedepth, ebfmi, max_depth)`, one value per chain. The first three come from `fit$diagnostic_summary()`. `max_depth` is the deepest `treedepth__` in `fit$sampler_diagnostics()`, which shows whether trajectories end by U-turn below the cap.
+  - It returns `list(max_rhat, max_rhat_scored, min_ess_bulk, min_ess_tail, min_ess_bulk_scored, min_ess_tail_scored, divergent, treedepth_hits, max_depth, min_ebfmi)`.
   - `max_rhat` and `min_ess_*` are taken over `params` and `scored` together (Decision 3).
 - `diagnostics_gate(d, rhat_max = 1.01, ess_min = 400)` → `list(pass, reasons)`.
   - The rules: `max_rhat ≤ rhat_max`, `divergent == 0` and `min_ess_bulk_scored ≥ ess_min`.
   - `reasons` names each failed rule with its value.
-- `diag_line(id, minutes, d, gate)` → exactly `sprintf("DIAG run=%s minutes=%.1f max_rhat=%.4f min_ess_bulk=%.0f min_ess_tail=%.0f divergent=%d treedepth_hits=%d min_ebfmi=%.3f gate=%s", …)`, with `gate` PASS or FAIL.
+- `diag_line(id, minutes, d, gate)` → exactly `sprintf("DIAG run=%s minutes=%.1f max_rhat=%.4f min_ess_bulk=%.0f min_ess_tail=%.0f divergent=%d treedepth_hits=%d max_depth=%d min_ebfmi=%.3f gate=%s", …)`, with `gate` PASS or FAIL.
 
 - [ ] **Step 1: Write the failing tests:**
   - `run_id("r0", as.Date("2024-11-30"), as.Date("2024-11-29"), 1101)` is `"r0_2024-11-30_2024-11-29_s1101"`.
@@ -858,11 +881,12 @@ test_that("expected valid votes are the previous election's, by name", {
 **Interfaces:**
 - Produces (`tier0_report.R`), run as `LC_ALL=en_US.UTF-8 Rscript R/harness/tier0_report.R <arm> <run_list> [out]`, with `out` defaulting to `harness/tier0/<arm>.md`. It reads only each run's `meta.json` and `key_diagnostics.csv`. It writes one table row per run with these columns:
   - cell (E, F, tag), seed, and the iterations;
-  - minutes, divergences, treedepth hits (count, and share of 4 × sampling);
+  - minutes, divergences, treedepth hits (count, and share of 4 × sampling), and the deepest tree reached;
   - min E-BFMI;
   - max R-hat (parameters; scored quantities);
   - min bulk and tail ESS (parameters; scored quantities);
   - ESS/min (min scored bulk ESS ÷ minutes; min parameter bulk ESS ÷ minutes);
+  - both minimum bulk ESS values scaled to 2000 sampling iterations (× 2000 / `iter_sampling`). The report labels these a linear projection; they inform Decision 5, not the gate;
   - the §5.7 gate verdict with its reasons. This is informational: Tier 0 is not gated.
 
   It also records the CmdStan version, `sysctl -n hw.ncpu`, and the measurement date. No share, mean, quantile or score appears in it.
@@ -907,9 +931,14 @@ test_that("expected valid votes are the previous election's, by name", {
   - a V2 entry in `ARMS`, with its builder and extractor writing the same parquets;
   - simulation-based recovery;
   - the permuted-order refit;
+  - a check on the walk's parameterisation before Tier 0:
+    - §6.2 keeps parties that do not exist yet in the sum-to-zero state, while every softmax runs over A_t.
+    - So shifting the present parties together, with the absent ones absorbing the shift, leaves the likelihood flat: a flat subspace of dimension |N(t)|.
+    - This is harmless under a non-centred walk. A centred Q-basis walk (a §6.9 option) would meet the kind of ridge that made the sampler study's centred walks 7.6–17× slower.
+    - §6.2's alternative avoids it: start a newcomer's component at entry.
   - V2 Tier 0, read against `harness/tier0/r0.md`.
 - **Plan 4 (Phases 3–6, runbook).** Covers:
-  - `FREEZE.md` and its sha list (the arms, the R0 config including this plan's Decisions 1–3, priors, dates, scores, margins, the per-cell poll lists, the newcomer, house and coalition tables);
+  - `FREEZE.md` and its sha list (the arms, the R0 config including this plan's Decisions 1–3 and 5, priors, dates, scores, margins, the per-cell poll lists, the newcomer, house and coalition tables);
   - Tier 1 and Tier 2 through the queue, scored by `score_cell()` and the seed-to-seed SE rule;
   - the gate's one rerun at twice the sampling iterations, and counting a second failure against the arm (§5.7);
   - `DECISION.md`;
