@@ -1,6 +1,7 @@
 # R0, production mapped to E (spec §5.4): one cell's admitted information set in the
 # format production's fit script hands to prepare_stan_data(), that function run as it is,
-# and a fixed table of overrides (harness/README.md, R0's inputs).
+# and a fixed table of overrides (harness/README.md, R0's inputs); and the extraction of a
+# fit's draws into the spec's section 5.5 parquets (harness/README.md, Runs).
 
 #' R0's kjördæmi order: production's level order in the 2024 run, so the last level,
 #' Suður, closes δ in every cell.
@@ -401,4 +402,149 @@ prediction_column <- function(d, info, party_order, fund_levels) {
   d$index_f[, col] <- c(match(party_order, rownames(d$y_f)), integer(nrow(d$index_f) - P))
   d$n_parties_f[col] <- P
   list(data = d, newcomers = newcomers, debut = debut)
+}
+
+#' The variables of R0 that `param_draws.parquet` keeps: parameters, transformed parameters
+#' (`sigma`, `tau_f`, `mu_pred`) and generated quantities (`mu_gamma_weight`,
+#' `mu_gamma_pred`, `delta_pred`), each declared in
+#' `Stan/polling_and_fundamentals_kjordaemi_r0.stan`.
+#' @export
+R0_PARAM_VARIABLES <- c(
+  "mu_gamma", "sigma_gamma", "sigma_delta", "mu_log_sigma", "tau_log_sigma", "tau_stjornarslit",
+  "log_phi", "mu_phi", "sigma_phi", "beta_lag_f", "beta_inc_years_f", "beta_vnv_f", "beta_growth_f",
+  "phi_f_inv", "L_Omega", "sigma", "tau_f", "mu_pred", "mu_gamma_weight", "mu_gamma_pred", "delta_pred"
+)
+
+#' The variables `r0_extract()` reads from a fit: the E-day kjördæmi and national counts, the
+#' latent E-day shares and `R0_PARAM_VARIABLES`.
+#' @export
+R0_EXTRACT_VARIABLES <- c("y_pred_constituency", "y_rep_national", "pi_eday", R0_PARAM_VARIABLES)
+
+#' The meta fields `r0_extract()` reads.
+EXTRACT_META <- c("party_order", "kjordaemi_levels", "eday_index", "n_pred")
+
+#' Stop with "r0_extract: " and `...`.
+extract_fail <- function(...) stop("r0_extract: ", ..., call. = FALSE)
+
+#' The elements of one variable in a draws_df, by the indices in their names.
+#' @param draws a `posterior::draws_df`
+#' @param variable the variable's name
+#' @return `list(columns, index, values)`: the element names, an integer matrix of their
+#'   indices (one row per element, one column per dimension, none for a scalar) and the
+#'   draws x elements matrix of their values, all in the order of `draws`; an error if
+#'   `draws` holds no element of `variable` or an element name does not parse
+indexed <- function(draws, variable) {
+  vars <- posterior::variables(draws)
+  columns <- vars[sub("\\[.*$", "", vars) == variable]
+  if (!length(columns)) extract_fail("the draws hold no ", variable)
+  scalar <- identical(columns, variable)
+  if (!scalar && !all(grepl("^[^[]+\\[[0-9]+(,[0-9]+)*\\]$", columns))) {
+    extract_fail("cannot parse the indices of ", paste(columns, collapse = ", "))
+  }
+  parts <- strsplit(sub("^[^[]*\\[(.*)\\]$", "\\1", columns), ",", fixed = TRUE)
+  ndim <- if (scalar) 0L else unique(lengths(parts))
+  if (length(ndim) != 1) extract_fail(variable, " has elements of different dimensions")
+  index <- matrix(as.integer(unlist(if (scalar) list() else parts)), nrow = length(columns), ncol = ndim, byrow = TRUE)
+  values <- matrix(unlist(lapply(columns, \(col) as.numeric(.subset2(draws, col))), use.names = FALSE), nrow = nrow(draws))
+  list(columns = columns, index = index, values = values)
+}
+
+#' The values of a variable's elements over a full index grid, ordered by the grid.
+#' @param x `indexed()`
+#' @param variable the variable's name, for messages
+#' @param dims the grid's size in each dimension
+#' @return the draws x cells matrix, its columns ordered by the first index, then the second
+#'   (the last fastest); an error unless the elements are exactly the cells of the grid
+grid_values <- function(x, variable, dims) {
+  idx <- x$index
+  full <- ncol(idx) == length(dims) && nrow(idx) == prod(dims) &&
+    all(vapply(seq_along(dims), \(j) all(idx[, j] %in% seq_len(dims[j])), logical(1))) &&
+    !anyDuplicated(apply(idx, 1, paste, collapse = ","))
+  if (!full) {
+    extract_fail(variable, " does not hold exactly the cells [", paste(dims, collapse = " x "), "] of the meta's levels")
+  }
+  x$values[, do.call(order, lapply(seq_len(ncol(idx)), \(j) idx[, j])), drop = FALSE]
+}
+
+#' A long draws table: one row per draw and cell, the draws in the order of `ids` and, within
+#' each, the cells in the order of `labels`.
+long_draws <- function(ids, labels, values, value) {
+  m <- nrow(labels)
+  out <- tibble::tibble(
+    .chain = rep(ids$.chain, each = m), .iteration = rep(ids$.iteration, each = m), .draw = rep(ids$.draw, each = m)
+  )
+  for (l in names(labels)) out[[l]] <- rep(labels[[l]], times = nrow(values))
+  out[[value]] <- as.vector(t(values))
+  out
+}
+
+#' Write a fit's draws as the spec's section 5.5 parquets.
+#' @param draws a posterior draws object (a `draws_df`, or anything `as_draws_df()` takes)
+#'   holding the elements of `y_pred_constituency`, the row `eday_index` of `y_rep_national`
+#'   (other rows are ignored), `pi_eday` and every variable of `R0_PARAM_VARIABLES`
+#' @param meta the builder's meta (`r0_stan_data()$meta`): `party_order`,
+#'   `kjordaemi_levels`, `eday_index` and `n_pred` are read
+#' @param dir the directory to write into (created if absent)
+#' @return invisibly, the paths written, named `eday_kjordaemi`, `eday_national`,
+#'   `latent_national` and `param_draws` (each `dir/<name>.parquet`):
+#'   - `eday_kjordaemi`: `.chain`, `.iteration`, `.draw` (integer), `kjordaemi`, `flokkur`
+#'     (character), `votes` (integer), from `y_pred_constituency[k, p]` labelled
+#'     `kjordaemi_levels[k]` and `party_order[p]`;
+#'   - `eday_national`: `.chain`, `.iteration`, `.draw`, `flokkur`, `share`, the share
+#'     `y_rep_national[eday_index, p] / n_pred`;
+#'   - `latent_national`: the same columns, the share `pi_eday[p]`;
+#'   - `param_draws`: `.chain`, `.iteration`, `.draw`, then one column per element of
+#'     `R0_PARAM_VARIABLES`, the variables in that order and each one's elements in Stan's
+#'     column-major order.
+#'
+#'   Rows run by draw, then kjördæmi and party in the meta's orders. Every label comes from
+#'   the indices parsed out of the element names, never from a column's position. Nothing is
+#'   written unless every table builds; an error, "r0_extract: ...", if the meta lacks a
+#'   field, a variable lacks an element or holds one outside the meta's levels, or a count is
+#'   not a whole number.
+#' @export
+r0_extract <- function(draws, meta, dir) {
+  lacks <- setdiff(EXTRACT_META, names(meta))
+  if (length(lacks)) extract_fail("the meta lacks ", paste(lacks, collapse = ", "))
+  draws <- posterior::as_draws_df(draws)
+  parties <- meta$party_order
+  kd_levels <- meta$kjordaemi_levels
+  P <- length(parties)
+  K <- length(kd_levels)
+  eday <- meta$eday_index
+  n_pred <- meta$n_pred
+  if (!(is.numeric(eday) && length(eday) == 1 && isTRUE(eday >= 1 && eday == round(eday)))) {
+    extract_fail("eday_index must be one whole number, at least 1")
+  }
+  if (!(is.numeric(n_pred) && length(n_pred) == 1 && isTRUE(n_pred > 0))) extract_fail("n_pred must be one number above 0")
+  ids <- list(
+    .chain = as.integer(draws$.chain), .iteration = as.integer(draws$.iteration), .draw = as.integer(draws$.draw)
+  )
+
+  votes <- grid_values(indexed(draws, "y_pred_constituency"), "y_pred_constituency", c(K, P))
+  if (anyNA(votes) || any(votes != round(votes))) extract_fail("y_pred_constituency holds a count that is not a whole number")
+  cells <- tibble::tibble(kjordaemi = rep(kd_levels, each = P), flokkur = rep(parties, times = K))
+  eday_kd <- long_draws(ids, cells, votes, "votes")
+  eday_kd$votes <- as.integer(eday_kd$votes)
+
+  national <- indexed(draws, "y_rep_national")
+  row <- national$index[, 1] == eday
+  national <- list(index = national$index[row, -1, drop = FALSE], values = national$values[, row, drop = FALSE])
+  counts <- grid_values(national, paste0("y_rep_national[", eday, ", ]"), P)
+  labels <- tibble::tibble(flokkur = parties)
+  eday_nat <- long_draws(ids, labels, counts / n_pred, "share")
+  latent <- long_draws(ids, labels, grid_values(indexed(draws, "pi_eday"), "pi_eday", P), "share")
+
+  params <- lapply(R0_PARAM_VARIABLES, \(v) {
+    x <- indexed(draws, v)
+    ord <- if (ncol(x$index)) do.call(order, rev(lapply(seq_len(ncol(x$index)), \(j) x$index[, j]))) else 1L
+    stats::setNames(lapply(ord, \(i) x$values[, i]), x$columns[ord])
+  })
+  param_draws <- tibble::as_tibble(c(ids, unlist(params, recursive = FALSE)))
+
+  dir.create(dir, recursive = TRUE, showWarnings = FALSE)
+  tables <- list(eday_kjordaemi = eday_kd, eday_national = eday_nat, latent_national = latent, param_draws = param_draws)
+  paths <- stats::setNames(file.path(dir, paste0(names(tables), ".parquet")), names(tables))
+  for (f in names(tables)) arrow::write_parquet(tables[[f]], paths[[f]])
+  invisible(paths)
 }

@@ -24,8 +24,9 @@ From the project root: `LC_ALL=en_US.UTF-8 Rscript tests/run.R [filter]`, which 
 suite under testthat edition 3. Tests that need the snapshot call `skip_without_snapshot()`
 and skip without it. `tests/harness/test-generated.R` fails if a generated committed file
 that builds offline is not a fresh build. Slow tests (the sweep of every forecast day in
-`tests/harness/test-sweep.R`, the self-test's kjördæmi and seat scores, and later the Stan
-tests) call `skip_unless_slow()` and run only with `HARNESS_SLOW=1` in the environment:
+`tests/harness/test-sweep.R`, the self-test's kjördæmi and seat scores, the R0 Stan tests
+and the cell runner's test fit, which compile with CmdStan) call `skip_unless_slow()` and
+run only with `HARNESS_SLOW=1` in the environment:
 `HARNESS_SLOW=1 LC_ALL=en_US.UTF-8 Rscript tests/run.R`.
 
 The R code in `R/harness/` and `R/election_utils.R` writes every non-ASCII character as a
@@ -142,9 +143,17 @@ results/harness/
   <id>/
     inputs/stan_data.json   the Stan data (cmdstanr::write_stan_json()), mode 0444
     inputs/inputs.json      how the data were built, mode 0444
+    eday_kjordaemi.parquet  the draws, as the arm's extractor writes them (spec §5.5)
+    eday_national.parquet
+    latent_national.parquet
+    param_draws.parquet
+    key_diagnostics.csv     R-hat and ESS of the scored quantities and the kept parameters
     meta.json               written last by the runner: present means finished
   _stale/<id>_<YYYYmmddHHMMSS>/   a retired run, kept as it was
+  logs/                     the queue's logs: queue.log, preflight.log, <id>.log
 ```
+
+The runner makes every file of a finished run read-only (mode 0444).
 
 `write_frozen_inputs(dir, stan_data, inputs_meta)` writes the two input files into a
 temporary sibling directory, makes them read-only there and renames that directory to
@@ -200,6 +209,70 @@ with R-hat and ESS over parameters and scored quantities together. Its format is
 so it leaves out `na_scored`: a scored NA shows as `gate=FAIL` (and as `NA` in the
 extremes), and the gate's reasons are in `meta.json`.
 
+**Arms.** `R/harness/arms.R` holds `ARMS`, one entry per arm, and `arm(name)` returns one
+(an error for an unknown name). An entry names the arm's Stan file and config (paths under
+the project root), the config's reader, the builder from a cell's `info_set()` and the
+config to `list(data, meta)`, the extractor from a fit's draws to the parquets, and the
+variables the extractor reads. Phase 1 has one arm, `r0`.
+
+**R0's extraction.** `r0_extract(draws, meta, dir)` (`R/harness/r0.R`) writes the four
+parquets of spec §5.5 from a fit's draws: `eday_kjordaemi` (`.chain`, `.iteration`,
+`.draw`, `kjordaemi`, `flokkur`, `votes`) from `y_pred_constituency[k, p]`;
+`eday_national` (`.chain`, `.iteration`, `.draw`, `flokkur`, `share`) with
+`y_rep_national[eday_index, p] / n_pred`; `latent_national`, the same columns with
+`pi_eday[p]`; and `param_draws`, one column per element of `R0_PARAM_VARIABLES`. Kjördæmi
+k and party p are `meta$kjordaemi_levels[k]` and `meta$party_order[p]`, read from the
+indices in each element's name and never from a column's position, so a reordered draws
+table cannot relabel a cell. It writes nothing unless all four tables build.
+
+**The cell runner.** From the project root:
+
+```
+LC_ALL=en_US.UTF-8 Rscript R/harness/fit_cell.R <arm> <E> <F> <seed> <iter_warmup> <iter_sampling>
+```
+
+`R/harness/fit_cell.R` is a plain script. It stops unless the locale is UTF-8 and the
+working directory is the project root. It builds the cell's data from `info_set(E, F)`
+after `validate_inputs()`, and compares the expected meta (with `stan_data_sha()` of the
+freshly built data) with the run's `meta.json`. On a match it prints
+`SKIP <id> (meta.json matches)` and exits 0. A run directory that does not match, or has no
+`meta.json`, is retired with `STALE <id> <mismatched keys>` (or `STALE <id> (no
+meta.json)`) and refitted. It then freezes the inputs; `inputs.json` records the arm, E, F,
+the expected keys, the builder's meta, the git HEAD (and whether the tree was dirty), the
+sha256 of `snapshot_manifest.csv` and the CmdStan and cmdstanr versions. It fits with
+`SAMPLER`, the seed and the iterations (`refresh = 50`), and stops with no `meta.json`
+unless the fit holds 4 chains of `iter_sampling` draws and the Stan file and the frozen
+data still hash as expected. After the extractor it summarises the diagnostics over every
+`parameters`-block variable and the scored quantities, the national shares of
+`kd_to_nat(eday_kjordaemi)` (`scored_nat[<flokkur>]`) and every kjördæmi cell's share
+(`scored_kd[<kjordaemi>,<flokkur>]`), writes `key_diagnostics.csv` (`variable`, `rhat`,
+`ess_bulk`, `ess_tail`) for those and the `param_draws` columns, and applies the gate.
+`meta.json` comes last: the expected keys, `arm`, `E`, `F`, `id`, the builder's meta
+(`n_pred_k` and `n_e` as objects named by kjördæmi and party), `minutes` (the sampling's
+wall time), `diagnostics`, `gate` (`pass`, `reasons`) and the provenance of `inputs.json`.
+A non-finite number in `meta.json` is written as a string (`"Inf"`, `"NA"`), so an infinite
+R-hat stays distinct from a missing one; the gate fails on either. It prints the DIAG line
+and `DONE <dir>`, then deletes the CmdStan CSVs.
+
+**The queue.** From the project root:
+
+```
+zsh R/harness/queue.sh <run_list> <iter_warmup> <iter_sampling>
+```
+
+A run list holds one run per line, `lane arm E F seed` separated by whitespace, with lane
+A or B; lines starting with `#` are comments. `harness/runs/tier0.txt` is Tier 0's. The
+queue refuses to start while a `fit_cell.R` runs (`pgrep -f -- '--file=R/harness/fit_cell.R'`)
+unless `FORCE=1`. It runs the full slow suite as a preflight and stops if that fails, then
+runs lanes A and B side by side, each lane's runs one after another, each run's output in
+`<logs>/<id>.log`. The logs directory is `${HARNESS_RESULTS:-results/harness}/logs`.
+`queue.log` there gets `QUEUE START`, the preflight's verdict, a `start` and an
+`end <id> rc=<rc> <first DIAG|SKIP|STALE line>` line per run, and `QUEUE FINISHED`. It is
+appended to by every queue, so a watcher reads only what follows the last `QUEUE START`; and
+a watcher whose own command line holds the guard's pattern trips the guard. `DRY_RUN=1`
+prints `would run <lane> <arm> <E> <F> <seed>` per run and does nothing else. It exits 0 when every run exits 0, 1 when a run, the guard or the preflight fails, and 2 on
+a bad command line or run list.
+
 ## R0's inputs
 
 `R/harness/r0.R` builds the Stan data of arm R0, production mapped to E (spec §5.4).
@@ -249,7 +322,7 @@ or `snapshot_manifest.csv`.
   map, the fieldwork corrections, the publication dates, the two correction tables
   (`poll_n_corrections.csv`, `fundamentals_corrections.csv`), the economy release dates,
   the house table and the coalition events. `harness/configs/` holds each arm's settings
-  (`r0.json`).
+  (`r0.json`), and `harness/runs/` the queue's run lists (`tier0.txt`).
 - Generated and gitignored: `harness/snapshot/` and `harness/selftest/`.
 
 ## Target rows: the economy and the carried columns
