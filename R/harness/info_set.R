@@ -165,6 +165,7 @@ apply_n_corrections <- function(polling, constituency, corrections) {
 #'   under a locale that is not UTF-8.
 #' @export
 read_inputs <- function() {
+  # WHY: the escapes cover parsing only; reads and string handling are tested under UTF-8 alone.
   if (!isTRUE(l10n_info()[["UTF-8"]])) {
     stop("read_inputs() needs a UTF-8 locale: run under LC_ALL=en_US.UTF-8", call. = FALSE)
   }

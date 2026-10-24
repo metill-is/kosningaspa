@@ -1,5 +1,5 @@
-# WHY: R parses a module in the locale active when it is loaded; under C it reads a
-# non-ASCII literal natively and translates every name tag, escaped or not (R54).
+# WHY: under C, R translates every name tag to a native symbol, escaped or not;
+# source() or a bare parse() also reads non-ASCII literals natively (R54).
 HARNESS_FILES <- c(Sys.glob(root("R", "harness", "*.R")), root("R", "election_utils.R"))
 non_ascii <- function(x) grepl("[^\\x01-\\x7f]", x, perl = TRUE)
 tokens <- function(path) {
@@ -21,7 +21,7 @@ test_that("every name tag in a harness module is plain ASCII", {
     tk <- tokens(f)
     tag <- which(tk$token == "EQ_SUB") - 1L
     tag <- tag[tk$token[tag] %in% c("STR_CONST", "SYMBOL_SUB")]
-    bad <- tk[tag[non_ascii(tk$text[tag]) | grepl("\\u", tk$text[tag], fixed = TRUE)], ]
+    bad <- tk[tag[non_ascii(tk$text[tag]) | grepl("\\", tk$text[tag], fixed = TRUE)], ]
     expect_equal(nrow(bad), 0, label = paste(basename(f), "lines", paste(bad$line1, collapse = ", ")))
   }
 })
