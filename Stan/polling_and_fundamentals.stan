@@ -38,8 +38,8 @@ data {
   matrix[P_f, D_f + 1] x_f;                // Previous vote share
   matrix[P_f, D_f + 1] incumbent_f;        // Incumbent status
   matrix[P_f, D_f + 1] incumbent_years;    // Years as incumbent
-  matrix[P_f, D_f + 1] vnv;                // Vote/No Vote status
-  matrix[P_f, D_f + 1] growth;             // Economic growth
+  matrix[P_f, D_f + 1] vnv;                // log(1 + CPI inflation), incumbents only
+  matrix[P_f, D_f + 1] growth;             // log(1 + GDP growth), incumbents only
   
   // Indexing arrays for fundamentals
   int<lower = 1> max_n_parties_f;          // Maximum number of parties in any election
@@ -87,8 +87,8 @@ parameters {
   vector[P_f - 1] alpha_f_raw;                      // Party-specific intercepts
   real beta_lag_f;                                  // Effect of previous vote share
   real beta_inc_years_f;                            // Effect of incumbent years
-  real beta_vnv_f;                                  // Effect of vote/no vote status
-  real beta_growth_f;                               // Effect of economic growth
+  real beta_vnv_f;                                  // Effect of CPI inflation (incumbents)
+  real beta_growth_f;                               // Effect of GDP growth (incumbents)
   real<lower = 0> phi_f_inv;                        // Inverse dispersion for fundamentals
 }
 
@@ -229,6 +229,8 @@ model {
   /* Fundamentals Priors and Likelihood */
   beta_lag_f ~ std_normal();                  // Previous vote share effect
   beta_inc_years_f ~ std_normal();            // Incumbency duration effect
+  beta_vnv_f ~ normal(0, 5);                  // Inflation effect
+  beta_growth_f ~ normal(0, 5);               // Growth effect
   alpha_f_raw ~ std_normal();                 // Party-specific intercepts
   phi_f_inv ~ exponential(1);                 // Fundamentals dispersion
 

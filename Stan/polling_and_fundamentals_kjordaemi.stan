@@ -54,8 +54,8 @@ data {
   matrix[P_f, D_f + 1] x_f;                // Previous vote shares
   matrix[P_f, D_f + 1] incumbent_f;        // Incumbent status
   matrix[P_f, D_f + 1] incumbent_years;    // Years as incumbent
-  matrix[P_f, D_f + 1] vnv;                // Vote/No Vote status
-  matrix[P_f, D_f + 1] growth;             // Economic growth
+  matrix[P_f, D_f + 1] vnv;                // log(1 + CPI inflation), incumbents only
+  matrix[P_f, D_f + 1] growth;             // log(1 + GDP growth), incumbents only
   
   // Fundamentals indexing
   int<lower = 1> max_n_parties_f;          // Maximum parties in any election
@@ -114,8 +114,8 @@ parameters {
   vector[P_f - 1] alpha_f_raw;                     // Party-specific intercepts
   real beta_lag_f;                                 // Effect of previous vote share
   real beta_inc_years_f;                           // Effect of incumbent years
-  real beta_vnv_f;                                 // Effect of vote/no vote status
-  real beta_growth_f;                              // Effect of economic growth
+  real beta_vnv_f;                                 // Effect of CPI inflation (incumbents)
+  real beta_growth_f;                              // Effect of GDP growth (incumbents)
   real<lower = 0> phi_f_inv;                       // Inverse dispersion for fundamentals
 }
 
@@ -133,7 +133,7 @@ transformed parameters {
   matrix[P - 1, D + pred_y_time_diff] beta;   
   vector[P_f] alpha_f;
   
-  // Sum-to-zero constraint for fundamentals intercepts
+  // Reference-zero intercept for party 1 (never used: its mu is minus the sum of the others)
   alpha_f[2:P_f] = alpha_f_raw;
   alpha_f[1] = 0;
   
@@ -161,9 +161,9 @@ transformed parameters {
   for (h in 2:H) {
     gamma[P - 1, h] = -sum(gamma[1:(P - 2), h]);
   }
-  // Calculate fundamentals predictions
+  // Calculate fundamentals predictions (same linear predictor as the fundamentals likelihood below)
   vector[P - 1] mu_pred = alpha_f[index_f[2:n_parties_f[D_f + 1], D_f + 1]] + 
-    beta_lag_f * (x_f[index_f[2:n_parties_f[D_f + 1], D_f + 1], D_f + 1] - alpha_f[index_f[2:n_parties_f[D_f + 1], D_f + 1]]) + 
+    beta_lag_f * x_f[index_f[2:n_parties_f[D_f + 1], D_f + 1], D_f + 1] + 
     beta_inc_years_f * incumbent_years[index_f[2:n_parties_f[D_f + 1], D_f + 1], D_f + 1] +
     beta_vnv_f * vnv[index_f[2:n_parties_f[D_f + 1], D_f + 1], D_f + 1] +
     beta_growth_f * growth[index_f[2:n_parties_f[D_f + 1], D_f + 1], D_f + 1];
@@ -283,6 +283,8 @@ model {
   /* Fundamentals Likelihood */
   beta_lag_f ~ std_normal();
   beta_inc_years_f ~ std_normal();
+  beta_vnv_f ~ normal(0, 5);
+  beta_growth_f ~ normal(0, 5);
   alpha_f_raw ~ std_normal();
   phi_f_inv ~ exponential(1);
 

@@ -3,11 +3,13 @@
 # evaluation after every stage. Each fit writes results/epoch_bias/<tag>/ and a
 # log under results/epoch_bias/logs/; the DIAG lines collect in logs/driver.log.
 #
-#   bash R/epoch_bias_experiments.sh              # whole grid, in priority order
+#   bash R/epoch_bias_experiments.sh              # whole grid (bt17 excluded)
 #   bash R/epoch_bias_experiments.sh full bt24    # only some stages
 #
 # Stages: full (2016+ window, v4 vs v5); bt24 / bt21 / bt17 (leave-future-out
-# backtests of the 2024 / 2021 / 2017 elections); sim (simulate from v4_full
+# backtests of the 2024 / 2021 / 2017 elections; bt17 runs only when asked for by
+# name and only once harness/DECISION.md exists, because 2017 is the v2
+# harness's held-out confirmatory target); sim (simulate from v4_full
 # with known drifting bias, fit v5 and v4); sens (v5 tau-prior sensitivity);
 # fix (v5 with a fixed small shock, tau = 0.05).
 #
@@ -44,12 +46,13 @@ pair() { # runs two fit() calls concurrently: pair "tagA opts..." "tagB opts..."
   wait
 }
 
-stages=${*:-full bt24 bt21 bt17 sim sens fix}
+stages=${*:-full bt24 bt21 sim sens fix}
 for s in $stages; do
   echo "$(date '+%F %T') START stage=$s" >>"$LOGS/driver.log"
   case $s in
   full)
     pair "v4_full --model=v4" "v5_full --model=v5"
+    fit v4w1_full --model=v4 --start=2024-11-30
     ;;
   bt24)
     pair "v4_bt2024 --model=v4 --cutoff=2024-11-30" "v5_bt2024 --model=v5 --cutoff=2024-11-30"
@@ -60,8 +63,15 @@ for s in $stages; do
     pair "v4w1_bt2021 --model=v4 --start=2017-10-28 --cutoff=2021-09-25" "v4w2_bt2021 --model=v4 --start=2016-10-29 --cutoff=2021-09-25"
     ;;
   bt17)
+    # WHY: a 2017 forecast scored before the 2021/2024 decision would spend the
+    # holdout, so this stage refuses until the decision memo is committed.
+    if [[ ! -f harness/DECISION.md ]]; then
+      echo "$(date '+%F %T') REFUSED stage=bt17: 2017 is held out until harness/DECISION.md exists" >>"$LOGS/driver.log"
+      echo "bt17 refused: 2017 is held out until harness/DECISION.md exists" >&2
+      continue
+    fi
     pair "v4_bt2017 --model=v4 --cutoff=2017-10-28" "v5_bt2017 --model=v5 --cutoff=2017-10-28"
-    pair "v4w1_bt2017 --model=v4 --start=2016-10-29 --cutoff=2017-10-28" "v4w1_full --model=v4 --start=2024-11-30"
+    fit v4w1_bt2017 --model=v4 --start=2016-10-29 --cutoff=2017-10-28
     ;;
   sim)
     Rscript R/epoch_bias_simulate.R --from=v4_full --tau_mu=0.12 --tau_house=0.05 --seed=1 --tag=sim1 >"$LOGS/sim1_generate.log" 2>&1

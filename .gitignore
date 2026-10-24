@@ -50,3 +50,6 @@ Rplots.pdf
 
 # Scratch / ad-hoc verification files
 scratch_*
+
+# Frozen harness input snapshot (sha256-checked against harness/snapshot_manifest.csv)
+harness/snapshot/
