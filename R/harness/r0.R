@@ -33,6 +33,17 @@ check <- function(ok, what) if (!isTRUE(ok)) fail(what)
 #' The values of `x` joined for a message, or "none".
 listed <- function(x) if (length(x)) paste(unique(x), collapse = "; ") else "none"
 
+#' The S/B-swap guard: the prediction column's `index_f` names the party order, so no
+#' party's fundamentals prediction lands on another party's row.
+#' @param d Stan data with `y_f` (rows named by fundamentals level), `index_f` and `D_f`
+#' @param party_order the run's party order
+check_prediction_index <- function(d, party_order) {
+  check(
+    identical(rownames(d$y_f)[d$index_f[seq_along(party_order), d$D_f + 1]], party_order),
+    "the prediction column's index_f names the party order"
+  )
+}
+
 #' R0's configuration.
 #' @param path the JSON file
 #' @return `list(campaign_days, desired_weight, weight_time, debut)`: the campaign length in
@@ -227,11 +238,14 @@ fundamentals_rows <- function(info, party_order) {
 #'   `house_n` and `house_k` lie in 1..H and house 1 is Kosning; every party has an entry
 #'   epoch at or before E's; the fundamentals levels are the rows of `y_f` (production's
 #'   `index_f` counts levels); a newcomer is not already a row of `y_f`; every party with a
-#'   previous share is a row of `y_f`; `index_f` has a row per party; `mu_gamma_scale` has
+#'   previous share is a row of `y_f`; a newcomer had no votes at `previous_election(E)`
+#'   (`info$prev_shares`, from the official results), so a fundamentals label missing from
+#'   `FUNDAMENTALS_RENAMED` cannot pass for one; `index_f` has a row per party; `mu_gamma_scale` has
 #'   P - 1 finite values in [0, 1]; `x_f`, `incumbent_f`, `incumbent_years`, `vnv` and
 #'   `growth` have the rows of `y_f` and D_f + 1 columns, as `index_f` has; the prediction
 #'   column's `index_f` names the party order (the S/B-swap guard); `n_parties_f[D_f + 1]`
-#'   is P; K is 6, `n_pred_k` is K positive whole numbers, `obs_k` lies in 1..`N_obs_k` and
+#'   is P; the expected valid votes of each kjördæmi are positive whole numbers (checked
+#'   before they become integers); K is 6 and `n_pred_k` has K values, `obs_k` lies in 1..`N_obs_k` and
 #'   each row of `constituency_weights` is positive and sums to 1; `pred_y_time_diff` and
 #'   `days_between_stjornarslit_and_election` are at least 1; no field holds an NA; every
 #'   national and kjördæmi date is on or before F.
@@ -260,6 +274,10 @@ r0_stan_data <- function(info, cfg = read_r0_config()) {
   d$days_between_stjornarslit_and_election <- cfg$campaign_days
   vv <- info$valid_votes_open
   k <- match(R0_KJORDAEMI, vv$kjordaemi)
+  check(
+    !anyNA(vv$votes[k]) && all(vv$votes[k] > 0 & vv$votes[k] == round(vv$votes[k])),
+    "the expected valid votes of each kj\u00f6rd\u00e6mi are positive whole numbers"
+  )
   n_pred_k <- stats::setNames(as.integer(vv$votes[k]), R0_KJORDAEMI)
   d$n_pred_k <- unname(n_pred_k)
   d$constituency_weights_pred <- vv$w[k]
@@ -307,15 +325,9 @@ r0_stan_data <- function(info, cfg = read_r0_config()) {
     all(shaped) && ncol(d$index_f) == col,
     "x_f, incumbent_f, incumbent_years, vnv and growth have the rows of y_f and D_f + 1 columns, as index_f has"
   )
-  check(
-    identical(rownames(d$y_f)[d$index_f[seq_len(P), col]], party_order),
-    "the prediction column's index_f names the party order"
-  )
+  check_prediction_index(d, party_order)
   check(d$n_parties_f[col] == P, "n_parties_f[D_f + 1] is P")
-  check(
-    d$K == 6 && length(d$n_pred_k) == d$K && all(d$n_pred_k > 0) && all(d$n_pred_k == round(d$n_pred_k)),
-    "K is 6 and n_pred_k is K positive whole numbers"
-  )
+  check(d$K == 6 && length(d$n_pred_k) == d$K, "K is 6 and n_pred_k has K values")
   check(
     length(d$obs_k) == d$N_k && all(d$obs_k %in% seq_len(d$N_obs_k)),
     "obs_k lies in 1..N_obs_k"
@@ -379,6 +391,10 @@ prediction_column <- function(d, info, party_order, fund_levels) {
   check(!anyNA(share) && all(share >= 0), "every previous share is a number of at least 0")
   old <- party_order[share > 0]
   newcomers <- party_order[share == 0]
+  prev_share <- info$prev_shares[info$prev_shares$election == info$E, ]
+  voted <- newcomers[which(prev_share$share[match(newcomers, prev_share$flokkur)] > 0)]
+  # WHY: a fundamentals label missing from FUNDAMENTALS_RENAMED folds into Annað and would pass for a newcomer.
+  if (length(voted)) fail("a newcomer had votes at ", format(previous_election(info$E)), ": ", listed(voted))
   s <- share[old] / sum(share[old])
   centre <- mean(stats::qlogis(s))
   debut <- stats::median(train$voteshare[which(train$new_party == 1 & train$voteshare > 0)] / 100)

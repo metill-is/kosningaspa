@@ -349,7 +349,9 @@ kjördæmi weights of each date, by name; the fundamentals weight and its day; t
 (`n_active_d`, `active_index_d`); and the fundamentals prediction column, rebuilt for the
 cell's party order, with a newcomer at the median debut share of earlier new parties. The
 settings are in `harness/configs/r0.json` (`read_r0_config()`). A build whose data break a
-shape the Stan file relies on stops with "R0 input: <check>". `stjornarslit` and
+shape the Stan file relies on stops with "R0 input: <check>". So does a newcomer, a party
+with no fundamentals share at the previous election, that had votes there in the official
+results, as a fundamentals label missing from `FUNDAMENTALS_RENAMED` would make one. `stjornarslit` and
 `post_stjornarslit` keep production's hard-coded 2024-10-14; the model declares them but
 never reads them.
 

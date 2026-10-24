@@ -226,6 +226,36 @@ test_that("an input the builder cannot map is an error", {
   expect_error(r0_stan_data(x), "R0 input")
 })
 
+test_that("the guards on expected votes, newcomers and the prediction column's index_f fire", {
+  skip_without_snapshot()
+  i <- cell("2024-11-30", "2024-11-29")
+  eve <- infos[[i]]
+  x <- eve
+  x$valid_votes_open$votes[1] <- x$valid_votes_open$votes[1] + 0.5
+  expect_error(r0_stan_data(x), "R0 input: the expected valid votes of each kjördæmi are positive whole numbers", fixed = TRUE)
+
+  x <- eve
+  train <- x$fundamentals$train
+  # WHY: a label with no rename folds into Annað, as Framsókn would without its FUNDAMENTALS_RENAMED entry.
+  hit <- train$party == "Framsóknarflokkurinn"
+  train$party[hit] <- "Framsókn gamli"
+  train$flokkur[hit] <- "Framsókn gamli"
+  x$fundamentals$train <- train
+  x$fundamentals$target <- x$fundamentals$target[x$fundamentals$target$party != "Framsóknarflokkurinn", ]
+  x$fundamentals$S_f <- setdiff(x$fundamentals$S_f, "Framsóknarflokkurinn")
+  expect_error(r0_stan_data(x), "R0 input: a newcomer had votes at 2021-09-25: Framsóknarflokkurinn", fixed = TRUE)
+
+  # WHY: r0.R builds index_f by name, so no input swaps it; the guard is called on a swapped copy of real data.
+  guard <- get("check_prediction_index", envir = environment(r0_stan_data))
+  d <- r0[[i]]$data
+  po <- r0[[i]]$meta$party_order
+  expect_no_error(guard(d, po))
+  col <- d$D_f + 1
+  sb <- match(c("Samfylkingin", "Framsóknarflokkurinn"), po)
+  d$index_f[sb, col] <- d$index_f[rev(sb), col]
+  expect_error(guard(d, po), "R0 input: the prediction column's index_f names the party order", fixed = TRUE)
+})
+
 test_that("obs_k follows each y_k row's date, not its position", {
   skip_without_snapshot()
   x <- infos[[cell("2024-11-30", "2024-11-29")]]
