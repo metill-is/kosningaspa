@@ -6,7 +6,6 @@ library(clock)
 library(slider)
 library(here)
 library(eurostat)
-library(zoo)
 
 countries <- c(
   "Iceland"
@@ -52,7 +51,7 @@ econ_data <- vnv |>
   ) |>
   mutate(
     breyting = c(0, diff(log(value))),
-    ar_breyting = slide_dbl(breyting, sum, .before = 12, .complete = T),
+    ar_breyting = slide_dbl(breyting, sum, .before = 11, .complete = T),
     .by = visitala
   ) |>
   mutate_at(
@@ -69,6 +68,7 @@ econ_data <- vnv |>
     fundamentals_data |>
       distinct(date) |>
       mutate(
+        # WHY: the CPI is read at July of E - 1, a 12-month change, so it is public well before E.
         date_prior = floor_date(date, "year") - months(6)
       ),
     by = join_by(dags == date_prior)
@@ -99,26 +99,17 @@ gdp <- gdp |>
     growth = 2
   ) |>
   drop_na() |>
-  crossing(
-    month = 1:12
-  ) |>
-  mutate(
-    dags = date_build(ar, month)
-  ) |>
-  mutate(
-    growth = if_else(month == 1, growth, NA_real_),
-    growth = zoo::na.approx(growth, na.rm = FALSE)
-  ) |>
-  fill(growth, .direction = "down") |>
+  # WHY: the election year's own growth is not known on election day, so the
+  # covariate is the previous year's growth.
   inner_join(
     fundamentals_data |>
       distinct(date) |>
       mutate(
-        date_prior = floor_date(date, "year") - months(6)
+        ar = year(date) - 1
       ),
-    by = join_by(dags == date_prior)
+    by = join_by(ar)
   ) |>
-  select(-dags, -ar, -month)
+  select(-ar)
 
 econ_data <- econ_data |>
   inner_join(

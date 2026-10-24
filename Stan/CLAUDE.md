@@ -33,7 +33,7 @@ Dirichlet-Multinomial state-space model with:
 | `gamma`, `phi` | House effects per polling firm (zero-sum constrained) |
 | `sigma` | Party-specific random walk volatilities |
 | `L_Omega` | Cholesky factor of party correlation matrix |
-| `alpha_f`, `beta_lag_f`, `beta_inc_years_f`, `beta_growth_f` | Fundamentals regression coefficients |
+| `alpha_f`, `beta_lag_f`, `beta_inc_years_f`, `beta_vnv_f`, `beta_growth_f` | Fundamentals regression coefficients (`beta_vnv_f`, `beta_growth_f`: CPI inflation and previous-year GDP growth for incumbents, `normal(0, 5)` priors) |
 | `delta_raw`, `sigma_delta` | Constituency deviations from national trends |
 | `tau_f` | Fundamentals weight decay parameter |
 | `y_rep_national`, `y_rep_k` | Posterior predictive draws (national / constituency) |

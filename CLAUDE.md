@@ -10,6 +10,8 @@ Authors: Brynjólfur Gauti Guðrúnar Jónsson, Rafael Daniel Vias, Hafsteinn Ei
 
 The repo is code-first. Modelling code lives at the top level; written outputs are nested under `writing/`, each as a self-contained Quarto project rendered from inside its own directory (manuscript: `writing/manuscript/CLAUDE.md`; adding an output: `.claude/rules/quarto-manuscript.md`).
 
+`harness/` holds the v2 backtest harness's committed inputs and generated tables, and its gitignored, sha256-checked snapshot of the live data (`harness/README.md`). Its code is in `R/harness/` and its tests in `tests/harness/`; `LC_ALL=en_US.UTF-8 Rscript R/harness/build_phase0.R` rewrites the generated tables.
+
 ## Key Commands
 
 ### Run the full model fitting pipeline
@@ -25,7 +27,7 @@ update_constituency_data()
 ```
 
 ### Testing
-No formal test suite. Validation is done interactively via model diagnostics, posterior predictive checks, and comparing predictions against known results (`R/compare_error.R`, `R/post_analysis.R`).
+The v2 harness has a testthat suite in `tests/harness/`. Run it from the project root with `LC_ALL=en_US.UTF-8 Rscript tests/run.R [filter]`; its real-data tests read `harness/snapshot/` and skip without it. Model validation stays interactive: model diagnostics, posterior predictive checks, and comparing predictions against known results (`R/compare_error.R`, `R/post_analysis.R`).
 
 ## Architecture
 
@@ -40,9 +42,12 @@ Google Sheets → data.R (update_*) → CSV files in data/
                                                     ↓
                                     Stan model fitting (cmdstanr)
                                                     ↓
-                          process_seats_draws.R → parquet files in data/{date}/
+                  constituency_predictions.parquet in data/{date}/
                                                     ↓
-                          make_new_prediction_plots.R → Figures/
+          calculate_seats() per draw → seats_draws.parquet (no live script;
+          the 2024 forecast used R/archive/predict_seats.R)
+                                                    ↓
+          process_seats_draws.R, make_new_prediction_plots*.R → Figures/
 ```
 
 **Publishing to metill.is (Fylgisvakt).** This repo does not publish anything by
@@ -57,8 +62,9 @@ runbook and checks live in `~/metill-platform/.claude/rules/fylgisvakt.md`.
 `R/election_utils.R` implements Iceland's electoral system:
 - `dhondt()` — D'Hondt method for regional seats
 - `jofnunarsaeti()` — Adjustment seat allocation (9 seats, 5% threshold)
-- `calculate_seats(draw)` — End-to-end: applies D'Hondt per constituency, then adjustment seats
-- 63 total seats: Reykjavík Suður (9), Reykjavík Norður (9), Suðvestur (11), Suður (9), Norðaustur (9), Norðvestur (7), plus 9 adjustment seats
+- `calculate_seats(draw, layout = seats_tibble(), ineligible = character(0))` — End-to-end: D'Hondt per constituency, then the adjustment seats by national D'Hondt over lists with ≥ 5%, each placed where the list's next quotient is the largest share of that constituency's votes; lists in `ineligible` (a forecast passes `"Annað"`) win no seat, but their votes still count in the 5% threshold and in those shares; returns `seats` and `kjordaemi_seats`
+- 63 total seats in each layout (constituency + adjustment seats). 2024 (`seats_tibble()`): Reykjavík Suður (9 + 2), Reykjavík Norður (9 + 2), Suðvestur (12 + 2), Suður (9 + 1), Norðaustur (9 + 1), Norðvestur (6 + 1). 2013–2021 (`seats_layout_2021()`): Suðvestur (11 + 2) and Norðvestur (7 + 1), the rest as in 2024. `layout_for(election)` returns the layout in force for 2016-10-29, 2017-10-28, 2021-09-25 or 2024-11-30
+- No live script turns `constituency_predictions.parquet` into `seats_draws.parquet`: the 2024 forecast used `R/archive/predict_seats.R`, which carries its own copy of the allocator
 
 ## Language & Naming Conventions
 

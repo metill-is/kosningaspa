@@ -42,6 +42,8 @@ model {
   // Priors
   beta_lag_f ~ std_normal();
   beta_inc_years_f ~ std_normal();
+  beta_vnv_f ~ normal(0, 5);
+  beta_growth_f ~ normal(0, 5);
   alpha_f_raw ~ std_normal();
   phi_f_inv ~ exponential(1);
 

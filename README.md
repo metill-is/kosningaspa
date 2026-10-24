@@ -29,8 +29,7 @@ The model combines three key components:
   - Historical election results (`y_f`)
   - Previous vote shares (`x_f`)
   - Incumbent status and duration
-  - Economic indicators (growth)
-  - Vote/No Vote status
+  - Economic indicators for incumbents: CPI inflation (`vnv`) and previous-year GDP per capita volume change (`growth`)
 
 ### Parameters
 1. **Polling Model**
@@ -43,7 +42,7 @@ The model combines three key components:
    - Party-specific intercepts (`alpha_f`)
    - Effects of previous results (`beta_lag_f`)
    - Incumbent effects (`beta_inc_years_f`)
-   - Economic effects (`beta_growth_f`)
+   - Economic effects (`beta_vnv_f`, `beta_growth_f`)
 
 3. **Constituency Effects**
    - Constituency-specific deviations (`delta_raw`)
