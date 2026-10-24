@@ -273,6 +273,44 @@ a watcher whose own command line holds the guard's pattern trips the guard. `DRY
 prints `would run <lane> <arm> <E> <F> <seed>` per run and does nothing else. It exits 0 when every run exits 0, 1 when a run, the guard or the preflight fails, and 2 on
 a bad command line or run list.
 
+## Tier 0
+
+Tier 0 measures an arm's sampler on two cells before anything is scored (spec §5.8): the runs
+of `harness/runs/tier0.txt` (R0 at the 2024 eve cell, seed 1101, in lane A, and at the 2021
+f180 cell, seed 1102, in lane B), at 200 + 200 iterations. From the project root, in a normal
+shell so that the queue outlives the session:
+
+```
+mkdir -p results/harness/logs
+nohup zsh R/harness/queue.sh harness/runs/tier0.txt 200 200 > results/harness/logs/tier0_nohup.log 2>&1 &
+LC_ALL=en_US.UTF-8 Rscript R/harness/tier0_report.R r0 harness/runs/tier0.txt
+```
+
+The last line, run once both runs are done, writes the report, `harness/tier0/<arm>.md`
+(committed). `R/harness/tier0_report.R <arm> <run_list> [out]` is a plain script. For each run
+of the arm in the run list it reads only the run's `meta.json` and `key_diagnostics.csv`, and
+writes one table row:
+
+- the cell (E, F, tag), the seed and the iterations;
+- the minutes, divergences, treedepth hits (count, and percentage of the chains × sampling
+  draws), the deepest tree and the min E-BFMI;
+- the max R-hat and the min bulk and tail ESS, over the parameters (the rows of
+  `key_diagnostics.csv` not named `scored_*`) and over the scored quantities (their extremes
+  in `meta.json`);
+- both min bulk ESS per minute, and both scaled linearly to 2000 sampling iterations
+  (× 2000 / `iter_sampling`). That projection informs the plan's Decision 5 (the centring),
+  not the gate;
+- the gate's verdict and reasons, which are informational: Tier 0 is not gated;
+- the modification time of `meta.json`, the date of the measurement.
+
+Above the table it records the run list, the CmdStan and cmdstanr versions and
+`max_treedepth` of `meta.json`, and `sysctl -n hw.ncpu`, read when the report is written.
+R-hat is rounded up and ESS and E-BFMI down, and a non-finite value prints as the run
+recorded it (`Inf`, `NaN`, `NA`). The report holds sampler diagnostics only: no share, mean,
+quantile or score of a forecast appears in it, and `tests/harness/test-tier0-report.R` checks
+that none of the words share, mean, median, CRPS or MAE does. It stops, writing nothing, on a
+run without `meta.json` or a run list with no run of the arm.
+
 ## R0's inputs
 
 `R/harness/r0.R` builds the Stan data of arm R0, production mapped to E (spec §5.4).
@@ -322,7 +360,8 @@ or `snapshot_manifest.csv`.
   map, the fieldwork corrections, the publication dates, the two correction tables
   (`poll_n_corrections.csv`, `fundamentals_corrections.csv`), the economy release dates,
   the house table and the coalition events. `harness/configs/` holds each arm's settings
-  (`r0.json`), and `harness/runs/` the queue's run lists (`tier0.txt`).
+  (`r0.json`), `harness/runs/` the queue's run lists (`tier0.txt`), and `harness/tier0/` the
+  Tier 0 reports, which `tier0_report.R` writes from local runs (no offline rebuild).
 - Generated and gitignored: `harness/snapshot/` and `harness/selftest/`.
 
 ## Target rows: the economy and the carried columns
