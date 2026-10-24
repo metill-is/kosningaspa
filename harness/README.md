@@ -224,6 +224,9 @@ shape the Stan file relies on stops with "R0 input: <check>". `stjornarslit` and
 `post_stjornarslit` keep production's hard-coded 2024-10-14; the model declares them but
 never reads them.
 
+R0's Stan file, `Stan/polling_and_fundamentals_kjordaemi_r0.stan`, is production's model plus
+three hooks, with production's log density (`Stan/CLAUDE.md`, `tests/harness/test-r0-stan.R`).
+
 ## Rebuilding the generated files
 
 From the project root: `LC_ALL=en_US.UTF-8 Rscript R/harness/build_phase0.R`. It verifies
