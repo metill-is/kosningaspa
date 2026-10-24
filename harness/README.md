@@ -22,10 +22,21 @@ manifest.
 
 From the project root: `LC_ALL=en_US.UTF-8 Rscript tests/run.R [filter]`, which runs the
 suite under testthat edition 3. Tests that need the snapshot call `skip_without_snapshot()`
-and skip without it. `read_inputs()` and `build_phase0.R` stop under a locale that is not
-UTF-8, which would silently drop Framsóknarflokkurinn's rows.
-`tests/harness/test-generated.R` fails if a generated committed file that builds offline
-is not a fresh build.
+and skip without it. `tests/harness/test-generated.R` fails if a generated committed file
+that builds offline is not a fresh build.
+
+The R code in `R/harness/` and `R/election_utils.R` writes every non-ASCII character as a
+`\uXXXX` escape and gives a non-ASCII name with `stats::setNames()`, never as a name tag;
+comments keep their Icelandic. R parses a module in the locale active when it is loaded.
+Under C it translates every name tag to a native symbol, escaped or not, so
+`c("Framsókn" = …)` became `Frams<U+00F3>kn` and Framsóknarflokkurinn silently dropped
+out of the fundamentals' party set. A literal survives such a load only because box tells
+the parser the file is UTF-8; `source()` or a bare `parse()` reads it natively.
+`tests/harness/test-escapes.R` enforces both rules and loads the harness under `LC_ALL=C`
+in a subprocess to check that it still reads the snapshot right. `read_inputs()` and
+`build_phase0.R` still stop under a locale that is not UTF-8, but that check cannot stand
+in for the escapes: it runs when they are called, after the modules were parsed, so a
+session that loads the harness under C and then switches to UTF-8 passes it.
 
 ## Rebuilding the generated files
 

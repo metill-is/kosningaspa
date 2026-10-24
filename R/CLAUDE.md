@@ -28,7 +28,7 @@ Interactive fitting scripts (e.g., `fit_*.R`) also use `library()` for heavy dep
 
 ### Harness (v2)
 
-Box modules in `R/harness/`, imported as `R/harness/<module>`, with tests in `tests/harness/` (`LC_ALL=en_US.UTF-8 Rscript tests/run.R`). They read only the snapshot and `harness/sources/` (`harness/README.md`).
+Box modules in `R/harness/`, imported as `R/harness/<module>`, with tests in `tests/harness/` (`LC_ALL=en_US.UTF-8 Rscript tests/run.R`). They read only the snapshot and `harness/sources/` (`harness/README.md`). Their code, and `election_utils.R`'s, writes non-ASCII characters as `\uXXXX` escapes and non-ASCII names with `stats::setNames()`, so a module loaded under the C locale reads the same; comments keep their Icelandic. `tests/harness/test-escapes.R` enforces this (`harness/README.md`, Tests).
 
 | Module | Exports | Role |
 |--------|---------|------|
