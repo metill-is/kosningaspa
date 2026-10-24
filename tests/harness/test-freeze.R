@@ -19,7 +19,8 @@ test_that("read_sha_list reads shasum lines, skips comments and blank lines, and
   expect_identical(read_sha_list(path), expected)
   bad <- c(
     paste0(toupper(a), "  x"), paste0(a, " x"), paste0(a, " *x"), paste0(substr(a, 1, 63), "  x"),
-    paste0(a, "  "), paste0(a, "0  x"), "  # indented", "x"
+    paste0(a, "  "), paste0(a, "0  x"), "  # indented", "x",
+    paste0(a, "  ../x"), paste0(a, "  harness/../../x"), paste0(a, "  harness/.."), paste0(a, "  /etc/hosts")
   )
   for (line in bad) {
     writeLines(c("# frozen", line), path)
@@ -27,6 +28,8 @@ test_that("read_sha_list reads shasum lines, skips comments and blank lines, and
   }
   writeLines("# nothing", path)
   expect_identical(read_sha_list(path), tibble::tibble(sha256 = character(0), path = character(0)))
+  writeLines(paste0(a, "  harness/a..b/..c.csv"), path)
+  expect_identical(read_sha_list(path)$path, "harness/a..b/..c.csv")
 })
 
 test_that("read_sha_list reads the lines shasum -a 256 writes", {
@@ -76,6 +79,16 @@ test_that("is_committed needs every path tracked and unchanged against HEAD", {
   file.remove(file.path(fr, "harness", "FREEZE.md"))
   expect_false(is_committed(files, fr))
   expect_false(is_committed(files, seal(withr::local_tempdir(), "FREEZE")))
+})
+
+test_that("is_committed sees an edit that the index is told to ignore", {
+  for (flag in c("--assume-unchanged", "--skip-worktree")) {
+    fr <- frozen_root()
+    git_in(fr, "update-index", flag, "harness/FREEZE.md")
+    cat("edited\n", file = file.path(fr, "harness", "FREEZE.md"), append = TRUE)
+    expect_false(is_committed("harness/FREEZE.md", fr), label = flag)
+    expect_true(is_committed("harness/FREEZE.sha256", fr), label = flag)
+  }
 })
 
 test_that("target_cell returns the TARGETS row of a forecast cell", {
@@ -163,23 +176,27 @@ test_that("5: a freeze never committed, only staged or changed since is not comm
   expect_error(freeze_guard(E24, F24, seal(withr::local_tempdir(), "FREEZE")), NOT_COMMITTED, fixed = TRUE)
 })
 
-test_that("6: 2017 is locked until DECISION.md and its sha256 list pass the freeze's checks", {
+test_that("6: 2017 is locked until DECISION.md and its sha256 list pass the freeze's checks, the failed check named", {
+  locked <- function(why) paste0(LOCKED_2017, " (", why, ")")
+  no_decision <- "no harness/DECISION.md and harness/DECISION.sha256"
   fr <- frozen_root()
-  for (F in c("2017-10-14", "2017-10-27")) expect_error(freeze_guard(E17, F, fr), LOCKED_2017, fixed = TRUE, label = F)
+  for (F in c("2017-10-14", "2017-10-27")) {
+    expect_error(freeze_guard(E17, F, fr), locked(no_decision), fixed = TRUE, label = F)
+  }
   seal(fr, "DECISION")
-  expect_error(freeze_guard(E17, F17, fr), LOCKED_2017, fixed = TRUE)
+  expect_error(freeze_guard(E17, F17, fr), locked("the decision is not committed"), fixed = TRUE)
   commit_all(fr, "decision")
   for (F in c("2017-10-14", "2017-10-27")) expect_true(freeze_guard(E17, F, fr), label = F)
   cat("edited\n", file = file.path(fr, "harness", "DECISION.md"), append = TRUE)
-  expect_error(freeze_guard(E17, F17, fr), LOCKED_2017, fixed = TRUE)
+  expect_error(freeze_guard(E17, F17, fr), locked("sha256 mismatch: harness/DECISION.md"), fixed = TRUE)
   expect_true(freeze_guard(E24, F24, fr))
   fr <- frozen_root(decision = TRUE)
   file.remove(file.path(fr, "harness", "DECISION.sha256"))
-  expect_error(freeze_guard(E17, F17, fr), LOCKED_2017, fixed = TRUE)
+  expect_error(freeze_guard(E17, F17, fr), locked(no_decision), fixed = TRUE)
   fr <- frozen_root(decision = TRUE)
   writeLines("# nothing listed", file.path(fr, "harness", "DECISION.sha256"))
   commit_all(fr, "a decision list that names nothing")
-  expect_error(freeze_guard(E17, F17, fr), LOCKED_2017, fixed = TRUE)
+  expect_error(freeze_guard(E17, F17, fr), locked("harness/DECISION.sha256 does not cover harness/DECISION.md"), fixed = TRUE)
 })
 
 test_that("7: once CONFIRM.md exists, 2017 is never scored again", {

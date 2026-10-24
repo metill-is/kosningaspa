@@ -91,16 +91,19 @@ would otherwise check another repository's freeze. The guard stops at the first 
 3. `FREEZE.sha256` does not list `harness/FREEZE.md`;
 4. a file it lists is missing or its sha256 differs (`verify_sha_list()`);
 5. the two files are not committed, that is tracked by git and unchanged against HEAD
-   (`is_committed()`).
+   (`is_committed()`, which compares each file's `git hash-object` with its blob in HEAD,
+   so an edit the index is told to ignore, by `--assume-unchanged` or `--skip-worktree`,
+   still counts).
 
 A 2017 cell, the confirmatory target, is locked until `harness/DECISION.md` and
-`harness/DECISION.sha256` pass checks 2–5 as well, and locked for good once
-`harness/CONFIRM.md` exists. Past both locks, `score_cell()` still refuses it: 2017 is
+`harness/DECISION.sha256` pass checks 2–5 as well (the refusal names the check that
+failed), and locked for good once `harness/CONFIRM.md` exists. Past both locks, `score_cell()` still refuses it: 2017 is
 scored once, by the Tier C runbook, which writes `CONFIRM.md`. Phase 1 has no such writer.
 
 A sha256 list holds the lines `shasum -a 256` writes (`<64 lowercase hex>  <path>`), with
-paths relative to the project root; lines that start with `#` and blank lines are skipped,
-and any other line is an error. To freeze, from the project root:
+paths relative to the project root and inside it; lines that start with `#` and blank lines
+are skipped, and any other line, an absolute path or a path with a `..` segment among them,
+is an error. To freeze, from the project root:
 
 ```sh
 shasum -a 256 harness/FREEZE.md <every other frozen file> > harness/FREEZE.sha256

@@ -7,14 +7,18 @@ SHA_LINE <- "^([0-9a-f]{64})  (.+)$"
 #' Read a sha256 list as `shasum -a 256` writes it.
 #' @param path the list
 #' @return a tibble (sha256, path), one row per `<64 lowercase hex><two spaces><path>`
-#'   line, in file order. Lines that start with `#` and blank lines are skipped; any other
-#'   line is an error, "malformed sha256 line <n> in <path>"
+#'   line, in file order, the path relative and inside the root: not absolute and with no
+#'   `..` segment. Lines that start with `#` and blank lines are skipped; any other line is
+#'   an error, "malformed sha256 line <n> in <path>"
 #' @export
 read_sha_list <- function(path) {
   lines <- readLines(path, warn = FALSE, encoding = "UTF-8")
   skip <- startsWith(lines, "#") | grepl("^[[:space:]]*$", lines)
   m <- regmatches(lines, regexec(SHA_LINE, lines))
-  bad <- which(!skip & lengths(m) == 0)
+  outside <- vapply(m, \(x) {
+    length(x) == 3 && (startsWith(x[3], "/") || ".." %in% strsplit(x[3], "/", fixed = TRUE)[[1]])
+  }, logical(1))
+  bad <- which(!skip & (lengths(m) == 0 | outside))
   if (length(bad)) stop("malformed sha256 line ", bad[1], " in ", path)
   tibble::tibble(
     sha256 = vapply(m[!skip], `[`, "", 2),
@@ -45,18 +49,32 @@ verify_sha_list <- function(path, root) {
 #' Whether files are committed: tracked by git and unchanged against HEAD.
 #' @param paths paths relative to `root`
 #' @param root a directory in a git working tree
-#' @return logical(1): TRUE when `git -C root ls-files --error-unmatch` and
-#'   `git -C root diff --quiet HEAD --` both succeed for `paths`; FALSE outside a
-#'   repository or before its first commit
+#' @return logical(1): TRUE when `git -C root ls-files --error-unmatch` succeeds for
+#'   `paths` and each file's `git hash-object` equals its blob in HEAD (`git rev-parse
+#'   HEAD:./<path>`); FALSE outside a repository, before its first commit, or for a path
+#'   missing from HEAD or the working tree
 #' @export
 is_committed <- function(paths, root) {
   stopifnot(is.character(paths), length(paths) > 0, !anyNA(paths))
   # WHY: GIT_DIR and its kin override -C, and `root` alone must name the repository.
   withr::local_envvar(c(GIT_DIR = NA, GIT_WORK_TREE = NA, GIT_INDEX_FILE = NA))
   git <- function(...) {
-    system2("git", c("-C", shQuote(root), ..., "--", shQuote(paths)), stdout = FALSE, stderr = FALSE)
+    suppressWarnings(system2("git", c("-C", shQuote(root), ...), stdout = TRUE, stderr = FALSE))
   }
-  git("ls-files", "--error-unmatch") == 0 && git("diff", "--quiet", "HEAD") == 0
+  one <- function(x) is.null(attr(x, "status")) && length(x) == 1 && grepl("^[0-9a-f]{40,64}$", x)
+  tracked <- git("ls-files", "--error-unmatch", "--", shQuote(paths))
+  if (!is.null(attr(tracked, "status"))) {
+    return(FALSE)
+  }
+  # WHY: hash the file itself; the index can be told to ignore an edit (--assume-unchanged, --skip-worktree).
+  for (path in paths) {
+    head <- git("rev-parse", "--verify", "--quiet", shQuote(paste0("HEAD:./", path)))
+    file <- git("hash-object", "--", shQuote(path))
+    if (!one(head) || !one(file) || head != file) {
+      return(FALSE)
+    }
+  }
+  TRUE
 }
 
 #' The `TARGETS` row of a forecast cell.
@@ -98,8 +116,8 @@ check_sealed <- function(name, root, none, not_committed) {
 #'   4. `verify_sha_list()`'s error for `harness/FREEZE.sha256`;
 #'   5. "the freeze is not committed" unless `is_committed()` holds for both files;
 #'   6. for a confirmatory cell, "2017 is locked until harness/DECISION.md is committed
-#'   with its sha256" unless `harness/DECISION.md` and `harness/DECISION.sha256` pass
-#'   checks 2–5;
+#'   with its sha256 (<the check that failed>)" unless `harness/DECISION.md` and
+#'   `harness/DECISION.sha256` pass checks 2–5;
 #'   7. for a confirmatory cell, "2017 has been scored (harness/CONFIRM.md): no second
 #'   look" if `harness/CONFIRM.md` exists
 #' @export
@@ -113,8 +131,18 @@ freeze_guard <- function(E, F, root = project_root()) {
     not_committed = "the freeze is not committed"
   )
   if (cell$confirmatory) {
-    decided <- tryCatch(check_sealed("DECISION", root, "", ""), error = function(e) FALSE)
-    if (!isTRUE(decided)) stop("2017 is locked until harness/DECISION.md is committed with its sha256")
+    why <- tryCatch(
+      {
+        check_sealed(
+          "DECISION", root,
+          none = "no harness/DECISION.md and harness/DECISION.sha256",
+          not_committed = "the decision is not committed"
+        )
+        NULL
+      },
+      error = conditionMessage
+    )
+    if (!is.null(why)) stop("2017 is locked until harness/DECISION.md is committed with its sha256 (", why, ")")
     if (file.exists(file.path(root, "harness", "CONFIRM.md"))) {
       stop("2017 has been scored (harness/CONFIRM.md): no second look")
     }
