@@ -146,14 +146,19 @@ results/harness/
   _stale/<id>_<YYYYmmddHHMMSS>/   a retired run, kept as it was
 ```
 
-`write_frozen_inputs(dir, stan_data, inputs_meta)` writes the two input files, makes them
-read-only and returns the sha256 of `stan_data.json`; it refuses a run whose `inputs/`
-exists, so frozen inputs are never rewritten in place. The runner adds the draws and
+`write_frozen_inputs(dir, stan_data, inputs_meta)` writes the two input files into a
+temporary sibling directory, makes them read-only there and renames that directory to
+`inputs/`, so a failed write leaves no `inputs/` to block a retry. It returns
+`stan_data_sha(stan_data)`, the sha256 of the data as `cmdstanr::write_stan_json()` writes
+them, after checking that it equals the sha256 of the written `stan_data.json`. It refuses
+a run whose `inputs/` exists, so frozen inputs are never rewritten in place. The runner adds the draws and
 `meta.json` beside them. `meta.json` holds the `expected_meta()` keys and more besides (the
 arm, E, F, the builder's meta, minutes, diagnostics, the gate and provenance).
 
 **Sha-skip.** `expected_meta()` lists the keys a finished run must match to be reused: the
-sha256 of the Stan file, the config and the Stan data, the seed, the warmup and sampling
+sha256 of the Stan file, the config and the Stan data (`stan_data_sha()` of the freshly
+built data, never the hash of the run's own frozen file, which would compare the old data
+with itself), the seed, the warmup and sampling
 iterations, the sampler settings of `SAMPLER` (4 chains, `init = 0`, `max_treedepth = 12`)
 and `EXTRACT_VERSION`. `meta_mismatch(meta, expected)` returns the keys of `expected` whose
 values differ or are missing from `meta`, and ignores every other key of `meta`. Numbers
@@ -168,15 +173,20 @@ extraction changes, so that every finished run is refitted.
 per-chain divergences, treedepth hits, E-BFMI and deepest tree. It reports the max R-hat
 and the min bulk and tail ESS over parameters and scored quantities together (the plan's
 Decision 3) and over the scored quantities alone, the divergences and treedepth hits
-summed over chains, the deepest tree and the min E-BFMI. A variable with no R-hat or ESS,
-such as a constant entry of a Cholesky factor, is left out of the extremes. The deepest
-tree shows whether trajectories end by U-turn below `max_treedepth`.
+summed over chains, the deepest tree and the min E-BFMI. A parameter with no R-hat or ESS,
+such as a constant entry of a Cholesky factor, is left out of the extremes. A scored
+quantity with none (a constant, or a draw that is NA) is not: it makes every extreme it
+enters NA, and `na_scored` counts such quantities. The deepest tree shows whether
+trajectories end by U-turn below `max_treedepth`.
 
 **The gate (spec §5.7).** `diagnostics_gate(d)` passes a cell if the max R-hat over
-parameters and scored quantities is at most 1.01, there are no divergences, and the min
-bulk ESS of the scored quantities is at least 400. Its `reasons` hold one line per failed
-rule with the value that failed it, for example `max R-hat 1.0234 > 1.01`,
-`divergent 2 > 0` or `min scored bulk ESS 399 < 400`; a missing value fails its rule. The
+parameters and scored quantities is at most 1.01, there are no divergences, the min bulk
+ESS of the scored quantities is at least 400, and every scored quantity has an R-hat and
+both ESS (`na_scored == 0`). Its `reasons` hold one line per failed rule with the value
+that failed it, for example `max R-hat 1.0234 > 1.01`, `divergent 2 > 0`,
+`min scored bulk ESS 399 < 400` or `scored quantities with NA R-hat or ESS: 2`; a missing
+value fails its rule. R-hat is printed with as many decimals as it takes to show it above
+the ceiling (`1.01004 > 1.01`), and ESS is rounded down, so no reason reads as passing. The
 spec gives a failing cell one rerun at twice the sampling iterations and counts a second
 failure against its arm; that rerun belongs to the scoring runbook, not to Phase 1.
 
@@ -186,7 +196,9 @@ failure against its arm; that rerun belongs to the scoring runbook, not to Phase
 DIAG run=<id> minutes=%.1f max_rhat=%.4f min_ess_bulk=%.0f min_ess_tail=%.0f divergent=%d treedepth_hits=%d max_depth=%d min_ebfmi=%.3f gate=PASS|FAIL
 ```
 
-with R-hat and ESS over parameters and scored quantities together.
+with R-hat and ESS over parameters and scored quantities together. Its format is fixed,
+so it leaves out `na_scored`: a scored NA shows as `gate=FAIL` (and as `NA` in the
+extremes), and the gate's reasons are in `meta.json`.
 
 ## Rebuilding the generated files
 

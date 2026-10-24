@@ -66,24 +66,45 @@ sha256_file <- function(path) {
   digest::digest(file = path, algo = "sha256")
 }
 
+#' The sha256 of Stan data as `cmdstanr::write_stan_json()` writes it.
+#' @param stan_data the Stan data list
+#' @return 64 lowercase hex characters: the sha of freshly built data, to compare with a
+#'   finished run's `data_sha256`
+#' @export
+stan_data_sha <- function(stan_data) {
+  path <- tempfile(fileext = ".json")
+  on.exit(unlink(path), add = TRUE)
+  cmdstanr::write_stan_json(stan_data, path)
+  sha256_file(path)
+}
+
 #' Write a run's frozen inputs, read-only.
 #' @param dir the run directory (created if absent)
 #' @param stan_data the Stan data list
 #' @param inputs_meta a list recording how the data were built
-#' @return the sha256 of `dir/inputs/stan_data.json` (`cmdstanr::write_stan_json()`), after
-#'   writing it and `dir/inputs/inputs.json` (`jsonlite::write_json(auto_unbox = TRUE,
-#'   pretty = TRUE, digits = NA)`) with mode 0444; an error if `dir/inputs` exists
+#' @return `stan_data_sha(stan_data)`, which is the sha256 of the written
+#'   `dir/inputs/stan_data.json` (`cmdstanr::write_stan_json()`), after writing it and
+#'   `dir/inputs/inputs.json` (`jsonlite::write_json(auto_unbox = TRUE, pretty = TRUE,
+#'   digits = NA)`) with mode 0444. Both are written into a temporary sibling directory
+#'   that is then renamed to `inputs`, so a failed write leaves no `inputs/`. An error if
+#'   `dir/inputs` exists
 #' @export
 write_frozen_inputs <- function(dir, stan_data, inputs_meta) {
   inputs <- file.path(dir, "inputs")
   if (file.exists(inputs)) stop("frozen inputs exist: ", inputs)
-  dir.create(inputs, recursive = TRUE)
-  data_json <- file.path(inputs, "stan_data.json")
-  meta_json <- file.path(inputs, "inputs.json")
+  dir.create(dir, recursive = TRUE, showWarnings = FALSE)
+  tmp <- tempfile("inputs-", tmpdir = dir)
+  if (!dir.create(tmp)) stop("could not create ", tmp)
+  on.exit(unlink(tmp, recursive = TRUE), add = TRUE)
+  data_json <- file.path(tmp, "stan_data.json")
+  meta_json <- file.path(tmp, "inputs.json")
   cmdstanr::write_stan_json(stan_data, data_json)
   jsonlite::write_json(inputs_meta, meta_json, auto_unbox = TRUE, pretty = TRUE, digits = NA)
-  if (!all(Sys.chmod(c(data_json, meta_json), mode = "0444"))) stop("could not make read-only: ", inputs)
-  sha256_file(data_json)
+  if (!all(Sys.chmod(c(data_json, meta_json), mode = "0444"))) stop("could not make read-only: ", tmp)
+  sha <- stan_data_sha(stan_data)
+  if (!identical(sha, sha256_file(data_json))) stop("stan_data.json does not reproduce stan_data_sha()")
+  if (!file.rename(tmp, inputs)) stop("could not move ", tmp, " to ", inputs)
+  sha
 }
 
 #' The meta keys a finished run must match to be reused (sha-skip).
@@ -158,9 +179,10 @@ retire_run <- function(dir) {
   to
 }
 
+# WHY: a constant parameter (L_Omega's fixed entries) has no R-hat or ESS.
+present <- function(x) x[!is.na(x)]
+
 extreme <- function(f, x) {
-  # WHY: a constant variable (L_Omega's fixed entries) has no R-hat or ESS.
-  x <- x[!is.na(x)]
   if (length(x)) f(x) else NA_real_
 }
 
@@ -172,9 +194,11 @@ extreme <- function(f, x) {
 #'   `treedepth__` of the chain in `fit$sampler_diagnostics()`
 #' @return a list: `max_rhat`, `min_ess_bulk` and `min_ess_tail` over `params` and
 #'   `scored` together (Decision 3); `max_rhat_scored`, `min_ess_bulk_scored` and
-#'   `min_ess_tail_scored` over `scored`; `divergent` and `treedepth_hits`, summed over
-#'   chains; `max_depth` (integers) and `min_ebfmi`. Variables without an R-hat or ESS
-#'   (constants) are left out of the extremes
+#'   `min_ess_tail_scored` over `scored`; `na_scored`, the number of scored quantities
+#'   whose R-hat, bulk ESS or tail ESS is NA; `divergent` and `treedepth_hits`, summed
+#'   over chains; `max_depth` (integers) and `min_ebfmi`. A parameter without an R-hat or
+#'   ESS (a constant) is left out of the extremes; a scored quantity without one (a
+#'   constant, or an NA draw) is kept, so the extremes it enters are NA
 #' @export
 summarise_diagnostics <- function(params, scored, sampler) {
   lacks <- setdiff(c("num_divergent", "num_max_treedepth", "ebfmi", "max_depth"), names(sampler))
@@ -188,12 +212,13 @@ summarise_diagnostics <- function(params, scored, sampler) {
   p <- measure(params)
   s <- measure(scored)
   list(
-    max_rhat = extreme(max, c(p$rhat, s$rhat)),
+    max_rhat = extreme(max, c(present(p$rhat), s$rhat)),
     max_rhat_scored = extreme(max, s$rhat),
-    min_ess_bulk = extreme(min, c(p$ess_bulk, s$ess_bulk)),
-    min_ess_tail = extreme(min, c(p$ess_tail, s$ess_tail)),
+    min_ess_bulk = extreme(min, c(present(p$ess_bulk), s$ess_bulk)),
+    min_ess_tail = extreme(min, c(present(p$ess_tail), s$ess_tail)),
     min_ess_bulk_scored = extreme(min, s$ess_bulk),
     min_ess_tail_scored = extreme(min, s$ess_tail),
+    na_scored = sum(is.na(s$rhat) | is.na(s$ess_bulk) | is.na(s$ess_tail)),
     divergent = as.integer(sum(sampler$num_divergent)),
     treedepth_hits = as.integer(sum(sampler$num_max_treedepth)),
     max_depth = as.integer(max(sampler$max_depth)),
@@ -208,25 +233,44 @@ diag_values <- function(d, fields) {
   lapply(stats::setNames(fields, fields), \(f) if (is.numeric(d[[f]]) && length(d[[f]]) == 1) d[[f]] else NA_real_)
 }
 
+# WHY: at four decimals 1.01004 prints as 1.0100, which would read as passing a 1.01 rule.
+shown_above <- function(x, limit) {
+  if (is.na(x)) {
+    return("NA")
+  }
+  for (k in 4:17) {
+    s <- sprintf("%.*f", k, x)
+    if (as.numeric(s) > limit) {
+      return(s)
+    }
+  }
+  sprintf("%.17g", x)
+}
+
 #' The diagnostics gate (spec §5.7).
 #' @param d `summarise_diagnostics()`
 #' @param rhat_max,ess_min the R-hat ceiling and the scored bulk ESS floor
-#' @return `list(pass, reasons)`: a cell passes if `max_rhat <= rhat_max`, `divergent == 0`
-#'   and `min_ess_bulk_scored >= ess_min`; `reasons` holds one line per failed rule with
-#'   its value ("max R-hat 1.0234 > 1.01", "divergent 2 > 0", "min scored bulk ESS 399 <
-#'   400"). A missing value (NA, or a null read back from JSON) fails its rule
+#' @return `list(pass, reasons)`: a cell passes if `max_rhat <= rhat_max`, `divergent == 0`,
+#'   `min_ess_bulk_scored >= ess_min` and `na_scored == 0`; `reasons` holds one line per
+#'   failed rule with its value ("max R-hat 1.0234 > 1.01", "divergent 2 > 0", "min scored
+#'   bulk ESS 399 < 400", "scored quantities with NA R-hat or ESS: 2"). R-hat is printed
+#'   with as many decimals (four or more) as it takes to show it above `rhat_max`, and ESS
+#'   rounded down, so a reason never reads as passing its rule. A missing value (NA, or a
+#'   null read back from JSON) fails its rule
 #' @export
 diagnostics_gate <- function(d, rhat_max = 1.01, ess_min = 400) {
-  v <- diag_values(d, c("max_rhat", "divergent", "min_ess_bulk_scored"))
+  v <- diag_values(d, c("max_rhat", "divergent", "min_ess_bulk_scored", "na_scored"))
   rules <- c(
     isTRUE(v$max_rhat <= rhat_max),
     isTRUE(v$divergent == 0),
-    isTRUE(v$min_ess_bulk_scored >= ess_min)
+    isTRUE(v$min_ess_bulk_scored >= ess_min),
+    isTRUE(v$na_scored == 0)
   )
   reasons <- c(
-    sprintf("max R-hat %.4f > %s", v$max_rhat, format(rhat_max)),
+    sprintf("max R-hat %s > %s", shown_above(v$max_rhat, rhat_max), format(rhat_max)),
     sprintf("divergent %s > 0", format(v$divergent)),
-    sprintf("min scored bulk ESS %.0f < %s", v$min_ess_bulk_scored, format(ess_min))
+    sprintf("min scored bulk ESS %.0f < %s", floor(v$min_ess_bulk_scored), format(ess_min)),
+    sprintf("scored quantities with NA R-hat or ESS: %s", format(v$na_scored))
   )
   list(pass = all(rules), reasons = reasons[!rules])
 }

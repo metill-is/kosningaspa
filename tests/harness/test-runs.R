@@ -1,6 +1,6 @@
 box::use(
   R / harness / runs[
-    EXTRACT_VERSION, SAMPLER, results_root, run_id, run_dir, sha256_file, write_frozen_inputs,
+    EXTRACT_VERSION, SAMPLER, results_root, run_id, run_dir, sha256_file, stan_data_sha, write_frozen_inputs,
     expected_meta, meta_mismatch, retire_run, summarise_diagnostics, diagnostics_gate, diag_line
   ]
 )
@@ -76,6 +76,31 @@ test_that("write_frozen_inputs() writes the Stan data and the inputs meta read-o
   expect_identical(jsonlite::read_json(meta_json, simplifyVector = TRUE), inputs_meta)
   expect_error(write_frozen_inputs(dir, stan_data, inputs_meta), "inputs")
   expect_identical(sha256_file(data_json), sha)
+  expect_identical(list.files(dir, all.files = TRUE, no.. = TRUE), "inputs")
+})
+
+test_that("a failed write_frozen_inputs() leaves no inputs/ behind, so a retry succeeds", {
+  dir <- file.path(withr::local_tempdir(), "r0_run")
+  expect_error(write_frozen_inputs(dir, list(N = 1L, bad = "text"), list(arm = "r0")))
+  expect_false(file.exists(file.path(dir, "inputs")))
+  expect_identical(list.files(dir, all.files = TRUE, no.. = TRUE), character(0))
+  sha <- write_frozen_inputs(dir, list(N = 1L), list(arm = "r0"))
+  expect_identical(sha, sha256_file(file.path(dir, "inputs", "stan_data.json")))
+})
+
+test_that("stan_data_sha() hashes the data as write_stan_json() writes them, so changed data are stale", {
+  d1 <- list(N = 3L, y = c(0.25, 1, 2))
+  d2 <- list(N = 3L, y = c(0.25, 1, 2.5))
+  path <- withr::local_tempfile(fileext = ".json")
+  cmdstanr::write_stan_json(d1, path)
+  expect_identical(stan_data_sha(d1), sha256_file(path))
+  expect_identical(stan_data_sha(d1), write_frozen_inputs(file.path(withr::local_tempdir(), "r"), d1, list()))
+  expect_false(identical(stan_data_sha(d1), stan_data_sha(d2)))
+  fx <- meta_fixture()
+  frozen <- expected_meta("r0", 1101, 200, 200, fx$stan, fx$config, stan_data_sha(d1))
+  fresh <- expected_meta("r0", 1101, 200, 200, fx$stan, fx$config, stan_data_sha(d2))
+  expect_identical(meta_mismatch(frozen, fresh), "data_sha256")
+  expect_identical(meta_mismatch(frozen, expected_meta("r0", 1101, 200, 200, fx$stan, fx$config, stan_data_sha(d1))), character(0))
 })
 
 test_that("expected_meta() holds the shas, the seed, the iterations and the sampler settings", {
@@ -88,6 +113,10 @@ test_that("expected_meta() holds the shas, the seed, the iterations and the samp
   expect_identical(e[c("seed", "iter_warmup", "iter_sampling")], list(seed = 1101L, iter_warmup = 200L, iter_sampling = 200L))
   expect_identical(e[c("chains", "max_treedepth", "init")], SAMPLER[c("chains", "max_treedepth", "init")])
   expect_identical(e$extract_version, EXTRACT_VERSION)
+  expect_error(expected_meta("r0/x", 1101, 200, 200, fx$stan, fx$config, strrep("a", 64)), "arm")
+  expect_error(expected_meta("r0", 1101, 200, 200, fx$stan, fx$config, "abc"), "data_sha")
+  expect_error(expected_meta("r0", 1101, 200, 200, fx$stan, fx$config, strrep("A", 64)), "data_sha")
+  expect_error(expected_meta("r0", 1101, 200, 200, fx$stan, fx$config, c(strrep("a", 64), strrep("b", 64))), "data_sha")
 })
 
 test_that("meta_mismatch() names the keys that differ or are missing", {
@@ -145,13 +174,27 @@ test_that("retire_run() moves a run under _stale/ and leaves nothing at the old 
   expect_error(retire_run(dir), "no run")
 })
 
+test_that("retire_run() refuses to overwrite a run retired in the same second", {
+  withr::local_envvar(HARNESS_RESULTS = withr::local_tempdir())
+  id <- "r0_2024-11-30_2024-11-29_s1101"
+  dir <- run_dir(id)
+  dir.create(dir, recursive = TRUE)
+  writeLines("new", file.path(dir, "meta.json"))
+  # WHY: retire_run() reads the clock itself, so every second it could land on is taken.
+  seconds <- format(Sys.time() + 0:30, "%Y%m%d%H%M%S")
+  for (s in seconds) dir.create(file.path(results_root(), "_stale", paste0(id, "_", s)), recursive = TRUE)
+  expect_error(retire_run(dir), "already retired this second")
+  expect_identical(readLines(file.path(dir, "meta.json")), "new")
+})
+
 test_that("summarise_diagnostics() reads R-hat and ESS over parameters and scored quantities together", {
   withr::local_seed(20261024)
   d <- summarise_diagnostics(normal_draws(c("a", "b[1]", "b[2]")), normal_draws(c("s[1]", "s[2]")), clean_sampler())
   expect_named(d, c(
     "max_rhat", "max_rhat_scored", "min_ess_bulk", "min_ess_tail", "min_ess_bulk_scored",
-    "min_ess_tail_scored", "divergent", "treedepth_hits", "max_depth", "min_ebfmi"
+    "min_ess_tail_scored", "na_scored", "divergent", "treedepth_hits", "max_depth", "min_ebfmi"
   ))
+  expect_identical(d$na_scored, 0L)
   expect_lt(d$max_rhat, 1.01)
   expect_gte(d$min_ess_bulk_scored, 400)
   expect_identical(d[c("divergent", "treedepth_hits", "max_depth")], list(divergent = 0L, treedepth_hits = 0L, max_depth = 9L))
@@ -186,11 +229,50 @@ test_that("summarise_diagnostics() sums divergences and treedepth hits and keeps
   expect_error(summarise_diagnostics(normal_draws("a"), normal_draws("s"), sampler[1:3]), "max_depth")
 })
 
+NA_REASON <- "scored quantities with NA R-hat or ESS: "
+
+test_that("a constant scored quantity fails the gate", {
+  withr::local_seed(2)
+  scored <- normal_draws(c("s[1]", "s[2]", "s[3]"))
+  scored[, , "s[2]"] <- 0.5
+  scored[, , "s[3]"] <- 0
+  d <- summarise_diagnostics(normal_draws("a"), scored, clean_sampler())
+  expect_identical(d$na_scored, 2L)
+  expect_true(is.na(d$min_ess_bulk_scored))
+  g <- diagnostics_gate(d)
+  expect_false(g$pass)
+  expect_true(paste0(NA_REASON, "2") %in% g$reasons)
+})
+
+test_that("one NA draw in a scored quantity fails the gate", {
+  withr::local_seed(3)
+  scored <- normal_draws(c("s[1]", "s[2]"))
+  scored[17, 2, "s[1]"] <- NA
+  d <- summarise_diagnostics(normal_draws("a"), scored, clean_sampler())
+  expect_identical(d$na_scored, 1L)
+  g <- diagnostics_gate(d)
+  expect_false(g$pass)
+  expect_true(paste0(NA_REASON, "1") %in% g$reasons)
+})
+
+test_that("a constant parameter is left out and the gate still passes", {
+  withr::local_seed(4)
+  params <- normal_draws(c("a", "L[1,1]", "L[1,2]"))
+  params[, , "L[1,1]"] <- 1
+  params[, , "L[1,2]"] <- 0
+  scored <- normal_draws(c("s[1]", "s[2]"))
+  d <- summarise_diagnostics(params, scored, clean_sampler())
+  expect_identical(d$na_scored, 0L)
+  expect_false(anyNA(unlist(d)))
+  expect_identical(d$max_rhat, max(posterior::summarise_draws(posterior::bind_draws(params, scored), "rhat")$rhat, na.rm = TRUE))
+  expect_identical(diagnostics_gate(d), list(pass = TRUE, reasons = character(0)))
+})
+
 test_that("a scored bulk ESS of 399 fails the gate and 400 passes it", {
   d <- list(
     max_rhat = 1.004, max_rhat_scored = 1.002, min_ess_bulk = 380, min_ess_tail = 350,
     min_ess_bulk_scored = 399, min_ess_tail_scored = 500, divergent = 0L, treedepth_hits = 0L,
-    max_depth = 11L, min_ebfmi = 0.7
+    max_depth = 11L, min_ebfmi = 0.7, na_scored = 0L
   )
   g <- diagnostics_gate(d)
   expect_false(g$pass)
@@ -212,13 +294,39 @@ test_that("a scored bulk ESS of 399 fails the gate and 400 passes it", {
     c("max R-hat 1.0234 > 1.02", "divergent 2 > 0", "min scored bulk ESS 120 < 200")
   )
   expect_error(diagnostics_gate(d[setdiff(names(d), "divergent")]), "divergent")
+  expect_error(diagnostics_gate(d[setdiff(names(d), "na_scored")]), "na_scored")
+  d$max_rhat <- 1.004
+  d$divergent <- 0L
+  d$min_ess_bulk_scored <- 500
+  d$na_scored <- 3L
+  expect_identical(diagnostics_gate(d), list(pass = FALSE, reasons = paste0(NA_REASON, "3")))
+  d["na_scored"] <- list(NULL)
+  expect_identical(diagnostics_gate(d)$reasons, paste0(NA_REASON, "NA"))
+})
+
+test_that("a gate reason never reads as passing its own rule", {
+  d <- list(max_rhat = 1.01004, divergent = 0L, min_ess_bulk_scored = 500, na_scored = 0L)
+  g <- diagnostics_gate(d)
+  expect_identical(g$reasons, "max R-hat 1.01004 > 1.01")
+  shown <- as.numeric(sub("max R-hat ([^ ]+) > .*", "\\1", g$reasons))
+  expect_gt(shown, 1.01)
+  d$max_rhat <- 1.01 + 2 * .Machine$double.eps
+  shown <- as.numeric(sub("max R-hat ([^ ]+) > .*", "\\1", diagnostics_gate(d)$reasons))
+  expect_gt(shown, 1.01)
+  d$max_rhat <- 1.0234
+  expect_identical(diagnostics_gate(d)$reasons, "max R-hat 1.0234 > 1.01")
+  d$max_rhat <- 1.004
+  d$min_ess_bulk_scored <- 399.6
+  expect_identical(diagnostics_gate(d)$reasons, "min scored bulk ESS 399 < 400")
+  d$min_ess_bulk_scored <- 399.99999
+  expect_identical(diagnostics_gate(d)$reasons, "min scored bulk ESS 399 < 400")
 })
 
 test_that("diag_line() is the fixed DIAG format", {
   d <- list(
     max_rhat = 1.00731, max_rhat_scored = 1.002, min_ess_bulk = 812.6, min_ess_tail = 640.2,
     min_ess_bulk_scored = 1500, min_ess_tail_scored = 900, divergent = 0L, treedepth_hits = 3L,
-    max_depth = 12L, min_ebfmi = 0.61249
+    max_depth = 12L, min_ebfmi = 0.61249, na_scored = 0L
   )
   expect_identical(
     diag_line("r0_2024-11-30_2024-11-29_s1101", 42.36, d, list(pass = TRUE, reasons = character(0))),
