@@ -45,7 +45,7 @@ The model combines three key components:
    - Economic effects (`beta_vnv_f`, `beta_growth_f`)
 
 3. **Constituency Effects**
-   - Constituency-specific deviations (`delta_raw`)
+   - Constituency-specific deviations (`delta_free`)
    - Constituency effect scales (`sigma_delta`)
 
 ## File Structure

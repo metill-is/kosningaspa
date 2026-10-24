@@ -32,10 +32,10 @@ Dirichlet-Multinomial state-space model with:
 |-----------|-------------|
 | `beta`, `mu_pred` | Latent party support (national, simplex via softmax) |
 | `gamma`, `phi` | House effects per polling firm (zero-sum constrained) |
-| `sigma` | Party-specific random walk volatilities |
+| `log_sigma`, `sigma` | Party-specific random walk log volatilities (centred: `log_sigma ~ normal(mu_log_sigma, tau_log_sigma)`) and `sigma = exp(log_sigma)` |
 | `L_Omega` | Cholesky factor of party correlation matrix |
 | `alpha_f`, `beta_lag_f`, `beta_inc_years_f`, `beta_vnv_f`, `beta_growth_f` | Fundamentals regression coefficients (`beta_vnv_f`, `beta_growth_f`: CPI inflation and previous-year GDP growth for incumbents, `normal(0, 5)` priors) |
-| `delta_raw`, `sigma_delta` | Constituency deviations from national trends |
+| `delta_free`, `sigma_delta` | Constituency deviations from national trends (`delta_free` is centred: `normal(0, sigma_delta[p])`) |
 | `tau_f` | Fundamentals weight decay parameter |
 | `y_rep_national`, `y_rep_k` | Posterior predictive draws (national / constituency) |
 
