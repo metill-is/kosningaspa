@@ -36,7 +36,7 @@ Dirichlet-Multinomial state-space model with:
 | `alpha_f`, `beta_lag_f`, `beta_inc_years_f`, `beta_vnv_f`, `beta_growth_f` | Fundamentals regression coefficients (`beta_vnv_f`, `beta_growth_f`: CPI inflation and previous-year GDP growth for incumbents, `normal(0, 5)` priors) |
 | `delta_free`, `sigma_delta` | Constituency deviations from national trends (`delta_free` is centred: `normal(0, sigma_delta[p])`) |
 | `tau_f` | Fundamentals weight decay parameter |
-| `y_rep_national`, `y_rep_k` | Posterior predictive draws (national / constituency) |
+| `y_rep_national`, `y_rep_k` | Posterior predictive draws (national / constituency). Like the likelihood, they gather parties by identity from the full sum-to-zero vector: up to date D, `y_rep_national` draws the parties active at each date (`n_active_d`, `active_index_d`), and `y_rep_k` the parties each constituency poll reported (`party_index_k`); the other columns are 0 |
 
 ## Compilation
 
