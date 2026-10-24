@@ -3,17 +3,37 @@ box::use(
   R / harness / info_set[info_set, read_inputs]
 )
 
-MASTER_STAN <- "polling_and_fundamentals_kjordaemi.stan"
 R0_STAN <- "polling_and_fundamentals_kjordaemi_r0.stan"
+PRODUCTION_STAN <- "Stan/polling_and_fundamentals_kjordaemi.stan"
+# WHY: R0 is production's model at this commit plus the hooks (Decision 5 keeps it uncentred); production has since centred delta.
+R0_PARENT_COMMIT <- "5d22031"
 H1_DECLARATIONS <- c(
   "vector<lower = 0, upper = 1>[P - 1] mu_gamma_scale;",
   "array[D] int<lower = 1, upper = P> n_active_d;",
   "array[D, P] int<lower = 0, upper = P> active_index_d;"
 )
 
+#' R0's parent, production's Stan file at `R0_PARENT_COMMIT`, read with `git show` into
+#' `results/harness/stan_parent/` (gitignored) and rewritten only when its bytes differ.
+#' @return the file's path
+parent_stan <- function() {
+  withr::local_envvar(c(GIT_DIR = NA, GIT_WORK_TREE = NA, GIT_INDEX_FILE = NA))
+  shown <- withr::local_tempfile(fileext = ".stan")
+  spec <- paste0(R0_PARENT_COMMIT, ":", PRODUCTION_STAN)
+  if (system2("git", c("-C", shQuote(root()), "show", shQuote(spec)), stdout = shown, stderr = FALSE) != 0) {
+    stop("git show ", spec, " failed")
+  }
+  bytes <- readBin(shown, "raw", file.size(shown))
+  path <- root("results", "harness", "stan_parent", basename(PRODUCTION_STAN))
+  if (!file.exists(path) || !identical(readBin(path, "raw", file.size(path)), bytes)) {
+    dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
+    writeBin(bytes, path)
+  }
+  path
+}
+
 #' A Stan file as one string marked "bytes", so that positions and comparisons are bytewise.
-stan_bytes <- function(name) {
-  path <- root("Stan", name)
+stan_bytes <- function(path) {
   x <- rawToChar(readBin(path, "raw", file.size(path)))
   Encoding(x) <- "bytes"
   x
@@ -78,14 +98,15 @@ closed_softmax <- function(e) {
 }
 
 #' R0's data at the 2024 eve in one JSON that both models read, both models compiled with
-#' their methods, R0 fitted for 10 draws and master for 1.
+#' their methods, R0 fitted for 10 draws and its parent (`parent_stan()`) for 1 + 10.
 fit_both <- function() {
   x <- r0_stan_data(info_set(as.Date("2024-11-30"), as.Date("2024-11-29"), read_inputs()))
   dir <- withr::local_tempdir(.local_envir = testthat::teardown_env())
   json <- file.path(dir, "data.json")
   cmdstanr::write_stan_json(x$data, json)
-  compile <- function(name) {
-    cmdstanr::cmdstan_model(root("Stan", name), dir = dir, compile_model_methods = TRUE, quiet = TRUE)
+  # WHY: compiled afresh: cmdstanr builds the log_prob methods only when it compiles, never from a cached executable.
+  compile <- function(path) {
+    cmdstanr::cmdstan_model(path, dir = dir, compile_model_methods = TRUE, quiet = TRUE)
   }
   run <- function(model, warmup, sampling) {
     model$sample(
@@ -94,7 +115,7 @@ fit_both <- function() {
       show_exceptions = FALSE, diagnostics = NULL
     )
   }
-  list(data = x$data, r0 = run(compile(R0_STAN), 20, 10), master = run(compile(MASTER_STAN), 1, 1))
+  list(data = x$data, r0 = run(compile(root("Stan", R0_STAN)), 20, 10), parent = run(compile(parent_stan()), 1, 10))
 }
 
 fixture <- new.env()
@@ -105,17 +126,17 @@ fits <- function() {
   fixture$value
 }
 
-test_that("the r0 file differs from master only in the data block and generated quantities", {
+test_that("the r0 file differs from its parent, production at 5d22031, only in the data block and generated quantities", {
   expect_true(file.exists(root("Stan", R0_STAN)))
-  master <- stan_blocks(stan_bytes(MASTER_STAN))
-  r0 <- stan_blocks(stan_bytes(R0_STAN))
-  expect_identical(r0$middle, master$middle)
-  m <- bare(master$data)
+  parent <- stan_blocks(stan_bytes(parent_stan()))
+  r0 <- stan_blocks(stan_bytes(root("Stan", R0_STAN)))
+  expect_identical(r0$middle, parent$middle)
+  m <- bare(parent$data)
   expect_true(endsWith(m, "}"))
   expect_identical(bare(r0$data), paste0(substr(m, 1, nchar(m) - 1), bare(paste(H1_DECLARATIONS, collapse = "\n")), "}"))
 })
 
-test_that("the r0 log density is master's", {
+test_that("the r0 log density is its parent's", {
   skip_unless_slow()
   skip_without_snapshot()
   f <- fits()
@@ -123,8 +144,8 @@ test_that("the r0 log density is master's", {
   expect_equal(nrow(u), 10)
   for (i in seq_len(nrow(u))) {
     ui <- as.numeric(u[i, ])
-    expect_equal(f$master$log_prob(ui), f$r0$log_prob(ui), tolerance = 1e-10)
-    expect_equal(f$master$grad_log_prob(ui), f$r0$grad_log_prob(ui), tolerance = 1e-10)
+    expect_equal(f$parent$log_prob(ui), f$r0$log_prob(ui), tolerance = 1e-10)
+    expect_equal(f$parent$grad_log_prob(ui), f$r0$grad_log_prob(ui), tolerance = 1e-10)
   }
 })
 
@@ -159,21 +180,22 @@ test_that("the r0 hooks compute what they claim", {
   }
 })
 
-test_that("the gather check catches master's positional slicing", {
+test_that("the gather checks catch the parent's positional slicing", {
   skip_unless_slow()
   skip_without_snapshot()
   f <- fits()
   d <- f$data
-  v <- draws_of(f$master, c("y_rep_k", "y_rep_national"))
-  expect_equal(dim(v$y_rep_k)[1], 1)
-  expect_false(all(zero_outside(v$y_rep_k[1, , ], d$party_index_k, d$n_parties_k)))
-  breaks <- support_breaks(v$y_rep_national[1, seq_len(d$D), ], d$active_index_d, d$n_active_d)
-  expect_false(all(breaks == ""), info = described(breaks))
-  expect_identical(which(breaks != ""), c(60L, 61L, 95:99), info = described(breaks))
-  expect_identical(
-    breaks[breaks != ""],
-    c(rep("active column(s) 9 at zero", 2), rep("active column(s) 10 at zero", 5)),
-    info = described(breaks)
-  )
-  expect_equal(rowSums(v$y_rep_national[1, , ]), rep(d$n_pred, d$D + d$pred_y_time_diff))
+  v <- draws_of(f$parent, c("y_rep_k", "y_rep_national"))
+  n <- dim(v$y_rep_k)[1]
+  expect_equal(n, 10)
+  # WHY: a draw can leave every dropped column at zero by chance, so the kjördæmi check needs only one draw to fail.
+  leaks <- vapply(seq_len(n), \(i) !all(zero_outside(v$y_rep_k[i, , ], d$party_index_k, d$n_parties_k)), logical(1))
+  expect_true(any(leaks))
+  for (i in seq_len(n)) {
+    breaks <- support_breaks(v$y_rep_national[i, seq_len(d$D), ], d$active_index_d, d$n_active_d)
+    expect_false(all(breaks == ""), info = described(breaks))
+    # WHY: the parent slices one column too few at a level whose active set skips a party, never one too many.
+    expect_true(all(grepl("^active column\\(s\\) [0-9,]+ at zero$", breaks[breaks != ""])), info = described(breaks))
+    expect_equal(rowSums(v$y_rep_national[i, , ]), rep(d$n_pred, d$D + d$pred_y_time_diff))
+  }
 })

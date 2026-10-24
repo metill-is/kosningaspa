@@ -152,7 +152,7 @@ it.
 `r0_2024-11-30_2024-11-29_s1101`; an arm's name holds only letters, digits and hyphens.
 `run_dir(id)` is `results_root()/<id>`, and `results_root()` is `results/harness/` under the
 project root (gitignored), or `HARNESS_RESULTS` when that is set and not empty. The tests
-set it to a temporary directory and never write under the project.
+set it to a temporary directory and never write a run under the project.
 
 ```
 results/harness/
@@ -353,8 +353,12 @@ shape the Stan file relies on stops with "R0 input: <check>". `stjornarslit` and
 `post_stjornarslit` keep production's hard-coded 2024-10-14; the model declares them but
 never reads them.
 
-R0's Stan file, `Stan/polling_and_fundamentals_kjordaemi_r0.stan`, is production's model plus
-three hooks, with production's log density (`Stan/CLAUDE.md`, `tests/harness/test-r0-stan.R`).
+R0's Stan file, `Stan/polling_and_fundamentals_kjordaemi_r0.stan`, is production's model as
+of commit 5d22031, with δ uncentred (the plan's Decision 5; production has since centred δ),
+plus three hooks, and has that model's log density (`Stan/CLAUDE.md`).
+`tests/harness/test-r0-stan.R` reads that parent with `git show 5d22031:<path>`, never from
+the working tree, into `results/harness/stan_parent/` (gitignored, rewritten only when its
+bytes change), and compares R0 with it byte for byte and by log density.
 
 ## Rebuilding the generated files
 
