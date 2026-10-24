@@ -288,15 +288,15 @@ LC_ALL=en_US.UTF-8 Rscript R/harness/tier0_report.R r0 harness/runs/tier0.txt
 
 The last line, run once both runs are done, writes the report, `harness/tier0/<arm>.md`
 (committed). `R/harness/tier0_report.R <arm> <run_list> [out]` is a plain script. For each run
-of the arm in the run list it reads only the run's `meta.json` and `key_diagnostics.csv`, and
-writes one table row:
+of the arm in the run list it reads only the run's `meta.json`, and writes one table row:
 
 - the cell (E, F, tag), the seed and the iterations;
-- the minutes, divergences, treedepth hits (count, and percentage of the chains × sampling
-  draws), the deepest tree and the min E-BFMI;
-- the max R-hat and the min bulk and tail ESS, over the parameters (the rows of
-  `key_diagnostics.csv` not named `scored_*`) and over the scored quantities (their extremes
-  in `meta.json`);
+- the minutes (the fit's wall time, warmup and sampling), divergences, treedepth hits (count,
+  and percentage of the chains × sampling draws), the deepest tree and the min E-BFMI;
+- the max R-hat and the min bulk and tail ESS, each as a pair: first over the gate's scope,
+  every `parameters`-block variable and the scored quantities together (`max_rhat`,
+  `min_ess_bulk`, `min_ess_tail`), then over the scored quantities alone (the `_scored`
+  extremes). When the two are equal, the scored set is the binding one;
 - both min bulk ESS per minute, and both scaled linearly to 2000 sampling iterations
   (× 2000 / `iter_sampling`). That projection informs the plan's Decision 5 (the centring),
   not the gate;
@@ -308,8 +308,10 @@ Above the table it records the run list, the CmdStan and cmdstanr versions and
 R-hat is rounded up and ESS and E-BFMI down, and a non-finite value prints as the run
 recorded it (`Inf`, `NaN`, `NA`). The report holds sampler diagnostics only: no share, mean,
 quantile or score of a forecast appears in it, and `tests/harness/test-tier0-report.R` checks
-that none of the words share, mean, median, CRPS or MAE does. It stops, writing nothing, on a
-run without `meta.json` or a run list with no run of the arm.
+that none of the words share, mean, median, CRPS or MAE, nor the value of a forecast-like
+decoy field in its fixture, does. It stops, writing nothing, on a run list with no run of the
+arm, a run without `meta.json`, a `meta.json` of another run, or a field that is missing or
+does not parse.
 
 ## R0's inputs
 

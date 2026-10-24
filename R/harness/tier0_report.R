@@ -3,18 +3,19 @@
 #   LC_ALL=en_US.UTF-8 Rscript R/harness/tier0_report.R <arm> <run_list> [out]
 #
 # The run list is the queue's (harness/runs/; "lane arm E F seed" per line, # for comments).
-# For each run of <arm> in it, in order, the script reads only the run's meta.json
-# (read_run_meta()) and key_diagnostics.csv, in results_root()/<run_id>, and writes one row of
-# a markdown table to out (default harness/tier0/<arm>.md):
+# For each run of <arm> in it, in order, the script reads only the run's meta.json, in
+# results_root()/<run_id>, and writes one row of a markdown table to out (default
+# harness/tier0/<arm>.md):
 #   the cell (E, F, tag), the seed and the iterations; the minutes, divergences, treedepth hits
 #   (count, and percentage of the chains x sampling draws), the deepest tree and the min
-#   E-BFMI; the max R-hat and the min bulk and tail ESS over the parameters (the rows of
-#   key_diagnostics.csv not named scored_*) and over the scored quantities (meta.json); both
-#   min bulk ESS per minute and projected linearly to 2000 sampling iterations; the gate's
+#   E-BFMI; the max R-hat and the min bulk and tail ESS over the gate's scope (every
+#   parameters-block variable and the scored quantities) and over the scored quantities alone;
+#   both min bulk ESS per minute and projected linearly to 2000 sampling iterations; the gate's
 #   verdict and reasons; and the modification time of meta.json, the measurement date.
 # Above the table it records the run list, the CmdStan and cmdstanr versions and the
 # max_treedepth of meta.json, and `sysctl -n hw.ncpu` read when it runs. It stops, writing
-# nothing, on a run with no meta.json or a run list with no run of <arm>.
+# nothing, on a run list with no run of <arm>, a run with no meta.json, a meta.json of another
+# run, or a field that is missing or does not parse.
 if (!isTRUE(l10n_info()[["UTF-8"]])) stop("tier0_report.R needs a UTF-8 locale: run under LC_ALL=en_US.UTF-8", call. = FALSE)
 # WHY: the box path below is the working directory, so check it is the project root first.
 stopifnot("run from the project root (no R/harness/constants.R here)" = file.exists("R/harness/constants.R"))
@@ -22,22 +23,23 @@ options(box.path = normalizePath("."), width = 120, warn = 1)
 box::use(
   R / harness / constants[harness_path],
   R / harness / freeze[target_cell],
-  R / harness / runs[run_id, run_dir],
-  R / harness / scorer[read_run_meta]
+  R / harness / runs[run_id, run_dir]
 )
+
+SCOPE <- "(gate scope: parameters block + scored; scored)"
 
 HEADINGS <- c(
   "Cell (E, F, tag)", "Seed", "Iterations (warmup + sampling)", "Minutes", "Divergences",
   "Treedepth hits (count; % of chains \u00d7 sampling)", "Deepest tree", "Min E-BFMI",
-  "Max R-hat (parameters; scored)", "Min bulk ESS (parameters; scored)", "Min tail ESS (parameters; scored)",
-  "Bulk ESS/min (parameters; scored)",
-  "Bulk ESS at 2000 sampling iterations, linear projection (parameters; scored)",
+  paste("Max R-hat", SCOPE), paste("Min bulk ESS", SCOPE), paste("Min tail ESS", SCOPE),
+  paste("Bulk ESS/min", SCOPE),
+  paste("Bulk ESS at 2000 sampling iterations, linear projection", SCOPE),
   "Gate (\u00a75.7, informational)", "meta.json written"
 )
 
 DIAGNOSTICS <- c(
-  "max_rhat_scored", "min_ess_bulk_scored", "min_ess_tail_scored", "divergent", "treedepth_hits",
-  "max_depth", "min_ebfmi"
+  "max_rhat", "max_rhat_scored", "min_ess_bulk", "min_ess_bulk_scored", "min_ess_tail",
+  "min_ess_tail_scored", "divergent", "treedepth_hits", "max_depth", "min_ebfmi"
 )
 
 #' A number of meta.json, where a non-finite one is the string "Inf", "-Inf", "NaN" or "NA".
@@ -59,31 +61,18 @@ text <- function(x, field) {
   x
 }
 
+#' A date field of meta.json; an error naming `field` if it is missing or not one ISO date.
+day <- function(x, field) {
+  d <- tryCatch(as.Date(text(x, field)), error = function(e) as.Date(NA))
+  if (is.na(d)) stop("meta.json: ", field, " is not a date", call. = FALSE)
+  d
+}
+
 #' `x` to `digits` decimals, rounded up or down; Inf, NaN and NA print as such.
 shown <- function(x, digits, up = FALSE) {
   # WHY: x * 10^digits carries float error (1.0042 * 1e4 is 10042.000000000002), which ceiling() would round up.
   y <- round(x * 10^digits, 6)
   sprintf("%.*f", digits, (if (up) ceiling(y) else floor(y)) / 10^digits)
-}
-
-#' The max or min of the values of `x` that are not NA or NaN; NA if there are none.
-extreme <- function(f, x) {
-  x <- x[!is.na(x)]
-  if (length(x)) f(x) else NA_real_
-}
-
-#' A run's key_diagnostics.csv: `variable`, then `rhat`, `ess_bulk` and `ess_tail` as doubles.
-read_key <- function(path) {
-  key <- utils::read.csv(path, check.names = FALSE, encoding = "UTF-8", colClasses = "character")
-  if (!identical(names(key), c("variable", "rhat", "ess_bulk", "ess_tail"))) {
-    stop(path, " does not hold variable, rhat, ess_bulk and ess_tail", call. = FALSE)
-  }
-  for (col in c("rhat", "ess_bulk", "ess_tail")) {
-    v <- suppressWarnings(as.numeric(key[[col]]))
-    if (any(is.na(v) & !is.na(key[[col]]) & !is.nan(v))) stop(path, ": ", col, " is not numeric", call. = FALSE)
-    key[[col]] <- v
-  }
-  key
 }
 
 #' One run's row of the table, the run named by a run list line's `arm`, `E`, `F` and `seed`.
@@ -94,8 +83,10 @@ run_row <- function(arm, E, F, seed) {
   dir <- run_dir(id)
   meta_path <- file.path(dir, "meta.json")
   if (!file.exists(meta_path)) stop("no meta.json in ", dir, ": the run has not finished", call. = FALSE)
-  meta <- read_run_meta(dir)
-  if (!identical(meta$arm, arm) || meta$E != as.Date(E) || meta$F != as.Date(F) ||
+  meta <- jsonlite::read_json(meta_path, simplifyVector = TRUE)
+  meta_E <- day(meta$E, "E")
+  meta_F <- day(meta$F, "F")
+  if (!identical(text(meta$arm, "arm"), arm) || meta_E != as.Date(E) || meta_F != as.Date(F) ||
     !isTRUE(number(meta$seed, "seed") == as.numeric(seed))) {
     stop("the meta.json in ", dir, " is not of the run list's run ", id, call. = FALSE)
   }
@@ -106,13 +97,9 @@ run_row <- function(arm, E, F, seed) {
   warmup <- number(meta$iter_warmup, "iter_warmup")
   sampling <- number(meta$iter_sampling, "iter_sampling")
   draws <- number(meta$chains, "chains") * sampling
-
-  key <- read_key(file.path(dir, "key_diagnostics.csv"))
-  params <- key[!startsWith(key$variable, "scored_"), ]
-  if (!nrow(params)) stop(dir, "/key_diagnostics.csv has no parameter rows", call. = FALSE)
-  rhat <- c(extreme(max, params$rhat), v$max_rhat_scored)
-  bulk <- c(extreme(min, params$ess_bulk), v$min_ess_bulk_scored)
-  tail <- c(extreme(min, params$ess_tail), v$min_ess_tail_scored)
+  rhat <- c(v$max_rhat, v$max_rhat_scored)
+  bulk <- c(v$min_ess_bulk, v$min_ess_bulk_scored)
+  tail <- c(v$min_ess_tail, v$min_ess_tail_scored)
 
   pass <- meta$gate$pass
   reasons <- as.character(unlist(meta$gate$reasons))
@@ -123,10 +110,9 @@ run_row <- function(arm, E, F, seed) {
   } else {
     "NA"
   }
-  tag <- tryCatch(target_cell(meta$E, meta$F)$tag, error = function(e) "-")
   pair <- function(x) paste(x, collapse = "; ")
   cells <- c(
-    sprintf("%s, %s, %s", format(meta$E), format(meta$F), tag),
+    sprintf("%s, %s, %s", format(meta_E), format(meta_F), target_cell(meta_E, meta_F)$tag),
     sprintf("%.0f", number(meta$seed, "seed")),
     sprintf("%.0f + %.0f", warmup, sampling),
     sprintf("%.1f", minutes),
@@ -180,7 +166,7 @@ table_row <- function(cells) paste0("| ", paste(cells, collapse = " | "), " |")
 report <- c(
   paste("# Tier 0 diagnostics: arm", arm),
   "",
-  "Written by `R/harness/tier0_report.R` from each run's `meta.json` and `key_diagnostics.csv`.",
+  "Written by `R/harness/tier0_report.R` from each run's `meta.json`.",
   "Sampler diagnostics only. Tier 0 is not gated: the gate column is informational.",
   "",
   sprintf("- Run list: `%s`", run_list),
@@ -194,18 +180,17 @@ report <- c(
   "The columns:",
   "",
   paste(
-    "- **Parameters** are the rows of `key_diagnostics.csv` not named `scored_*`: the elements of",
-    "the variables the arm keeps in `param_draws.parquet` (for R0, `R0_PARAM_VARIABLES`, which hold",
-    "transformed parameters and generated quantities beside some of the `parameters` block). An",
-    "element with no R-hat or ESS (a",
-    "constant) is left out, as `summarise_diagnostics()` leaves it out. **Scored** values are the",
-    "scored quantities' extremes in `meta.json` (`max_rhat_scored`, `min_ess_bulk_scored`,",
-    "`min_ess_tail_scored`)."
+    "- **Gate scope: parameters block + scored**, the first value of each pair, is `meta.json`'s",
+    "`max_rhat`, `min_ess_bulk` and `min_ess_tail`: the extremes over every `parameters`-block",
+    "variable and the scored quantities together, the scope of the gate's R-hat rule (the plan's",
+    "Decision 3); when it equals the scored value, the scored set is the binding one. **Scored**,",
+    "the second, is the scored quantities alone (`max_rhat_scored`, `min_ess_bulk_scored`,",
+    "`min_ess_tail_scored`). A parameter with no R-hat or ESS (a constant) is left out of the gate",
+    "scope; a scored quantity with none makes both values NA."
   ),
   paste(
-    "- The gate's R-hat rule runs over every `parameters`-block variable and the scored quantities",
-    "together (the plan's Decision 3), a wider set than the parameters here, and its ESS rule over",
-    "the scored quantities' bulk ESS; a failing gate's reasons print the value that failed."
+    "- The gate checks the gate-scope max R-hat and the scored min bulk ESS; a failing gate's",
+    "reasons print the value that failed."
   ),
   paste(
     "- R-hat is rounded up, and ESS, ESS/min and E-BFMI down, to the digits shown. `Inf`, `NaN`",
@@ -215,7 +200,7 @@ report <- c(
     "- **Treedepth hits** are transitions that reached `max_treedepth`, as a percentage of the",
     "chains \u00d7 sampling draws; the **deepest tree** is the deepest any transition reached."
   ),
-  "- **Bulk ESS/min** is each min bulk ESS \u00f7 the minutes, the sampling's wall time.",
+  "- **Bulk ESS/min** is each min bulk ESS \u00f7 the minutes, the fit's wall time (warmup and sampling).",
   paste(
     "- **Bulk ESS at 2000 sampling iterations** scales each min bulk ESS by 2000 / `iter_sampling`.",
     "It is a linear projection that informs Decision 5, not the gate."
