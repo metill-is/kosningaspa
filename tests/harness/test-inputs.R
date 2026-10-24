@@ -39,6 +39,27 @@ test_that("snapshot_inputs refuses an existing destination", {
   expect_error(snapshot_inputs(src, file.path(out, "snap"), file.path(out, "m.csv")), "exists")
 })
 
+test_that("snapshot_inputs copies only the files it is given, each under its basename", {
+  src <- withr::local_tempdir()
+  files <- c(one = "a/x.parquet", two = "b/c/y.parquet")
+  for (p in files) {
+    dir.create(dirname(file.path(src, p)), recursive = TRUE)
+    writeLines(p, file.path(src, p))
+  }
+  out <- withr::local_tempdir()
+  m <- snapshot_inputs(src, file.path(out, "snap"), file.path(out, "m.csv"), files = files)
+  expect_equal(m$name, c("one", "two"))
+  expect_equal(m$file, c("x.parquet", "y.parquet"))
+  expect_equal(m$source, unname(files))
+  expect_setequal(list.files(file.path(out, "snap")), c("x.parquet", "y.parquet"))
+  expect_true(verify_snapshot(file.path(out, "snap"), file.path(out, "m.csv")))
+  expect_error(
+    snapshot_inputs(src, file.path(out, "snap2"), file.path(out, "m2.csv"), files = c(one = "a/x.parquet", two = "b/x.parquet")),
+    "basenames repeat"
+  )
+  expect_false(file.exists(file.path(out, "snap2")))
+})
+
 test_that("cells and previous elections are the design's", {
   expect_equal(nrow(TARGETS), 10)
   expect_equal(

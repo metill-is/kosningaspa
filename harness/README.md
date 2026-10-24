@@ -24,8 +24,8 @@ From the project root: `LC_ALL=en_US.UTF-8 Rscript tests/run.R [filter]`, which 
 suite under testthat edition 3. Tests that need the snapshot call `skip_without_snapshot()`
 and skip without it. `tests/harness/test-generated.R` fails if a generated committed file
 that builds offline is not a fresh build. Slow tests (the sweep of every forecast day in
-`tests/harness/test-sweep.R`, and later the Stan and seat-allocation tests) call
-`skip_unless_slow()` and run only with `HARNESS_SLOW=1` in the environment:
+`tests/harness/test-sweep.R`, the self-test's kjördæmi and seat scores, and later the Stan
+tests) call `skip_unless_slow()` and run only with `HARNESS_SLOW=1` in the environment:
 `HARNESS_SLOW=1 LC_ALL=en_US.UTF-8 Rscript tests/run.R`.
 
 The R code in `R/harness/` and `R/election_utils.R` writes every non-ASCII character as a
@@ -40,6 +40,41 @@ in a subprocess to check that it still reads the snapshot right. `read_inputs()`
 `build_phase0.R` still stop under a locale that is not UTF-8, but that check cannot stand
 in for the escapes: it runs when they are called, after the modules were parsed, so a
 session that loads the harness under C and then switches to UTF-8 passes it.
+
+## The scorer self-test
+
+Before it scores anything new, the scorer must reproduce a run that an earlier study
+already scored (spec §5.6, which names the study's folder). `selftest_inputs()`
+(`R/harness/selftest.R`) copies two of that run's draw files, `SELFTEST_FILES`, into
+`harness/selftest/` (gitignored) and writes `harness/selftest_manifest.csv` (committed)
+through the snapshot machinery, so every read checks the file's sha256. Once, from the
+project root:
+
+```r
+options(box.path = normalizePath("."))
+box::use(R/harness/selftest[selftest_inputs])
+selftest_inputs("<path to the overdisp study>")
+```
+
+Like `snapshot_inputs()`, it refuses an existing `harness/selftest/`. Re-copied from the
+same files, the manifest comes out unchanged.
+
+`tests/harness/test-selftest.R` re-scores those draws against the committed 2024 result
+(`cell_truth()`) with the functions of `R/harness/scores.R`, and must reproduce the study's
+published scores to a tolerance of 1e-9: the national scores (CRPS10, IS90, DSS10, mDSS,
+d², energy score, MAE8, the MAE over all ten parties, 90% width and coverage, zero cells
+replaced) with their batch-means and MCSE standard errors, the kjördæmi scores, and the
+seat scores with the seat-CRPS standard error and the majority probability of the
+coalition that formed. The reference values are written in the test file and are never
+changed: a miss means the scorer is wrong. The national test runs whenever
+`harness/selftest/` exists; the kjördæmi and seat tests also need `HARNESS_SLOW=1`
+(allocating seats for the run's 8000 draws took 107 s on 24 Oct 2026). Without the folder
+they skip, but the test of the committed manifest still runs.
+
+It is the phase's one scoring of a known result. No harness forecast is compared with its
+result before the freeze (spec §8), and the self-test keeps that rule: it re-scores draws
+the earlier study had already scored and published, not a harness arm's, so no harness arm
+meets a result.
 
 ## Rebuilding the generated files
 
@@ -56,14 +91,14 @@ or `snapshot_manifest.csv`.
 
 ## Committed versus generated
 
-- Committed: this README, `snapshot_manifest.csv`, the generated tables that
-  `build_phase0.R` writes, and `harness/sources/`, which holds source files fetched once or
-  entered by hand, with their provenance in a README: `harness/truth/README.md` for the
+- Committed: this README, `snapshot_manifest.csv`, `selftest_manifest.csv`, the generated
+  tables that `build_phase0.R` writes, and `harness/sources/`, which holds source files
+  fetched once or entered by hand, with their provenance in a README: `harness/truth/README.md` for the
   results sources, `harness/sources/README.md` for the poll-fieldwork tables and the house
   map, the fieldwork corrections, the publication dates, the two correction tables
   (`poll_n_corrections.csv`, `fundamentals_corrections.csv`), the economy release dates,
   the house table and the coalition events.
-- Generated and gitignored: `harness/snapshot/`.
+- Generated and gitignored: `harness/snapshot/` and `harness/selftest/`.
 
 ## Target rows: the economy and the carried columns
 

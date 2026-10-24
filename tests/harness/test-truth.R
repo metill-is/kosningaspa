@@ -1,5 +1,5 @@
 box::use(
-  R / harness / truth[build_truth, fold_truth, prev_national_shares, read_seats_2021],
+  R / harness / truth[build_truth, cell_truth, fold_truth, prev_national_shares, read_seats_2021, read_truth],
   R / harness / inputs[snapshot_file],
   R / election_utils[calculate_seats, layout_for]
 )
@@ -92,4 +92,68 @@ test_that("previous national shares feed the shock scaling", {
   expect_false(is.na(prev_national_shares(as.Date("2024-11-30"), tr(), f)["Sósíalistaflokkurinn"]))
   # R2: no Sósíalistar list in 2017, so NA although the folded rows carry a 0
   expect_true(is.na(prev_national_shares(as.Date("2021-09-25"), tr(), f)["Sósíalistaflokkurinn"]))
+})
+
+test_that("read_truth reads the committed table with its column types", {
+  t <- read_truth()
+  expect_named(t, c("election", "kjordaemi", "list_letter", "list_name", "flokkur", "votes", "seats", "ran", "source"))
+  expect_s3_class(t$election, "Date")
+  expect_type(t$votes, "integer")
+  expect_type(t$seats, "integer")
+  expect_type(t$ran, "logical")
+  expect_equal(sort(unique(t$election)), ELECTIONS)
+  expect_false(anyNA(t))
+})
+
+test_that("read_truth returns what build_truth builds", {
+  skip_without_snapshot()
+  expect_identical(read_truth(), tr())
+})
+
+test_that("cell_truth gives the national shares, the kjördæmi shares and the seats at E", {
+  ct <- cell_truth("2024-11-30", POLL_PARTIES)
+  expect_named(ct, c("nat", "kd", "seats"))
+  expect_named(ct$nat, POLL_PARTIES)
+  expect_equal(sum(ct$nat), 1)
+  expect_named(ct$seats, POLL_PARTIES)
+  expect_type(ct$seats, "integer")
+  expect_equal(sum(ct$seats), 63L)
+  expect_named(ct$kd, c("kjordaemi", "flokkur", "votes", "share"))
+  expect_equal(nrow(ct$kd), 60)
+  expect_equal(sum(ct$kd$votes), 212470)
+  expect_equal(unname(c(tapply(ct$kd$share, ct$kd$kjordaemi, sum))), rep(1, 6))
+  # WHY: a fold of KOS02018 made before the harness, so it checks cell_truth()'s own fold (harness/truth/README.md)
+  o <- readr::read_csv(root("harness", "sources", "hagstofa", "official_2024_kjordaemi.csv"), show_col_types = FALSE)
+  v <- tapply(o$votes, o$flokkur, sum)
+  expect_equal(ct$nat, c(v[POLL_PARTIES] / sum(v)), ignore_attr = "dimnames")
+  expect_equal(unname(ct$seats), unname(c(tapply(o$seats_official, o$flokkur, sum))[POLL_PARTIES]))
+  j <- dplyr::inner_join(ct$kd, o, by = c("kjordaemi", "flokkur"), suffix = c("", "_o"))
+  expect_equal(nrow(j), 60)
+  expect_equal(j$votes, j$votes_o)
+})
+
+test_that("cell_truth names its vectors in the run's party order", {
+  ct <- cell_truth("2024-11-30", POLL_PARTIES)
+  r <- cell_truth("2024-11-30", rev(POLL_PARTIES))
+  expect_identical(r$nat, ct$nat[rev(POLL_PARTIES)])
+  expect_identical(r$seats, ct$seats[rev(POLL_PARTIES)])
+})
+
+test_that("cell_truth refuses a result with votes for a party the run does not forecast", {
+  expect_error(
+    cell_truth("2024-11-30", setdiff(POLL_PARTIES, "Sósíalistaflokkurinn")),
+    "truth has votes for parties the run does not forecast: Sósíalistaflokkurinn",
+    fixed = TRUE
+  )
+  expect_error(cell_truth("2024-11-30", c(POLL_PARTIES, "Björt framtíð")), "not poll parties: Björt framtíð")
+  expect_error(cell_truth("2013-04-27", POLL_PARTIES), "no results for 2013-04-27")
+})
+
+test_that("a nine-party run is scored in 2017, when Sósíalistaflokkurinn had no list", {
+  ct <- cell_truth("2017-10-28", setdiff(POLL_PARTIES, "Sósíalistaflokkurinn"))
+  expect_length(ct$nat, 9)
+  expect_equal(sum(ct$nat), 1)
+  expect_equal(sum(ct$seats), 63L)
+  expect_equal(nrow(ct$kd), 54)
+  expect_equal(sum(ct$kd$votes), 196259)
 })

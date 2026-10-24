@@ -299,6 +299,72 @@ write_truth <- function(path = harness_path("truth", "elections_official.csv")) 
   invisible(truth)
 }
 
+# The columns of the official results table and their readr types.
+TRUTH_COLUMNS <- c(
+  election = "D", kjordaemi = "c", list_letter = "c", list_name = "c", flokkur = "c",
+  votes = "i", seats = "i", ran = "l", source = "c"
+)
+
+#' The committed official results table.
+#' @param path the CSV that `write_truth()` writes
+#' @return a tibble as `build_truth()` returns it: election (Date), kjordaemi,
+#'   list_letter, list_name, flokkur (character), votes, seats (integer), ran (logical),
+#'   source (character); an error if the columns differ
+#' @export
+read_truth <- function(path = harness_path("truth", "elections_official.csv")) {
+  # WHY: the default argument is a promise, forced after this import.
+  box::use(R / harness / constants[harness_path])
+  header <- names(readr::read_csv(path, n_max = 0, col_types = readr::cols(.default = "c")))
+  if (!identical(header, names(TRUTH_COLUMNS))) {
+    stop(basename(path), ": columns are not ", paste(names(TRUTH_COLUMNS), collapse = ", "))
+  }
+  t <- readr::read_csv(
+    path,
+    col_types = do.call(readr::cols, as.list(TRUTH_COLUMNS)), na = character(), progress = FALSE
+  )
+  if (nrow(readr::problems(t))) stop(basename(path), ": cells that do not parse as their column type")
+  tibble::as_tibble(t)
+}
+
+#' The result a forecast cell is scored against.
+#' @param E the election (Date or ISO string)
+#' @param parties the poll parties the run forecasts: `POLL_PARTIES` labels, no repeats,
+#'   in the run's order
+#' @param truth an official results table (`read_truth()`)
+#' @return `list(nat, kd, seats)`, all from `fold_truth(truth)` at E: `nat`, each party's
+#'   share of the national valid vote, a numeric vector named by `parties`; `kd`, a tibble
+#'   (kjordaemi, flokkur, votes, share) with one row per kjördæmi × party of `parties`,
+#'   `share` being the party's share of its kjördæmi's valid vote; `seats`, the official
+#'   seats, an integer vector named by `parties`. A party of `parties` with no list at E
+#'   has 0 votes, shares and seats. An error if a poll party outside `parties` has votes
+#'   at E, since a scorer would otherwise drop them silently.
+#' @export
+cell_truth <- function(E, parties, truth = read_truth()) {
+  box::use(R / harness / constants[POLL_PARTIES], dplyr[filter, mutate, select, summarise])
+  E <- as.Date(E)
+  stopifnot(length(E) == 1, !is.na(E), is.character(parties), length(parties) > 0, !anyDuplicated(parties))
+  unknown <- setdiff(parties, POLL_PARTIES)
+  if (length(unknown)) stop("not poll parties: ", paste(unknown, collapse = ", "))
+  te <- truth[which(truth$election == E), ]
+  if (!nrow(te)) stop("no results for ", format(E))
+
+  folded <- fold_truth(te)
+  nat <- summarise(folded, votes = sum(votes), seats = sum(seats), .by = flokkur)
+  extra <- nat$flokkur[nat$votes > 0 & !nat$flokkur %in% parties]
+  if (length(extra)) {
+    stop("truth has votes for parties the run does not forecast: ", paste(extra, collapse = ", "))
+  }
+  i <- match(parties, nat$flokkur)
+  list(
+    nat = stats::setNames(nat$votes[i] / sum(nat$votes), parties),
+    kd = folded |>
+      mutate(share = votes / sum(votes), .by = kjordaemi) |>
+      filter(flokkur %in% parties) |>
+      select(kjordaemi, flokkur, votes, share),
+    seats = stats::setNames(as.integer(nat$seats[i]), parties)
+  )
+}
+
 #' Fold lists into the poll parties.
 #' @param truth a `build_truth()` table
 #' @return a tibble (election, kjordaemi, flokkur, votes, seats) with every `POLL_PARTIES`
