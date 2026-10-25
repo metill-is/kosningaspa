@@ -78,7 +78,7 @@ From the project root, with `<dir>` a scratch folder holding `stan_data_eve.json
 
 ```bash
 git show 5d22031:Stan/polling_and_fundamentals_kjordaemi.stan > <dir>/kjordaemi_old.stan
-cp Stan/polling_and_fundamentals_kjordaemi.stan <dir>/kjordaemi_new.stan
+git show <new>:Stan/polling_and_fundamentals_kjordaemi.stan > <dir>/kjordaemi_new.stan
 LC_ALL=en_US.UTF-8 Rscript R/sampler_check/fit_headless.R --out=<dir>/eve_old \
   --stan=<dir>/kjordaemi_old.stan --data-json=<dir>/stan_data_eve.json --max-treedepth=10
 LC_ALL=en_US.UTF-8 Rscript R/sampler_check/equivalence.R --old-stan=<dir>/kjordaemi_old.stan \
@@ -90,5 +90,16 @@ LC_ALL=en_US.UTF-8 Rscript R/sampler_check/compare_fits.R --old=<dir>/eve_old \
   --new=<dir>/eve_new --data-json=<dir>/stan_data_eve.json --out=<dir>/compare --label=eve
 ```
 
-`fit_headless.R` defaults to seed 4100 and 1000 + 1000 iterations. Without
-`stan_data_eve.json`, its first call builds the JSON from the current `data/`.
+`fit_headless.R` defaults to seed 4100 and 1000 + 1000 iterations.
+
+`<new>` is the last commit before the replication draws gathered parties by identity: its
+model file has the new model's sha256 above (`git log -- Stan/polling_and_fundamentals_kjordaemi.stan`
+lists the candidates). Both models read `n_parties_n_rep` and `n_parties_k_rep`, which
+`prepare_stan_data()` no longer writes, so use the frozen `stan_data_eve.json`. The current
+model file is a different model: its `y_rep_national` and `y_rep_k` gather the parties active
+at each date and the parties each constituency poll reported, from the full sum-to-zero
+vector, as the likelihood does, and it needs `n_active_d` and `active_index_d`, which
+`stan_data_eve.json` lacks. On the eve data its replications change on dates 1–99 and on 9
+of the 36 constituency rows. As that changes how many random numbers those draws use, every
+random quantity generated after them can change too, so `equivalence.R`'s
+generated-quantities check fails between the 5d22031 model and the current file.
