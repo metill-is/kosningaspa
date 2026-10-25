@@ -187,14 +187,20 @@ parent_prepare <- function() {
   env$prepare_stan_data
 }
 
-test_that("the data keep the parent's fields in its order, with its positional rep counts", {
+# WHY: stan_data_sha() hashes the JSON in field order, so a field R0 adds that lands anywhere but here retires every finished run as STALE.
+R0_APPENDED <- c(
+  "constituency_weights_pred", "constituency_weights", "N_obs_k", "obs_k", "desired_weight", "weight_time",
+  "mu_gamma_scale", "n_active_d", "active_index_d"
+)
+
+test_that("the data keep the parent's fields in its order, then R0's own, with its positional rep counts", {
   skip_without_snapshot()
   old_prepare <- parent_prepare()
   for (i in seq_along(r0)) {
     inputs <- r0_production_inputs(infos[[i]])
     old <- old_prepare(inputs$polling, inputs$fundamentals, inputs$constituency, election_date = infos[[i]]$E)
     d <- r0[[i]]$data
-    expect_identical(intersect(names(d), names(old)), setdiff(names(old), c("N", "xm", "n_election", "time_diff_f")))
+    expect_identical(names(d), c(setdiff(names(old), c("N", "xm", "n_election", "time_diff_f")), R0_APPENDED))
     expect_identical(d$n_parties_n_rep, old$n_parties_n_rep)
     expect_identical(d$n_parties_k_rep, old$n_parties_k_rep)
     expect_length(d$n_parties_n_rep, d$N_n)
