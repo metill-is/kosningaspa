@@ -173,26 +173,18 @@ prepare_polling_data <- function(polling_data, constituency_data, election_date)
   n_parties_n <- as.integer(rowSums(y_n != 0))
   party_index_n <- build_party_index(y_n)
 
-  n_parties_n_rep <- polling_data |>
+  # The parties active at each date level (indexed like date_n): those whose first
+  # national count above 0 is on or before it, as column ids in party order,
+  # 0-padded. The national y_rep draws gather them by identity, as the likelihood
+  # gathers each poll's reported parties with party_index_n.
+  entry_n <- polling_data |>
     filter(n > 0) |>
-    summarise(
-      date = min(date),
-      .by = flokkur
-    ) |>
-    count(date) |>
-    mutate(
-      n = cumsum(n)
-    )
-
-  n_parties_n_rep <- polling_data |>
-    summarise(
-      n_parties = sum(n != 0),
-      .by = c(date, fyrirtaeki)
-    ) |>
-    arrange(date) |>
-    left_join(n_parties_n_rep, by = "date") |>
-    fill(n, .direction = "down") |>
-    pull(n)
+    summarise(entry = min(date), .by = flokkur)
+  entry_n <- entry_n$entry[match(colnames(y_n), entry_n$flokkur)]
+  active_d <- outer(as.Date(levels(date_factor)), entry_n, `>=`)
+  active_d[is.na(active_d)] <- FALSE
+  active_index_d <- build_party_index(active_d)
+  n_active_d <- as.integer(rowSums(active_d))
 
 
   #### Kjördæmi level ####
@@ -229,28 +221,6 @@ prepare_polling_data <- function(polling_data, constituency_data, election_date)
   party_index_k <- build_party_index(y_k)
 
 
-  n_parties_k_rep <- constituency_data |>
-    filter(n > 0) |>
-    summarise(
-      date = min(date),
-      .by = flokkur
-    ) |>
-    count(date) |>
-    mutate(
-      n = cumsum(n)
-    )
-
-
-  n_parties_k_rep <- constituency_data |>
-    summarise(
-      n_parties = sum(n != 0),
-      .by = c(date, kjordaemi, fyrirtaeki)
-    ) |>
-    arrange(date) |>
-    left_join(n_parties_k_rep, by = "date") |>
-    fill(n, .direction = "down") |>
-    pull(n)
-
   constituency_k <- constituency_data |>
     pivot_wider(names_from = flokkur, values_from = n, values_fill = 0) |>
     mutate(
@@ -273,7 +243,8 @@ prepare_polling_data <- function(polling_data, constituency_data, election_date)
     date_n = date_n,
     n_parties_n = n_parties_n,
     party_index_n = party_index_n,
-    n_parties_n_rep = n_parties_n_rep,
+    n_active_d = n_active_d,
+    active_index_d = active_index_d,
     time_diff = time_diff,
     month_before_election = month_before_election,
     pred_y_time_diff = pred_y_time_diff,
@@ -290,7 +261,6 @@ prepare_polling_data <- function(polling_data, constituency_data, election_date)
     date_k = date_k,
     n_parties_k = n_parties_k,
     party_index_k = party_index_k,
-    n_parties_k_rep = n_parties_k_rep,
     constituency_k = constituency_k,
     n_pred_k = n_pred_k
   )

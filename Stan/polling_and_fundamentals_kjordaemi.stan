@@ -12,7 +12,8 @@ data {
   array[N_n] int<lower = 1, upper = H> house_n;  // House indicator for each national poll
   array[N_n] int<lower = 1, upper = D> date_n;   // Date indicator for each national poll
   array[N_n] int<lower = 1, upper = P> n_parties_n;     // Number of parties in each national poll
-  array[N_n] int<lower = 1, upper = P> n_parties_n_rep; // Number of parties for replications
+  array[D] int<lower = 1, upper = P> n_active_d;        // Parties active at each date level [D]
+  array[D, P] int<lower = 0, upper = P> active_index_d; // Their columns in party order, 0-padded [D, P]
   array[N_n, P] int<lower = 0, upper = P> party_index_n; // Column ids of reported parties per national poll (0-padded tail)
 
   // Time-related vectors
@@ -35,7 +36,6 @@ data {
   array[N_k] int<lower = 1, upper = H> house_k;  // House indicator for constituency polls
   array[N_k] int<lower = 1, upper = D> date_k;   // Date indicator for constituency polls
   array[N_k] int<lower = 1, upper = P> n_parties_k;     // Number of parties in constituency polls
-  array[N_k] int<lower = 1, upper = P> n_parties_k_rep; // Number of parties for replications
   array[N_k, P] int<lower = 0, upper = P> party_index_k; // Column ids of reported parties per constituency poll (0-padded tail)
   array[N_k] int<lower = 1, upper = K> constituency_k;  // Constituency indicator
   array[N_k] int<lower = 1, upper = N_obs_k> obs_k;     // Observation indicator
@@ -350,16 +350,14 @@ generated quantities {
           constituency_weights_pred[K];
   }
 
-  // Generate national-level predictions
+  // Generate national-level predictions. Like the likelihood, build the full
+  // sum-to-zero P-vector, then gather the parties active at date d by identity.
   for (d in 1:D) {
-    vector[n_parties_n_rep[d]] eta_d;
-    vector[n_parties_n_rep[d]] pi_d;
-    
-    eta_d[2:n_parties_n_rep[d]] = beta[1:(n_parties_n_rep[d] - 1), d] + mu_gamma_pred[1:(n_parties_n_rep[d] - 1)];
-    eta_d[1] = -sum(eta_d[2:n_parties_n_rep[d]]);
-    pi_d = softmax(eta_d);
-    y_rep_national[d, 1:n_parties_n_rep[d]] = 
-      multinomial_logit_rng(eta_d[1:n_parties_n_rep[d]], n_pred);
+    vector[P] eta_d;
+    eta_d[2:P] = beta[, d] + mu_gamma_pred;
+    eta_d[1] = -sum(eta_d[2:P]);
+    array[n_active_d[d]] int cols = active_index_d[d, 1:n_active_d[d]];
+    y_rep_national[d, cols] = multinomial_logit_rng(eta_d[cols], n_pred);
   }
 
   // Generate future predictions
@@ -386,8 +384,7 @@ generated quantities {
   // Generate constituency-level replications
   for (n in 1:N_k) {
     matrix[P - 1, K] delta;
-    vector[n_parties_k_rep[n]] eta_k;
-    vector[n_parties_k_rep[n]] pi_k;
+    vector[P] eta_k;
 
     for (p in 1:(P - 1)) {
       delta[p, 1:(K - 1)] = delta_free[p, ];
@@ -395,19 +392,18 @@ generated quantities {
             constituency_weights[obs_k[n] , K];
     }
 
-    eta_k[2:n_parties_k_rep[n]] = beta[1:(n_parties_k_rep[n] - 1), date_k[n]] + 
-        gamma[1:(n_parties_k_rep[n] - 1), house_k[n]] + 
-        delta[1:(n_parties_k_rep[n] - 1), constituency_k[n]] +
-        mu_gamma_pred[1:(n_parties_k_rep[n] - 1)];
+    eta_k[2:P] = beta[, date_k[n]] + gamma[, house_k[n]] +
+      delta[, constituency_k[n]] + mu_gamma_pred;
+    eta_k[1] = -sum(eta_k[2:P]);
 
-    eta_k[1] = -sum(eta_k[2:n_parties_k_rep[n]]);
-    pi_k = softmax(eta_k);
+    // Gather the poll's reported parties by identity, as the likelihood does
+    int k = n_parties_k[n];
+    array[k] int cols = party_index_k[n, 1:k];
     if (house_k[n] > 1) {
-    y_rep_k[n, 1:n_parties_k_rep[n]] = 
-      dirichlet_multinomial_rng(pi_k * phi[house_k[n] - 1], sum(y_k[n, ]));
+      y_rep_k[n, cols] =
+        dirichlet_multinomial_rng(softmax(eta_k[cols]) * phi[house_k[n] - 1], sum(y_k[n, ]));
     } else {
-      y_rep_k[n, 1:n_parties_k_rep[n]] = 
-        multinomial_logit_rng(eta_k[1:n_parties_k_rep[n]], sum(y_k[n, ]));
+      y_rep_k[n, cols] = multinomial_logit_rng(eta_k[cols], sum(y_k[n, ]));
     }
   }
 }

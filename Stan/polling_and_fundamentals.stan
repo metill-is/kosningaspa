@@ -11,7 +11,8 @@ data {
   array[N] int<lower = 1, upper = H> house_n;  // Which polling house conducted each poll
   array[N] int<lower = 1, upper = D> date_n;   // When each poll was conducted
   array[N] int<lower = 1, upper = P> n_parties_n;  // Number of parties included in each poll
-  array[N] int<lower = 1, upper = P> n_parties_n_rep;  // Number of parties included in each poll
+  array[D] int<lower = 1, upper = P> n_active_d;        // Parties active at each date level [D]
+  array[D, P] int<lower = 0, upper = P> active_index_d; // Their columns in party order, 0-padded [D, P]
   array[N, P] int<lower = 0, upper = P> party_index_n; // Column ids of reported parties per poll (0-padded tail)
   
   // Time-related vectors
@@ -268,10 +269,12 @@ generated quantities {
     // Construct linear predictor for all parties
     eta_d[2:P] = beta[, d];                                // Use estimated party support
     eta_d[1] = -sum(eta_d[2:P]);                          // Sum-to-zero constraint
-    vector[n_parties_n_rep[d]] pi_d = softmax(eta_d[1:n_parties_n_rep[d]]);                       // Convert to probabilities
+    // Gather the parties active at date d by identity
+    array[n_active_d[d]] int cols = active_index_d[d, 1:n_active_d[d]];
+    vector[n_active_d[d]] pi_d = softmax(eta_d[cols]);    // Convert to probabilities
     // Generate synthetic poll data
-    y_latent[d, 1:n_parties_n_rep[d]] = multinomial_logit_rng(eta_d[1:n_parties_n_rep[d]], n_pred);
-    pi_rep[1:n_parties_n_rep[d], d] = pi_d;
+    y_latent[d, cols] = multinomial_logit_rng(eta_d[cols], n_pred);
+    pi_rep[cols, d] = pi_d;
   }
 
   for (d in (D + 1):(D + pred_y_time_diff)) {
