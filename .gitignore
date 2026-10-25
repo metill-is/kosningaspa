@@ -53,3 +53,6 @@ scratch_*
 
 # Frozen harness input snapshot (sha256-checked against harness/snapshot_manifest.csv)
 harness/snapshot/
+
+# Scorer self-test inputs (sha256-checked against harness/selftest_manifest.csv)
+harness/selftest/

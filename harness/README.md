@@ -22,10 +22,364 @@ manifest.
 
 From the project root: `LC_ALL=en_US.UTF-8 Rscript tests/run.R [filter]`, which runs the
 suite under testthat edition 3. Tests that need the snapshot call `skip_without_snapshot()`
-and skip without it. `read_inputs()` and `build_phase0.R` stop under a locale that is not
-UTF-8, which would silently drop Framsóknarflokkurinn's rows.
-`tests/harness/test-generated.R` fails if a generated committed file that builds offline
-is not a fresh build.
+and skip without it. `tests/harness/test-generated.R` fails if a generated committed file
+that builds offline is not a fresh build. Slow tests (the sweep of every forecast day in
+`tests/harness/test-sweep.R`, the self-test's kjördæmi and seat scores, the R0 Stan tests
+and the cell runner's test fit, which compile with CmdStan) call `skip_unless_slow()` and
+run only with `HARNESS_SLOW=1` in the environment:
+`HARNESS_SLOW=1 LC_ALL=en_US.UTF-8 Rscript tests/run.R`.
+
+The R code in `R/harness/` and `R/election_utils.R` writes every non-ASCII character as a
+`\uXXXX` escape and gives a non-ASCII name with `stats::setNames()`, never as a name tag;
+comments keep their Icelandic. R parses a module in the locale active when it is loaded.
+Under C it translates every name tag to a native symbol, escaped or not, so
+`c("Framsókn" = …)` became `Frams<U+00F3>kn` and Framsóknarflokkurinn silently dropped
+out of the fundamentals' party set. A literal survives such a load only because box tells
+the parser the file is UTF-8; `source()` or a bare `parse()` reads it natively.
+`tests/harness/test-escapes.R` enforces both rules and loads the harness under `LC_ALL=C`
+in a subprocess to check that it still reads the snapshot right. `read_inputs()` and
+`build_phase0.R` still stop under a locale that is not UTF-8, but that check cannot stand
+in for the escapes: it runs when they are called, after the modules were parsed, so a
+session that loads the harness under C and then switches to UTF-8 passes it.
+
+## The scorer self-test
+
+Before it scores anything new, the scorer must reproduce a run that an earlier study
+already scored (spec §5.6, which names the study's folder). `selftest_inputs()`
+(`R/harness/selftest.R`) copies two of that run's draw files, `SELFTEST_FILES`, into
+`harness/selftest/` (gitignored) and writes `harness/selftest_manifest.csv` (committed)
+through the snapshot machinery, so every read checks the file's sha256. Once, from the
+project root:
+
+```r
+options(box.path = normalizePath("."))
+box::use(R/harness/selftest[selftest_inputs])
+selftest_inputs("<path to the overdisp study>")
+```
+
+Like `snapshot_inputs()`, it refuses an existing `harness/selftest/`. Re-copied from the
+same files, the manifest comes out unchanged.
+
+`tests/harness/test-selftest.R` re-scores those draws against the committed 2024 result
+(`cell_truth()`) with the functions of `R/harness/scores.R`, and must reproduce the study's
+published scores to a tolerance of 1e-9: the national scores (CRPS10, IS90, DSS10, mDSS,
+d², energy score, MAE8, the MAE over all ten parties, 90% width and coverage, zero cells
+replaced) with their batch-means and MCSE standard errors, the kjördæmi scores, and the
+seat scores with the seat-CRPS standard error and the majority probability of the
+coalition that formed. The reference values are written in the test file and are never
+changed: a miss means the scorer is wrong. The national test runs whenever
+`harness/selftest/` exists; the kjördæmi and seat tests also need `HARNESS_SLOW=1`
+(allocating seats for the run's 8000 draws took 107 s on 24 Oct 2026). Without the folder
+they skip, but the test of the committed manifest still runs.
+
+It is the phase's one scoring of a known result. No harness forecast is compared with its
+result before the freeze (spec §8), and the self-test keeps that rule: it re-scores draws
+the earlier study had already scored and published, not a harness arm's, so no harness arm
+meets a result.
+
+## The freeze and the 2017 locks
+
+`score_cell(run_dir)` (`R/harness/scorer.R`) is the only function that scores a forecast
+cell against its result (spec §5.6–§5.7). It reads the run's `meta.json`, calls
+`freeze_guard(E, F)` (`R/harness/freeze.R`), and only once the guard passes reads the
+result (`cell_truth()`) and then the draws. With the default result reader, which reads
+this project's results, it refuses a `root` other than the project's, since the guard
+would otherwise check another repository's freeze. The guard stops at the first failure:
+
+1. (E, F) is not a cell of `TARGETS`;
+2. `harness/FREEZE.md` or `harness/FREEZE.sha256` does not exist;
+3. `FREEZE.sha256` does not list `harness/FREEZE.md`;
+4. a file it lists is missing or its sha256 differs (`verify_sha_list()`);
+5. the two files are not committed, that is tracked by git and unchanged against HEAD
+   (`is_committed()`, which compares each file's `git hash-object` with its blob in HEAD,
+   so an edit the index is told to ignore, by `--assume-unchanged` or `--skip-worktree`,
+   still counts).
+
+A 2017 cell, the confirmatory target, is locked until `harness/DECISION.md` and
+`harness/DECISION.sha256` pass checks 2–5 as well (the refusal names the check that
+failed), and locked for good once `harness/CONFIRM.md` exists. Past both locks, `score_cell()` still refuses it: 2017 is
+scored once, by the Tier C runbook, which writes `CONFIRM.md`. Phase 1 has no such writer.
+
+A sha256 list holds the lines `shasum -a 256` writes (`<64 lowercase hex>  <path>`), with
+paths relative to the project root and inside it; lines that start with `#` and blank lines
+are skipped, and any other line, an absolute path or a path with a `..` segment among them,
+is an error. To freeze, from the project root:
+
+```sh
+shasum -a 256 harness/FREEZE.md <every other frozen file> > harness/FREEZE.sha256
+```
+
+and commit both files. The list cannot hold its own sha256; the commit check covers it.
+
+What `score_cell()` returns, per cell:
+
+- `national`: the scored reading, `kd_aggregate`, sums the kjördæmi vote draws to national
+  shares (`kd_to_nat()`), with `zero_share = 0.5 / sum(n_pred_k)`. The `eday_national`
+  reading, the model's own national shares with `zero_share = 0.5 / n_pred`, is reported
+  beside it, and `gap_pp` is the largest gap between the two readings' posterior means,
+  in points. Each row carries batch-means SEs over 16 blocks (`batch_of()`, four per
+  chain) of CRPS10, IS90, DSS10, mDSS, d², MAE8 and the 50% and 90% coverage counts.
+- `per_party` (with the PIT's batch SE), `kjordaemi` (`kd_scores()`, with the batch SEs
+  `se_kd_crps` and `se_kd_cov90`), and `seats` and `seats_per_party`: the seats of each
+  draw allocated with Annað ineligible, scored for the Brier coalition recorded in
+  `meta.json`, with the majority probability of the coalition that formed after E
+  (`formed_coalition()`, hindsight that only `score_cell()` reads). `seats` carries the
+  batch SEs `se_seat_crps`, `se_seat_cov90` and `se_brier`.
+
+Every batch SE is over the same 16 blocks: the score is recomputed on each block's draws,
+and its SE is their standard deviation over √16. So the tie rule of spec §5.7 (a
+difference under 2 × SE_diff) can be applied to every scored quantity, and coverage comes
+with its Monte Carlo error.
+
+Past the guard and the 2017 refusal, it recomputes the Brier event,
+`coalition_event(F, read_coalitions())`, and stops with "coalition event changed since the
+fit: refit <run>" unless its parties are those `meta.json` recorded: the sha-skip keys do
+not cover the event, so a reused run could otherwise be scored against an outdated one. It
+stops with "no list at E" if a party the run forecasts has a national result of 0, as a
+party with no list would, since the alr scores would take the log of that zero. Until Phase
+3 commits `FREEZE.md`, it refuses every target cell of this repository;
+`tests/harness/test-scorer.R` checks that with a result reader that fails if it is called.
+The tests that pass the guard run in temporary git repositories.
+
+## Runs
+
+`R/harness/runs.R` keeps the record of each fit (spec §5.5, §5.7, §5.8): its id and
+directory, its frozen inputs, the keys that decide whether a finished run is reused, the
+diagnostics summary, the gate and the DIAG line. It fits nothing; the cell runner builds on
+it.
+
+**Ids and directories.** `run_id(arm, E, F, seed)` is `<arm>_<E>_<F>_s<seed>`, for example
+`r0_2024-11-30_2024-11-29_s1101`; an arm's name holds only letters, digits and hyphens.
+`run_dir(id)` is `results_root()/<id>`, and `results_root()` is `results/harness/` under the
+project root (gitignored), or `HARNESS_RESULTS` when that is set and not empty. The tests
+set it to a temporary directory and never write a run under the project.
+
+```
+results/harness/
+  <id>/
+    inputs/stan_data.json   the Stan data (cmdstanr::write_stan_json()), mode 0444
+    inputs/inputs.json      how the data were built, mode 0444
+    eday_kjordaemi.parquet  the draws, as the arm's extractor writes them (spec §5.5)
+    eday_national.parquet
+    latent_national.parquet
+    param_draws.parquet
+    key_diagnostics.csv     R-hat and ESS of the scored quantities and the kept parameters
+    meta.json               written last by the runner: present means finished
+  _stale/<id>_<YYYYmmddHHMMSS>/   a retired run, kept as it was
+  logs/                     the queue's logs: queue.log, preflight.log, <id>.log, and its lock, queue.lock/
+```
+
+The runner makes every file of a finished run read-only (mode 0444).
+
+`write_frozen_inputs(dir, stan_data, inputs_meta)` writes the two input files into a
+temporary sibling directory, makes them read-only there and renames that directory to
+`inputs/`, so a failed write leaves no `inputs/` to block a retry. It returns
+`stan_data_sha(stan_data)`, the sha256 of the data as `cmdstanr::write_stan_json()` writes
+them, after checking that it equals the sha256 of the written `stan_data.json`. It refuses
+a run whose `inputs/` exists, so frozen inputs are never rewritten in place. The runner adds the draws and
+`meta.json` beside them. `meta.json` holds the `expected_meta()` keys and more besides (the
+arm, E, F, the builder's meta, minutes, diagnostics, the gate and provenance).
+
+**Sha-skip.** `expected_meta()` lists the keys a finished run must match to be reused: the
+sha256 of the Stan file, the config and the Stan data (`stan_data_sha()` of the freshly
+built data, never the hash of the run's own frozen file, which would compare the old data
+with itself; the slow `test-fit-cell.R` edits a run's frozen file and expects SKIP), the
+seed, the warmup and sampling
+iterations, the sampler settings of `SAMPLER` (4 chains, `init = 0`, `max_treedepth = 12`)
+and `EXTRACT_VERSION`. `meta_mismatch(meta, expected)` returns the keys of `expected` whose
+values differ or are missing from `meta`, and ignores every other key of `meta`. Numbers
+compare by value, since a JSON round trip turns `0` into `0L`; every other value must be
+identical, so a number written as a string, a null or an NA is a mismatch. An empty result
+means the run is reused. Otherwise `retire_run(dir)` moves the directory under `_stale/`,
+never deleting it, and the cell is refitted. Bump `EXTRACT_VERSION` whenever the
+extraction changes, so that every finished run is refitted.
+
+**Diagnostics.** `summarise_diagnostics(params, scored, sampler)` takes the draws of every
+`parameters`-block variable, the draws of the scored quantities, and the sampler's
+per-chain divergences, treedepth hits, E-BFMI and deepest tree. It reports the max R-hat
+and the min bulk and tail ESS over parameters and scored quantities together (the plan's
+Decision 3) and over the scored quantities alone, the divergences and treedepth hits
+summed over chains, the deepest tree and the min E-BFMI. A parameter with no R-hat or ESS,
+such as a constant entry of a Cholesky factor, is left out of the extremes. A scored
+quantity with none (a constant, or a draw that is NA) is not: it makes every extreme it
+enters NA, and `na_scored` counts such quantities. The deepest tree shows whether
+trajectories end by U-turn below `max_treedepth`.
+
+**The gate (spec §5.7).** `diagnostics_gate(d)` passes a cell if the max R-hat over
+parameters and scored quantities is at most 1.01, there are no divergences, the min bulk
+ESS of the scored quantities is at least 400, and every scored quantity has an R-hat and
+both ESS (`na_scored == 0`). Its `reasons` hold one line per failed rule with the value
+that failed it, for example `max R-hat 1.0234 > 1.01`, `divergent 2 > 0`,
+`min scored bulk ESS 399 < 400` or `scored quantities with NA R-hat or ESS: 2`; a missing
+value fails its rule. R-hat is printed with as many decimals as it takes to show it above
+the ceiling (`1.01004 > 1.01`), and ESS is rounded down, so no reason reads as passing. The
+spec gives a failing cell one rerun at twice the sampling iterations and counts a second
+failure against its arm; that rerun belongs to the scoring runbook, not to Phase 1.
+
+**DIAG.** Each finished run prints one line, `diag_line(id, minutes, d, gate)`:
+
+```
+DIAG run=<id> minutes=%.1f max_rhat=%.4f min_ess_bulk=%.0f min_ess_tail=%.0f divergent=%d treedepth_hits=%d max_depth=%d min_ebfmi=%.3f gate=PASS|FAIL
+```
+
+with R-hat and ESS over parameters and scored quantities together. Its format is fixed,
+so it leaves out `na_scored`: a scored NA shows as `gate=FAIL` (and as `NA` in the
+extremes), and the gate's reasons are in `meta.json`.
+
+**Arms.** `R/harness/arms.R` holds `ARMS`, one entry per arm, and `arm(name)` returns one
+(an error for an unknown name). An entry names the arm's Stan file and config (paths under
+the project root), the config's reader, the builder from a cell's `info_set()` and the
+config to `list(data, meta)`, the extractor from a fit's draws to the parquets, and the
+variables the extractor reads. Phase 1 has one arm, `r0`.
+
+**R0's extraction.** `r0_extract(draws, meta, dir)` (`R/harness/r0.R`) writes the four
+parquets of spec §5.5 from a fit's draws: `eday_kjordaemi` (`.chain`, `.iteration`,
+`.draw`, `kjordaemi`, `flokkur`, `votes`) from `y_pred_constituency[k, p]`;
+`eday_national` (`.chain`, `.iteration`, `.draw`, `flokkur`, `share`) with
+`y_rep_national[eday_index, p] / n_pred`; `latent_national`, the same columns with
+`pi_eday[p]`; and `param_draws`, one column per element of `R0_PARAM_VARIABLES`. Kjördæmi
+k and party p are `meta$kjordaemi_levels[k]` and `meta$party_order[p]`, read from the
+indices in each element's name and never from a column's position, so a reordered draws
+table cannot relabel a cell. It writes nothing unless all four tables build.
+
+**The cell runner.** From the project root:
+
+```
+LC_ALL=en_US.UTF-8 Rscript R/harness/fit_cell.R <arm> <E> <F> <seed> <iter_warmup> <iter_sampling>
+```
+
+`R/harness/fit_cell.R` is a plain script. It stops unless the locale is UTF-8 and the
+working directory is the project root. It builds the cell's data from `info_set(E, F)`
+after `validate_inputs()`, and compares the expected meta (with `stan_data_sha()` of the
+freshly built data) with the run's `meta.json`. On a match it prints
+`SKIP <id> (meta.json matches)` and exits 0. A run directory that does not match, or has no
+`meta.json`, is retired with `STALE <id> <mismatched keys>` (or `STALE <id> (no
+meta.json)`) and refitted. It then freezes the inputs; `inputs.json` records the arm, E, F,
+the expected keys, the builder's meta, the git HEAD (and whether the tree was dirty), the
+sha256 of `snapshot_manifest.csv` and the CmdStan and cmdstanr versions. It fits with
+`SAMPLER`, the seed and the iterations (`refresh = 50`), and stops with no `meta.json`
+unless the fit holds 4 chains of `iter_sampling` draws and the Stan file and the frozen
+data still hash as expected. After the extractor it summarises the diagnostics over every
+`parameters`-block variable and the scored quantities, the national shares of
+`kd_to_nat(eday_kjordaemi)` (`scored_nat[<flokkur>]`) and every kjördæmi cell's share
+(`scored_kd[<kjordaemi>,<flokkur>]`), writes `key_diagnostics.csv` (`variable`, `rhat`,
+`ess_bulk`, `ess_tail`) for those and the `param_draws` columns, and applies the gate.
+`meta.json` comes last: the expected keys, `arm`, `E`, `F`, `id`, the builder's meta
+(`n_pred_k` and `n_e` as objects named by kjördæmi and party), `minutes` (the fit's wall
+time, warmup and sampling), `diagnostics`, `gate` (`pass`, `reasons`) and the provenance of `inputs.json`.
+A non-finite number in `meta.json` is written as a string (`"Inf"`, `"NA"`), so an infinite
+R-hat stays distinct from a missing one; the gate fails on either. It prints the DIAG line
+and `DONE <dir>`, then deletes the CmdStan CSVs.
+
+**The queue.** From the project root:
+
+```
+zsh R/harness/queue.sh <run_list> <iter_warmup> <iter_sampling>
+```
+
+A run list holds one run per line, `lane arm E F seed` separated by whitespace, with lane
+A or B; lines starting with `#` are comments. `harness/runs/tier0.txt` is Tier 0's. The logs
+directory is `${HARNESS_RESULTS:-results/harness}/logs`. Before any fit the queue takes the
+lock `<logs>/queue.lock`, a directory holding its pid, and refuses to start while another
+queue holds it, while a `fit_cell.R` runs (`pgrep -f -- '--file=R/harness/fit_cell.R'`), or
+when `pgrep` fails and so cannot tell (an exit other than 0 or 1), unless `FORCE=1`. It runs
+the full slow suite as a preflight (`<logs>/preflight.log`) and stops if that fails, then
+runs lanes A and B side by side, each lane's runs one after another, each run's output in
+`<logs>/<id>.log`. `queue.log` there gets
+`QUEUE START <time> <list> <warmup> <sampling> (pid <pid>)`, the preflight's verdict, a `start` and an
+`end <id> rc=<rc> <first DIAG|SKIP|STALE line>` line per run, and one terminal line:
+`QUEUE FINISHED` once both lanes are done, or `QUEUE ABORTED rc=<rc> <reason> (pid <pid>)` on
+any other exit (a bad command line, a refusal, a failed preflight, SIGTERM or SIGINT). A
+refused queue writes only its `QUEUE ABORTED` line. The log is appended to by every queue, so
+a watcher reads only what follows the last `QUEUE START` and stops at `QUEUE FINISHED` or at a
+`QUEUE ABORTED` carrying that start's pid (a refused second queue's line carries its own); and
+a watcher whose own command line holds the guard's pattern trips the guard. On SIGTERM or
+SIGINT the queue stops the preflight or both lanes, so no further run starts; a fit already
+running finishes on its own (the guard's `pgrep` finds it). Every exit releases the lock but
+SIGKILL's, which leaves the lock and no terminal line: remove `<logs>/queue.lock` once no queue
+runs. `DRY_RUN=1` prints `would run <lane> <arm> <E> <F> <seed>` per run and does nothing
+else: no lock, guard, preflight, log or fit. It exits 0 when every run exits 0, 1 when a run,
+the lock, the guard or the preflight fails, 2 on a bad command line or run list, and 143 or
+130 on SIGTERM or SIGINT.
+
+## Tier 0
+
+Tier 0 measures an arm's sampler on two cells before anything is scored (spec §5.8): the runs
+of `harness/runs/tier0.txt` (R0 at the 2024 eve cell, seed 1101, in lane A, and at the 2021
+f180 cell, seed 1102, in lane B), at 200 + 200 iterations. From the project root, in a normal
+shell so that the queue outlives the session:
+
+```
+mkdir -p results/harness/logs
+nohup zsh R/harness/queue.sh harness/runs/tier0.txt 200 200 > results/harness/logs/tier0_nohup.log 2>&1 &
+LC_ALL=en_US.UTF-8 Rscript R/harness/tier0_report.R r0 harness/runs/tier0.txt
+```
+
+Both runs are done once `results/harness/logs/queue.log` ends in `QUEUE FINISHED`; a
+`QUEUE ABORTED` line with the queue's pid means it stopped first, and the line names why.
+The last command, run once both runs are done, writes the report, `harness/tier0/<arm>.md`
+(committed). `R/harness/tier0_report.R <arm> <run_list> [out]` is a plain script. For each run
+of the arm in the run list it reads only the run's `meta.json`, and writes one table row:
+
+- the cell (E, F, tag), the seed and the iterations;
+- the minutes (the fit's wall time, warmup and sampling), divergences, treedepth hits (count,
+  and percentage of the chains × sampling draws), the deepest tree and the min E-BFMI;
+- the max R-hat and the min bulk and tail ESS, each as a pair: first over the gate's scope,
+  every `parameters`-block variable and the scored quantities together (`max_rhat`,
+  `min_ess_bulk`, `min_ess_tail`), then over the scored quantities alone (the `_scored`
+  extremes). When the two are equal, the scored set is the binding one;
+- both min bulk ESS per minute, and both scaled linearly to 2000 sampling iterations
+  (× 2000 / `iter_sampling`). That projection informs the plan's Decision 5 (the centring),
+  not the gate;
+- the gate's verdict and reasons, which are informational: Tier 0 is not gated;
+- the modification time of `meta.json`, the date of the measurement.
+
+Above the table it records the run list, the CmdStan and cmdstanr versions and
+`max_treedepth` of `meta.json`, and `sysctl -n hw.ncpu`, read when the report is written.
+R-hat is rounded up and ESS and E-BFMI down, and a non-finite value prints as the run
+recorded it (`Inf`, `NaN`, `NA`). The report holds sampler diagnostics only: no share, mean,
+quantile or score of a forecast appears in it, and `tests/harness/test-tier0-report.R` checks
+that none of the words share, mean, median, CRPS or MAE, nor the value of a forecast-like
+decoy field in its fixture, does. It stops, writing nothing, on a run list with no run of the
+arm, a run without `meta.json`, a `meta.json` of another run, a cell that is not a forecast
+cell (naming the run), or a field it reads that is missing or does not parse, the gate's
+among them: `pass` must be true or false and `reasons` a list of strings, possibly empty.
+
+## R0's inputs
+
+`R/harness/r0.R` builds the Stan data of arm R0, production mapped to E (spec §5.4).
+`r0_production_inputs(info)` puts a cell's `info_set()` into the format production's fit
+script hands to `prepare_stan_data()` (`R/stan_data.R`): the `Kosning` rows and admitted
+national polls; the previous election's kjördæmi results and the admitted kjördæmi polls
+dated after it; the training rows, E's target rows and an Annað target row. The party order
+is Annað, then the cell's parties in `POLL_PARTIES` order; the houses are `Kosning`, then
+each house by its first admitted poll; the kjördæmi follow `R0_KJORDAEMI`, production's 2024
+order, so Suður closes δ in every cell. No house is filtered out.
+
+`r0_stan_data(info)` runs production's `prepare_stan_data()` on those inputs and then applies
+a fixed table of overrides, and only those (Task 8 of
+`docs/superpowers/plans/2026-10-24-v2-harness-phase1-scorer-r0.md`): the campaign length;
+`n_pred_k` and the prediction weights from the previous election's valid votes, by name; the
+kjördæmi weights of each date, by name; the fundamentals weight and its day; the hedge scale
+`mu_gamma_scale` (1/√n_e, 0 for a party new to the window); the parties active at each date
+(`n_active_d`, `active_index_d`, R0's own: production computes the same since 5f09c5b, and R0
+drops its copies so the fields keep 5d22031's order); production's positional
+`n_parties_n_rep` and `n_parties_k_rep` as at 5d22031, which R0's Stan file still declares
+and 5f09c5b dropped; and the fundamentals prediction column, rebuilt for the
+cell's party order, with a newcomer at the median debut share of earlier new parties. The
+settings are in `harness/configs/r0.json` (`read_r0_config()`). A build whose data break a
+shape the Stan file relies on stops with "R0 input: <check>". So does a newcomer, a party
+with no fundamentals share at the previous election, that had votes there in the official
+results, as a fundamentals label missing from `FUNDAMENTALS_RENAMED` would make one. `stjornarslit` and
+`post_stjornarslit` keep production's hard-coded 2024-10-14; the model declares them but
+never reads them.
+
+R0's Stan file, `Stan/polling_and_fundamentals_kjordaemi_r0.stan`, is production's model as
+of commit 5d22031, with δ uncentred (the plan's Decision 5; production has since centred δ),
+plus three hooks, and has that model's log density (`Stan/CLAUDE.md`).
+`tests/harness/test-r0-stan.R` reads that parent with `git show 5d22031:<path>`, never from
+the working tree, into `results/harness/stan_parent/` (gitignored, rewritten only when its
+bytes change), and compares R0 with it byte for byte and by log density.
 
 ## Rebuilding the generated files
 
@@ -42,14 +396,16 @@ or `snapshot_manifest.csv`.
 
 ## Committed versus generated
 
-- Committed: this README, `snapshot_manifest.csv`, the generated tables that
-  `build_phase0.R` writes, and `harness/sources/`, which holds source files fetched once or
-  entered by hand, with their provenance in a README: `harness/truth/README.md` for the
+- Committed: this README, `snapshot_manifest.csv`, `selftest_manifest.csv`, the generated
+  tables that `build_phase0.R` writes, and `harness/sources/`, which holds source files
+  fetched once or entered by hand, with their provenance in a README: `harness/truth/README.md` for the
   results sources, `harness/sources/README.md` for the poll-fieldwork tables and the house
   map, the fieldwork corrections, the publication dates, the two correction tables
   (`poll_n_corrections.csv`, `fundamentals_corrections.csv`), the economy release dates,
-  the house table and the coalition events.
-- Generated and gitignored: `harness/snapshot/`.
+  the house table and the coalition events. `harness/configs/` holds each arm's settings
+  (`r0.json`), `harness/runs/` the queue's run lists (`tier0.txt`), and `harness/tier0/` the
+  Tier 0 reports, which `tier0_report.R` writes from local runs (no offline rebuild).
+- Generated and gitignored: `harness/snapshot/` and `harness/selftest/`.
 
 ## Target rows: the economy and the carried columns
 

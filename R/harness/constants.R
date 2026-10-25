@@ -59,17 +59,17 @@ TARGETS <- tibble::tibble(
 #' The ten poll parties, labelled as in the data.
 #' @export
 POLL_PARTIES <- c(
-  "Sjálfstæðisflokkurinn", "Framsóknarflokkurinn", "Samfylkingin", "Vinstri Græn",
-  "Píratar", "Viðreisn", "Flokkur Fólksins", "Miðflokkurinn", "Sósíalistaflokkurinn",
-  "Annað"
+  "Sj\u00e1lfst\u00e6\u00f0isflokkurinn", "Frams\u00f3knarflokkurinn", "Samfylkingin",
+  "Vinstri Gr\u00e6n", "P\u00edratar", "Vi\u00f0reisn", "Flokkur F\u00f3lksins",
+  "Mi\u00f0flokkurinn", "S\u00f3s\u00edalistaflokkurinn", "Anna\u00f0"
 )
 
 #' List letter to poll party, for the letters that map to a named party.
 #' @export
 LETTER_PARTY <- c(
-  B = "Framsóknarflokkurinn", C = "Viðreisn", D = "Sjálfstæðisflokkurinn",
-  F = "Flokkur Fólksins", J = "Sósíalistaflokkurinn", M = "Miðflokkurinn",
-  P = "Píratar", S = "Samfylkingin", V = "Vinstri Græn"
+  B = "Frams\u00f3knarflokkurinn", C = "Vi\u00f0reisn", D = "Sj\u00e1lfst\u00e6\u00f0isflokkurinn",
+  F = "Flokkur F\u00f3lksins", J = "S\u00f3s\u00edalistaflokkurinn", M = "Mi\u00f0flokkurinn",
+  P = "P\u00edratar", S = "Samfylkingin", V = "Vinstri Gr\u00e6n"
 )
 
 #' Poll party of a list letter: `LETTER_PARTY[letter]`, and Annað for every other letter.
@@ -80,13 +80,13 @@ party_of_letter <- function(letter) {
   letter <- as.character(letter)
   stopifnot("a list letter is missing" = !anyNA(letter))
   party <- unname(LETTER_PARTY[letter])
-  party[is.na(party)] <- "Annað"
+  party[is.na(party)] <- "Anna\u00f0"
   party
 }
 
 #' Poll-party label of each `fundamentals_data.csv` party label that differs from it.
 #' @export
-FUNDAMENTALS_RENAMED <- c("Framsókn" = "Framsóknarflokkurinn")
+FUNDAMENTALS_RENAMED <- stats::setNames("Frams\u00f3knarflokkurinn", "Frams\u00f3kn")
 
 #' Kjördæmi labels: poll label, Hagstofa sheet label and KOS02018 code. Join on these
 #' by name, never by position. The code "NA" (Norðaustur) is a string, not a missing
@@ -94,11 +94,14 @@ FUNDAMENTALS_RENAMED <- c("Framsókn" = "Framsóknarflokkurinn")
 #' @export
 KJORDAEMI <- tibble::tibble(
   kjordaemi = c(
-    "Reykjavík Suður", "Reykjavík Norður", "Suðvestur", "Suður", "Norðaustur", "Norðvestur"
+    "Reykjav\u00edk Su\u00f0ur", "Reykjav\u00edk Nor\u00f0ur", "Su\u00f0vestur", "Su\u00f0ur",
+    "Nor\u00f0austur", "Nor\u00f0vestur"
   ),
   hagstofa = c(
-    "Reykjavíkurkjördæmi suður", "Reykjavíkurkjördæmi norður", "Suðvesturkjördæmi",
-    "Suðurkjördæmi", "Norðausturkjördæmi", "Norðvesturkjördæmi"
+    "Reykjav\u00edkurkj\u00f6rd\u00e6mi su\u00f0ur",
+    "Reykjav\u00edkurkj\u00f6rd\u00e6mi nor\u00f0ur", "Su\u00f0vesturkj\u00f6rd\u00e6mi",
+    "Su\u00f0urkj\u00f6rd\u00e6mi", "Nor\u00f0austurkj\u00f6rd\u00e6mi",
+    "Nor\u00f0vesturkj\u00f6rd\u00e6mi"
   ),
   code = c("RS", "RN", "SV", "SU", "NA", "NV")
 )

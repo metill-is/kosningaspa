@@ -165,9 +165,7 @@ apply_n_corrections <- function(polling, constituency, corrections) {
 #'   under a locale that is not UTF-8.
 #' @export
 read_inputs <- function() {
-  # WHY: under a non-UTF-8 locale R translates the harness modules' non-ASCII names
-  # (Framsókn in constants.R's FUNDAMENTALS_RENAMED) to the native encoding at parse time,
-  # and Framsóknarflokkurinn silently drops out of S_f and the target rows.
+  # WHY: the escapes cover parsing only; reads and string handling are tested under UTF-8 alone.
   if (!isTRUE(l10n_info()[["UTF-8"]])) {
     stop("read_inputs() needs a UTF-8 locale: run under LC_ALL=en_US.UTF-8", call. = FALSE)
   }
@@ -264,7 +262,7 @@ cell_polls <- function(E, F, polling, constituency, availability) {
   list(
     parties = parties,
     polls_nat = sorted(keep_parties(admitted, parties, "national"), nat_cols),
-    polls_kd = sorted(keep_parties(kd[kd$available_from <= F, ], parties, "kjördæmi"), kd_cols),
+    polls_kd = sorted(keep_parties(kd[kd$available_from <= F, ], parties, "kj\u00f6rd\u00e6mi"), kd_cols),
     kosning_nat = sorted(keep_parties(nat[nat$fyrirtaeki == ELECTION_HOUSE & nat$date < E, ], parties, "Kosning"), nat_cols)
   )
 }

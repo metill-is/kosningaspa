@@ -144,7 +144,7 @@ list_letters <- function(parties) strsplit(parties, ";", fixed = TRUE)[[1]]
 # dropped.
 named_parties <- function(lists) {
   box::use(R / harness / constants[POLL_PARTIES, party_of_letter])
-  setdiff(intersect(POLL_PARTIES, party_of_letter(lists)), "Annað")
+  setdiff(intersect(POLL_PARTIES, party_of_letter(lists)), "Anna\u00f0")
 }
 
 #' The Brier event's coalition (spec §5.6): the composition in office on day F.
@@ -157,7 +157,23 @@ named_parties <- function(lists) {
 coalition_event <- function(F, coalitions) {
   box::use(R / harness / constants[party_of_letter])
   lists <- list_letters(cabinet_at(F, coalitions)$parties)
-  list(parties = named_parties(lists), dropped = sort(lists[party_of_letter(lists) == "Annað"]))
+  list(parties = named_parties(lists), dropped = sort(lists[party_of_letter(lists) == "Anna\u00f0"]))
+}
+
+#' The coalition that formed after election E: the first cabinet row with
+#' `caretaker == FALSE` and `from > E`. It is hindsight, so only `score_cell()` calls it,
+#' after the freeze guard; `info_set()` never does.
+#' @param E one election (Date or ISO string)
+#' @param coalitions the `read_coalitions()` tibble
+#' @return poll-party labels in `POLL_PARTIES` order, letters that map to Annað dropped; an
+#'   error if no such row starts after E
+#' @export
+formed_coalition <- function(E, coalitions) {
+  E <- as.Date(E)
+  if (length(E) != 1 || is.na(E)) stop("E must be one date")
+  after <- which(!coalitions$caretaker & coalitions$from > E)
+  if (!length(after)) stop("no cabinet formed after ", format(E))
+  named_parties(list_letters(coalitions$parties[after[which.min(coalitions$from[after])]]))
 }
 
 #' The incumbents on day F, as `fundamentals_data.csv` codes them: the opening composition
@@ -195,13 +211,13 @@ valid_votes <- function(truth, election) {
   election <- as.Date(election)
   if (length(election) != 1 || is.na(election)) stop("election must be one date")
   te <- truth[which(truth$election == election), ]
-  if (!nrow(te)) stop("no kjördæmi results for ", format(election))
+  if (!nrow(te)) stop("no kj\u00f6rd\u00e6mi results for ", format(election))
   votes <- tapply(te$votes, te$kjordaemi, sum)
   missing <- setdiff(KJORDAEMI$kjordaemi, names(votes))
   extra <- setdiff(names(votes), KJORDAEMI$kjordaemi)
   if (length(missing) || length(extra)) {
     none <- function(x) if (length(x)) paste(x, collapse = ", ") else "none"
-    stop(format(election), ": kjördæmi missing: ", none(missing), "; not in KJORDAEMI: ", none(extra))
+    stop(format(election), ": kj\u00f6rd\u00e6mi missing: ", none(missing), "; not in KJORDAEMI: ", none(extra))
   }
   votes <- as.vector(votes[KJORDAEMI$kjordaemi])
   tibble::tibble(kjordaemi = KJORDAEMI$kjordaemi, votes = votes, w = votes / sum(votes))
@@ -218,7 +234,7 @@ expected_valid_votes <- function(truth, E) {
   box::use(R / harness / constants[previous_election])
   prev <- previous_election(E)
   if (!any(truth$election == prev, na.rm = TRUE)) {
-    stop("no kjördæmi results for ", format(prev), ", the election before ", format(as.Date(E)))
+    stop("no kj\u00f6rd\u00e6mi results for ", format(prev), ", the election before ", format(as.Date(E)))
   }
   valid_votes(truth, prev)
 }

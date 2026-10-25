@@ -25,7 +25,7 @@ fundamentals_party <- function(flokkur) {
   box::use(R / harness / constants[POLL_PARTIES])
   if (anyNA(flokkur)) stop("a fundamentals party label is missing")
   party <- relabel(flokkur)
-  party[!party %in% POLL_PARTIES] <- "Annað"
+  party[!party %in% POLL_PARTIES] <- "Anna\u00f0"
   party
 }
 
@@ -86,9 +86,9 @@ fundamentals_inputs <- function(E, F, fund, econ, coalitions, parties) {
   train <- earlier |>
     dplyr::inner_join(econ, by = "date") |>
     dplyr::mutate(party = relabel(flokkur), .after = flokkur) |>
-    dplyr::mutate(in_sf = dplyr::coalesce(flokkur != "Annað" & voteshare_prior > 0 & new_party == 0, FALSE))
+    dplyr::mutate(in_sf = dplyr::coalesce(flokkur != "Anna\u00f0" & voteshare_prior > 0 & new_party == 0, FALSE))
 
-  candidates <- intersect(POLL_PARTIES, setdiff(parties, "Annað"))
+  candidates <- intersect(POLL_PARTIES, setdiff(parties, "Anna\u00f0"))
   at_E <- fund[which(fund$date == E), ]
   mapped <- fundamentals_party(at_E$flokkur)
   twice <- intersect(candidates, mapped[duplicated(mapped)])

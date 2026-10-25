@@ -1,11 +1,5 @@
 box::use(R / election_utils[calculate_seats, seats_layout_2021, seats_tibble, layout_for])
 
-kd <- seats_layout_2021()$kjordaemi
-draw_with <- function(shares) {
-  tidyr::expand_grid(kjordaemi = kd, flokkur = names(shares)) |>
-    dplyr::mutate(votes = 10000 * shares[flokkur])
-}
-
 test_that("layouts hold 63 seats and match the elections", {
   expect_equal(sum(seats_layout_2021()$n_seats + seats_layout_2021()$n_jofnun), 63)
   expect_identical(layout_for("2017-10-28"), seats_layout_2021())

@@ -63,12 +63,12 @@ seats_tibble <- function() {
   )
   tribble(
     ~kjordaemi, ~n_seats, ~n_jofnun,
-    "Reykjavík Suður", 9, 2,
-    "Reykjavík Norður", 9, 2,
-    "Suðvestur", 12, 2,
-    "Suður", 9, 1,
-    "Norðaustur", 9, 1,
-    "Norðvestur", 6, 1
+    "Reykjav\u00edk Su\u00f0ur", 9, 2,
+    "Reykjav\u00edk Nor\u00f0ur", 9, 2,
+    "Su\u00f0vestur", 12, 2,
+    "Su\u00f0ur", 9, 1,
+    "Nor\u00f0austur", 9, 1,
+    "Nor\u00f0vestur", 6, 1
   )
 }
 
@@ -83,12 +83,12 @@ seats_layout_2021 <- function() {
   )
   tribble(
     ~kjordaemi, ~n_seats, ~n_jofnun,
-    "Reykjavík Suður", 9, 2,
-    "Reykjavík Norður", 9, 2,
-    "Suðvestur", 11, 2,
-    "Suður", 9, 1,
-    "Norðaustur", 9, 1,
-    "Norðvestur", 7, 1
+    "Reykjav\u00edk Su\u00f0ur", 9, 2,
+    "Reykjav\u00edk Nor\u00f0ur", 9, 2,
+    "Su\u00f0vestur", 11, 2,
+    "Su\u00f0ur", 9, 1,
+    "Nor\u00f0austur", 9, 1,
+    "Nor\u00f0vestur", 7, 1
   )
 }
 

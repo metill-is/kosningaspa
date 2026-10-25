@@ -13,7 +13,7 @@ SEATS_2021 <- c("sources", "seats_2021_official.csv")
 
 # Letterless list labels that Hagstofa uses for an aggregate of small lists; the label
 # itself stands in for the letter.
-AGGREGATE_LABELS <- "Aðrir"
+AGGREGATE_LABELS <- "A\u00f0rir"
 
 kjordaemi_order <- function(kjordaemi) {
   box::use(R / harness / constants[KJORDAEMI])
@@ -52,7 +52,7 @@ read_hagstofa_sheet <- function(path, election, measure) {
   headers <- unlist(x[3, 3:8], use.names = FALSE)
   k <- match(headers, KJORDAEMI$hagstofa)
   if (anyNA(k) || anyDuplicated(k)) {
-    stop(file, ": kjördæmi headers do not match KJORDAEMI$hagstofa: ", paste(headers, collapse = ", "))
+    stop(file, ": kj\u00f6rd\u00e6mi headers do not match KJORDAEMI$hagstofa: ", paste(headers, collapse = ", "))
   }
 
   labels <- x[[2]][-(1:3)]
@@ -86,7 +86,7 @@ read_hagstofa_sheet <- function(path, election, measure) {
 #' @export
 parse_gild_atkvaedi <- function(path, election) {
   box::use(dplyr[rename])
-  read_hagstofa_sheet(path, election, "Gild atkvæði") |> rename(votes = value)
+  read_hagstofa_sheet(path, election, "Gild atkv\u00e6\u00f0i") |> rename(votes = value)
 }
 
 #' Seats per list and kjördæmi from a Hagstofa "þingsæti" sheet (2016–2021).
@@ -96,7 +96,7 @@ parse_gild_atkvaedi <- function(path, election) {
 #' @export
 parse_thingsaeti <- function(path, election) {
   box::use(dplyr[transmute])
-  read_hagstofa_sheet(path, election, "Þingsæti") |>
+  read_hagstofa_sheet(path, election, "\u00deings\u00e6ti") |>
     transmute(election, kjordaemi, list_letter, seats = value)
 }
 
@@ -119,9 +119,9 @@ parse_jsonstat_results <- function(path, election) {
   if (!grepl(format(election, "%Y"), j$label, fixed = TRUE)) {
     stop(file, ": table label is not for ", format(election, "%Y"), ": ", j$label)
   }
-  dims <- c("Atriði", "Flokkur", "Kjördæmi")
-  if (!identical(j$id, dims)) stop(file, ": dimensions are not ", paste(dims, collapse = " × "))
-  if (length(j$value) != prod(j$size)) stop(file, ": ", length(j$value), " values for size ", paste(j$size, collapse = " × "))
+  dims <- c("Atri\u00f0i", "Flokkur", "Kj\u00f6rd\u00e6mi")
+  if (!identical(j$id, dims)) stop(file, ": dimensions are not ", paste(dims, collapse = " \u00d7 "))
+  if (length(j$value) != prod(j$size)) stop(file, ": ", length(j$value), " values for size ", paste(j$size, collapse = " \u00d7 "))
 
   category <- function(d) {
     index <- unlist(j$dimension[[d]]$category$index)
@@ -129,13 +129,13 @@ parse_jsonstat_results <- function(path, election) {
     stopifnot(identical(sort(unname(index)), seq_along(index) - 1L))
     tibble::tibble(code = codes, label = unname(unlist(j$dimension[[d]]$category$label)[codes]))
   }
-  atr <- category("Atriði")
+  atr <- category("Atri\u00f0i")
   flo <- category("Flokkur")
-  kjo <- category("Kjördæmi")
+  kjo <- category("Kj\u00f6rd\u00e6mi")
   stopifnot(identical(j$size, c(nrow(atr), nrow(flo), nrow(kjo))))
-  a_votes <- match("Gild atkvæði", atr$label)
-  a_seats <- match("Þingsæti", atr$label)
-  if (anyNA(c(a_votes, a_seats))) stop(file, ": Atriði has no 'Gild atkvæði' or no 'Þingsæti'")
+  a_votes <- match("Gild atkv\u00e6\u00f0i", atr$label)
+  a_seats <- match("\u00deings\u00e6ti", atr$label)
+  if (anyNA(c(a_votes, a_seats))) stop(file, ": Atri\u00f0i has no 'Gild atkv\u00e6\u00f0i' or no '\u00deings\u00e6ti'")
 
   missing <- which(is.na(j$value)) - 1L
   if (!all(as.character(missing) %in% names(j$status))) stop(file, ": null value(s) without a '.' status")
@@ -150,13 +150,13 @@ parse_jsonstat_results <- function(path, election) {
     m <- cube[, , a]
     if (!all(colSums(m[!kjo_total, , drop = FALSE]) == m[kjo_total, ]) ||
       !all(rowSums(m[, !flo_total, drop = FALSE]) == m[, flo_total])) {
-      stop(file, ": cells do not add up to the totals for Atriði ", atr$label[a])
+      stop(file, ": cells do not add up to the totals for Atri\u00f0i ", atr$label[a])
     }
   }
 
   k <- match(kjo$label[!kjo_total], KJORDAEMI$hagstofa)
   if (anyNA(k) || anyDuplicated(k) || length(k) != nrow(KJORDAEMI)) {
-    stop(file, ": kjördæmi labels do not match KJORDAEMI$hagstofa: ", paste(kjo$label[!kjo_total], collapse = ", "))
+    stop(file, ": kj\u00f6rd\u00e6mi labels do not match KJORDAEMI$hagstofa: ", paste(kjo$label[!kjo_total], collapse = ", "))
   }
   lists <- split_list_label(flo$label[!flo_total], file)
   votes <- as.integer(cube[!kjo_total, !flo_total, a_votes])
@@ -299,6 +299,72 @@ write_truth <- function(path = harness_path("truth", "elections_official.csv")) 
   invisible(truth)
 }
 
+# The columns of the official results table and their readr types.
+TRUTH_COLUMNS <- c(
+  election = "D", kjordaemi = "c", list_letter = "c", list_name = "c", flokkur = "c",
+  votes = "i", seats = "i", ran = "l", source = "c"
+)
+
+#' The committed official results table.
+#' @param path the CSV that `write_truth()` writes
+#' @return a tibble as `build_truth()` returns it: election (Date), kjordaemi,
+#'   list_letter, list_name, flokkur (character), votes, seats (integer), ran (logical),
+#'   source (character); an error if the columns differ
+#' @export
+read_truth <- function(path = harness_path("truth", "elections_official.csv")) {
+  # WHY: the default argument is a promise, forced after this import.
+  box::use(R / harness / constants[harness_path])
+  header <- names(readr::read_csv(path, n_max = 0, col_types = readr::cols(.default = "c")))
+  if (!identical(header, names(TRUTH_COLUMNS))) {
+    stop(basename(path), ": columns are not ", paste(names(TRUTH_COLUMNS), collapse = ", "))
+  }
+  t <- readr::read_csv(
+    path,
+    col_types = do.call(readr::cols, as.list(TRUTH_COLUMNS)), na = character(), progress = FALSE
+  )
+  if (nrow(readr::problems(t))) stop(basename(path), ": cells that do not parse as their column type")
+  tibble::as_tibble(t)
+}
+
+#' The result a forecast cell is scored against.
+#' @param E the election (Date or ISO string)
+#' @param parties the poll parties the run forecasts: `POLL_PARTIES` labels, no repeats,
+#'   in the run's order
+#' @param truth an official results table (`read_truth()`)
+#' @return `list(nat, kd, seats)`, all from `fold_truth(truth)` at E: `nat`, each party's
+#'   share of the national valid vote, a numeric vector named by `parties`; `kd`, a tibble
+#'   (kjordaemi, flokkur, votes, share) with one row per kjördæmi × party of `parties`,
+#'   `share` being the party's share of its kjördæmi's valid vote; `seats`, the official
+#'   seats, an integer vector named by `parties`. A party of `parties` with no list at E
+#'   has 0 votes, shares and seats. An error if a poll party outside `parties` has votes
+#'   at E, since a scorer would otherwise drop them silently.
+#' @export
+cell_truth <- function(E, parties, truth = read_truth()) {
+  box::use(R / harness / constants[POLL_PARTIES], dplyr[filter, mutate, select, summarise])
+  E <- as.Date(E)
+  stopifnot(length(E) == 1, !is.na(E), is.character(parties), length(parties) > 0, !anyDuplicated(parties))
+  unknown <- setdiff(parties, POLL_PARTIES)
+  if (length(unknown)) stop("not poll parties: ", paste(unknown, collapse = ", "))
+  te <- truth[which(truth$election == E), ]
+  if (!nrow(te)) stop("no results for ", format(E))
+
+  folded <- fold_truth(te)
+  nat <- summarise(folded, votes = sum(votes), seats = sum(seats), .by = flokkur)
+  extra <- nat$flokkur[nat$votes > 0 & !nat$flokkur %in% parties]
+  if (length(extra)) {
+    stop("truth has votes for parties the run does not forecast: ", paste(extra, collapse = ", "))
+  }
+  i <- match(parties, nat$flokkur)
+  list(
+    nat = stats::setNames(nat$votes[i] / sum(nat$votes), parties),
+    kd = folded |>
+      mutate(share = votes / sum(votes), .by = kjordaemi) |>
+      filter(flokkur %in% parties) |>
+      select(kjordaemi, flokkur, votes, share),
+    seats = stats::setNames(as.integer(nat$seats[i]), parties)
+  )
+}
+
 #' Fold lists into the poll parties.
 #' @param truth a `build_truth()` table
 #' @return a tibble (election, kjordaemi, flokkur, votes, seats) with every `POLL_PARTIES`
@@ -360,7 +426,7 @@ prev_national_shares <- function(E, truth, fundamentals) {
   party <- f$flokkur
   renamed <- party %in% names(FUNDAMENTALS_RENAMED)
   party[renamed] <- unname(FUNDAMENTALS_RENAMED[party[renamed]])
-  party[!party %in% POLL_PARTIES] <- "Annað"
+  party[!party %in% POLL_PARTIES] <- "Anna\u00f0"
   share <- tapply(f$voteshare, party, sum)
   out <- stats::setNames(rep(NA_real_, length(POLL_PARTIES)), POLL_PARTIES)
   out[names(share)] <- share / sum(share)
