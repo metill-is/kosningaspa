@@ -5,8 +5,6 @@ box::use(
 
 R0_STAN <- "polling_and_fundamentals_kjordaemi_r0.stan"
 PRODUCTION_STAN <- "Stan/polling_and_fundamentals_kjordaemi.stan"
-# WHY: R0 is production's model at this commit plus the hooks (Decision 5 keeps it uncentred); production has since centred delta.
-R0_PARENT_COMMIT <- "5d22031"
 H1_DECLARATIONS <- c(
   "vector<lower = 0, upper = 1>[P - 1] mu_gamma_scale;",
   "array[D] int<lower = 1, upper = P> n_active_d;",

@@ -362,7 +362,10 @@ a fixed table of overrides, and only those (Task 8 of
 `n_pred_k` and the prediction weights from the previous election's valid votes, by name; the
 kjördæmi weights of each date, by name; the fundamentals weight and its day; the hedge scale
 `mu_gamma_scale` (1/√n_e, 0 for a party new to the window); the parties active at each date
-(`n_active_d`, `active_index_d`); and the fundamentals prediction column, rebuilt for the
+(`n_active_d`, `active_index_d`, R0's own: production computes the same since 5f09c5b, and R0
+drops its copies so the fields keep 5d22031's order); production's positional
+`n_parties_n_rep` and `n_parties_k_rep` as at 5d22031, which R0's Stan file still declares
+and 5f09c5b dropped; and the fundamentals prediction column, rebuilt for the
 cell's party order, with a newcomer at the median debut share of earlier new parties. The
 settings are in `harness/configs/r0.json` (`read_r0_config()`). A build whose data break a
 shape the Stan file relies on stops with "R0 input: <check>". So does a newcomer, a party

@@ -2,7 +2,8 @@ box::use(
   R / harness / r0[R0_KJORDAEMI, r0_production_inputs, r0_stan_data, read_r0_config],
   R / harness / info_set[info_set, read_inputs],
   R / harness / constants[previous_election],
-  R / harness / fundamentals[fundamentals_party]
+  R / harness / fundamentals[fundamentals_party],
+  R / stan_data[prepare_stan_data]
 )
 inp <- if (snapshot_present()) read_inputs()
 infos <- if (snapshot_present()) lapply(seq_len(nrow(TARGETS)), \(i) info_set(TARGETS$E[i], TARGETS$F[i], inp))
@@ -172,6 +173,42 @@ test_that("the active parties grow with each party's first national row", {
     date_levels <- sort(unique(c(info$kosning_nat$date, info$polls_nat$date)))
     has_j <- apply(d$active_index_d, 1, \(r) j %in% r)
     expect_equal(has_j, date_levels >= as.Date("2018-10-16"))
+  }
+})
+
+#' Production's `prepare_stan_data()` at `R0_PARENT_COMMIT`, read with `git show`.
+parent_prepare <- function() {
+  withr::local_envvar(c(GIT_DIR = NA, GIT_WORK_TREE = NA, GIT_INDEX_FILE = NA))
+  spec <- paste0(R0_PARENT_COMMIT, ":R/stan_data.R")
+  src <- suppressWarnings(system2("git", c("-C", shQuote(root()), "show", shQuote(spec)), stdout = TRUE, stderr = FALSE))
+  if (!is.null(attr(src, "status"))) stop("git show ", spec, " failed")
+  env <- new.env()
+  eval(parse(text = src, keep.source = FALSE), envir = env)
+  env$prepare_stan_data
+}
+
+test_that("the data keep the parent's fields in its order, with its positional rep counts", {
+  skip_without_snapshot()
+  old_prepare <- parent_prepare()
+  for (i in seq_along(r0)) {
+    inputs <- r0_production_inputs(infos[[i]])
+    old <- old_prepare(inputs$polling, inputs$fundamentals, inputs$constituency, election_date = infos[[i]]$E)
+    d <- r0[[i]]$data
+    expect_identical(intersect(names(d), names(old)), setdiff(names(old), c("N", "xm", "n_election", "time_diff_f")))
+    expect_identical(d$n_parties_n_rep, old$n_parties_n_rep)
+    expect_identical(d$n_parties_k_rep, old$n_parties_k_rep)
+    expect_length(d$n_parties_n_rep, d$N_n)
+    expect_length(d$n_parties_k_rep, d$N_k)
+  }
+})
+
+test_that("the active parties are the ones production's prepare_stan_data() gives since 5f09c5b", {
+  skip_without_snapshot()
+  for (i in seq_along(r0)) {
+    inputs <- r0_production_inputs(infos[[i]])
+    live <- prepare_stan_data(inputs$polling, inputs$fundamentals, inputs$constituency, election_date = infos[[i]]$E)
+    expect_identical(r0[[i]]$data$n_active_d, live$n_active_d)
+    expect_identical(r0[[i]]$data$active_index_d, live$active_index_d)
   }
 })
 

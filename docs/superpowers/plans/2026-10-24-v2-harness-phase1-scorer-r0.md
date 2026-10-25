@@ -662,7 +662,8 @@ R0 is production mapped to E (§5.4). The builder assembles the cell's admitted 
 | `constituency_weights_pred` | `valid_votes_open$w`, by name | the first weights row (the previous election), by position |
 | `desired_weight`, `weight_time` | 0.22, 180 (config) | fit l.118–119, the same values |
 | `mu_gamma_scale` (new) | for `party_order[-1]`: 1/√n_e, and 0 when n_e = 0; n_e = `epoch_of(E) − entry_epoch` | `/ sqrt(3.0)` on rows 1..P−3 and `/ sqrt(2.0)` on row P−2, inside the Stan file |
-| `n_active_d`, `active_index_d` (new) | for each date level, the parties whose first national row with n > 0 (in `kosning_nat` or `polls_nat`) is on or before it, in party order, padded with 0 | the positional `n_parties_n_rep` |
+| `n_active_d`, `active_index_d` (new) | for each date level, the parties whose first national row with n > 0 (in `kosning_nat` or `polls_nat`) is on or before it, in party order, padded with 0; R0's own, placed last (production's copies, added in 5f09c5b, are dropped first, and a test pins that the two agree) | the positional `n_parties_n_rep` at 5d22031; since 5f09c5b, the same fields after `party_index_n` |
+| `n_parties_n_rep`, `n_parties_k_rep` (restored) | production's positional counts at 5d22031, recomputed by `rep_counts()` after `party_index_n` and `party_index_k`, because R0's Stan file declares them (its generated quantities do not read them) | dropped in 5f09c5b |
 | Column D_f + 1 of `x_f`, `index_f` and `n_parties_f`, plus the newcomer rows of `y_f`, `x_f`, `incumbent_f`, `incumbent_years`, `vnv` and `growth` | rebuilt by the prediction-column rule below | the previous election's party set |
 
 The builder applies no house filter (§5.4: no Gallup filters, as in the final 2024 run).

@@ -6,6 +6,9 @@ box::use(
 
 root <- function(...) file.path(project_root(), ...)
 
+# WHY: R0 is production's model at this commit plus the hooks (Decision 5 keeps it uncentred); production has since centred delta and dropped the positional rep counts.
+R0_PARENT_COMMIT <- "5d22031"
+
 snapshot_present <- function() {
   file.exists(root("harness", "snapshot_manifest.csv")) && dir.exists(root("harness", "snapshot"))
 }

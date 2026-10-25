@@ -197,6 +197,33 @@ fundamentals_rows <- function(info, party_order) {
   fund[order(as.integer(fund$flokkur), fund$date, method = "radix"), ]
 }
 
+#' Production's positional rep counts at 5d22031 (R0's parent), ported as they were: for
+#' each group of `df` by `by`, in date order, the number of parties whose first row with
+#' n > 0 is on or before the group's date. R0's Stan file declares them; its generated
+#' quantities gather by `active_index_d` instead.
+#' @param df the national poll rows or the kjördæmi rows `prepare_stan_data()` is given
+#' @param by the grouping columns, `date` first
+#' @return an integer vector, one value per group
+rep_counts <- function(df, by) {
+  entry <- df |>
+    dplyr::filter(n > 0) |>
+    dplyr::summarise(date = min(date), .by = flokkur) |>
+    dplyr::count(date) |>
+    dplyr::mutate(n = cumsum(n))
+  df |>
+    dplyr::summarise(n_parties = sum(n != 0), .by = dplyr::all_of(by)) |>
+    dplyr::arrange(date) |>
+    dplyr::left_join(entry, by = "date") |>
+    tidyr::fill(n, .direction = "down") |>
+    dplyr::pull(n)
+}
+
+#' `x` with the fields of `fields` (a named list) inserted after the field `after`.
+insert_after <- function(x, after, fields) {
+  i <- match(after, names(x))
+  c(x[seq_len(i)], fields, x[-seq_len(i)])
+}
+
 #' R0's Stan data for one cell: production's `prepare_stan_data()` on
 #' `r0_production_inputs()`, with the overrides of the plan's Task 8 table and only those.
 #' @param info an `info_set()` list
@@ -214,8 +241,13 @@ fundamentals_rows <- function(info, party_order) {
 #'   - `desired_weight`, `weight_time`: from `cfg`;
 #'   - `mu_gamma_scale`: for each party but Annað, 1/sqrt(n_e), 0 when n_e = 0, where n_e =
 #'     `epoch_of(E)` - the party's entry epoch;
+#'   - `n_parties_n_rep`, `n_parties_k_rep`: production's positional counts at 5d22031
+#'     (`rep_counts()`), which R0's Stan file declares, after `party_index_n` and
+#'     `party_index_k` as they were there; production dropped them in 5f09c5b;
 #'   - `n_active_d`, `active_index_d`: for each date level, the parties (in party order,
-#'     0-padded) whose first national row with n > 0 is on or before it;
+#'     0-padded) whose first national row with n > 0 is on or before it, R0's own and
+#'     placed last, as at 5d22031; production's copies (since 5f09c5b) are dropped first,
+#'     and a test pins that the two agree;
 #'   - the prediction column D_f + 1 of `x_f`, `index_f` and `n_parties_f`, and a zero row
 #'     of `y_f`, `x_f`, `incumbent_f`, `incumbent_years`, `vnv` and `growth` for each
 #'     newcomer (a party with no share at `previous_election(E)`), `P_f` grown to match.
@@ -235,7 +267,8 @@ fundamentals_rows <- function(info, party_order) {
 #'
 #'   An error, "R0 input: <check>", on any error of `r0_production_inputs()` or when a
 #'   check fails: the columns of `y_n` and `y_k` are the party order and P its length;
-#'   `house_n` and `house_k` lie in 1..H and house 1 is Kosning; every party has an entry
+#'   `house_n` and `house_k` lie in 1..H and house 1 is Kosning; `n_parties_n_rep` and
+#'   `n_parties_k_rep` have N_n and N_k values in 1..P; every party has an entry
 #'   epoch at or before E's; the fundamentals levels are the rows of `y_f` (production's
 #'   `index_f` counts levels); a newcomer is not already a row of `y_f`; every party with a
 #'   previous share is a row of `y_f`; a newcomer had no votes at `previous_election(E)`
@@ -269,6 +302,16 @@ r0_stan_data <- function(info, cfg = read_r0_config()) {
   check(
     all(c(d$house_n, d$house_k) %in% seq_len(d$H)) && identical(levels(polling$fyrirtaeki)[1], ELECTION_HOUSE),
     "house_n and house_k lie in 1..H, and house 1 is Kosning"
+  )
+  # WHY: R0's data keep 5d22031's fields and order, so its Stan file reads them and the Tier 0 runs' data_sha256 still match.
+  d$n_active_d <- NULL
+  d$active_index_d <- NULL
+  d <- insert_after(d, "party_index_n", list(n_parties_n_rep = rep_counts(polling, c("date", "fyrirtaeki"))))
+  d <- insert_after(d, "party_index_k", list(n_parties_k_rep = rep_counts(constituency, c("date", "kjordaemi", "fyrirtaeki"))))
+  check(
+    length(d$n_parties_n_rep) == d$N_n && length(d$n_parties_k_rep) == d$N_k &&
+      all(c(d$n_parties_n_rep, d$n_parties_k_rep) %in% seq_len(P)),
+    "n_parties_n_rep and n_parties_k_rep have N_n and N_k values in 1..P"
   )
 
   d$days_between_stjornarslit_and_election <- cfg$campaign_days
