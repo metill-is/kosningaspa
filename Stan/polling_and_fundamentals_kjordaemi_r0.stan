@@ -12,7 +12,8 @@ data {
   array[N_n] int<lower = 1, upper = H> house_n;  // House indicator for each national poll
   array[N_n] int<lower = 1, upper = D> date_n;   // Date indicator for each national poll
   array[N_n] int<lower = 1, upper = P> n_parties_n;     // Number of parties in each national poll
-  array[N_n] int<lower = 1, upper = P> n_parties_n_rep; // Number of parties for replications
+  array[D] int<lower = 1, upper = P> n_active_d;        // Parties active at each date level [D]
+  array[D, P] int<lower = 0, upper = P> active_index_d; // Their columns in party order, 0-padded [D, P]
   array[N_n, P] int<lower = 0, upper = P> party_index_n; // Column ids of reported parties per national poll (0-padded tail)
 
   // Time-related vectors
@@ -35,7 +36,6 @@ data {
   array[N_k] int<lower = 1, upper = H> house_k;  // House indicator for constituency polls
   array[N_k] int<lower = 1, upper = D> date_k;   // Date indicator for constituency polls
   array[N_k] int<lower = 1, upper = P> n_parties_k;     // Number of parties in constituency polls
-  array[N_k] int<lower = 1, upper = P> n_parties_k_rep; // Number of parties for replications
   array[N_k, P] int<lower = 0, upper = P> party_index_k; // Column ids of reported parties per constituency poll (0-padded tail)
   array[N_k] int<lower = 1, upper = K> constituency_k;  // Constituency indicator
   array[N_k] int<lower = 1, upper = N_obs_k> obs_k;     // Observation indicator
@@ -66,10 +66,8 @@ data {
   real<lower = 0, upper = 1> desired_weight;  // Desired weight for fundamentals
   int<lower = 0> weight_time;                 // Time point for desired weight
 
-  // H1: harness hook, the hedge scale and the active parties as data
+  // H1: harness hook, the hedge scale as data
   vector<lower = 0, upper = 1>[P - 1] mu_gamma_scale;   // 1/sqrt(n_e); 0 for a party new to the window
-  array[D] int<lower = 1, upper = P> n_active_d;        // parties active at each date level
-  array[D, P] int<lower = 0, upper = P> active_index_d; // their columns, 0-padded
 }
 
 transformed data {
@@ -95,7 +93,10 @@ parameters {
   vector[P - 1] z_beta0;                             // Initial support levels
   
   // Constituency level parameters
-  matrix[P - 1, K - 1] delta_raw;                  // Raw constituency effects
+  // delta_free and log_sigma are centred: the data pin both, so the non-centred forms made
+  // ridges with sigma_delta and mu_log_sigma that NUTS crossed slowly. The random walk
+  // (z_beta_raw) stays non-centred; centring it mixes far worse.
+  matrix[P - 1, K - 1] delta_free;                 // Constituency effects 1..K-1
   vector<lower = 0>[P - 1] sigma_delta;             // Constituency effect scales
   
   // House Effects Parameters
@@ -107,7 +108,7 @@ parameters {
   // Variance Parameters
   real mu_log_sigma;                    // Population mean of log volatility
   real<lower=0> tau_log_sigma;          // Population SD of log volatility
-  vector[P - 1] log_sigma_raw;            // Raw party-specific parameters
+  vector[P - 1] log_sigma;                // Party-specific log volatilities
   real<lower = 0> tau_stjornarslit;                // Scale for government collapse period
 
   // vector<lower = 0>[H - 1] phi;
@@ -125,7 +126,7 @@ parameters {
 }
 
 transformed parameters {
-  vector<lower=0>[P - 1] sigma = exp(mu_log_sigma + tau_log_sigma * log_sigma_raw);           // Party-specific volatilities
+  vector<lower=0>[P - 1] sigma = exp(log_sigma);           // Party-specific volatilities
   // Convert inverse dispersion parameters to dispersion parameters
   
   vector<lower = 0>[H - 1] phi = exp(mu_phi + sigma_phi * log_phi);
@@ -215,7 +216,7 @@ model {
   L_Omega ~ lkj_corr_cholesky(10);
   mu_log_sigma ~ normal(-2, 2);         // Prior centered on small volatility
   tau_log_sigma ~ exponential(1);       // Weakly informative prior on variance
-  log_sigma_raw ~ std_normal();         // Unit normal for non-centered param         
+  log_sigma ~ normal(mu_log_sigma, tau_log_sigma);
   z_beta0 ~ std_normal();
   tau_stjornarslit ~ exponential(1);
 
@@ -225,7 +226,9 @@ model {
   // phi ~ exponential(1);
 
   // Constituency effects priors
-  to_vector(delta_raw) ~ std_normal();
+  for (p in 1:(P - 1)) {
+    delta_free[p] ~ normal(0, sigma_delta[p]);
+  }
   sigma_delta ~ exponential(1);
 
   /* Likelihood Functions */
@@ -258,7 +261,7 @@ model {
 
     // Calculate constituency effects with sum-to-zero constraint
     for (p in 1:(P - 1)) {
-      delta[p, 1:(K - 1)] = sigma_delta[p] * delta_raw[p, ];
+      delta[p, 1:(K - 1)] = delta_free[p, ];
       delta[p, K] = -sum(delta[p, 1:(K - 1)] .* constituency_weights[obs_k[n], 1:(K - 1)]) / 
             constituency_weights[obs_k[n] , K];
     }
@@ -344,7 +347,7 @@ generated quantities {
 
   // Calculate constituency effects for predictions
   for (p in 1:(P - 1)) {
-    delta_pred[p, 1:(K - 1)] = sigma_delta[p] * delta_raw[p, ];
+    delta_pred[p, 1:(K - 1)] = delta_free[p, ];
     delta_pred[p, K] = -sum(to_vector(delta_pred[p, 1:(K - 1)]) .* constituency_weights_pred[1:(K - 1)]) / 
           constituency_weights_pred[K];
   }
@@ -364,10 +367,10 @@ generated quantities {
     }
   }
 
-  // Generate national-level predictions
+  // Generate national-level predictions. Like the likelihood, build the full
+  // sum-to-zero P-vector, then gather the parties active at date d by identity.
   for (d in 1:D) {
     vector[P] eta_d;
-    // H3: rebuild the full sum-to-zero P-vector, then gather the active parties by identity
     eta_d[2:P] = beta[, d] + mu_gamma_pred;
     eta_d[1] = -sum(eta_d[2:P]);
     array[n_active_d[d]] int cols = active_index_d[d, 1:n_active_d[d]];
@@ -401,17 +404,21 @@ generated quantities {
     vector[P] eta_k;
 
     for (p in 1:(P - 1)) {
-      delta[p, 1:(K - 1)] = sigma_delta[p] * delta_raw[p, ];
+      delta[p, 1:(K - 1)] = delta_free[p, ];
       delta[p, K] = -sum(delta[p, 1:(K - 1)] .* constituency_weights[obs_k[n], 1:(K - 1)]) / 
             constituency_weights[obs_k[n] , K];
     }
 
-    // H3: rebuild the full sum-to-zero P-vector, then gather the reported parties by identity
-    eta_k[2:P] = beta[, date_k[n]] + gamma[, house_k[n]] + delta[, constituency_k[n]] + mu_gamma_pred;
+    eta_k[2:P] = beta[, date_k[n]] + gamma[, house_k[n]] +
+      delta[, constituency_k[n]] + mu_gamma_pred;
     eta_k[1] = -sum(eta_k[2:P]);
-    array[n_parties_k[n]] int cols = party_index_k[n, 1:n_parties_k[n]];
+
+    // Gather the poll's reported parties by identity, as the likelihood does
+    int k = n_parties_k[n];
+    array[k] int cols = party_index_k[n, 1:k];
     if (house_k[n] > 1) {
-      y_rep_k[n, cols] = dirichlet_multinomial_rng(softmax(eta_k[cols]) * phi[house_k[n] - 1], sum(y_k[n, ]));
+      y_rep_k[n, cols] =
+        dirichlet_multinomial_rng(softmax(eta_k[cols]) * phi[house_k[n] - 1], sum(y_k[n, ]));
     } else {
       y_rep_k[n, cols] = multinomial_logit_rng(eta_k[cols], sum(y_k[n, ]));
     }

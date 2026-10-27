@@ -361,12 +361,8 @@ a fixed table of overrides, and only those (Task 8 of
 `docs/superpowers/plans/2026-10-24-v2-harness-phase1-scorer-r0.md`): the campaign length;
 `n_pred_k` and the prediction weights from the previous election's valid votes, by name; the
 kjördæmi weights of each date, by name; the fundamentals weight and its day; the hedge scale
-`mu_gamma_scale` (1/√n_e, 0 for a party new to the window); the parties active at each date
-(`n_active_d`, `active_index_d`, R0's own: production computes the same since 5f09c5b, and R0
-drops its copies so the fields keep 5d22031's order); production's positional
-`n_parties_n_rep` and `n_parties_k_rep` as at 5d22031, which R0's Stan file still declares
-and 5f09c5b dropped; and the fundamentals prediction column, rebuilt for the
-cell's party order, with a newcomer at the median debut share of earlier new parties. The
+`mu_gamma_scale` (1/√n_e, 0 for a party new to the window); and the fundamentals prediction
+column, rebuilt for the cell's party order, with a newcomer at the median debut share of earlier new parties. The
 settings are in `harness/configs/r0.json` (`read_r0_config()`). A build whose data break a
 shape the Stan file relies on stops with "R0 input: <check>". So does a newcomer, a party
 with no fundamentals share at the previous election, that had votes there in the official
@@ -375,11 +371,19 @@ results, as a fundamentals label missing from `FUNDAMENTALS_RENAMED` would make 
 never reads them.
 
 R0's Stan file, `Stan/polling_and_fundamentals_kjordaemi_r0.stan`, is production's model as
-of commit 5d22031, with δ uncentred (the plan's Decision 5; production has since centred δ),
-plus three hooks, and has that model's log density (`Stan/CLAUDE.md`).
-`tests/harness/test-r0-stan.R` reads that parent with `git show 5d22031:<path>`, never from
-the working tree, into `results/harness/stan_parent/` (gitignored, rewritten only when its
-bytes change), and compares R0 with it byte for byte and by log density.
+of commit 884560f, with δ and log σ centred (the plan's Decision 5, ruled on 2026-10-27),
+plus two hooks: H1, the hedge scale as data, and H2, the E-day shares `pi_eday` and `pi_kd`.
+It has that model's log density (`Stan/CLAUDE.md`). A third hook, H3, gathered the
+replications by party identity; production took it over in 5f09c5b, with the active parties
+(`n_active_d`, `active_index_d`) that `prepare_stan_data()` now computes.
+`tests/harness/test-r0-stan.R` reads that parent with `git show` at `R0_PARENT_COMMIT`
+(884560f's full sha), never from the working tree, into `results/harness/stan_parent/`
+(gitignored, rewritten only when its bytes change), and compares R0 with it: `transformed
+data` to `model` byte for byte, the data block and generated quantities outside the two
+hooks with comments and whitespace stripped (H2 may hold no RNG call), and the log density
+and its gradient. `tests/harness/test-r0-inputs.R` likewise holds R0's data to that
+commit's `prepare_stan_data()`: its fields in its order, with its values but for the
+overrides above.
 
 ## Rebuilding the generated files
 

@@ -9,7 +9,7 @@
 | Model | Purpose | Used By |
 |-------|---------|---------|
 | `polling_and_fundamentals_kjordaemi.stan` | Full model with constituency effects | `R/fit_polling_and_fundamentals_kjordaemi_model.R` |
-| `polling_and_fundamentals_kjordaemi_r0.stan` | Harness arm R0: the production model as of commit 5d22031 (δ uncentred; production has since centred δ) with harness hooks only (H1 the hedge scale `mu_gamma_scale` and the active parties as data, H2 `pi_eday`/`pi_kd`, H3 `y_rep_k`/`y_rep_national` gathered by party identity); `transformed data` to `model` are byte-identical to that commit's `polling_and_fundamentals_kjordaemi.stan`, which `tests/harness/test-r0-stan.R` reads with `git show`, not from the working tree | `R/harness/fit_cell.R` |
+| `polling_and_fundamentals_kjordaemi_r0.stan` | Harness arm R0: the production model as of commit 884560f (δ and log σ centred, replications gathered by party identity) with harness hooks only (H1 the hedge scale `mu_gamma_scale` as data, H2 `pi_eday`/`pi_kd`; H3, the identity gather of `y_rep_k`/`y_rep_national`, has been production's own since 5f09c5b); `transformed data` to `model` are byte-identical to that commit's `polling_and_fundamentals_kjordaemi.stan`, which `tests/harness/test-r0-stan.R` reads with `git show`, not from the working tree | `R/harness/fit_cell.R` |
 | `polling_and_fundamentals.stan` | National-level model (no constituencies) | `R/fit_polling_and_fundamentals_model.R` |
 | `polling_and_fundamentals_historic.stan` | Backtesting variant for past elections | `R/modeling_utils.R` |
 | `fundamentals.stan` | Fundamentals-only (no polling data) | `R/fit_fundamentals_model.R` |
