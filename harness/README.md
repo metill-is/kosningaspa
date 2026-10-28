@@ -371,13 +371,14 @@ results, as a fundamentals label missing from `FUNDAMENTALS_RENAMED` would make 
 never reads them.
 
 R0's Stan file, `Stan/polling_and_fundamentals_kjordaemi_r0.stan`, is production's model as
-of commit 884560f, with δ and log σ centred (the plan's Decision 5, ruled on 2026-10-27),
-plus two hooks: H1, the hedge scale as data, and H2, the E-day shares `pi_eday` and `pi_kd`.
+of commit aa2ac1a: the centred model of the plan's Decision 5 (ruled on 2026-10-27),
+reparameterised (anchored walk, δ and log σ partially centred, log φ bounded above at 20;
+`Stan/CLAUDE.md`, `R/sampler_check/RESULTS.md`), plus two hooks: H1, the hedge scale as data, and H2, the E-day shares `pi_eday` and `pi_kd`.
 It has that model's log density (`Stan/CLAUDE.md`). A third hook, H3, gathered the
 replications by party identity; production took it over in 5f09c5b, with the active parties
 (`n_active_d`, `active_index_d`) that `prepare_stan_data()` now computes.
 `tests/harness/test-r0-stan.R` reads that parent with `git show` at `R0_PARENT_COMMIT`
-(884560f's full sha), never from the working tree, into `results/harness/stan_parent/`
+(aa2ac1a's full sha), never from the working tree, into `results/harness/stan_parent/`
 (gitignored, rewritten only when its bytes change), and compares R0 with it: `transformed
 data` to `model` byte for byte, the data block and generated quantities outside the two
 hooks with comments and whitespace stripped (H2 may hold no RNG call), and the log density
