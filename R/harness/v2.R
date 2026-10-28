@@ -112,10 +112,6 @@ stage1_placeholder <- function(info) {
   list(mu_f = stats::setNames(rep(0, length(S_f)), S_f), sha256 = "placeholder", diagnostics = list())
 }
 
-# WHY: stage 1 is fitted by R/harness/stage1.R (Plan 3, Task 2); until then a config with
-# fundamentals = 1 cannot build outside the 2017 cells.
-stage1_mu_f <- function(info, cfg, root) stop("v2 input: stage 1 is not built yet", call. = FALSE)
-
 #' The keys of rows as single strings, one per row of `cols`.
 row_key <- function(rows, cols) do.call(paste, c(lapply(rows[cols], as.character), sep = "\r"))
 
@@ -146,13 +142,13 @@ reported <- function(y) {
 #' @param info an `info_set()` list
 #' @param cfg a `read_v2_config()` list
 #' @param stage1 the stage-1 fit, called as `stage1(info, cfg, root = root)` only when
-#'   `cfg$fundamentals` is 1 and the cell is not 2017 before the freeze; it returns
-#'   `list(mu_f, sha256, diagnostics)` with `mu_f` named by `info$fundamentals$S_f`. Until
-#'   stage 1 is built, the default stops
+#'   `cfg$fundamentals` is 1 and `forecast_free(E, root)` does not hold; it returns
+#'   `list(mu_f, sha256, diagnostics)` with `mu_f` named by `info$fundamentals$S_f`. The
+#'   default is `stage1_mu_f()` (`R/harness/stage1.R`)
 #' @param party_order for tests only: the party order, overriding `cfg$order` for the
 #'   parties (the kjördæmi keep `cfg$order`); NULL takes `POLL_PARTIES` restricted to
 #'   `info$parties`, reversed when `cfg$order` is `"reversed"`
-#' @param root the project root whose freeze files `is_frozen()` reads
+#' @param root the project root whose freeze files `forecast_free()` reads
 #' @return `list(data, meta)`. `data` holds, in this order (`stan_data_sha()` depends on
 #'   it), with no dimnames and each one-dimensional field a 1-d array (`V2_VECTOR_FIELDS`):
 #'   - sizes and the grid: `P`, `K`, `H`, `G`, `n_epoch` (`epoch_of(E)`), `delta_days`
@@ -184,10 +180,10 @@ reported <- function(y) {
 #'     stage 1 (n_sf = 0 when `cfg$fundamentals` is 0); `desired_weight`, `weight_time`,
 #'     `campaign_days`, `delta_years_bar`, the `V2_PRIORS` and the `V2_SWITCHES`, from `cfg`.
 #'
-#'   `draw_forecast` is 1 and `latent_path` 0, except on a 2017 cell (E = 2017-10-28, the
-#'   confirmatory target of `TARGETS`) while `is_frozen(root)` is FALSE: there
-#'   `draw_forecast` is 0 and `mu_f` comes from `stage1_placeholder(info)`, never from
-#'   `stage1`.
+#'   `draw_forecast` is 1 and `latent_path` 0, except on a 2017 cell before the freeze
+#'   (`forecast_free(E, root)`: E = 2017-10-28, the confirmatory target of `TARGETS`, while
+#'   `is_frozen(root)` is FALSE): there `draw_forecast` is 0 and `mu_f` comes from
+#'   `stage1_placeholder(info)`, never from `stage1`.
 #'
 #'   `meta`: `party_order`, `kjordaemi_levels`, `house_levels`, `newcomers` (the parties
 #'   absent at the window's start, §6.4), `eday_index` (G), `n_pred` (Σ N_open), `n_pred_k`
@@ -214,8 +210,9 @@ reported <- function(y) {
 v2_stan_data <- function(info, cfg, stage1 = stage1_mu_f, party_order = NULL, root = project_root()) {
   # WHY: the default argument is a promise, forced after this import.
   box::use(
-    R / harness / constants[ELECTION_HOUSE, ELECTIONS, KJORDAEMI, POLL_PARTIES, TARGETS, project_root],
-    R / harness / freeze[is_frozen],
+    R / harness / constants[ELECTION_HOUSE, ELECTIONS, KJORDAEMI, POLL_PARTIES, project_root],
+    R / harness / freeze[forecast_free],
+    R / harness / stage1[stage1_mu_f],
     R / harness / tables[epoch_of, grid_dates, valid_votes]
   )
   check(all(c(V2_SWITCHES, "order", "campaign_days") %in% names(cfg)) && cfg$order %in% V2_ORDERS, "cfg is not a read_v2_config() list")
@@ -358,13 +355,13 @@ v2_stan_data <- function(info, cfg, stage1 = stage1_mu_f, party_order = NULL, ro
     d_shock[e, ] <- sqrt(pmin(0.2 / share, SHOCK_CAP))
   }
 
-  forecast_free <- any(TARGETS$confirmatory & TARGETS$E == E) && !is_frozen(root)
+  free <- forecast_free(E, root)
   stage1_sha256 <- NULL
   n_sf <- 0L
   sf_idx <- integer(0)
   mu_f <- numeric(0)
   if (cfg$fundamentals == 1L) {
-    s1 <- if (forecast_free) stage1_placeholder(info) else stage1(info, cfg, root = root)
+    s1 <- if (free) stage1_placeholder(info) else stage1(info, cfg, root = root)
     S_f <- info$fundamentals$S_f
     check(
       is.numeric(s1$mu_f) && all(is.finite(s1$mu_f)) && !anyDuplicated(names(s1$mu_f)) &&
@@ -391,7 +388,7 @@ v2_stan_data <- function(info, cfg, stage1 = stage1_mu_f, party_order = NULL, ro
     n_closed = n_closed, grid_res = grid_res, y_res = y_res, n_rep_res = as.integer(rowSums(nat_res > 0)),
     idx_res = reported(nat_res),
     house_first_epoch = epoch_of(firsts$first), entry_epoch = entry_epoch,
-    d_shock = d_shock, N_open = as.integer(N_open), draw_forecast = if (forecast_free) 0L else 1L, latent_path = 0L,
+    d_shock = d_shock, N_open = as.integer(N_open), draw_forecast = if (free) 0L else 1L, latent_path = 0L,
     n_sf = n_sf, sf_idx = sf_idx, mu_f = mu_f,
     desired_weight = cfg$desired_weight, weight_time = cfg$weight_time, campaign_days = cd,
     delta_years_bar = cfg$delta_years_bar

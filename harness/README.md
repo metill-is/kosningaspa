@@ -166,6 +166,7 @@ results/harness/
     key_diagnostics.csv     R-hat and ESS of the scored quantities and the kept parameters
     meta.json               written last by the runner: present means finished
   _stale/<id>_<YYYYmmddHHMMSS>/   a retired run, kept as it was
+  stage1/<sha256>/mu_f.json  V2's stage-1 output, cached by the sha256 of its inputs (R/harness/stage1.R)
   logs/                     the queue's logs: queue.log, preflight.log, <id>.log, and its lock, queue.lock/
 ```
 

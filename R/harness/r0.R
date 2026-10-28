@@ -166,7 +166,9 @@ r0_production_inputs <- function(info) {
 }
 
 #' The fundamentals table of a cell, as production's `read_fundamentals_data()` and the fit
-#' script's economy join give it; see `r0_production_inputs()`.
+#' script's economy join give it; see `r0_production_inputs()`. V2's stage 1
+#' (`R/harness/stage1.R`) reads the same table.
+#' @export
 fundamentals_rows <- function(info, party_order) {
   train <- info$fundamentals$train
   target <- info$fundamentals$target

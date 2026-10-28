@@ -1,4 +1,4 @@
-box::use(R / harness / freeze[read_sha_list, verify_sha_list, is_committed, freeze_guard, is_frozen, target_cell])
+box::use(R / harness / freeze[read_sha_list, verify_sha_list, is_committed, freeze_guard, is_frozen, forecast_free, target_cell])
 
 E24 <- "2024-11-30"
 F24 <- "2024-11-29"
@@ -227,4 +227,15 @@ test_that("is_frozen is FALSE without a sealed freeze and TRUE with one", {
   writeLines("# nothing listed", file.path(unsealed, "harness", "FREEZE.sha256"))
   commit_all(unsealed, "a list that does not cover FREEZE.md")
   expect_false(is_frozen(unsealed))
+})
+
+test_that("forecast_free holds for the 2017 target until the freeze is sealed, and for no other election", {
+  none <- withr::local_tempdir()
+  expect_true(forecast_free(as.Date(E17), none))
+  expect_true(forecast_free(E17, none))
+  expect_false(forecast_free(as.Date("2021-09-25"), none))
+  expect_false(forecast_free(E24, none))
+  expect_false(forecast_free(E17, frozen_root()))
+  expect_error(forecast_free(c(E17, E24), none), "E must be one date")
+  expect_error(forecast_free(NA, none), "E must be one date")
 })

@@ -123,6 +123,23 @@ is_frozen <- function(root = project_root()) {
   )
 }
 
+#' Whether a cell of election E must stay forecast-free (Decision 9): E is the confirmatory
+#' 2017 target and the freeze is not sealed. V2's builder, stage 1 and the cell runner all
+#' decide "a 2017 cell before the freeze" here.
+#' @param E the cell's election (Date or ISO string), one
+#' @param root the project root whose freeze files `is_frozen()` reads
+#' @return logical(1): TRUE when E is the E of a confirmatory `TARGETS` row and
+#'   `is_frozen(root)` is FALSE, else FALSE (the freeze files are not read for any other
+#'   E); an error, "E must be one date, not …", unless E is one date
+#' @export
+forecast_free <- function(E, root = project_root()) {
+  # WHY: the default argument is a promise, forced after this import.
+  box::use(R / harness / constants[TARGETS, project_root])
+  e <- tryCatch(as.Date(E), error = function(err) as.Date(NA))
+  if (length(e) != 1 || is.na(e)) stop("E must be one date, not ", paste(format(E), collapse = ", "))
+  any(TARGETS$confirmatory & TARGETS$E == e) && !is_frozen(root)
+}
+
 #' The freeze guard: whether forecast cell (E, F) may be scored under `root`.
 #' @param E,F the cell's election and forecast date (Date or ISO string)
 #' @param root the project root whose `harness/` holds the freeze files

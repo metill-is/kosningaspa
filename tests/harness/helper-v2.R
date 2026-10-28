@@ -1,5 +1,6 @@
-# Test fixtures for arm V2: its step configs, the 2024-eve cell and its Stan data, and
-# helpers that each plant one fault in one table of an info_set().
+# Test fixtures for arm V2: its step configs, the 2024-eve cell and its Stan data, helpers
+# that each plant one fault in one table of an info_set(), and model methods on V2's Stan
+# files (v2_methods(), n_unc(), reverse_labels()).
 # The V2 modules are imported inside the fixtures, so that a broken module fails the tests
 # that use it, not the sourcing of every test file.
 box::use(
@@ -77,4 +78,60 @@ poll_after_F <- function(info) {
   last <- which(info$polls_nat$date == max(info$polls_nat$date))
   info$polls_nat$date[last] <- info$F + 1
   info
+}
+
+# The compiled models of v2_methods(), one per Stan file's sha256 in this R session.
+methods_models <- new.env(parent = emptyenv())
+
+# A one-iteration fit that carries the model methods (log_prob, unconstrain_variables, ...)
+# of `stan_file` on `data`. Ruling P1: the model is compiled with its methods from a copy of
+# the file in a fresh temporary directory, never in place and never with force_recompile,
+# once per R session per file sha256. `data$draw_forecast` is set to 0 if the field exists.
+# The methods are attached by a fixed_param run in a temporary directory, deleted unread.
+# A relative `stan_file` is read from the project root.
+v2_methods <- function(stan_file, data) {
+  if (!startsWith(stan_file, "/")) stan_file <- file.path(project_root(), stan_file)
+  sha <- digest::digest(file = stan_file, algo = "sha256")
+  if (is.null(methods_models[[sha]])) {
+    # WHY: cmdstanr builds the methods only when it compiles, never from an executable it finds up to date.
+    dir <- tempfile("v2-methods-")
+    dir.create(dir)
+    copy <- file.path(dir, basename(stan_file))
+    stopifnot(file.copy(stan_file, copy))
+    methods_models[[sha]] <- cmdstanr::cmdstan_model(copy, compile_model_methods = TRUE, quiet = TRUE)
+  }
+  if (!is.null(data$draw_forecast)) data$draw_forecast <- 0L
+  attributes(data) <- list(names = names(data))
+  run <- tempfile("v2-methods-run-")
+  dir.create(run)
+  on.exit(unlink(run, recursive = TRUE), add = TRUE)
+  json <- file.path(run, "data.json")
+  cmdstanr::write_stan_json(data, json)
+  fit <- methods_models[[sha]]$sample(
+    data = json, fixed_param = TRUE, chains = 1, iter_warmup = 0, iter_sampling = 1, adapt_engaged = FALSE,
+    seed = 1, init = 0, output_dir = run, refresh = 0, show_messages = FALSE, show_exceptions = FALSE
+  )
+  # WHY: the model pointer reads the data file, which on.exit deletes.
+  fit$init_model_methods()
+  fit
+}
+
+# The length of the unconstrained parameter vector of a v2_methods() fit.
+# WHY: cmdstanr keeps it only in the fit's private methods environment; reading it calls no model method.
+n_unc <- function(m) m$.__enclos_env__$private$model_methods_env_$num_upars_
+
+# Stage-1 data (stage1_data()) with the party labels in reverse order: label l becomes
+# L + 1 - l, the attribute `labels` is reversed, and the rows of each election and the
+# target rows are listed in reverse order too.
+reverse_labels <- function(d) {
+  first <- cumsum(c(0L, c(d$n_rows)[-d$D]))
+  i <- unlist(lapply(seq_len(d$D), \(e) rev(first[e] + seq_len(d$n_rows[e]))))
+  j <- rev(seq_len(d$N_E))
+  out <- d
+  for (f in c("y", "x", "inc_years", "vnv", "growth")) out[[f]] <- array(c(d[[f]])[i], dim = d$N)
+  out$label <- array(d$L + 1L - c(d$label)[i], dim = d$N)
+  for (f in c("x_E", "inc_years_E", "vnv_E", "growth_E")) out[[f]] <- array(c(d[[f]])[j], dim = d$N_E)
+  out$label_E <- array(d$L + 1L - c(d$label_E)[j], dim = d$N_E)
+  attr(out, "labels") <- rev(attr(d, "labels"))
+  out
 }
