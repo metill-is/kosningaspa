@@ -155,7 +155,8 @@ scale funnel (max R-hat 1.13), so the model does not use it.
 - **The bound.** The new posterior is the old one conditioned on log φ < 20; no posterior
   draw above reaches it, but data that pushed φ that high would be fitted differently.
 - **Live data.** Every fit here uses arm R0's frozen data for its cell, never `data/`.
-- **2017.** The 2017 cells were checked for equivalence only, not sampled.
+- **2017.** The 2017 cells were checked for equivalence only, at points from the old model's
+  30 + 20 fit above; the new model was not sampled on them.
 
 ### Reproducing
 
