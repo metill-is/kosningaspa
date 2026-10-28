@@ -105,6 +105,24 @@ check_sealed <- function(name, root, none, not_committed) {
   invisible(TRUE)
 }
 
+#' Whether the freeze is sealed under `root`.
+#' @param root the project root whose `harness/` holds the freeze files
+#' @return logical(1): TRUE when `harness/FREEZE.md` and `harness/FREEZE.sha256` pass
+#'   checks 2–5 of `freeze_guard()` (both exist, the list covers FREEZE.md, every listed
+#'   sha256 matches, and both files are committed), else FALSE
+#' @export
+is_frozen <- function(root = project_root()) {
+  # WHY: the default argument is a promise, forced after this import.
+  box::use(R / harness / constants[project_root])
+  tryCatch(
+    {
+      check_sealed("FREEZE", root, none = "no freeze", not_committed = "the freeze is not committed")
+      TRUE
+    },
+    error = function(e) FALSE
+  )
+}
+
 #' The freeze guard: whether forecast cell (E, F) may be scored under `root`.
 #' @param E,F the cell's election and forecast date (Date or ISO string)
 #' @param root the project root whose `harness/` holds the freeze files

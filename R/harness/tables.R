@@ -1,6 +1,7 @@
 # Lookup tables of the v2 harness (spec §7): houses and their lineage (D7), each poll
 # party's entry (D8), the epoch of a date, the cabinet in office on a day (the Brier
-# event's coalition, D9, and the incumbents), and each kjördæmi's valid votes (D6).
+# event's coalition, D9, and the incumbents), each kjördæmi's valid votes (D6), and V2's
+# time grid (§6.2).
 
 #' Epoch of each date: 1 + the number of elections strictly before it, so an election
 #' day belongs to the epoch it closes.
@@ -12,6 +13,28 @@ epoch_of <- function(date, elections = ELECTIONS) {
   # WHY: the default argument is a promise, forced after this import.
   box::use(R / harness / constants[ELECTIONS])
   1L + findInterval(as.Date(date), sort(as.Date(elections)), left.open = TRUE)
+}
+
+#' The time grid of a cell's latent walk (spec §6.2): every admitted national and
+#' kjördæmi poll date, the window elections before E, the campaign starts, F and E.
+#' @param info an `info_set()` list
+#' @param campaign_days the campaign length in days
+#' @return a sorted Date vector without repeats, starting at the first admitted poll date.
+#'   The campaign starts are election - `campaign_days` for the elections before E and for
+#'   E, kept when on or after the first poll date. For a valid `info` every observation
+#'   date is on or before F, so the only dates after F are E - `campaign_days` (when after
+#'   F) and E, which is last. `v2_stan_data()` checks that; this only builds. An error if
+#'   `info` has no admitted poll
+#' @export
+grid_dates <- function(info, campaign_days = 47L) {
+  box::use(R / harness / constants[ELECTIONS])
+  E <- as.Date(info$E)
+  obs <- as.Date(c(info$polls_nat$date, info$polls_kd$date))
+  if (!length(obs)) stop("grid_dates: no admitted poll")
+  closed <- ELECTIONS[ELECTIONS < E]
+  starts <- c(closed, E) - campaign_days
+  starts <- starts[starts >= min(obs)]
+  sort(unique(c(obs, closed, starts, as.Date(info$F), E)))
 }
 
 #' The house table: each pollster's house and house lineage.

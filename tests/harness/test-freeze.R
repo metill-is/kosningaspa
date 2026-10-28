@@ -1,4 +1,4 @@
-box::use(R / harness / freeze[read_sha_list, verify_sha_list, is_committed, freeze_guard, target_cell])
+box::use(R / harness / freeze[read_sha_list, verify_sha_list, is_committed, freeze_guard, is_frozen, target_cell])
 
 E24 <- "2024-11-30"
 F24 <- "2024-11-29"
@@ -209,4 +209,22 @@ test_that("7: once CONFIRM.md exists, 2017 is never scored again", {
   commit_all(fr, "confirm")
   expect_error(freeze_guard(E17, F17, fr), CONFIRMED_2017, fixed = TRUE)
   expect_true(freeze_guard(E24, F24, fr))
+})
+
+test_that("is_frozen is FALSE without a sealed freeze and TRUE with one", {
+  expect_false(is_frozen(withr::local_tempdir()))
+  fr <- frozen_root()
+  expect_true(is_frozen(fr))
+  expect_true(is_frozen(frozen_root(decision = TRUE)))
+  cat("edited\n", file = file.path(fr, "harness", "FREEZE.md"), append = TRUE)
+  expect_false(is_frozen(fr))
+  unsealed <- withr::local_tempdir()
+  git_in(unsealed, "init", "-q")
+  seal(unsealed, "FREEZE")
+  expect_false(is_frozen(unsealed))
+  commit_all(unsealed, "freeze")
+  expect_true(is_frozen(unsealed))
+  writeLines("# nothing listed", file.path(unsealed, "harness", "FREEZE.sha256"))
+  commit_all(unsealed, "a list that does not cover FREEZE.md")
+  expect_false(is_frozen(unsealed))
 })
