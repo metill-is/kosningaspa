@@ -110,7 +110,7 @@ test_that("the data fields come in the contract's order, with integer counts and
   expect_identical(dim(d$idx_res), c(d$n_closed, d$P))
   expect_identical(c(d$n_epoch, d$n_closed, d$draw_forecast, d$latent_path, d$n_sf), c(4L, 3L, 1L, 0L, 0L))
   expect_equal(rowSums(d$w), rep(1, d$n_epoch))
-  expect_true(all(d$poll_kd == cummax(d$poll_kd)) && identical(sort(unique(d$poll_kd)), seq_len(d$J)))
+  expect_true(all(d$poll_kd == cummax(d$poll_kd)) && identical(sort(unique(c(d$poll_kd))), seq_len(d$J)))
   expect_true(all(d$house_first_epoch == cummax(d$house_first_epoch)))
 })
 test_that("the shock scaling reads the previous election's national share, with the floor for a party with none", {
@@ -147,5 +147,66 @@ test_that("a 2017 cell under a sealed freeze draws a forecast and calls stage 1"
   expect_identical(b$data$draw_forecast, 1L)
   expect_identical(b$meta$stage1_sha256, "stub")
   expect_identical(b$meta$party_order[b$data$sf_idx], S_f)
-  expect_identical(b$data$mu_f, seq_along(S_f) / 10)
+  expect_identical(c(b$data$mu_f), seq_along(S_f) / 10)
+})
+
+test_that("every one-dimensional field is a JSON array, even of length 1, as CmdStan reads it", {
+  skip_without_snapshot()
+  vectors <- c(
+    "delta_days", "campaign", "grid_epoch", "delta_years", "grid_nat", "house_nat", "n_rep_nat",
+    "poll_kd", "kd_kd", "grid_kd", "house_kd", "n_rep_kd", "grid_res", "n_rep_res",
+    "house_first_epoch", "entry_epoch", "N_open", "sf_idx", "mu_f"
+  )
+  info <- info_set(as.Date("2017-10-28"), as.Date("2017-10-14"), v2_inputs())
+  b <- v2_stan_data(info, modifyList(cfg_m0(), list(fundamentals = 1L)), root = withr::local_tempdir())
+  expect_identical(lengths(b$data[c("grid_res", "n_rep_res")]), c(grid_res = 1L, n_rep_res = 1L))
+  path <- withr::local_tempfile(fileext = ".json")
+  cmdstanr::write_stan_json(b$data, path)
+  j <- jsonlite::read_json(path)
+  for (f in c("grid_res", "n_rep_res")) {
+    expect_type(j[[f]], "list")
+    expect_length(j[[f]], 1L)
+  }
+  for (f in vectors) {
+    expect_type(j[[f]], "list")
+    expect_length(j[[f]], length(b$data[[f]]))
+  }
+  expect_identical(unlist(j$grid_res), c(b$data$grid_res))
+})
+test_that("the campaign flag covers exactly the steps within 47 days before an election, past or target", {
+  skip_without_snapshot()
+  els <- ELECTIONS
+  for (cell in list(c("2024-11-30", "2024-11-29", "4"), c("2017-10-28", "2017-10-27", "2"))) {
+    info <- info_set(as.Date(cell[1]), as.Date(cell[2]), v2_inputs())
+    d <- v2_stan_data(info, cfg_m0(), root = withr::local_tempdir())$data
+    g <- grid_dates(info)
+    expect_identical(length(g), d$G)
+    expect_equal(sum(d$campaign * d$delta_days), 47 * as.numeric(cell[3]))
+    E <- as.Date(cell[1])
+    inside <- vapply(seq_len(d$G - 1), \(i) any(g[i] >= els[els <= E] - 47 & g[i + 1] <= els[els <= E]), logical(1))
+    expect_identical(c(d$campaign) == 1L, inside)
+  }
+  d <- d_2024eve(); g <- grid_dates(info_2024eve())
+  start <- match(as.Date("2024-10-14"), g)
+  expect_identical(c(d$campaign[start - 1], d$campaign[start], d$campaign[d$G - 1]), c(0L, 1L, 1L))
+  e21 <- match(as.Date("2021-09-25"), g)
+  expect_identical(c(d$campaign[e21 - 1], d$campaign[e21]), c(1L, 0L))
+})
+test_that("a party exists from its entry date on, and throughout if present at the window's start", {
+  skip_without_snapshot()
+  entry <- readr::read_csv(root("harness", "entry_table.csv"), col_types = readr::cols(
+    flokkur = "c", first_nonzero = "D", entry_epoch = "i", newcomer = "l"
+  ))
+  for (cell in list(c("2024-11-30", "2024-11-29"), c("2021-09-25", "2021-03-29"))) {
+    info <- info_set(as.Date(cell[1]), as.Date(cell[2]), v2_inputs())
+    b <- v2_stan_data(info, cfg_m0())
+    g <- grid_dates(info)
+    for (p in seq_len(b$data$P)) {
+      row <- entry[entry$flokkur == b$meta$party_order[p], ]
+      expect_identical(nrow(row), 1L)
+      want <- if (row$newcomer) as.integer(g >= row$first_nonzero) else rep(1L, length(g))
+      expect_identical(b$data$exists[, p], want, label = b$meta$party_order[p])
+    }
+    expect_true(any(b$data$exists == 0L))
+  }
 })

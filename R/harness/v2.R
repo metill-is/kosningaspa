@@ -22,6 +22,15 @@ STAGE1_KEYS <- c("seed", "iter_warmup", "iter_sampling")
 #' The party and kjördæmi orders a V2 config may name.
 V2_ORDERS <- c("default", "reversed")
 
+#' The data fields declared as a one-dimensional array or vector. They are stored as 1-d R
+#' arrays, so `cmdstanr::write_stan_json()` writes a length-1 field as `[x]`, not as the
+#' scalar that CmdStan's JSON reader refuses for an `array[1]`.
+V2_VECTOR_FIELDS <- c(
+  "delta_days", "campaign", "grid_epoch", "delta_years", "grid_nat", "house_nat", "n_rep_nat",
+  "poll_kd", "kd_kd", "grid_kd", "house_kd", "n_rep_kd", "grid_res", "n_rep_res",
+  "house_first_epoch", "entry_epoch", "N_open", "sf_idx", "mu_f"
+)
+
 #' π̄ for a party with no previous result, and the cap on 0.2 / π̄ in the shock scaling (§6.6).
 SHOCK_FLOOR <- 0.02
 SHOCK_CAP <- 10
@@ -145,7 +154,7 @@ reported <- function(y) {
 #'   `info$parties`, reversed when `cfg$order` is `"reversed"`
 #' @param root the project root whose freeze files `is_frozen()` reads
 #' @return `list(data, meta)`. `data` holds, in this order (`stan_data_sha()` depends on
-#'   it), with no dimnames:
+#'   it), with no dimnames and each one-dimensional field a 1-d array (`V2_VECTOR_FIELDS`):
 #'   - sizes and the grid: `P`, `K`, `H`, `G`, `n_epoch` (`epoch_of(E)`), `delta_days`
 #'     (the G - 1 steps of `grid_dates()`), `campaign` (1 for a step starting on or after
 #'     an election - `campaign_days` and ending on or before it, for an election before E
@@ -389,6 +398,7 @@ v2_stan_data <- function(info, cfg, stage1 = stage1_mu_f, party_order = NULL, ro
   )
   data[V2_PRIORS] <- cfg[V2_PRIORS]
   data[V2_SWITCHES] <- lapply(cfg[V2_SWITCHES], as.integer)
+  data[V2_VECTOR_FIELDS] <- lapply(data[V2_VECTOR_FIELDS], \(x) array(x, dim = length(x)))
   na <- names(data)[vapply(data, anyNA, logical(1))]
   if (length(na)) fail("no field holds an NA; NA in ", listed(na))
 
@@ -398,8 +408,8 @@ v2_stan_data <- function(info, cfg, stage1 = stage1_mu_f, party_order = NULL, ro
     house_levels = house_levels,
     newcomers = party_order[entry_epoch > 0],
     eday_index = G,
-    n_pred = sum(data$N_open),
-    n_pred_k = stats::setNames(data$N_open, kd_order),
+    n_pred = sum(as.integer(N_open)),
+    n_pred_k = stats::setNames(as.integer(N_open), kd_order),
     n_polls_nat = data$N_nat,
     n_polls_kd = data$J,
     max_poll_date = max(nat$date),
