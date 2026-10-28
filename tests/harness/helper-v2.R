@@ -1,6 +1,6 @@
 # Test fixtures for arm V2: its step configs, the 2024-eve cell and its Stan data, helpers
 # that each plant one fault in one table of an info_set(), and model methods on V2's Stan
-# files (v2_methods(), n_unc(), reverse_labels()).
+# files (v2_methods(), n_unc(), reverse_labels(), and stage 1's R reference).
 # The V2 modules are imported inside the fixtures, so that a broken module fails the tests
 # that use it, not the sourcing of every test file.
 box::use(
@@ -134,4 +134,39 @@ reverse_labels <- function(d) {
   out$label_E <- array(d$L + 1L - c(d$label_E)[j], dim = d$N_E)
   attr(out, "labels") <- rev(attr(d, "labels"))
   out
+}
+
+# The predictor of stage 1 (Stan/fundamentals_v2.stan) at parameters `p` for covariates
+# `x`, `inc_years`, `vnv`, `growth` (suffix "" for the training rows, "_E" for E).
+stage1_predictor <- function(d, p, suffix = "") {
+  f <- function(name) c(d[[paste0(name, suffix)]])
+  label <- if (suffix == "") c(d$label) else c(d$label_E)
+  c(p$alpha)[label] + p$beta_lag * f("x") + p$beta_inc * f("inc_years") + p$beta_vnv * f("vnv") +
+    p$beta_growth * f("growth")
+}
+
+# Stage 1's log density at constrained parameters `p` (a constrain_variables() list), with
+# every normalising constant: the Dirichlet-multinomial log-pmf of each election's counts
+# given phi_f * softmax(eta_d), plus the §6.10 priors, without the Jacobian.
+stage1_lp_ref <- function(d, p) {
+  eta <- stage1_predictor(d, p)
+  phi <- 1 / p$phi_f_inv
+  last <- cumsum(c(d$n_rows))
+  lp <- 0
+  for (e in seq_len(d$D)) {
+    i <- (last[e] - d$n_rows[e] + 1):last[e]
+    a <- phi * exp(eta[i] - max(eta[i])) / sum(exp(eta[i] - max(eta[i])))
+    y <- c(d$y)[i]
+    n <- sum(y)
+    lp <- lp + lgamma(n + 1) - sum(lgamma(y + 1)) + lgamma(sum(a)) - lgamma(n + sum(a)) + sum(lgamma(y + a) - lgamma(a))
+  }
+  lp + sum(stats::dnorm(c(p$alpha), 0, 1, log = TRUE)) + stats::dnorm(p$beta_lag, 0, 1, log = TRUE) +
+    stats::dnorm(p$beta_inc, 0, 1, log = TRUE) + stats::dnorm(p$beta_vnv, 0, 5, log = TRUE) +
+    stats::dnorm(p$beta_growth, 0, 5, log = TRUE) + stats::dexp(p$phi_f_inv, 1, log = TRUE)
+}
+
+# Stage 1's eta_E at constrained parameters `p`: the predictor at E, centred over S_f(E).
+stage1_eta_E_ref <- function(d, p) {
+  e <- stage1_predictor(d, p, "_E")
+  e - mean(e)
 }

@@ -10,6 +10,10 @@ STAGE1_STAN <- file.path("Stan", "fundamentals_v2.stan")
 #' The largest R-hat a stage-1 fit may have.
 STAGE1_MAX_RHAT <- 1.01
 
+#' The significant digits of the stage-1 fit's CSV: the full double, so that the mean of the
+#' centred draws of `eta_E` sums to 0 to rounding.
+STAGE1_SIG_FIGS <- 18L
+
 #' The data fields declared as a one-dimensional array or vector, stored as 1-d R arrays so
 #' that `cmdstanr::write_stan_json()` writes a length-1 field as an array.
 STAGE1_VECTOR_FIELDS <- c(
@@ -22,9 +26,13 @@ fail <- function(...) stop("stage 1: ", ..., call. = FALSE)
 #' Stop with "stage 1: `what`" unless `ok` is TRUE.
 check <- function(ok, what) if (!isTRUE(ok)) fail(what)
 
-#' The predictors §6.5 names, coded as production's `prepare_fundamentals_data()` codes them:
-#' the logit of the previous vote share, log incumbency years (0 for none), and log(1 + CPI
-#' inflation) and log(1 + GDP growth / 100) for incumbents, 0 for the other parties.
+#' The predictors §6.5 names: the lag, logit(voteshare_prior / 100), the previous vote
+#' share as recorded in the row; log incumbency years (0 for none); and log(1 + CPI
+#' inflation) and log(1 + GDP growth / 100) for incumbents, 0 for the other parties. The
+#' last three are coded as production's `prepare_fundamentals_data()` codes them. The lag
+#' is not production's `x_f`, which renormalises the previous election's shares, gives 0
+#' to a label with no row at the previous election and drops the first election as an
+#' outcome.
 covariates <- function(rows) {
   p <- rows$voteshare_prior / 100
   list(
@@ -51,7 +59,11 @@ covariates <- function(rows) {
 #'   not new) and stood at d (voteshare > 0); an election enters with at least two such
 #'   rows. Its count is production's, round(voteshare / Σ voteshare × total_valid_votes)
 #'   with the sum over that election's rows with a previous share, restricted to S_f(d), so
-#'   the shares are renormalised over S_f(d). Its predictors are `covariates()`'s. E's rows
+#'   the shares are renormalised over S_f(d). Its predictors are `covariates()`'s, so the
+#'   row set differs from R0's in two ways: 1967 enters as an outcome (its rows record
+#'   1963's shares, and R0's table drops its first election as one), and a successor list
+#'   with no row under the same label at the previous election gets its recorded previous
+#'   share, where R0's lag is 0. E's rows
 #'   are the target rows of the S_f parties, whose masked columns (voteshare,
 #'   voteshare_change, total_valid_votes) are never read. The labels are the α labels
 #'   (`party`) of those rows and E's, in the order of `fundamentals_rows()`'s levels.
@@ -114,15 +126,16 @@ stage1_data <- function(info) {
 
 #' The cache key of a stage-1 fit.
 #' @return the sha256 of the lines naming the Stan file's and the data JSON's sha256, the
-#'   seed, the iterations, the CmdStan version, the other sampler settings and the S_f
-#'   parties
+#'   seed, the iterations, the CmdStan version, the other sampler settings (`SAMPLER`'s
+#'   chains, init and max_treedepth, and `STAGE1_SIG_FIGS`) and the S_f parties
 stage1_key <- function(stan_sha, data_sha, s1, S_f) {
   box::use(R / harness / runs[SAMPLER])
   lines <- c(
     paste("stan", stan_sha), paste("data", data_sha), paste("seed", s1$seed),
     paste("iter_warmup", s1$iter_warmup), paste("iter_sampling", s1$iter_sampling),
     paste("cmdstan", cmdstanr::cmdstan_version()), paste("chains", SAMPLER$chains), paste("init", SAMPLER$init),
-    paste("max_treedepth", SAMPLER$max_treedepth), paste("S_f", paste(enc2utf8(S_f), collapse = "\r"))
+    paste("max_treedepth", SAMPLER$max_treedepth), paste("sig_figs", STAGE1_SIG_FIGS),
+    paste("S_f", paste(enc2utf8(S_f), collapse = "\r"))
   )
   digest::digest(paste(lines, collapse = "\n"), algo = "sha256", serialize = FALSE)
 }
@@ -151,7 +164,8 @@ fit_stage1 <- function(stan_file, json, s1, key, info, path) {
   fit <- model$sample(
     data = json, seed = s1$seed, chains = SAMPLER$chains, parallel_chains = SAMPLER$parallel_chains,
     init = SAMPLER$init, max_treedepth = SAMPLER$max_treedepth, iter_warmup = s1$iter_warmup,
-    iter_sampling = s1$iter_sampling, output_dir = out, refresh = 0, show_messages = FALSE
+    iter_sampling = s1$iter_sampling, sig_figs = STAGE1_SIG_FIGS, output_dir = out, refresh = 0,
+    show_messages = FALSE
   )
   minutes <- as.numeric(difftime(Sys.time(), start, units = "mins"))
   eta <- fit$draws("eta_E", format = "draws_matrix")
@@ -202,12 +216,13 @@ fit_stage1 <- function(stan_file, json, s1, key, info, path) {
 #'
 #'   The key is the sha256 over the Stan file's sha256, the sha256 of the data JSON as
 #'   `cmdstanr::write_stan_json()` writes `stage1_data(info)`, the seed, the iterations,
-#'   the CmdStan version, `SAMPLER`'s chains, init and max_treedepth, and the S_f parties.
+#'   the CmdStan version, `SAMPLER`'s chains, init and max_treedepth, `STAGE1_SIG_FIGS`
+#'   and the S_f parties.
 #'   The fit's output lives in `results_root()/stage1/<key>/mu_f.json`, written atomically
 #'   (a temporary file, then a rename), and a later call with the same key reads it
 #'   instead of fitting, so both calls return identical values. The fit runs `SAMPLER`'s
-#'   chains, init and max_treedepth with `cfg$stage1`'s seed and iterations, and prints a
-#'   STAGE1 line of its diagnostics.
+#'   chains, init and max_treedepth with `cfg$stage1`'s seed and iterations, writes its
+#'   CSVs with `STAGE1_SIG_FIGS` digits, and prints a STAGE1 line of its diagnostics.
 #'
 #'   An error, "stage 1: ...", before any fit or compile when `forecast_free(info$E,
 #'   root)` holds ("2017 is not fitted before the freeze"); when `cfg$stage1` is not a

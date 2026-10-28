@@ -35,6 +35,7 @@ test_that("stage 1 is cached by its inputs", {
   b <- stage1_mu_f(info, cfg)
   expect_identical(a, b)
   expect_named(a$mu_f, info$fundamentals$S_f)
+  expect_lt(abs(sum(a$mu_f)), 1e-8)
   expect_true(file.exists(file.path(Sys.getenv("HARNESS_RESULTS"), "stage1", a$sha256, "mu_f.json")))
   out <- capture.output(again <- stage1_mu_f(info, cfg))
   expect_false(any(startsWith(out, "STAGE1")))
@@ -44,13 +45,47 @@ test_that("stage 1 is cached by its inputs", {
 })
 test_that("stage 1 refuses a 2017 cell before the freeze", {
   skip_without_snapshot()
-  expect_error(
+  withr::local_envvar(HARNESS_RESULTS = withr::local_tempdir())
+  # WHY: a refusal moved after the compile would then fail with "compiled", not pass with the right message.
+  local_mocked_bindings(cmdstan_model = function(...) stop("compiled"), .package = "cmdstanr")
+  out <- capture.output(expect_error(
     stage1_mu_f(info_set(as.Date("2017-10-28"), as.Date("2017-10-27")), cfg_m0(), root = withr::local_tempdir()),
     "stage 1: 2017 is not fitted before the freeze"
-  )
+  ))
+  expect_false(any(startsWith(out, "STAGE1")))
+  expect_false(file.exists(file.path(Sys.getenv("HARNESS_RESULTS"), "stage1")))
+})
+test_that("stage 1's log density and eta_E are the R reference's at arbitrary points", {
+  skip_unless_slow()
+  skip_without_snapshot()
+  d <- stage1_data(info_set(as.Date("2021-09-25"), as.Date("2021-03-29"), v2_inputs()))
+  m <- v2_methods("Stan/fundamentals_v2.stan", d)
+  set.seed(2)
+  lp <- matrix(NA_real_, 5, 2, dimnames = list(NULL, c("stan", "ref")))
+  for (i in 1:5) {
+    u <- rnorm(n_unc(m))
+    pars <- m$constrain_variables(u)
+    lp[i, ] <- c(m$log_prob(u, jacobian = FALSE), stage1_lp_ref(d, pars))
+    expect_equal(c(pars$eta_E), stage1_eta_E_ref(d, pars), tolerance = 1e-12)
+  }
+  # WHY: Stan drops the constant terms (the multinomial coefficient, the normals' constants), so the gap is constant, not 0.
+  gap <- lp[, "stan"] - lp[, "ref"]
+  expect_lt(diff(range(gap)), 1e-9 * max(1, abs(lp)))
+})
+test_that("a stage-1 fit that fails its check stops and writes no cache", {
+  skip_unless_slow()
+  skip_without_snapshot()
+  results <- withr::local_tempdir()
+  withr::local_envvar(HARNESS_RESULTS = results)
+  info <- info_set(as.Date("2021-09-25"), as.Date("2021-03-29"), v2_inputs())
+  cfg <- cfg_m0()
+  cfg$stage1[c("iter_warmup", "iter_sampling")] <- list(10L, 10L)
+  expect_error(capture.output(stage1_mu_f(info, cfg)), "stage 1: the fit fails its check")
+  expect_false(dir.exists(file.path(results, "stage1")))
+  expect_length(list.files(results, pattern = "mu_f", recursive = TRUE, all.files = TRUE), 0)
 })
 
-test_that("stage 1's rows are S_f(d)'s lists that stood at each election before E, with production's counts and covariates", {
+test_that("stage 1's rows are S_f(d)'s lists that stood at each election before E, with production's counts and the recorded lag", {
   skip_without_snapshot()
   for (cell in list(c("2021-09-25", "2021-03-29"), c("2024-11-30", "2024-11-29"))) {
     info <- info_set(as.Date(cell[1]), as.Date(cell[2]), v2_inputs())
