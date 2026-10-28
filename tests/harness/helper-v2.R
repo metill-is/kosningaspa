@@ -1,6 +1,7 @@
 # Test fixtures for arm V2: its step configs, the 2024-eve cell and its Stan data, helpers
 # that each plant one fault in one table of an info_set(), and model methods on V2's Stan
-# files (v2_methods(), n_unc(), reverse_labels(), and stage 1's R reference).
+# files (v2_methods(), n_unc(), reverse_labels(), and stage 1's R reference), and
+# random_sigma() for the walk's covariance algebra.
 # The V2 modules are imported inside the fixtures, so that a broken module fails the tests
 # that use it, not the sourcing of every test file.
 box::use(
@@ -78,6 +79,15 @@ poll_after_F <- function(info) {
   last <- which(info$polls_nat$date == max(info$polls_nat$date))
   info$polls_nat$date[last] <- info$F + 1
   info
+}
+
+# A random walk-innovation covariance Sigma = diag(sigma) Omega diag(sigma), with
+# sigma ~ U(0.01, 0.05) and Omega an LKJ(2) draw, from the global RNG.
+random_sigma <- function(P) {
+  box::use(R / harness / v2_reference[lkj_corr_cholesky_rng])
+  s <- stats::runif(P, 0.01, 0.05)
+  L <- lkj_corr_cholesky_rng(P, 2)
+  diag(s) %*% tcrossprod(L) %*% diag(s)
 }
 
 # The compiled models of v2_methods(), one per Stan file's sha256 in this R session.
