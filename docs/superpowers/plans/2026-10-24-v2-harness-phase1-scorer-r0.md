@@ -10,7 +10,7 @@
 - An arm is an entry in `R/harness/arms.R`. It has a builder from `info_set()` to frozen Stan data, a Stan file, and an extractor that writes the §5.5 parquets.
 - `R/harness/fit_cell.R` fits one cell headless. It uses the run records in `R/harness/runs.R`: ids, frozen inputs, `meta.json`, sha-skip, the DIAG line and the §5.7 gate. `R/harness/queue.sh` runs a run list on two lanes.
 - R0's builder is production's `prepare_stan_data()` run on the cell's admitted inputs, plus a fixed list of overrides. R0's Stan file is production's with three hooks.
-  - Since Decision 5 (ruled 2026-10-27), the parent is 884560f (centred), and R0 keeps two hooks, H1 and H2; H3 is the parent's own. Where the tasks below say 5d22031, three hooks, H3 or R0's own active parties, they describe the plan as executed before that ruling.
+  - Since Decision 5 (ruled 2026-10-27), the parent is production at 884560f (centred), and since b57a015 at aa2ac1a (anchored walk, partially centred effects); R0 keeps two hooks, H1 and H2; H3 is the parent's own. Where the tasks below say 5d22031, three hooks, H3 or R0's own active parties, they describe the plan as executed before that ruling.
 
 **Tech Stack:** R box modules, testthat 3, cmdstanr 0.9 (CmdStan 2.38; model methods for `log_prob`), posterior 1.6, arrow, jsonlite, digest, withr, zsh.
 
@@ -666,7 +666,7 @@ R0 is production mapped to E (§5.4). The builder assembles the cell's admitted 
 | `mu_gamma_scale` (new) | for `party_order[-1]`: 1/√n_e, and 0 when n_e = 0; n_e = `epoch_of(E) − entry_epoch` | `/ sqrt(3.0)` on rows 1..P−3 and `/ sqrt(2.0)` on row P−2, inside the Stan file |
 | Column D_f + 1 of `x_f`, `index_f` and `n_parties_f`, plus the newcomer rows of `y_f`, `x_f`, `incumbent_f`, `incumbent_years`, `vnv` and `growth` | rebuilt by the prediction-column rule below | the previous election's party set |
 
-Decision 5 (2026-10-27) removed two rows from this table. They were R0's own `n_active_d`/`active_index_d`, and the positional `n_parties_n_rep`/`n_parties_k_rep` that `rep_counts()` restored. R0's parent is now 884560f: its `prepare_stan_data()` computes the active parties itself, and its Stan file declares no rep counts.
+Decision 5 (2026-10-27) removed two rows from this table. They were R0's own `n_active_d`/`active_index_d`, and the positional `n_parties_n_rep`/`n_parties_k_rep` that `rep_counts()` restored. R0's parent became 884560f (aa2ac1a since b57a015, with the same `prepare_stan_data()`): its `prepare_stan_data()` computes the active parties itself, and its Stan file declares no rep counts.
 
 The builder applies no house filter (§5.4: no Gallup filters, as in the final 2024 run).
 

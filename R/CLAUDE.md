@@ -67,7 +67,7 @@ Box modules in `R/harness/`, imported as `R/harness/<module>`, with tests in `te
 | `sampler_check/equivalence.R` | Checks the centred δ / log σ reparameterisation (`delta_raw` → `delta_free`, `log_sigma_raw` → `log_sigma`) point by point: at posterior and off-posterior points, new log density minus (old log density minus log-Jacobian) must be constant, with each Jacobian term left out as a negative control; and both models' generated quantities, run at the posterior points with one seed, must agree |
 | `sampler_check/equivalence_anchored.R` | Checks the anchored walk with partially centred δ and log σ, non-centred γ and centred log φ against the earlier backward non-centred fit: maps the old fit's draws to the new model's unconstrained space through the natural quantities, then at posterior and off-posterior points new log density minus its log-Jacobian minus (old log density minus the old model's unused walk column and its log-Jacobian) must be constant, with one negative control per log-Jacobian term, and the generated quantities must agree |
 | `sampler_check/compare_fits.R` | Old vs new fit (either parameterisation): `treedepth__` distribution, max R-hat, min bulk/tail ESS, ESS per minute and per 1,000 gradients, election-day share quantiles compared within MCSE |
-| `sampler_check/RESULTS.md` | Results of the centred δ / log σ + `max_treedepth = 12` change (24 Oct 2026), with the commands that reproduce them |
+| `sampler_check/RESULTS.md` | Results of each sampler change, newest first, with the commands that reproduce them: the anchored walk with partially centred δ and log σ and bounded log φ (28 Oct 2026), and the centred δ / log σ + `max_treedepth = 12` change (24 Oct 2026) |
 
 ### Polling-watch fit (Fylgisvakt; headless, run by hand)
 
