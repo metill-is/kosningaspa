@@ -27,7 +27,10 @@ that builds offline is not a fresh build. Slow tests (the sweep of every forecas
 `tests/harness/test-sweep.R`, the self-test's kjördæmi and seat scores, the R0 Stan tests
 and the cell runner's test fit, which compile with CmdStan) call `skip_unless_slow()` and
 run only with `HARNESS_SLOW=1` in the environment:
-`HARNESS_SLOW=1 LC_ALL=en_US.UTF-8 Rscript tests/run.R`.
+`HARNESS_SLOW=1 LC_ALL=en_US.UTF-8 Rscript tests/run.R`. The tests of `Stan/forecast_v2.stan`
+in `tests/harness/test-v2-stan.R` are slow and named by the V2 step they test (`v2s-m0: …`);
+`V2_STEPS=<step>[,<step>…]` runs only those steps' tests (`skip_unless_step()`), and unset it
+runs them all.
 
 The R code in `R/harness/` and `R/election_utils.R` writes every non-ASCII character as a
 `\uXXXX` escape and gives a non-ASCII name with `stats::setNames()`, never as a name tag;

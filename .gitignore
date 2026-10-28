@@ -16,6 +16,7 @@ Stan/base_model
 Stan/base_model_no_polling_bias
 Stan/fundamentals
 Stan/fundamentals_v2
+Stan/forecast_v2
 Stan/polling_and_fundamentals
 Stan/polling_and_fundamentals_*
 Stan/polling_watch*

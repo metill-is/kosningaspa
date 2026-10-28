@@ -1,7 +1,10 @@
 # Test fixtures for arm V2: its step configs, the 2024-eve cell and its Stan data, helpers
 # that each plant one fault in one table of an info_set(), and model methods on V2's Stan
-# files (v2_methods(), n_unc(), reverse_labels(), and stage 1's R reference), and
-# random_sigma() for the walk's covariance algebra.
+# files (v2_model(), v2_methods(), n_unc(), reverse_labels(), and stage 1's R reference),
+# random_sigma() for the walk's covariance algebra, and the comparison of
+# Stan/forecast_v2.stan with the R reference (skip_unless_step(), v2_test_cells(),
+# lp_points(), stan_pars(), expect_lp_matches(), expect_lp_rejects(), mutant_exercised(),
+# bounded_at()).
 # The V2 modules are imported inside the fixtures, so that a broken module fails the tests
 # that use it, not the sourcing of every test file.
 box::use(
@@ -93,13 +96,10 @@ random_sigma <- function(P) {
 # The compiled models of v2_methods(), one per Stan file's sha256 in this R session.
 methods_models <- new.env(parent = emptyenv())
 
-# A one-iteration fit that carries the model methods (log_prob, unconstrain_variables, ...)
-# of `stan_file` on `data`. Ruling P1: the model is compiled with its methods from a copy of
-# the file in a fresh temporary directory, never in place and never with force_recompile,
-# once per R session per file sha256. `data$draw_forecast` is set to 0 if the field exists.
-# The methods are attached by a fixed_param run in a temporary directory, deleted unread.
-# A relative `stan_file` is read from the project root.
-v2_methods <- function(stan_file, data) {
+# The model of `stan_file` compiled with its methods. Ruling P1: compiled from a copy of the
+# file in a fresh temporary directory, never in place and never with force_recompile, once
+# per R session per file sha256. A relative `stan_file` is read from the project root.
+v2_model <- function(stan_file) {
   if (!startsWith(stan_file, "/")) stan_file <- file.path(project_root(), stan_file)
   sha <- digest::digest(file = stan_file, algo = "sha256")
   if (is.null(methods_models[[sha]])) {
@@ -110,17 +110,33 @@ v2_methods <- function(stan_file, data) {
     stopifnot(file.copy(stan_file, copy))
     methods_models[[sha]] <- cmdstanr::cmdstan_model(copy, compile_model_methods = TRUE, quiet = TRUE)
   }
+  methods_models[[sha]]
+}
+
+# The v2_model() whose executable ran the fit `m`.
+model_of <- function(m) {
+  exe <- m$runset$exe_file()
+  for (sha in ls(methods_models)) if (identical(methods_models[[sha]]$exe_file(), exe)) return(methods_models[[sha]])
+  stop("no v2_model() in this session ran this fit")
+}
+
+# A one-iteration fit that carries the model methods (log_prob, unconstrain_variables, ...)
+# of `stan_file` (v2_model()) on `data`. `data$draw_forecast` is set to 0 if the field
+# exists. The methods are attached by a fixed_param run in a temporary directory, deleted
+# unread; a run that fails stops before the methods are attached.
+v2_methods <- function(stan_file, data) {
+  model <- v2_model(stan_file)
   if (!is.null(data$draw_forecast)) data$draw_forecast <- 0L
-  attributes(data) <- list(names = names(data))
   run <- tempfile("v2-methods-run-")
   dir.create(run)
   on.exit(unlink(run, recursive = TRUE), add = TRUE)
-  json <- file.path(run, "data.json")
-  cmdstanr::write_stan_json(data, json)
-  fit <- methods_models[[sha]]$sample(
-    data = json, fixed_param = TRUE, chains = 1, iter_warmup = 0, iter_sampling = 1, adapt_engaged = FALSE,
+  fit <- model$sample(
+    data = data_json(data, run), fixed_param = TRUE, chains = 1, iter_warmup = 0, iter_sampling = 1, adapt_engaged = FALSE,
     seed = 1, init = 0, output_dir = run, refresh = 0, show_messages = FALSE, show_exceptions = FALSE
   )
+  # WHY: init_model_methods() builds the model on `data` in this R session, where a C++ exception
+  # (a reject in transformed data) corrupts the heap (Ruling P1); CmdStan's own run meets it first.
+  stopifnot("the fixed_param run failed" = all(fit$return_codes() == 0))
   # WHY: the model pointer reads the data file, which on.exit deletes.
   fit$init_model_methods()
   fit
@@ -179,4 +195,222 @@ stage1_lp_ref <- function(d, p) {
 stage1_eta_E_ref <- function(d, p) {
   e <- stage1_predictor(d, p, "_E")
   e - mean(e)
+}
+# Ruling P3: skip unless the env var V2_STEPS is unset or empty, or its comma-separated list
+# names `step`, so that one step's tests of test-v2-stan.R run on their own.
+skip_unless_step <- function(step) {
+  steps <- trimws(strsplit(Sys.getenv("V2_STEPS"), ",", fixed = TRUE)[[1]])
+  steps <- steps[nzchar(steps)]
+  if (length(steps) && !step %in% steps) testthat::skip(paste0(step, " is not in V2_STEPS"))
+}
+
+# The three cells of the Stan lp tests, as list(data, n_post, n_off), built on first call in
+# the R session for each config, never when the helper is sourced: `data` is
+# v2_stan_data()'s for `cfg` with walk_form and delta_form at 0, under a temporary root with
+# no freeze, so the 2017 cell is its pre-freeze form (draw_forecast = 0). The 2017 cell gets
+# prior points only.
+v2_test_cells <- function(cfg) {
+  box::use(R / harness / v2[v2_stan_data])
+  skip_without_snapshot()
+  cfg$walk_form <- 0L
+  cfg$delta_form <- 0L
+  cached(paste("v2_test_cells", digest::digest(cfg)), {
+    root <- withr::local_tempdir("v2-cells-root-")
+    build <- function(E, F) v2_stan_data(info_set(as.Date(E), as.Date(F), v2_inputs()), cfg, root = root)$data
+    list(
+      eve2024 = list(data = build("2024-11-30", "2024-11-29"), n_post = 20L, n_off = 10L),
+      f180_2021 = list(data = build("2021-09-25", "2021-03-29"), n_post = 20L, n_off = 10L),
+      eve2017 = list(data = build("2017-10-28", "2017-10-27"), n_post = 0L, n_off = 0L)
+    )
+  })
+}
+
+# The core's parameters at unconstrained point `u` of the v2_methods() fit `m`, as
+# constrain_variables() gives them: named and ordered as V2_CORE_PARS, a matrix as a
+# matrix, and an array of more than two dimensions (`delta_raw`) flat in column-major
+# order, since utils::relist() drops its dims.
+stan_pars <- function(m, u) {
+  box::use(R / harness / v2_reference[V2_CORE_PARS])
+  pars <- m$constrain_variables(u, transformed_parameters = FALSE, generated_quantities = FALSE)
+  stopifnot(identical(names(pars), V2_CORE_PARS$name))
+  pars
+}
+
+# One draw `x` (a named numeric vector of CmdStan columns) as a list of the parameters of
+# `dims`, each in cmdstanr's shape; `scalar` names the parameters declared as scalars.
+draw_pars <- function(x, dims, scalar) {
+  out <- list()
+  for (n in names(dims)) {
+    d <- dims[[n]]
+    if (prod(d) == 0) {
+      out[[n]] <- array(numeric(0), d)
+    } else if (scalar[[n]]) {
+      out[[n]] <- unname(x[[n]])
+    } else {
+      idx <- as.matrix(expand.grid(lapply(d, seq_len)))
+      v <- unname(x[paste0(n, "[", apply(idx, 1, paste, collapse = ","), "]")])
+      stopifnot(!anyNA(v))
+      out[[n]] <- if (length(d) == 1) v else array(v, d)
+    }
+  }
+  out
+}
+
+# A point read back from a CmdStan CSV, made safe for unconstrain_variables() (Ruling P1):
+# every sum-to-zero group (theta1, mu1, each nu[j]) projected to zero sum, and every
+# lower-bounded parameter checked strictly positive.
+project_point <- function(p) {
+  p$theta1 <- p$theta1 - mean(p$theta1)
+  p$mu1 <- p$mu1 - mean(p$mu1)
+  if (length(p$nu)) p$nu <- p$nu - rowMeans(p$nu)
+  stopifnot(
+    abs(sum(p$theta1)) < 1e-12, abs(sum(p$mu1)) < 1e-12, all(abs(rowSums(p$nu)) < 1e-12),
+    all(unlist(p[OFF_SCALES]) > 0)
+  )
+  p
+}
+
+# The lower-bounded scale parameters that an off-posterior point multiplies by exp(N(0, 0.5)).
+OFF_SCALES <- c("sigma", "tau_camp", "sigma_gamma", "sigma_phi", "tau_sd")
+
+# The draws in `fit` (of `model`) of the variables named in `dims`, each in cmdstanr's
+# shape with its dims there; a list of one named list per draw.
+fit_values <- function(fit, model, dims) {
+  info <- do.call(c, unname(model$variables()[c("parameters", "transformed_parameters", "generated_quantities")]))
+  scalar <- vapply(names(dims), \(v) info[[v]]$dimensions == 0, logical(1))
+  present <- names(dims)[vapply(dims, prod, numeric(1)) > 0]
+  x <- unclass(posterior::as_draws_matrix(fit$draws(variables = present)))
+  lapply(seq_len(nrow(x)), \(i) draw_pars(x[i, ], dims, scalar))
+}
+
+# Data written as CmdStan JSON in `dir`; returns the path.
+data_json <- function(data, dir) {
+  json <- file.path(dir, "data.json")
+  attributes(data) <- list(names = names(data))
+  cmdstanr::write_stan_json(data, json)
+  json
+}
+
+# The parameter draws of a 4 x (50 + 20) fit of `m`'s model on `data` at max_treedepth 8,
+# init 0 and `seed`, read at sig_figs = 18 and projected (project_point()): a list of 80
+# parameter lists. The fit's output is in a temporary directory, deleted on return; only the
+# parameters are read. Every transition reaching depth 8 is expected, so the sampler's
+# diagnostic warnings are off.
+short_fit_draws <- function(m, data, seed) {
+  box::use(R / harness / v2_reference[v2_par_dims])
+  model <- model_of(m)
+  run <- withr::local_tempdir("v2-points-")
+  fit <- model$sample(
+    data = data_json(data, run), chains = 4, parallel_chains = 4, iter_warmup = 50, iter_sampling = 20,
+    max_treedepth = 8, seed = seed, init = 0, sig_figs = 18, output_dir = run, refresh = 0, show_messages = FALSE,
+    show_exceptions = FALSE, diagnostics = NULL
+  )
+  stopifnot("the short fit failed" = all(fit$return_codes() == 0))
+  lapply(fit_values(fit, model, v2_par_dims(data)), project_point)
+}
+
+# The parameters and generated quantities of `stan_file` (v2_model()) on `data` at `pars` (a
+# v2_simulate() draw): a one-draw fixed_param run started at `pars`, read back at sig_figs =
+# 18, so `pars` is the point as the run holds it. Returns list(pars, gq), `gq` holding every
+# generated quantity of non-zero size in its shape.
+gq_at <- function(stan_file, data, pars) {
+  box::use(R / harness / v2_reference[v2_par_dims])
+  model <- v2_model(stan_file)
+  run <- withr::local_tempdir("v2-gq-")
+  # WHY: CmdStan's init reader refuses a zero-size parameter (nu with J = 0) written as [], and
+  # there is nothing to initialise in it; cmdstanr would note that it was left out.
+  withr::local_options(cmdstanr_warn_inits = FALSE)
+  fit <- model$sample(
+    data = data_json(data, run), fixed_param = TRUE, chains = 1, iter_warmup = 0, iter_sampling = 1,
+    adapt_engaged = FALSE, seed = 1, init = list(pars[lengths(pars) > 0]), sig_figs = 18, output_dir = run,
+    refresh = 0, show_messages = FALSE, show_exceptions = FALSE
+  )
+  stopifnot("the fixed_param run failed" = all(fit$return_codes() == 0))
+  sizes <- fit$metadata()$stan_variable_sizes
+  gq <- intersect(names(model$variables()$generated_quantities), names(sizes))
+  gq <- gq[vapply(sizes[gq], prod, numeric(1)) > 0]
+  list(pars = fit_values(fit, model, v2_par_dims(data))[[1]], gq = fit_values(fit, model, sizes[gq])[[1]])
+}
+
+# The points of the Stan lp tests on `data`, for the v2_methods() fit `m`: a list of
+# list(u, pars, kind), `u` unconstrained and `pars` constrain_variables()' parameters at `u`
+# (stan_pars()). `n_post` posterior points and `n_off` off-posterior points are distinct
+# draws of one short fit (short_fit_draws(), seed `seed`), the latter with each OFF_SCALES
+# element multiplied by exp(N(0, 0.5)); `n_prior` prior points are v2_simulate() draws with
+# seeds seed + 1, ..., seed + n_prior. With n_post = n_off = 0 nothing is fitted. Memoised in
+# the R session by the model, the data and the counts, so a cell's fit runs once.
+lp_points <- function(m, data, n_post = 20, n_off = 10, n_prior = 10, seed = 5100) {
+  key <- paste("lp_points", digest::digest(list(m$runset$exe_file(), data)), n_post, n_off, n_prior, seed)
+  cached(key, {
+    box::use(R / harness / v2_reference[v2_simulate])
+    point <- function(u, kind) list(u = u, pars = stan_pars(m, u), kind = kind)
+    pts <- list()
+    if (n_post + n_off > 0) {
+      draws <- short_fit_draws(m, data, seed)
+      withr::with_seed(seed, {
+        pick <- sample(length(draws), n_post + n_off)
+        for (i in seq_along(pick)) {
+          p <- draws[[pick[i]]]
+          off <- i > n_post
+          if (off) for (n in OFF_SCALES) p[[n]] <- p[[n]] * exp(stats::rnorm(length(p[[n]]), 0, 0.5))
+          pts[[length(pts) + 1]] <- point(m$unconstrain_variables(p), if (off) "off" else "post")
+        }
+      })
+    }
+    for (i in seq_len(n_prior)) {
+      s <- v2_simulate(data, seed = seed + i, observe = FALSE)
+      pts[[length(pts) + 1]] <- point(m$unconstrain_variables(s$pars), "prior")
+    }
+    pts
+  })
+}
+
+# The range of `x`, or Inf if some element is not finite (a mutant whose density is -Inf
+# at a point where Stan's is finite differs from it without bound).
+lp_range <- function(x) if (all(is.finite(x))) diff(range(x)) else Inf
+
+# Stan's log density (log_prob, jacobian = FALSE) minus the reference's (`mutant`) at each
+# point, and the tolerance 1e-9 * max(1, |lp_ref|) of the true reference.
+lp_gap <- function(m, data, points, mutant = "none") {
+  box::use(R / harness / v2_reference[v2_lp_ref])
+  stan <- vapply(points, \(p) m$log_prob(p$u, jacobian = FALSE), numeric(1))
+  ref <- vapply(points, \(p) v2_lp_ref(p$pars, data), numeric(1))
+  mut <- if (mutant == "none") ref else vapply(points, \(p) v2_lp_ref(p$pars, data, mutant), numeric(1))
+  list(gap = stan - mut, tol = 1e-9 * max(1, abs(ref)))
+}
+
+# Expect Stan's log density minus the reference's to be constant over `points`: its range
+# below 1e-9 * max(1, |lp_ref|). Returns list(range, tol) invisibly.
+expect_lp_matches <- function(m, data, points) {
+  g <- lp_gap(m, data, points)
+  r <- lp_range(g$gap)
+  expect_lt(r, g$tol, label = "range of lp_stan - lp_ref")
+  invisible(list(range = r, tol = g$tol))
+}
+
+# Expect the same range against the `mutant` reference to exceed 100 times the tolerance.
+# Returns that range over 100 * tol invisibly.
+expect_lp_rejects <- function(m, data, points, mutant) {
+  g <- lp_gap(m, data, points, mutant)
+  r <- lp_range(g$gap)
+  expect_gt(r, 100 * g$tol, label = paste0("range of lp_stan - lp_ref(", mutant, ")"))
+  invisible(r / (100 * g$tol))
+}
+
+# Whether `mutant`'s reference differs from the true reference by more than 1e-6 at some of
+# `points`: a property of the reference and the data alone.
+mutant_exercised <- function(data, points, mutant) {
+  box::use(R / harness / v2_reference[v2_lp_ref])
+  any(vapply(points, \(p) !isTRUE(abs(v2_lp_ref(p$pars, data, mutant) - v2_lp_ref(p$pars, data)) <= 1e-6), logical(1)))
+}
+
+# The transformed parameters of `m` at a prior draw (v2_simulate(), seed 1) with every
+# bounded concentration's free parameter (log_phi_u, log_phi_K_u, log_kappa_u) set to `u`.
+bounded_at <- function(m, data, u) {
+  box::use(R / harness / v2_reference[v2_simulate])
+  pars <- v2_simulate(data, seed = 1, observe = FALSE)$pars
+  pars$log_phi_u <- rep(u, data$H)
+  pars$log_phi_K_u <- u
+  pars$log_kappa_u <- u
+  m$constrain_variables(m$unconstrain_variables(pars), transformed_parameters = TRUE, generated_quantities = FALSE)
 }
