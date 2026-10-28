@@ -10,7 +10,8 @@
 # where ld is each model's log |d natural / d parameters|. The old model's first walk
 # column, z_beta_raw[, 1], is never used: unused is its std_normal term, which the new model
 # lacks. Each negative control drops one log-Jacobian term (or unused) and must then fail.
-# The bound conditions on log phi < phi_cap, so the map is exact for every point below it.
+# The bound conditions on log phi < phi_cap, so the map is exact for every point below it;
+# points at or above it are outside the claim, so they are counted and excluded.
 # Points: n posterior draws of the old model plus n_off pushed off the posterior in the
 # scales the new weights depend on. Both models then run their generated quantities at
 # the posterior points with one seed; those must agree.
@@ -126,7 +127,9 @@ map_point <- function(x) {
   lam_s <- cp$lambda_sigma
   lam_d <- cp$lambda_delta
   lam_g <- if (g_par == "gamma_t") cp$lambda_gamma else matrix(0, P1 - 1, H1)
-  stopifnot(all(log_phi < phi_cap))
+  if (any(log_phi >= phi_cap)) {
+    return(list(outside = TRUE))
+  }
 
   # walk: anchors last to first, then bridges and the pre-anchor stretch
   anchor_w <- matrix(0, m, P1)
@@ -193,15 +196,21 @@ map_point <- function(x) {
     new_log_sigma = sum((1 - lam_s) * log(po$tau_log_sigma)),
     new_phi = sum(log(phi_cap - phi_init) + pn$log_phi_u)
   )
-  list(po = po, pn = pn, beta = beta, jac = jac, unused = -0.5 * sum(po$z_beta_raw[, 1]^2))
+  list(outside = FALSE, po = po, pn = pn, beta = beta, jac = jac, unused = -0.5 * sum(po$z_beta_raw[, 1]^2))
 }
 
+EQ_COLS <- c(
+  "lp_old", "lp_new", "path_err", "unused", "const", "outside", "old_walk", "old_gamma", "old_sigma_phi",
+  "new_beta0", "new_anchor", "new_bridge", "new_gamma", "new_delta", "new_log_sigma", "new_phi"
+)
 eq <- data.frame(t(vapply(seq_len(nrow(X)), function(i) {
-  # WHY: far enough off the posterior a softmax can underflow to an exact 0, which
-  # Stan rejects; such points are dropped and counted, not evaluated.
+  # WHY: a point the map cannot handle (an error from constrain or unconstrain, or a
+  # Cholesky factor far off the posterior) is dropped and counted; so is a log density
+  # Stan rejects, such as a softmax that underflows to an exact 0, which lp() returns as NA.
+  # A point with log phi at or above the bound is outside the claim: excluded and counted.
   r <- tryCatch(map_point(X[i, ]), error = function(e) NULL)
-  if (is.null(r)) {
-    return(rep(NA_real_, 5 + 10))
+  if (is.null(r) || r$outside) {
+    return(setNames(c(rep(NA_real_, 5), as.numeric(isTRUE(r$outside)), rep(NA_real_, 10)), EQ_COLS))
   }
   un <- new$fit$unconstrain_variables(r$pn)
   cn <- new$fit$constrain_variables(un, transformed_parameters = TRUE, generated_quantities = FALSE)
@@ -211,20 +220,31 @@ eq <- data.frame(t(vapply(seq_len(nrow(X)), function(i) {
   j <- unlist(r$jac)
   ld_new <- sum(j[startsWith(names(j), "new_")])
   ld_old <- sum(j[startsWith(names(j), "old_")])
-  c(
+  row <- c(
     lp_old = lp_old, lp_new = lp_new, path_err = max(abs(cn$beta - r$beta)), unused = r$unused,
-    const = (lp_new - ld_new) - (lp_old - r$unused - ld_old), j
+    const = (lp_new - ld_new) - (lp_old - r$unused - ld_old), outside = 0, j
   )
-}, numeric(5 + 10))))
+  stopifnot(identical(names(row), EQ_COLS))
+  row
+}, setNames(numeric(length(EQ_COLS)), EQ_COLS))))
 eq$point <- point
-rejected <- !is.finite(eq$const)
+outside <- eq$outside == 1
+rejected <- !outside & !is.finite(eq$const)
 one_sided <- sum(xor(is.finite(eq$lp_old), is.finite(eq$lp_new)))
+cat(sprintf(
+  "points outside the bound (log phi >= phi_cap, excluded): %d posterior, %d off-posterior\n",
+  sum(outside & point == "posterior"), sum(outside & point != "posterior")
+))
 cat(sprintf(
   "points rejected (dropped): %d posterior, %d off-posterior; by one model only: %d\n",
   sum(rejected & point == "posterior"), sum(rejected & point != "posterior"), one_sided
 ))
-stopifnot(one_sided == 0, !any(rejected & point == "posterior"), sum(!rejected & point != "posterior") >= 5)
-eq <- eq[!rejected, ]
+keep <- !outside & !rejected
+stopifnot(
+  one_sided == 0, !any(rejected & point == "posterior"),
+  sum(keep & point == "posterior") >= 5, sum(keep & point != "posterior") >= 5
+)
+eq <- eq[keep, ]
 write.csv(eq, out_csv, row.names = FALSE)
 
 report <- function(x, label) {
@@ -251,7 +271,7 @@ cat(sprintf(
   ifelse(controls > tol, "fails, as it must", "PASSES: the check cannot see this term")
 ), sep = "")
 
-post <- which(point == "posterior")
+post <- which(point == "posterior" & keep)
 flatten <- function(lst, pars) {
   # WHY: standalone generated quantities match parameter columns by position, in the
   # model's declaration order and Stan's column-major element order.
