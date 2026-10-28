@@ -41,11 +41,17 @@ KEY <- c(
   "beta_growth_f", "phi_f", "mu_pred", "mu_gamma_pred"
 )
 SHARED_PARAMS <- c(
-  "z_beta_raw", "L_Omega", "z_beta0", "sigma_delta", "gamma_raw", "mu_gamma", "sigma_gamma",
-  "mu_log_sigma", "tau_log_sigma", "tau_stjornarslit", "log_phi", "mu_phi", "sigma_phi",
+  "L_Omega", "z_beta0", "sigma_delta", "gamma_raw", "mu_gamma", "sigma_gamma",
+  "mu_log_sigma", "tau_log_sigma", "tau_stjornarslit", "mu_phi", "sigma_phi",
   "alpha_f_raw", "beta_lag_f", "beta_inc_years_f", "beta_vnv_f", "beta_growth_f", "phi_f_inv"
 )
-OWN_PARAMS <- c("delta_raw", "log_sigma_raw", "delta_free", "log_sigma")
+# Each parameterisation's own parameters. WHY: the anchored model also writes delta_free,
+# log_sigma and log_phi, but as transformed parameters, so a fit is anchored when it has
+# anchor_w and takes the backward walk's names otherwise.
+OWN_PARAMS <- list(
+  anchored = c("anchor_w", "z_walk", "delta_t", "log_sigma_t", "log_phi_u"),
+  backward = c("z_beta_raw", "log_phi", "delta_raw", "log_sigma_raw", "delta_free", "log_sigma")
+)
 
 read_fit <- function(dir) {
   files <- list.files(file.path(dir, "cmdstan"), pattern = "\\.csv$", full.names = TRUE)
@@ -53,7 +59,7 @@ read_fit <- function(dir) {
   # WHY: cmdstanr renames CmdStan's max_depth to max_treedepth; the old name reads NULL,
   # and treedepth__ >= NULL counts no transition at the cap.
   stopifnot(is.numeric(meta$max_treedepth), length(meta$max_treedepth) == 1)
-  own <- intersect(OWN_PARAMS, meta$stan_variables)
+  own <- if ("anchor_w" %in% meta$stan_variables) OWN_PARAMS$anchored else intersect(OWN_PARAMS$backward, meta$stan_variables)
   csv <- read_cmdstan_csv(files, variables = unique(c(KEY, SHARED_PARAMS, own)))
   list(
     draws = csv$post_warmup_draws, sd = csv$post_warmup_sampler_diagnostics,
