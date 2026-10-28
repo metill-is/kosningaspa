@@ -2,8 +2,7 @@ box::use(
   R / harness / r0[R0_KJORDAEMI, r0_production_inputs, r0_stan_data, read_r0_config],
   R / harness / info_set[info_set, read_inputs],
   R / harness / constants[previous_election],
-  R / harness / fundamentals[fundamentals_party],
-  R / stan_data[prepare_stan_data]
+  R / harness / fundamentals[fundamentals_party]
 )
 inp <- if (snapshot_present()) read_inputs()
 infos <- if (snapshot_present()) lapply(seq_len(nrow(TARGETS)), \(i) info_set(TARGETS$E[i], TARGETS$F[i], inp))
@@ -190,31 +189,27 @@ parent_prepare <- function() {
 # WHY: stan_data_sha() hashes the JSON in field order, so a field R0 adds that lands anywhere but here retires every finished run as STALE.
 R0_APPENDED <- c(
   "constituency_weights_pred", "constituency_weights", "N_obs_k", "obs_k", "desired_weight", "weight_time",
-  "mu_gamma_scale", "n_active_d", "active_index_d"
+  "mu_gamma_scale"
 )
 
-test_that("the data keep the parent's fields in its order, then R0's own, with its positional rep counts", {
-  skip_without_snapshot()
-  old_prepare <- parent_prepare()
-  for (i in seq_along(r0)) {
-    inputs <- r0_production_inputs(infos[[i]])
-    old <- old_prepare(inputs$polling, inputs$fundamentals, inputs$constituency, election_date = infos[[i]]$E)
-    d <- r0[[i]]$data
-    expect_identical(names(d), c(setdiff(names(old), c("N", "xm", "n_election", "time_diff_f")), R0_APPENDED))
-    expect_identical(d$n_parties_n_rep, old$n_parties_n_rep)
-    expect_identical(d$n_parties_k_rep, old$n_parties_k_rep)
-    expect_length(d$n_parties_n_rep, d$N_n)
-    expect_length(d$n_parties_k_rep, d$N_k)
-  }
-})
+# WHY: P_f is y_f's row count, so the prediction column's newcomer rows change it too.
+R0_OVERRIDDEN <- c(
+  "days_between_stjornarslit_and_election", "n_pred_k", "P_f", "y_f", "x_f", "index_f", "n_parties_f",
+  "incumbent_f", "incumbent_years", "vnv", "growth"
+)
 
-test_that("the active parties are the ones production's prepare_stan_data() gives since 5f09c5b", {
+test_that("the data keep the parent's fields, in its order and with its values but for the overrides, then R0's own", {
   skip_without_snapshot()
+  parent <- parent_prepare()
   for (i in seq_along(r0)) {
     inputs <- r0_production_inputs(infos[[i]])
-    live <- prepare_stan_data(inputs$polling, inputs$fundamentals, inputs$constituency, election_date = infos[[i]]$E)
-    expect_identical(r0[[i]]$data$n_active_d, live$n_active_d)
-    expect_identical(r0[[i]]$data$active_index_d, live$active_index_d)
+    old <- parent(inputs$polling, inputs$fundamentals, inputs$constituency, election_date = infos[[i]]$E)
+    old <- lapply(old, \(x) if (is.data.frame(x)) as.matrix(x) else x)
+    d <- r0[[i]]$data
+    kept <- setdiff(names(old), c("N", "xm", "n_election", "time_diff_f"))
+    expect_identical(names(d), c(kept, R0_APPENDED))
+    changed <- kept[!vapply(kept, \(f) identical(d[[f]], old[[f]]), logical(1))]
+    expect_identical(setdiff(changed, R0_OVERRIDDEN), character(0), info = format(TARGETS$F[i]))
   }
 })
 

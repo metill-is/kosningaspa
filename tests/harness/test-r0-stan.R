@@ -5,11 +5,9 @@ box::use(
 
 R0_STAN <- "polling_and_fundamentals_kjordaemi_r0.stan"
 PRODUCTION_STAN <- "Stan/polling_and_fundamentals_kjordaemi.stan"
-H1_DECLARATIONS <- c(
-  "vector<lower = 0, upper = 1>[P - 1] mu_gamma_scale;",
-  "array[D] int<lower = 1, upper = P> n_active_d;",
-  "array[D, P] int<lower = 0, upper = P> active_index_d;"
-)
+H1_DECLARATION <- "vector<lower = 0, upper = 1>[P - 1] mu_gamma_scale;"
+H1_HEDGE <- "mu_gamma_pred = mu_gamma_pred .* mu_gamma_scale;"
+PARENT_HEDGE <- "mu_gamma_pred[1:(P - 3)] /= sqrt(3.0); mu_gamma_pred[P - 2] /= sqrt(2.0);"
 
 #' R0's parent, production's Stan file at `R0_PARENT_COMMIT`, read with `git show` into
 #' `results/harness/stan_parent/` (gitignored) and rewritten only when its bytes differ.
@@ -57,6 +55,23 @@ bare <- function(x) {
   gsub("[[:space:]]+", "", x, useBytes = TRUE)
 }
 
+#' How many times `pattern` occurs in `x`, bytewise.
+occurrences <- function(x, pattern) sum(gregexpr(pattern, x, fixed = TRUE, useBytes = TRUE)[[1]] > 0)
+
+#' Generated quantities split at the H2 block, from its `// H2:` comment through the brace
+#' that closes it: `list(h2, rest)`; an error unless there is exactly one.
+split_h2 <- function(gq) {
+  if (occurrences(gq, "  // H2:") != 1) stop("generated quantities do not hold exactly one H2 block")
+  at <- regexpr("  // H2:", gq, fixed = TRUE, useBytes = TRUE)
+  rest <- substr(gq, at, nchar(gq, type = "bytes"))
+  end <- regexpr("\n  }\n", rest, fixed = TRUE, useBytes = TRUE)
+  if (end < 1) stop("the H2 block is not closed")
+  list(
+    h2 = substr(rest, 1, end + 4),
+    rest = paste0(substr(gq, 1, at - 1), substr(rest, end + 5, nchar(rest, type = "bytes")))
+  )
+}
+
 #' For each row r of `y`, whether it is 0 outside the columns `index[r, 1:n[r]]`.
 zero_outside <- function(y, index, n) {
   vapply(seq_len(nrow(y)), \(r) all(y[r, -index[r, seq_len(n[r])]] == 0), logical(1))
@@ -95,13 +110,20 @@ closed_softmax <- function(e) {
   exp(eta - max(eta)) / sum(exp(eta - max(eta)))
 }
 
+eve <- new.env()
+#' R0's Stan data at the 2024 eve, built once per file.
+eve_data <- function() {
+  if (is.null(eve$value)) eve$value <- r0_stan_data(info_set(as.Date("2024-11-30"), as.Date("2024-11-29"), read_inputs()))$data
+  eve$value
+}
+
 #' R0's data at the 2024 eve in one JSON that both models read, both models compiled with
 #' their methods, R0 fitted for 10 draws and its parent (`parent_stan()`) for 1 + 10.
 fit_both <- function() {
-  x <- r0_stan_data(info_set(as.Date("2024-11-30"), as.Date("2024-11-29"), read_inputs()))
+  data <- eve_data()
   dir <- withr::local_tempdir(.local_envir = testthat::teardown_env())
   json <- file.path(dir, "data.json")
-  cmdstanr::write_stan_json(x$data, json)
+  cmdstanr::write_stan_json(data, json)
   # WHY: compiled afresh: cmdstanr builds the log_prob methods only when it compiles, never from a cached executable.
   compile <- function(path) {
     cmdstanr::cmdstan_model(path, dir = dir, compile_model_methods = TRUE, quiet = TRUE)
@@ -113,7 +135,7 @@ fit_both <- function() {
       show_exceptions = FALSE, diagnostics = NULL
     )
   }
-  list(data = x$data, r0 = run(compile(root("Stan", R0_STAN)), 20, 10), parent = run(compile(parent_stan()), 1, 10))
+  list(data = data, r0 = run(compile(root("Stan", R0_STAN)), 20, 10), parent = run(compile(parent_stan()), 1, 10))
 }
 
 fixture <- new.env()
@@ -124,14 +146,20 @@ fits <- function() {
   fixture$value
 }
 
-test_that("the r0 file differs from its parent, production at 5d22031, only in the data block and generated quantities", {
+test_that("the r0 file is its parent plus the hooks: H1 in the data block, H1 and H2 in generated quantities", {
   expect_true(file.exists(root("Stan", R0_STAN)))
   parent <- stan_blocks(stan_bytes(parent_stan()))
   r0 <- stan_blocks(stan_bytes(root("Stan", R0_STAN)))
   expect_identical(r0$middle, parent$middle)
   m <- bare(parent$data)
   expect_true(endsWith(m, "}"))
-  expect_identical(bare(r0$data), paste0(substr(m, 1, nchar(m) - 1), bare(paste(H1_DECLARATIONS, collapse = "\n")), "}"))
+  expect_identical(bare(r0$data), paste0(substr(m, 1, nchar(m) - 1), bare(H1_DECLARATION), "}"))
+  g <- bare(parent$gq)
+  expect_equal(occurrences(g, bare(PARENT_HEDGE)), 1)
+  parts <- split_h2(r0$gq)
+  expect_identical(bare(parts$rest), sub(bare(PARENT_HEDGE), bare(H1_HEDGE), g, fixed = TRUE, useBytes = TRUE))
+  # WHY: an RNG call in H2 would shift every later draw of the replications.
+  expect_false(grepl("_rng(", bare(parts$h2), fixed = TRUE, useBytes = TRUE))
 })
 
 test_that("the r0 log density is its parent's", {
@@ -178,22 +206,24 @@ test_that("the r0 hooks compute what they claim", {
   }
 })
 
-test_that("the gather checks catch the parent's positional slicing", {
-  skip_unless_slow()
+#' Rows positive on the first `n[r]` columns of `P` and 0 after: the positional slice the
+#' parent made before 5f09c5b gathered by party identity.
+positional <- function(n, P) t(vapply(n, \(k) as.numeric(seq_len(P) <= k), numeric(P)))
+
+#' The rows r whose `index[r, 1:n[r]]` is not `1:n[r]`: a party skipped, so a positional
+#' slice reads the wrong columns there.
+skipping <- function(index, n) {
+  which(vapply(seq_along(n), \(r) !identical(as.integer(index[r, seq_len(n[r])]), seq_len(n[r])), logical(1)))
+}
+
+test_that("the gather checks flag a positional slice and a short count", {
   skip_without_snapshot()
-  f <- fits()
-  d <- f$data
-  v <- draws_of(f$parent, c("y_rep_k", "y_rep_national"))
-  n <- dim(v$y_rep_k)[1]
-  expect_equal(n, 10)
-  # WHY: a draw can leave every dropped column at zero by chance, so the kjördæmi check needs only one draw to fail.
-  leaks <- vapply(seq_len(n), \(i) !all(zero_outside(v$y_rep_k[i, , ], d$party_index_k, d$n_parties_k)), logical(1))
-  expect_true(any(leaks))
-  for (i in seq_len(n)) {
-    breaks <- support_breaks(v$y_rep_national[i, seq_len(d$D), ], d$active_index_d, d$n_active_d)
-    expect_false(all(breaks == ""), info = described(breaks))
-    # WHY: the parent slices one column too few at a level whose active set skips a party, never one too many.
-    expect_true(all(grepl("^active column\\(s\\) [0-9,]+ at zero$", breaks[breaks != ""])), info = described(breaks))
-    expect_equal(rowSums(v$y_rep_national[i, , ]), rep(d$n_pred, d$D + d$pred_y_time_diff))
-  }
+  d <- eve_data()
+  skips_k <- skipping(d$party_index_k, d$n_parties_k)
+  expect_gt(length(skips_k), 0)
+  expect_identical(which(!zero_outside(positional(d$n_parties_k, d$P), d$party_index_k, d$n_parties_k)), skips_k)
+  # WHY: the eve's national active sets are prefixes of the party order, so only a short count, the parent's per-poll count read by date before 5f09c5b, misreads them.
+  expect_length(skipping(d$active_index_d, d$n_active_d), 0)
+  breaks <- support_breaks(positional(d$n_active_d - 1L, d$P), d$active_index_d, d$n_active_d)
+  expect_true(all(grepl("^active column\\(s\\) [0-9]+ at zero$", breaks)), info = described(breaks))
 })
