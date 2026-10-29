@@ -443,6 +443,10 @@ and was not adopted: `adopt` printed `KEEP v2s-m0`, condition 3 failing on its 1
 against `v2s-m0`'s none. The anchored form stays built behind `walk_form`, and every later
 step's config sets `walk_form = 0`.
 
+M1 (`v2s-m1`), the epoch bias (`epoch_bias = 1`), passed the stop rule: `GO` on both fits
+(`harness/v2/steps.md`). Each later step's config is the previous step's with its own switch
+on, so it keeps `epoch_bias = 1`.
+
 A P-step's form is first checked against the reference form, point by point, by
 `R/harness/v2_equivalence.R` (the plan's Decision 6, condition 1), once for each check of
 `EQUIVALENCE_REQUIRED` (below), all into the step's equivalence CSV:
