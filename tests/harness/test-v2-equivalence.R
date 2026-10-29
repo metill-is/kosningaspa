@@ -5,7 +5,9 @@
 # form it checks.
 box::use(
   R / harness / constants[POLL_PARTIES],
-  R / harness / v2_equivalence[EQUIVALENCE_SUMMARY, check_reasons, control_verdicts, provisional_row, write_equivalence_row]
+  R / harness / v2_equivalence[
+    EQUIVALENCE_SUMMARY, check_reasons, control_verdicts, gq_points_compared, provisional_row, write_equivalence_row
+  ]
 )
 
 P1_CONFIG <- "harness/configs/steps/v2s-p1.json"
@@ -72,14 +74,16 @@ test_that("a provisional row replaces an earlier verdict of its cell and order, 
   expect_identical(x$reasons, c("", "x"))
 })
 
-# check_reasons() at a passing check's values, these changed.
-reasons_at <- function(...) {
+# check_reasons() at a passing check's values, these changed. Unless given, gq_ran is what
+# main() takes it to be: gq_points_compared() of kept_n and main_kind above 0.
+reasons_at <- function(..., main_kind = "posterior") {
   args <- utils::modifyList(list(
     form = "walk", const_range = 1e-14, tol = 1e-12,
     controls = c(ref_walk = 1, new_anchor = 1, new_bridge = 1, new_forward = 1),
-    main_kind = "posterior", gq_max_rel = 1e-15, path_err = 1e-12, one_sided = 0L, posterior_dropped = FALSE,
+    gq_max_rel = 1e-15, path_err = 1e-12, one_sided = 0L, posterior_dropped = FALSE,
     kept_n = c(posterior = 30L, `off-posterior` = 15L)
   ), list(...))
+  if (is.null(args$gq_ran)) args$gq_ran <- gq_points_compared(args$kept_n, main_kind) > 0L
   do.call(check_reasons, args)
 }
 
@@ -91,6 +95,19 @@ test_that("check_reasons() gives none at a passing check's values, and each fail
   expect_identical(
     reasons_at(const_range = Inf, path_err = 1e-7, posterior_dropped = TRUE),
     c("constant range Inf is not below tol 1e-12", "path error 1e-07", "a posterior point was dropped")
+  )
+  expect_identical(
+    reasons_at(
+      const_range = 1, controls = c(ref_walk = 1, new_anchor = NA, new_bridge = 1e-13, new_forward = 1),
+      gq_max_rel = 1e-3, path_err = 1, one_sided = 3L, posterior_dropped = TRUE,
+      kept_n = c(posterior = 30L, `off-posterior` = 4L)
+    ),
+    c(
+      "constant range 1 is not below tol 1e-12", "a negative control passes: new_bridge",
+      "a negative control is not exercised: new_anchor", "generated quantities differ by 0.001 relative",
+      "path error 1", "3 points finite on one side only", "a posterior point was dropped",
+      "fewer than 5 kept points of a kind"
+    )
   )
 })
 
@@ -105,6 +122,8 @@ test_that("check_reasons() fails a walk check on a negative control that is not 
     reasons_at(controls = c(ref_walk = 1, new_anchor = NA, new_bridge = 1e-13, new_forward = NA)),
     c("a negative control passes: new_bridge", "a negative control is not exercised: new_anchor, new_forward")
   )
+  # WHY: under the delta form (the plan's Task 13) the walk's Jacobian terms need not vary, so only a walk check fails on a control that is not exercised.
+  expect_identical(reasons_at(form = "delta", controls = controls), character(0))
 })
 
 test_that("check_reasons() fails on fewer than 5 kept points of the main kind and judges no generated quantities then", {
@@ -113,6 +132,22 @@ test_that("check_reasons() fails on fewer than 5 kept points of the main kind an
   # WHY: the control for the two above: with 5 kept points the same NA difference is judged.
   expect_identical(reasons_at(kept_n = c(posterior = 5L, `off-posterior` = 15L), gq_max_rel = NA_real_), "generated quantities differ by NA relative")
   expect_identical(reasons_at(kept_n = c(posterior = 30L, `off-posterior` = 4L)), "fewer than 5 kept points of a kind")
+})
+
+test_that("gq_points_compared() is the one gate on the GQ comparison, and a check that compared none writes gq_points 0", {
+  expect_identical(gq_points_compared(c(posterior = 30L, `off-posterior` = 15L), "posterior"), 30L)
+  expect_identical(gq_points_compared(c(posterior = 5L, `off-posterior` = 15L), "posterior"), 5L)
+  expect_identical(gq_points_compared(c(posterior = 4L, `off-posterior` = 15L), "posterior"), 0L)
+  expect_identical(gq_points_compared(c(posterior = 0L, `off-posterior` = 0L, prior = 20L), "prior"), 20L)
+  path <- withr::local_tempfile(fileext = ".csv")
+  write_equivalence_row(path, summary_row(
+    E = "2021-09-25", F = "2021-03-29", order = "default", verdict = "FAIL",
+    gq_points = gq_points_compared(c(posterior = 4L, `off-posterior` = 15L, prior = 0L), "posterior"),
+    gq_max_rel = NA_real_, reasons = "fewer than 5 kept points of a kind"
+  ))
+  x <- utils::read.csv(path, colClasses = "character")
+  expect_identical(x$gq_points, "0")
+  expect_identical(x$gq_max_rel, "")
 })
 
 test_that("the script refuses a bad command line before it compiles anything, and writes no CSV", {

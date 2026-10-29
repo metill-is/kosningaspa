@@ -469,8 +469,11 @@ with a bounded log concentration at its cap is excluded and counted; one whose l
 not finite on both sides is dropped and counted, and a dropped posterior point fails the
 check, as does one finite on one side only; each kind needs at least 5 kept points; with
 fewer of the main kind no generated quantities are compared and the check fails on that
-count. `check_reasons()` gives the failed conditions and `control_verdicts()` the controls'
-verdicts. It prints the coordinate party (`coordinate party: <label>`; it stops if the two
+count (`gq_points_compared()`, the one gate on the comparison). `check_reasons()` gives the
+failed conditions and `control_verdicts()` the controls' verdicts. Besides its own stops (the
+script's header lists them), the data can fail `v2_stan_data()`'s guards or the Stan file's
+transformed-data rejects, which come back as "the fixed_param run failed; CmdStan said: ...".
+It prints the coordinate party (`coordinate party: <label>`; it stops if the two
 sides' differ), each point's constant and path error, the controls and the generated
 quantities' largest relative difference, never a forecast value, then `EQUIV PASS` or
 `EQUIV FAIL` (exit 1). `--out` must be a file in an existing directory. Once the command line

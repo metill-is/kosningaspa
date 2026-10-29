@@ -53,18 +53,22 @@
 # provisional FAIL row (reasons "incomplete") is written first, so a check that stops before
 # its end leaves no earlier verdict of its cell and order standing.
 #
-# Stops. Before that row: a bad command line, --form=delta or both, a config whose form is 0,
-# no Stan file, and point counts it cannot take (too few, more than the fit draws, or
-# off-posterior points on a 2017 cell). After it, the row left standing: the two sides'
-# coordinate parties differ, a 2017 cell's data draw a forecast or its generated quantities
-# hold a forecast variable, the Stan file's parameters are not v2_par_dims()' in its order,
-# the anchored map leaves a z_walk column unset, a parameter has the wrong number of values,
-# or the standalone generate_quantities run fails.
+# The script's own stops, each starting "v2_equivalence: ". Before that row: a locale that is
+# not UTF-8, a working directory that is not the project root, a bad command line,
+# --form=delta or both, a config whose form is 0, no Stan file, and point counts it cannot
+# take (too few, more than the fit draws, or off-posterior points on a 2017 cell); a config
+# read_v2_config() refuses stops there too, with its own message. After
+# it, the row left standing: the two sides' coordinate parties differ, a 2017 cell's data draw
+# a forecast or its generated quantities hold a forecast variable, the Stan file's parameters
+# are not v2_par_dims()' in its order, the anchored map leaves a z_walk column unset, a
+# parameter has the wrong number of values, or the standalone generate_quantities run fails.
+# Other stops also leave the row standing: the data can fail v2_stan_data()'s guards ("v2
+# input: ...") or the Stan file's transformed-data rejects, walk_form = 1's conditions among
+# them, which come back as "the fixed_param run failed; CmdStan said: ...".
 #
 # The definitions also load as a box module (its test imports EQUIVALENCE_SUMMARY,
-# write_equivalence_row(), provisional_row(), control_verdicts() and check_reasons()); the
-# script part runs only when box::name() is NULL. Every failure outside the check itself
-# stops with "v2_equivalence: ...".
+# write_equivalence_row(), provisional_row(), control_verdicts(), gq_points_compared() and
+# check_reasons()); the script part runs only when box::name() is NULL.
 if (is.null(box::name())) {
   if (!isTRUE(l10n_info()[["UTF-8"]])) stop("v2_equivalence: needs a UTF-8 locale: run under LC_ALL=en_US.UTF-8", call. = FALSE)
   # WHY: the box path below is the working directory, so check it is the project root first.
@@ -160,15 +164,27 @@ control_verdicts <- function(controls, tol) {
   stats::setNames(ifelse(is.na(controls), "not exercised", ifelse(controls > tol, "fails", "PASSES")), names(controls))
 }
 
+#' The number of points whose generated quantities a check compares: its kept points of the
+#' main kind, or 0 when there are fewer than `MIN_KEPT` of them, the check then failing on that
+#' count instead. The one gate on the comparison: the GQ run, `gq_points` and check_reasons()
+#' all read it.
+#' @param kept_n the kept points of each kind, named by kind
+#' @param main_kind "posterior", or "prior" on a 2017 cell
+#' @return an integer
+#' @export
+gq_points_compared <- function(kept_n, main_kind) {
+  n <- as.integer(kept_n[[main_kind]])
+  if (n >= MIN_KEPT) n else 0L
+}
+
 #' Why a check fails, in the order its EQUIV line and the CSV's `reasons` give them; none when
-#' it passes. The generated quantities count only when compared: with fewer than `MIN_KEPT`
-#' kept points of the main kind they are not, and the check fails on that count instead.
+#' it passes. The generated quantities count only when compared (gq_points_compared() above 0).
 #' @param form the --form value; under "walk" every control must be exercised
 #' @param const_range the constant's range over the kept points
 #' @param tol the tolerance
 #' @param controls the controls' constant ranges, named by `JACOBIAN_TERMS`, NA where the term
 #'   is not exercised
-#' @param main_kind "posterior", or "prior" on a 2017 cell
+#' @param gq_ran whether the generated quantities were compared
 #' @param gq_max_rel the generated quantities' largest relative difference (NA if not compared;
 #'   an NA or NaN where they are compared fails, as an NA constant range or path error does)
 #' @param path_err the largest path error
@@ -177,10 +193,9 @@ control_verdicts <- function(controls, tol) {
 #' @param kept_n the kept points of each kind the check draws, named by kind
 #' @return a character vector
 #' @export
-check_reasons <- function(form, const_range, tol, controls, main_kind, gq_max_rel, path_err, one_sided,
+check_reasons <- function(form, const_range, tol, controls, gq_ran, gq_max_rel, path_err, one_sided,
                           posterior_dropped, kept_n) {
   verdict <- control_verdicts(controls, tol)
-  gq_ran <- kept_n[[main_kind]] >= MIN_KEPT
   # WHY: isTRUE() so that an NA or NaN measure fails its condition instead of stopping the check.
   as.character(c(
     if (!isTRUE(const_range < tol)) sprintf("constant range %.3g is not below tol %.3g", const_range, tol),
@@ -548,8 +563,10 @@ main <- function(args) {
 
   main_kind <- if (prior_only) "prior" else "posterior"
   gq_idx <- which(kept_kind == main_kind)
+  kept_n <- vapply(c("posterior", "off-posterior", "prior"), \(k) sum(kept_kind == k), 0L)
   # WHY: with too few kept points of the main kind the check fails on MIN_KEPT; comparing nothing would only stop it.
-  gq_ran <- length(gq_idx) >= MIN_KEPT
+  gq_points <- gq_points_compared(kept_n, main_kind)
+  gq_ran <- gq_points > 0L
   gq_max_rel <- NA_real_
   if (gq_ran) {
     gq_ref <- gq_rows(stan, d_ref, do.call(rbind, lapply(kept[gq_idx], \(r) r$row_ref)))
@@ -568,9 +585,8 @@ main <- function(args) {
     cat(sprintf("generated quantities not compared: %d kept %s points, fewer than %d\n", length(gq_idx), main_kind, MIN_KEPT))
   }
 
-  kept_n <- vapply(c("posterior", "off-posterior", "prior"), \(k) sum(kept_kind == k), 0L)
   reasons <- check_reasons(
-    a$form, spread(const), tol, controls, main_kind, gq_max_rel, path_err, one_sided,
+    a$form, spread(const), tol, controls, gq_ran, gq_max_rel, path_err, one_sided,
     any(rejected & kind == "posterior"), kept_n[kinds]
   )
   pass <- !length(reasons)
@@ -580,7 +596,7 @@ main <- function(args) {
     stan_sha256 = stan_sha256, n_posterior = kept_n[["posterior"]],
     n_off = kept_n[["off-posterior"]], n_prior = kept_n[["prior"]], n_rejected = sum(rejected), n_outside = sum(outside),
     n_one_sided = one_sided, const_range = signif(spread(const), 4), tol = signif(tol, 4), path_err = signif(path_err, 4),
-    gq_points = if (gq_ran) length(gq_idx) else 0L, gq_max_rel = signif(gq_max_rel, 4),
+    gq_points = gq_points, gq_max_rel = signif(gq_max_rel, 4),
     control_ref_walk = control_verdict[["ref_walk"]], control_new_anchor = control_verdict[["new_anchor"]],
     control_new_bridge = control_verdict[["new_bridge"]], control_new_forward = control_verdict[["new_forward"]],
     reasons = paste(reasons, collapse = "; ")

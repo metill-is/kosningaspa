@@ -56,8 +56,8 @@ are recorded, never a stop.
   arm such as `v2s-m0` is never scored.
 - **The minutes are a little loaded.** Light jobs ran beside the queue's 8 chains on the 10
   cores at times: from 03:53 to 04:09 a one-core test job, the `compare_runs.R` tests, and at
-  other times read-only reviews and test runs. No fit ran unloaded, so every fit's minutes may
-  read slightly high.
+  other times read-only reviews and test runs. No fit is known to have run unloaded, so every
+  fit's minutes may read slightly high.
 
 To rewrite the table and the verdicts from the finished runs under `results/harness/`, from the
 project root:
@@ -75,11 +75,15 @@ cells and seeds.
 `v2s-m0` with `walk_form = 1` (config `harness/configs/steps/v2s-p1.json`): the walk anchored
 at the closed elections' dates, the parties with national votes centred at each anchor and the
 absent ones non-centred from the previous anchor, Brownian bridges between the anchors and a
-forward walk after the last (`Stan/CLAUDE.md`). It reparameterises the same model. Its log
-density and generated quantities are tested against the R reference in
-`tests/harness/test-v2-stan.R`, and its check against the reference walk is
-`R/harness/v2_equivalence.R`, tested in `tests/harness/test-v2-equivalence.R`. This section is
-that check's four results, the sampler check of its fits and the adoption rule's verdict.
+forward walk after the last (`Stan/CLAUDE.md`). It reparameterises the same model. The R
+reference `v2_lp_ref()` refuses `walk_form = 1`, so the three `v2s-p1` tests in
+`tests/harness/test-v2-stan.R` cover what needs no reference density: transformed data's
+rejects of an anchored walk it cannot build, the parameters' sizes and the reference walk's free
+size, and each anchor at its result when the present levels are 0. Its log density and
+generated quantities are checked against the reference walk by `R/harness/v2_equivalence.R`
+(tested in `tests/harness/test-v2-equivalence.R`), whose reference side is the form that
+`test-v2-stan.R` tests against `v2_lp_ref()`. This section is that check's four results, the
+sampler check of its fits and the adoption rule's verdict.
 
 **Equivalence.** The four checks of `EQUIVALENCE_REQUIRED`, as written to
 `harness/v2/steps/v2s-p1-equivalence.csv` by `LC_ALL=en_US.UTF-8 Rscript
@@ -106,11 +110,16 @@ table is `harness/v2/steps/v2s-p1.md`.
 
 **Provenance.** All four fits ran at c981e7e: each `meta.json` records `git_head` c981e7e and
 `git_dirty` true, probably because of the then untracked equivalence CSV. The CSV's four rows
-came from f87e0b6's script. c981e7e changed that script's refusals, its provisional rows and its
+came from f87e0b6's script. c981e7e changed that script's refusals, its provisional rows, its
 control rule (a control that is not exercised now fails a walk check; all four rows' controls
-are `fails`, so the rule does not change their verdicts), but none of the point check's
-arithmetic, and left `Stan/forecast_v2.stan` byte-identical: every row's `stan_sha256` is the
-file's at both commits, `0495827175f177b3f618a4f171b97625c28ffce0ebe958623782f952b89cddf6`.
+are `fails`, so the rule does not change their verdicts), the coordinate-party stop and line,
+and the `MIN_KEPT` gate on the generated-quantities comparison (every row compared 20 or 30
+points, so the gate does not change them either), but none of the point check's arithmetic,
+and left `Stan/forecast_v2.stan` byte-identical: every row's `stan_sha256` is the file's at
+both commits, `0495827175f177b3f618a4f171b97625c28ffce0ebe958623782f952b89cddf6`. The
+`v2s-m0` fits ran with the file at sha256 `430939e21f0d…` and the `v2s-p1` fits at
+`0495827175f1…` (each `meta.json`'s `stan_sha256`); the `walk_form = 0` model is pinned across
+that edit by the M-step lp tests, which passed at f87e0b6 (`HARNESS_SLOW=1 V2_STEPS=v2s-m0`).
 
 **Stop rule.** `LC_ALL=en_US.UTF-8 Rscript R/harness/compare_runs.R stop v2s-p1` (exit 0):
 
@@ -149,11 +158,13 @@ Adoption rule (Decision 6): v2s-p1 against the reference form v2s-m0; run list h
 | 2024-11-30, 2024-11-29, eve | 0.253 | 0.664 | 2.62 | yes |
 | 2021-09-25, 2021-03-29, f180 | 0.270 | 0.530 | 1.95 | yes |
 
+```
 1. The equivalence check passes (harness/v2/steps/v2s-p1-equivalence.csv): yes (4 rows, none FAIL, a PASS row of each of the 4 required checks)
 2. On each cell, v2s-p1's median min bulk ESS per 1,000 gradients is at least 1.25 × v2s-m0's: yes
 3. v2s-p1's divergences over its 4 fits, 10, are at most v2s-m0's, 0, plus 4: no
 4. No fit of v2s-m0 or v2s-p1 trips the stop rule: yes
 KEEP v2s-m0: v2s-p1 fails condition 3
+```
 
 **Verdict: KEEP v2s-m0.** `v2s-p1` fails condition 3: its 10 divergences (9 and 1, both on 2021
 f180) are more than `v2s-m0`'s 0 plus 4. Conditions 1, 2 (cell ratios 2.62 and 1.95) and 4
@@ -177,10 +188,12 @@ anchored form stays built behind its switch, with its tests and its equivalence 
   | 2021 f180, 2701 | 1243.5 | 1602.5 | 1619.4 | 1243.5 | 487.6 |
   | 2021 f180, 2702 | 907.1 | 1525.6 | 1303.2 | 907.1 | 377.0 |
 
-- **The ratio over equal scopes, which has no say in the verdict.** The gate scope holds
-  `anchor_w` for `v2s-p1` only, so the adoption rule's ratio compares unequal scopes. With
-  `anchor_w` left out nothing changes: each `v2s-p1` run's gate-scope min is another variable's
-  bulk ESS (`tau_sd`'s, and `log_phi[2]`'s on 2021 f180 seed 2702), well below every
+- **The ratio with `anchor_w` left out, which has no say in the verdict.** The gate scope
+  holds `anchor_w` for `v2s-p1` only, so the adoption rule's ratio compares unequal scopes; with
+  `anchor_w` left out they are still not equal, because the two forms' `z_walk` differ in size.
+  Leaving `anchor_w` out changes nothing: each `v2s-p1` run's gate-scope min is another
+  parameter's bulk ESS (`tau_sd`'s, and on 2021 f180 seed 2702 `log_phi_u[2]`'s, which
+  `key_diagnostics.csv` lists through its transform `log_phi[2]`), well below every
   `anchor_w` element's. Its min bulk ESS per 1,000 gradients stays 0.7308, 0.5975, 0.5986 and
   0.4613 (2024 eve 2701, 2702, 2021 f180 2701, 2702; rounded down) against `v2s-m0`'s 0.2547,
   0.2520, 0.2733 and 0.2683, and the cell ratios stay 2.62 and 1.95. Condition 3, not this
@@ -189,8 +202,8 @@ anchored form stays built behind its switch, with its tests and its equivalence 
   max R-hat (1.0202 to 1.0230) is above 1.01, and the 2021 f180 fits diverged. A `dev` arm is
   never scored.
 - **The minutes are a little loaded.** Light jobs ran beside the queue at times (a read-only
-  review, fast test runs). No fit ran unloaded, so every fit's minutes may read slightly high.
-  The adoption rule reads ESS per gradient, not per minute.
+  review, fast test runs). No fit is known to have run unloaded, so every fit's minutes may
+  read slightly high. The adoption rule reads ESS per gradient, not per minute.
 
 To rewrite the table and the verdicts from the finished runs under `results/harness/`, from the
 project root:
