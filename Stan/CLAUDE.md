@@ -14,8 +14,8 @@
 | `polling_and_fundamentals_historic.stan` | Backtesting variant for past elections | `R/modeling_utils.R` |
 | `fundamentals.stan` | Fundamentals-only (no polling data) | `R/fit_fundamentals_model.R` |
 | `base_model_no_polling_bias.stan` | Weighted average baseline (no house effects) | Comparison/baseline |
-| `polling_watch_v4.stan` | Between-election polling smoother (production; the other `polling_watch*.stan` files are superseded or comparison variants, see `polling_watch_variants.md`) | `R/fit_polling_watch.R` |
-| `polling_watch_v5_epoch.stan` | Experimental: v4 with pollster bias (industry `mu_gamma` and house effects) that random-walks across election epochs (`tau_mu`, `tau_house`, sampled or fixed; both 0 reproduces v4) | `R/fit_polling_watch_epoch.R` |
+| `polling_watch_v5_epoch.stan` | Between-election polling smoother, Fylgisvakt's production model since 28 October 2026: v4 with pollster bias (industry `mu_gamma` and house effects) that random-walks across the epochs between election results (`tau_mu`, `tau_house`, sampled or fixed; both fixed at 0 reproduces v4). Its walk and log φ are v4's (below); the posterior is unchanged by that parameterisation apart from the bound on log φ (`polling_watch_variants.md`, §10) | `R/fit_polling_watch.R`, `R/fit_polling_watch_epoch.R` |
+| `polling_watch_v4.stan` | The same smoother with one pollster bias over the whole window: Fylgisvakt's production model until 28 October 2026, kept as v5's comparison (the other `polling_watch*.stan` files are superseded or comparison variants, see `polling_watch_variants.md`). Since 28 October 2026 its walk is anchored at the election results with non-centred Brownian bridges between them, and log φ is bounded above at 20, as in the production model's Parameterisation below; the posterior is unchanged apart from that bound (`polling_watch_variants.md`, §9) | `R/fit_polling_watch_epoch.R` (`--model=v4`), `R/sampler_check/` |
 
 ## Model Architecture (production model)
 
