@@ -260,3 +260,35 @@ test_that("score_cell refuses kjördæmi draws whose .draw restarts in each chai
   reader <- function(...) fixed_truth(meta$party_order, layout_for(E24)$kjordaemi)
   expect_error(score_cell(run, truth = reader, root = fr), "repeats a (.draw, kjordaemi, flokkur) cell", fixed = TRUE)
 })
+
+# The fake run of the 2024 eve with `fields` set in its meta.json (NULL drops one).
+run_with <- function(fields, env = parent.frame()) {
+  run <- fake_run(E24, F24, env = env)
+  path <- file.path(run, "meta.json")
+  m <- utils::modifyList(jsonlite::read_json(path), fields)
+  jsonlite::write_json(m, path, auto_unbox = TRUE, pretty = TRUE, digits = NA)
+  run
+}
+
+test_that("score_cell refuses a dev arm and a run whose role is not its arm's, before the freeze guard", {
+  calls <- 0L
+  reader <- function(...) {
+    calls <<- calls + 1L
+    stop("truth read")
+  }
+  dev <- "score_cell: arm v2s-m0 has role dev; check and dev arms are never scored"
+  # WHY: with no freeze, freeze_guard() would stop with "no freeze"; the role message shows the refusal comes first.
+  expect_error(score_cell(run_with(list(arm = "v2s-m0")), truth = reader), dev, fixed = TRUE)
+  expect_error(score_cell(run_with(list(arm = "v2s-m0", role = "dev")), truth = reader), dev, fixed = TRUE)
+  fr <- frozen_root()
+  expect_error(score_cell(run_with(list(arm = "v2s-m0")), truth = reader, root = fr), dev, fixed = TRUE)
+  mismatch <- "score_cell: run role dev differs from arm r0's role reference"
+  expect_error(score_cell(run_with(list(role = "dev")), truth = reader), mismatch, fixed = TRUE)
+  expect_error(score_cell(run_with(list(role = "dev")), truth = reader, root = fr), mismatch, fixed = TRUE)
+  expect_equal(calls, 0L)
+  expect_error(score_cell(run_with(list(role = "reference")), truth = reader), "no freeze")
+  expect_error(score_cell(run_with(list(role = "reference")), truth = reader, root = fr), "truth read", fixed = TRUE)
+  expect_equal(calls, 1L)
+  expect_error(score_cell(run_with(list(arm = "r9")), truth = reader, root = fr), "unknown arm: r9")
+  expect_equal(calls, 1L)
+})

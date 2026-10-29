@@ -25,12 +25,13 @@ suite under testthat edition 3. Tests that need the snapshot call `skip_without_
 and skip without it. `tests/harness/test-generated.R` fails if a generated committed file
 that builds offline is not a fresh build. Slow tests (the sweep of every forecast day in
 `tests/harness/test-sweep.R`, the self-test's kjördæmi and seat scores, the R0 Stan tests
-and the cell runner's test fit, which compile with CmdStan) call `skip_unless_slow()` and
+and the cell runner's test fits of `r0` and `v2s-m0` on the 2024 eve, which compile with CmdStan) call `skip_unless_slow()` and
 run only with `HARNESS_SLOW=1` in the environment:
 `HARNESS_SLOW=1 LC_ALL=en_US.UTF-8 Rscript tests/run.R`. The tests of `Stan/forecast_v2.stan`
 in `tests/harness/test-v2-stan.R` are slow and named by the V2 step they test (`v2s-m0: …`);
 `V2_STEPS=<step>[,<step>…]` runs only those steps' tests (`skip_unless_step()`), and unset it
-runs them all.
+runs them all. The fast test of the cell runner's 2017 refusal reads this repository's real
+freeze state, under a temporary `HARNESS_RESULTS`, and skips once the freeze is sealed.
 
 The R code in `R/harness/` and `R/election_utils.R` writes every non-ASCII character as a
 `\uXXXX` escape and gives a non-ASCII name with `stats::setNames()`, never as a name tag;
@@ -83,8 +84,9 @@ meets a result.
 ## The freeze and the 2017 locks
 
 `score_cell(run_dir)` (`R/harness/scorer.R`) is the only function that scores a forecast
-cell against its result (spec §5.6–§5.7). It reads the run's `meta.json`, calls
-`freeze_guard(E, F)` (`R/harness/freeze.R`), and only once the guard passes reads the
+cell against its result (spec §5.6–§5.7). It reads the run's `meta.json`, refuses an arm
+whose role is `check` or `dev` and a run whose `meta.json` records a role other than its
+arm's (Runs, Arms), calls `freeze_guard(E, F)` (`R/harness/freeze.R`), and only once the guard passes reads the
 result (`cell_truth()`) and then the draws. With the default result reader, which reads
 this project's results, it refuses a `root` other than the project's, since the guard
 would otherwise check another repository's freeze. The guard stops at the first failure:
@@ -166,6 +168,7 @@ results/harness/
     eday_national.parquet
     latent_national.parquet
     param_draws.parquet
+    ppc_results.parquet     V2 only: the closed elections' in-sample replicates
     key_diagnostics.csv     R-hat and ESS of the scored quantities and the kept parameters
     meta.json               written last by the runner: present means finished
   _stale/<id>_<YYYYmmddHHMMSS>/   a retired run, kept as it was
@@ -200,10 +203,13 @@ extraction changes, so that every finished run is refitted.
 
 **Diagnostics.** `summarise_diagnostics(params, scored, sampler)` takes the draws of every
 `parameters`-block variable, the draws of the scored quantities, and the sampler's
-per-chain divergences, treedepth hits, E-BFMI and deepest tree. It reports the max R-hat
+per-chain divergences, treedepth hits, E-BFMI, deepest tree and post-warmup leapfrog steps.
+It reports the max R-hat
 and the min bulk and tail ESS over parameters and scored quantities together (the plan's
 Decision 3) and over the scored quantities alone, the divergences and treedepth hits
-summed over chains, the deepest tree and the min E-BFMI. A parameter with no R-hat or ESS,
+summed over chains, the deepest tree, the min E-BFMI and `n_leapfrog`, the post-warmup
+leapfrog steps (gradients) summed over chains, which puts ESS per gradient within reach of
+`meta.json` alone. A parameter with no R-hat or ESS,
 such as a constant entry of a Cholesky factor, is left out of the extremes. A scored
 quantity with none (a constant, or a draw that is NA) is not: it makes every extreme it
 enters NA, and `na_scored` counts such quantities. The deepest tree shows whether
@@ -233,8 +239,23 @@ extremes), and the gate's reasons are in `meta.json`.
 **Arms.** `R/harness/arms.R` holds `ARMS`, one entry per arm, and `arm(name)` returns one
 (an error for an unknown name). An entry names the arm's Stan file and config (paths under
 the project root), the config's reader, the builder from a cell's `info_set()` and the
-config to `list(data, meta)`, the extractor from a fit's draws to the parquets, and the
-variables the extractor reads. Phase 1 has one arm, `r0`.
+config to `list(data, meta)`, the extractor from a fit's draws to the parquets, the
+variables the extractor reads (a vector, or a function of the config), and the arm's role,
+one of `ARM_ROLES`:
+
+| Role | Arms | Scored |
+|---|---|---|
+| `reference` | `r0` | yes, after the freeze |
+| `candidate` | `v2` | yes, after the freeze |
+| `ablation` | `v2-noepoch`, `v2-nonew`, `v2-noshock`, `v2-staticdelta`, `v2-nofund` | yes, after the freeze |
+| `check` | `v2-perm`, V2 with both orders reversed, which must reproduce `v2` | never |
+| `dev` | `v2s-m0` and the rest of V2's staircase, one component or form per step | never |
+
+`score_cell()` refuses a `check` or `dev` arm before the freeze guard, and a run whose
+`meta.json` records a role other than its arm's; a `meta.json` without `role`, as R0's
+Phase 1 runs have, takes its arm's. Plan 4 may add roles for the arms it scores. Every arm
+but `r0` runs `Stan/forecast_v2.stan` with its own config, an entry `v2_arm(config, role)`
+builds. `ARMS` holds `r0` and `v2s-m0`; each other V2 arm is registered as its config lands.
 
 **R0's extraction.** `r0_extract(draws, meta, dir)` (`R/harness/r0.R`) writes the four
 parquets of spec §5.5 from a fit's draws: `eday_kjordaemi` (`.chain`, `.iteration`,
@@ -246,6 +267,20 @@ k and party p are `meta$kjordaemi_levels[k]` and `meta$party_order[p]`, read fro
 indices in each element's name and never from a column's position, so a reordered draws
 table cannot relabel a cell. It writes nothing unless all four tables build.
 
+**V2's extraction.** `v2_variables(cfg)` (`R/harness/v2.R`) names what a V2 fit's draws must
+hold: `votes_kd`, `pi_nat_eday`, `pi_latent_E`, `y_rep_res`, and the parameters and
+transformed parameters of `V2_PARAM_VARIABLES` that the config's switches put in the model
+(`V2_PARAM_SWITCH` names the switch of each that one adds; a parameter of size 0 has no
+column in the CSVs). `v2_extract(draws, meta, dir)` writes the four parquets in R0's format,
+`eday_kjordaemi` from `votes_kd[k, p]`, `eday_national` from `pi_nat_eday` (the
+vote-weighted aggregate of `votes_kd`, so its gap to the scored kjördæmi aggregate is zero),
+`latent_national` from `pi_latent_E` and `param_draws` from those parameters, plus
+`ppc_results.parquet` (`.chain`, `.iteration`, `.draw`, `election`, `kjordaemi`, `flokkur`,
+`votes`) from `y_rep_res[e, k, p]`, the in-sample replicates of each closed election's
+kjördæmi counts (0 for a party with no national votes there), which only the past-election
+checks read. The election label is the builder's `closed_elections[e]`, and every label
+comes from the element names' indices, as in R0's extraction.
+
 **The cell runner.** From the project root:
 
 ```
@@ -253,7 +288,9 @@ LC_ALL=en_US.UTF-8 Rscript R/harness/fit_cell.R <arm> <E> <F> <seed> <iter_warmu
 ```
 
 `R/harness/fit_cell.R` is a plain script. It stops unless the locale is UTF-8 and the
-working directory is the project root. It builds the cell's data from `info_set(E, F)`
+working directory is the project root. Right after reading its arguments it stops on a 2017
+cell while the freeze is not sealed (`forecast_free(E)`: "fit_cell: 2017 is not fitted before
+the freeze (spec §5.7)"), for every arm, before it builds or writes anything. It builds the cell's data from `info_set(E, F)`
 after `validate_inputs()`, and compares the expected meta (with `stan_data_sha()` of the
 freshly built data) with the run's `meta.json`. On a match it prints
 `SKIP <id> (meta.json matches)` and exits 0. A run directory that does not match, or has no
@@ -261,18 +298,22 @@ freshly built data) with the run's `meta.json`. On a match it prints
 meta.json)`) and refitted. It then freezes the inputs; `inputs.json` records the arm, E, F,
 the expected keys, the builder's meta, the git HEAD (and whether the tree was dirty), the
 sha256 of `snapshot_manifest.csv` and the CmdStan and cmdstanr versions. It fits with
-`SAMPLER`, the seed and the iterations (`refresh = 50`), and stops with no `meta.json`
+`SAMPLER`, the seed and the iterations (`refresh = 50`), on the Stan executable alone (never
+with the model methods compiled, which would build the model on the data inside R), and stops with no `meta.json`
 unless the fit holds 4 chains of `iter_sampling` draws and the Stan file and the frozen
-data still hash as expected. After the extractor it summarises the diagnostics over every
-`parameters`-block variable and the scored quantities, the national shares of
+data still hash as expected. The extractor reads the arm's variables (for V2,
+`v2_variables()` of the config). It then summarises the diagnostics over every
+`parameters`-block variable present in the fit (a zero-size one has no draws) and the scored quantities, the national shares of
 `kd_to_nat(eday_kjordaemi)` (`scored_nat[<flokkur>]`) and every kjördæmi cell's share
 (`scored_kd[<kjordaemi>,<flokkur>]`), writes `key_diagnostics.csv` (`variable`, `rhat`,
 `ess_bulk`, `ess_tail`) for those and the `param_draws` columns, and applies the gate.
-`meta.json` comes last: the expected keys, `arm`, `E`, `F`, `id`, the builder's meta
+`meta.json` comes last: the expected keys, `arm`, `role` (the arm's), `E`, `F`, `id`, the builder's meta
 (`n_pred_k` and `n_e` as objects named by kjördæmi and party), `minutes` (the fit's wall
 time, warmup and sampling), `diagnostics`, `gate` (`pass`, `reasons`) and the provenance of `inputs.json`.
 A non-finite number in `meta.json` is written as a string (`"Inf"`, `"NA"`), so an infinite
-R-hat stays distinct from a missing one; the gate fails on either. It prints the DIAG line
+R-hat stays distinct from a missing one; the gate fails on either. A NULL, such as V2's
+`stage1_sha256` with no stage 1, is written as `null` in both `meta.json` and `inputs.json`,
+and reads back as NULL. It prints the DIAG line
 and `DONE <dir>`, then deletes the CmdStan CSVs.
 
 **The queue.** From the project root:

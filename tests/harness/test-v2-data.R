@@ -33,6 +33,7 @@ test_that("2021 f180 keeps J with no kjordaemi row, entering in the open epoch",
   expect_false(is.na(j))
   expect_false(any(b$data$y_kd[, j] > 0))
   expect_equal(b$data$entry_epoch[j], b$data$n_epoch)
+  expect_identical(b$meta$closed_elections, c("2016-10-29", "2017-10-28"))
 })
 test_that("the 2017 cells have nine parties, one closed epoch, M entering in the open one, and no forecast", {
   skip_without_snapshot()
@@ -46,6 +47,7 @@ test_that("the 2017 cells have nine parties, one closed epoch, M entering in the
     expect_equal(b$data$entry_epoch[match("Mi\u00f0flokkurinn", b$meta$party_order)], 2L)
     expect_equal(b$data$draw_forecast, 0L)
     expect_identical(b$meta$stage1_sha256, "placeholder")
+    expect_identical(b$meta$closed_elections, "2016-10-29")
   }
 })
 test_that("partial polls and results are gathered by identity", {

@@ -3,11 +3,14 @@ box::use(
   R / harness / r0[r0_stan_data, R0_EXTRACT_VARIABLES, R0_KJORDAEMI],
   R / harness / info_set[info_set, read_inputs],
   R / harness / scorer[read_run_meta, score_cell],
-  R / harness / arms[arm]
+  R / harness / arms[arm],
+  R / harness / freeze[is_frozen],
+  R / harness / v2[v2_stan_data]
 )
 
 TIER0 <- c("would run A r0 2024-11-30 2024-11-29 1101", "would run B r0 2021-09-25 2021-03-29 1102")
 PARQUETS <- paste0(c("eday_kjordaemi", "eday_national", "latent_national", "param_draws"), ".parquet")
+REFUSED_2017 <- "fit_cell: 2017 is not fitted before the freeze (spec \u00a75.7)"
 GUARD <- "--file=R/harness/fit_cell.R"
 
 # queue.sh run from the project root; its output, with the exit status as attribute "status"
@@ -318,4 +321,96 @@ test_that("fit_cell.R fits a cell, skips it while meta.json matches, and retires
   expect_identical(jsonlite::read_json(file.path(stale, "meta.json"))$seed, 2L)
   expect_length(grep("^DIAG run=", out), 1)
   expect_identical(meta_mismatch(jsonlite::read_json(path), expected), character(0))
+})
+
+# fit_cell.R run from the project root under LC_ALL=en_US.UTF-8; its output, with the exit
+# status as attribute "status" when it is not 0.
+fit_cell <- function(args) {
+  withr::with_dir(root(), suppressWarnings(system2(
+    file.path(R.home("bin"), "Rscript"), c("R/harness/fit_cell.R", args),
+    stdout = TRUE, stderr = TRUE, env = "LC_ALL=en_US.UTF-8"
+  )))
+}
+
+test_that("fit_cell.R refuses a 2017 cell before the freeze, before it builds or writes anything", {
+  # WHY: this reads the repository's real freeze state; Plan 4 replaces the test once the freeze is sealed.
+  skip_if(is_frozen(), "the freeze is sealed")
+  results <- withr::local_tempdir()
+  withr::local_envvar(HARNESS_RESULTS = results)
+  out <- fit_cell(c("v2s-m0", "2017-10-28", "2017-10-27", "1", "10", "10"))
+  expect_identical(attr(out, "status"), 1L)
+  expect_match(out, REFUSED_2017, fixed = TRUE, all = FALSE)
+  expect_false(any(grepl("^(DIAG|DONE|SKIP|STALE)", out)))
+  expect_length(list.files(results, recursive = TRUE, all.files = TRUE, include.dirs = TRUE, no.. = TRUE), 0)
+  expect_false(dir.exists(root("results", "harness", "v2s-m0_2017-10-28_2017-10-27_s1")))
+})
+
+test_that("fit_cell.R fits v2s-m0 on 2024 eve: the five parquets, the role, n_leapfrog and the scorer's meta fields", {
+  skip_unless_slow()
+  skip_without_snapshot()
+  results <- withr::local_tempdir()
+  withr::local_envvar(HARNESS_RESULTS = results)
+  E <- "2024-11-30"
+  F <- "2024-11-29"
+  id <- run_id("v2s-m0", E, F, 1)
+  dir <- file.path(results, id)
+  a <- arm("v2s-m0")
+  built <- v2_stan_data(info_set(as.Date(E), as.Date(F), read_inputs()), a$read_config(root(a$config)))
+  expected <- expected_meta("v2s-m0", 1, 10, 10, root(a$stan_file), root(a$config), stan_data_sha(built$data))
+
+  out <- fit_cell(c("v2s-m0", E, F, "1", "10", "10"))
+  expect_null(attr(out, "status"), info = paste(utils::tail(out, 30), collapse = "\n"))
+  expect_true(paste("DONE", dir) %in% out)
+  parquets <- c(PARQUETS, "ppc_results.parquet")
+  expect_true(all(file.exists(file.path(dir, c(parquets, "key_diagnostics.csv", "meta.json")))))
+  expect_identical(sort(list.files(dir, pattern = "\\.parquet$")), sort(parquets))
+
+  meta <- jsonlite::read_json(file.path(dir, "meta.json"))
+  expect_identical(meta_mismatch(meta, expected), character(0))
+  expect_true(all(c("arm", "E", "F", "role", "diagnostics", "gate", names(built$meta)) %in% names(meta)))
+  expect_identical(meta$role, "dev")
+  leapfrog <- meta$diagnostics$n_leapfrog
+  expect_true(is.numeric(leapfrog) && length(leapfrog) == 1 && leapfrog >= 40 && leapfrog == round(leapfrog))
+  # WHY: v2s-m0 has no stage 1, so its stage1_sha256 is NULL, which must read back as a null, not as {}.
+  expect_true("stage1_sha256" %in% names(meta))
+  expect_null(meta$stage1_sha256)
+  expect_true(any(grepl('^\\s*"stage1_sha256": null,?$', readLines(file.path(dir, "meta.json")))))
+  box::use(R / harness / scorer[META_FIELDS])
+  run_meta <- read_run_meta(dir)
+  expect_true(all(META_FIELDS %in% names(run_meta)))
+  expect_true("stage1_sha256" %in% names(run_meta))
+  expect_null(run_meta$stage1_sha256)
+  expect_identical(run_meta$party_order, built$meta$party_order)
+  expect_identical(names(run_meta$n_pred_k), built$meta$kjordaemi_levels)
+  expect_error(score_cell(dir, truth = function(...) stop("truth read")), "has role dev", fixed = TRUE)
+
+  # WHY: only names, types and row counts are read: no forecast value is looked at.
+  schema <- function(f) {
+    x <- arrow::read_parquet(file.path(dir, f), as_data_frame = FALSE)
+    list(names = names(x), types = vapply(x$schema$fields, \(fl) fl$type$ToString(), character(1)), rows = x$num_rows)
+  }
+  K <- length(built$meta$kjordaemi_levels)
+  P <- length(built$meta$party_order)
+  ids <- c(".chain", ".iteration", ".draw")
+  kd <- schema("eday_kjordaemi.parquet")
+  expect_identical(kd$names, c(ids, "kjordaemi", "flokkur", "votes"))
+  expect_identical(kd$types, c("int32", "int32", "int32", "string", "string", "int32"))
+  expect_equal(kd$rows, 40 * K * P)
+  for (f in c("eday_national.parquet", "latent_national.parquet")) {
+    s <- schema(f)
+    expect_identical(s$names, c(ids, "flokkur", "share"), label = f)
+    expect_identical(s$types, c("int32", "int32", "int32", "string", "double"), label = f)
+    expect_equal(s$rows, 40 * P, label = f)
+  }
+  ppc <- schema("ppc_results.parquet")
+  expect_identical(ppc$names, c(ids, "election", "kjordaemi", "flokkur", "votes"))
+  expect_identical(ppc$types, c("int32", "int32", "int32", "date32[day]", "string", "string", "int32"))
+  expect_equal(ppc$rows, 40 * built$meta$n_closed * K * P)
+  pd <- schema("param_draws.parquet")
+  expect_identical(pd$names[1:3], ids)
+  kept <- setdiff(a$variables(a$read_config(root(a$config))), c("votes_kd", "pi_nat_eday", "pi_latent_E", "y_rep_res"))
+  expect_identical(unique(sub("\\[.*$", "", pd$names[-(1:3)])), kept)
+  expect_equal(pd$rows, 40)
+  keyd <- names(utils::read.csv(file.path(dir, "key_diagnostics.csv"), check.names = FALSE, nrows = 1))
+  expect_identical(keyd, c("variable", "rhat", "ess_bulk", "ess_tail"))
 })

@@ -85,9 +85,9 @@ stan_data_sha <- function(stan_data) {
 #' @return `stan_data_sha(stan_data)`, which is the sha256 of the written
 #'   `dir/inputs/stan_data.json` (`cmdstanr::write_stan_json()`), after writing it and
 #'   `dir/inputs/inputs.json` (`jsonlite::write_json(auto_unbox = TRUE, pretty = TRUE,
-#'   digits = NA)`) with mode 0444. Both are written into a temporary sibling directory
-#'   that is then renamed to `inputs`, so a failed write leaves no `inputs/`. An error if
-#'   `dir/inputs` exists
+#'   digits = NA, null = "null")`, so a NULL field is written as null) with mode 0444. Both
+#'   are written into a temporary sibling directory that is then renamed to `inputs`, so a
+#'   failed write leaves no `inputs/`. An error if `dir/inputs` exists
 #' @export
 write_frozen_inputs <- function(dir, stan_data, inputs_meta) {
   inputs <- file.path(dir, "inputs")
@@ -99,7 +99,7 @@ write_frozen_inputs <- function(dir, stan_data, inputs_meta) {
   data_json <- file.path(tmp, "stan_data.json")
   meta_json <- file.path(tmp, "inputs.json")
   cmdstanr::write_stan_json(stan_data, data_json)
-  jsonlite::write_json(inputs_meta, meta_json, auto_unbox = TRUE, pretty = TRUE, digits = NA)
+  jsonlite::write_json(inputs_meta, meta_json, auto_unbox = TRUE, pretty = TRUE, digits = NA, null = "null")
   if (!all(Sys.chmod(c(data_json, meta_json), mode = "0444"))) stop("could not make read-only: ", tmp)
   sha <- stan_data_sha(stan_data)
   if (!identical(sha, sha256_file(data_json))) stop("stan_data.json does not reproduce stan_data_sha()")
@@ -189,24 +189,29 @@ extreme <- function(f, x) {
 #' The diagnostics of a fit.
 #' @param params the draws of every `parameters`-block variable, a posterior draws object
 #' @param scored the draws of the scored quantities, with the same chains
-#' @param sampler `list(num_divergent, num_max_treedepth, ebfmi, max_depth)`, one value
-#'   per chain: the first three from `fit$diagnostic_summary()`, `max_depth` the deepest
-#'   `treedepth__` of the chain in `fit$sampler_diagnostics()`
+#' @param sampler `list(num_divergent, num_max_treedepth, ebfmi, max_depth, n_leapfrog)`, one
+#'   value per chain: the first three from `fit$diagnostic_summary()`, `max_depth` the
+#'   deepest `treedepth__` of the chain in `fit$sampler_diagnostics()` and `n_leapfrog` the
+#'   sum of its post-warmup `n_leapfrog__` there (whole numbers)
 #' @return a list: `max_rhat`, `min_ess_bulk` and `min_ess_tail` over `params` and
 #'   `scored` together (Decision 3); `max_rhat_scored`, `min_ess_bulk_scored` and
 #'   `min_ess_tail_scored` over `scored`; `na_scored`, the number of scored quantities
 #'   whose R-hat, bulk ESS or tail ESS is NA; `divergent` and `treedepth_hits`, summed
-#'   over chains; `max_depth` (integers) and `min_ebfmi`. A parameter without an R-hat or
+#'   over chains; `max_depth` (integers), `min_ebfmi` and `n_leapfrog`, the leapfrog steps
+#'   (gradients) of the post-warmup draws summed over chains. A parameter without an R-hat or
 #'   ESS (a constant) is left out of the extremes; a scored quantity without one (a
 #'   constant, or an NA draw) is kept, so the extremes it enters are NA
 #' @export
 summarise_diagnostics <- function(params, scored, sampler) {
-  lacks <- setdiff(c("num_divergent", "num_max_treedepth", "ebfmi", "max_depth"), names(sampler))
+  fields <- c("num_divergent", "num_max_treedepth", "ebfmi", "max_depth", "n_leapfrog")
+  lacks <- setdiff(fields, names(sampler))
   if (length(lacks)) stop("sampler lacks: ", paste(lacks, collapse = ", "))
   chains <- posterior::nchains(params)
   if (posterior::nchains(scored) != chains) stop("params and scored have different chains")
-  if (any(lengths(sampler[c("num_divergent", "num_max_treedepth", "ebfmi", "max_depth")]) != chains)) {
-    stop("sampler needs one value per chain (", chains, ")")
+  if (any(lengths(sampler[fields]) != chains)) stop("sampler needs one value per chain (", chains, ")")
+  leapfrog <- sampler$n_leapfrog
+  if (!is.numeric(leapfrog) || anyNA(leapfrog) || any(leapfrog < 0 | leapfrog != round(leapfrog))) {
+    stop("sampler n_leapfrog must be whole numbers, at least 0")
   }
   measure <- function(x) posterior::summarise_draws(x, "rhat", "ess_bulk", "ess_tail")
   p <- measure(params)
@@ -222,7 +227,8 @@ summarise_diagnostics <- function(params, scored, sampler) {
     divergent = as.integer(sum(sampler$num_divergent)),
     treedepth_hits = as.integer(sum(sampler$num_max_treedepth)),
     max_depth = as.integer(max(sampler$max_depth)),
-    min_ebfmi = min(sampler$ebfmi)
+    min_ebfmi = min(sampler$ebfmi),
+    n_leapfrog = sum(as.numeric(leapfrog))
   )
 }
 

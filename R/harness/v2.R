@@ -1,5 +1,6 @@
 # Arm V2's inputs (spec §6): its configuration, and one cell's info_set() as the Stan data
-# of Stan/forecast_v2.stan, with the meta its extractor and the scorer read.
+# of Stan/forecast_v2.stan, with the meta its extractor and the scorer read; and its
+# extraction (spec §5.5): the variables a fit's draws must hold, and their parquets.
 
 #' V2's data switches, in the order of the Stan data: five model components, then two
 #' parameterisations.
@@ -189,7 +190,8 @@ reported <- function(y) {
 #'   absent at the window's start, §6.4), `eday_index` (G), `n_pred` (Σ N_open), `n_pred_k`
 #'   (N_open named by kjördæmi), `n_polls_nat` (N_nat), `n_polls_kd` (J), `max_poll_date`
 #'   (the last national poll date), `coalition_event`, `coordinate_party` (the first party),
-#'   `n_grid` (G), `n_epoch`, `n_closed`, `n_kd_polls` (N_kd, the kjördæmi poll rows),
+#'   `n_grid` (G), `n_epoch`, `n_closed`, `closed_elections` (the ISO dates of the n_closed
+#'   elections before E, in date order), `n_kd_polls` (N_kd, the kjördæmi poll rows),
 #'   `switches` (the `V2_SWITCHES`, named) and `stage1_sha256` (NULL when `cfg$fundamentals`
 #'   is 0).
 #'
@@ -415,9 +417,148 @@ v2_stan_data <- function(info, cfg, stage1 = stage1_mu_f, party_order = NULL, ro
     n_grid = G,
     n_epoch = n_epoch,
     n_closed = n_closed,
+    closed_elections = format(closed),
     n_kd_polls = data$N_kd,
     switches = unlist(data[V2_SWITCHES]),
     stage1_sha256 = stage1_sha256
   )
   list(data = data, meta = meta)
+}
+
+#' The forecast and replicate variables `v2_extract()` reads (spec §6.8): the kjördæmi counts
+#' at E, their vote-weighted national aggregate, the latent national share at E and the
+#' in-sample replicates of the closed elections' kjördæmi counts.
+V2_DRAW_VARIABLES <- c("votes_kd", "pi_nat_eday", "pi_latent_E", "y_rep_res")
+
+#' The parameters and transformed parameters of `Stan/forecast_v2.stan` that
+#' `param_draws.parquet` keeps, in its column order. Those of `V2_PARAM_SWITCH` exist only
+#' under their switch; the others are the core's.
+#' @export
+V2_PARAM_VARIABLES <- c(
+  "sigma", "L_Omega", "tau_camp", "mu_phi", "sigma_phi", "log_phi", "log_phi_K", "log_kappa", "sigma_gamma", "mu",
+  "tau_mu", "tau_mu_A", "tau_house", "m_new", "s_new", "s_bar_E", "mu_sd", "tau_sd", "s_delta0", "s_bar_zeta", "s_zeta",
+  "anchor_w"
+)
+
+#' The switch that puts each switch-dependent variable of `V2_PARAM_VARIABLES` in the model:
+#' the epoch walk's scales (§6.4), the newcomer pool's mean and scale (§6.4), the shock's
+#' scale (§6.6), the δ walk's scales (§6.7) and the anchored walk's anchors (`walk_form = 1`,
+#' §6.9). Each is size 0, or absent, with its switch at 0.
+#' @export
+V2_PARAM_SWITCH <- c(
+  tau_mu = "epoch_bias", tau_mu_A = "epoch_bias", tau_house = "epoch_bias", m_new = "newcomer_pool",
+  s_new = "newcomer_pool", s_bar_E = "shock", s_bar_zeta = "delta_walk", s_zeta = "delta_walk", anchor_w = "walk_form"
+)
+
+#' The variables of `V2_PARAM_VARIABLES` in the model under `switches`.
+#' @param switches the `V2_SWITCHES`, named, each 0 or 1 (a list or a vector)
+#' @param fail the error function
+param_variables <- function(switches, fail) {
+  sw <- unlist(switches[V2_SWITCHES])
+  if (length(sw) != length(V2_SWITCHES) || !identical(names(sw), V2_SWITCHES) || !all(sw %in% c(0, 1))) {
+    fail("switches must name each of ", paste(V2_SWITCHES, collapse = ", "), " as 0 or 1")
+  }
+  on <- is.na(V2_PARAM_SWITCH[V2_PARAM_VARIABLES]) | sw[V2_PARAM_SWITCH[V2_PARAM_VARIABLES]] == 1
+  V2_PARAM_VARIABLES[on]
+}
+
+#' The variables arm V2's extractor reads from a fit, by its config.
+#' @param cfg a `read_v2_config()` list; only its `V2_SWITCHES` are read
+#' @return `votes_kd`, `pi_nat_eday`, `pi_latent_E` and `y_rep_res`, then the variables of
+#'   `V2_PARAM_VARIABLES` that `cfg`'s switches put in the model, in that order; an error
+#'   unless `cfg` names every switch as 0 or 1
+#' @export
+v2_variables <- function(cfg) {
+  c(V2_DRAW_VARIABLES, param_variables(cfg, \(...) stop("v2_variables: ", ..., call. = FALSE)))
+}
+
+#' Stop with "v2_extract: " and `...`.
+extract_fail <- function(...) stop("v2_extract: ", ..., call. = FALSE)
+
+#' Write a V2 fit's draws as the spec's §5.5 parquets, and the closed elections' in-sample
+#' replicates.
+#' @param draws a posterior draws object (a `draws_df`, or anything `as_draws_df()` takes)
+#'   holding the elements of `votes_kd`, `pi_nat_eday`, `pi_latent_E`, `y_rep_res` and each
+#'   variable of `V2_PARAM_VARIABLES` that `meta$switches` puts in the model (the
+#'   `v2_variables()` of the config); other variables are ignored
+#' @param meta the builder's meta (`v2_stan_data()$meta`): `party_order`,
+#'   `kjordaemi_levels`, `closed_elections` and `switches` are read
+#' @param dir the directory to write into (created if absent)
+#' @return invisibly, the paths written, named `eday_kjordaemi`, `eday_national`,
+#'   `latent_national`, `param_draws` and `ppc_results` (each `dir/<name>.parquet`):
+#'   - `eday_kjordaemi`: `.chain`, `.iteration`, `.draw` (integer), `kjordaemi`, `flokkur`
+#'     (character), `votes` (integer), from `votes_kd[k, p]` labelled `kjordaemi_levels[k]`
+#'     and `party_order[p]`;
+#'   - `eday_national`: `.chain`, `.iteration`, `.draw`, `flokkur`, `share`, the share
+#'     `pi_nat_eday[p]`, the vote-weighted aggregate of `votes_kd`, so its gap to
+#'     `kd_to_nat(eday_kjordaemi)` is zero;
+#'   - `latent_national`: the same columns, the share `pi_latent_E[p]`;
+#'   - `param_draws`: `.chain`, `.iteration`, `.draw`, then one column per element of the
+#'     parameters, the variables in `V2_PARAM_VARIABLES` order and each one's elements in
+#'     Stan's column-major order;
+#'   - `ppc_results`: `.chain`, `.iteration`, `.draw`, `election` (Date), `kjordaemi`,
+#'     `flokkur`, `votes` (integer), from `y_rep_res[e, k, p]` labelled
+#'     `closed_elections[e]`, `kjordaemi_levels[k]` and `party_order[p]`; 0 for a party
+#'     without national votes at that election. Only the past-election checks read it.
+#'
+#'   `.draw` is numbered across chains, 1..N, as `as_draws_df()` numbers it. Rows run by
+#'   draw, then (election,) kjördæmi and party in the meta's orders. Every label comes from
+#'   the indices parsed out of the element names, never from a column's position. Nothing is
+#'   written unless every table builds; an error, "v2_extract: ...", if the meta lacks a
+#'   field or names the switches wrongly, a variable lacks an element or holds one outside
+#'   the meta's levels, or a count is not a whole number.
+#' @export
+v2_extract <- function(draws, meta, dir) {
+  box::use(R / harness / r0[indexed, grid_values, long_draws])
+  lacks <- setdiff(c("party_order", "kjordaemi_levels", "closed_elections", "switches"), names(meta))
+  if (length(lacks)) extract_fail("the meta lacks ", paste(lacks, collapse = ", "))
+  params <- param_variables(meta$switches, extract_fail)
+  closed <- tryCatch(as.Date(meta$closed_elections), error = function(e) as.Date(NA))
+  if (!length(closed) || anyNA(closed)) extract_fail("closed_elections must be one or more dates")
+  draws <- posterior::as_draws_df(draws)
+  parties <- meta$party_order
+  kd_levels <- meta$kjordaemi_levels
+  P <- length(parties)
+  K <- length(kd_levels)
+  n_closed <- length(closed)
+  ids <- list(
+    .chain = as.integer(draws$.chain), .iteration = as.integer(draws$.iteration), .draw = as.integer(draws$.draw)
+  )
+  cells <- function(variable, dims) grid_values(indexed(draws, variable, extract_fail), variable, dims, extract_fail)
+  counts <- function(variable, dims) {
+    x <- cells(variable, dims)
+    if (anyNA(x) || any(x != round(x))) extract_fail(variable, " holds a count that is not a whole number")
+    x
+  }
+
+  kd_cells <- tibble::tibble(kjordaemi = rep(kd_levels, each = P), flokkur = rep(parties, times = K))
+  eday_kd <- long_draws(ids, kd_cells, counts("votes_kd", c(K, P)), "votes")
+  eday_kd$votes <- as.integer(eday_kd$votes)
+  labels <- tibble::tibble(flokkur = parties)
+  eday_nat <- long_draws(ids, labels, cells("pi_nat_eday", P), "share")
+  latent <- long_draws(ids, labels, cells("pi_latent_E", P), "share")
+
+  res_cells <- tibble::tibble(
+    election = rep(closed, each = K * P),
+    kjordaemi = rep(rep(kd_levels, each = P), times = n_closed),
+    flokkur = rep(parties, times = n_closed * K)
+  )
+  ppc <- long_draws(ids, res_cells, counts("y_rep_res", c(n_closed, K, P)), "votes")
+  ppc$votes <- as.integer(ppc$votes)
+
+  kept <- lapply(params, \(v) {
+    x <- indexed(draws, v, extract_fail)
+    ord <- if (ncol(x$index)) do.call(order, rev(lapply(seq_len(ncol(x$index)), \(j) x$index[, j]))) else 1L
+    stats::setNames(lapply(ord, \(i) x$values[, i]), x$columns[ord])
+  })
+  param_draws <- tibble::as_tibble(c(ids, unlist(kept, recursive = FALSE)))
+
+  dir.create(dir, recursive = TRUE, showWarnings = FALSE)
+  tables <- list(
+    eday_kjordaemi = eday_kd, eday_national = eday_nat, latent_national = latent, param_draws = param_draws,
+    ppc_results = ppc
+  )
+  paths <- stats::setNames(file.path(dir, paste0(names(tables), ".parquet")), names(tables))
+  for (f in names(tables)) arrow::write_parquet(tables[[f]], paths[[f]])
+  invisible(paths)
 }

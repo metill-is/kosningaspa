@@ -1,12 +1,45 @@
 # The harness arms (spec section 5.5): for each, its Stan file and config, the reader of that
 # config, the builder from a cell's info_set() to Stan data and meta, the extractor of a fit's
-# draws into the parquets, and the variables the extractor reads. R/harness/fit_cell.R runs
-# one arm on one cell.
+# draws into the parquets, the variables the extractor reads, and the arm's role.
+# R/harness/fit_cell.R runs one arm on one cell.
+
+#' The roles an arm may have: `reference` (R0), `candidate` (V2), `ablation` (V2 with one
+#' component off), `check` (a refit that must reproduce another arm) and `dev` (a step of
+#' V2's staircase). `score_cell()` never scores a `check` or `dev` arm. Plan 4 may add roles
+#' for the arms it scores.
+#' @export
+ARM_ROLES <- c("reference", "candidate", "ablation", "check", "dev")
+
+#' The entry of an arm of the V2 family, which runs `Stan/forecast_v2.stan` with its own
+#' config.
+#' @param config the arm's config, a path under `harness/configs/` relative to the project
+#'   root
+#' @param role one of `ARM_ROLES`
+#' @return `list(stan_file = "Stan/forecast_v2.stan", config, read_config =
+#'   read_v2_config, build = v2_stan_data, extract = v2_extract, variables = v2_variables,
+#'   role)`, `variables` a function of the config; an error unless `config` is one path
+#'   under `harness/configs/` and `role` one of `ARM_ROLES`
+#' @export
+v2_arm <- function(config, role) {
+  box::use(R / harness / v2[read_v2_config, v2_stan_data, v2_extract, v2_variables])
+  if (!is.character(config) || length(config) != 1 || !startsWith(config, "harness/configs/")) {
+    stop("v2_arm: config must be one path under harness/configs/, not ", paste(config, collapse = ", "), call. = FALSE)
+  }
+  if (!is.character(role) || length(role) != 1 || !role %in% ARM_ROLES) {
+    stop("v2_arm: role must be one of ", paste(ARM_ROLES, collapse = ", "), ", not ", paste(role, collapse = ", "), call. = FALSE)
+  }
+  list(
+    stan_file = "Stan/forecast_v2.stan", config = config, read_config = read_v2_config, build = v2_stan_data,
+    extract = v2_extract, variables = v2_variables, role = role
+  )
+}
 
 #' The arms, by name. Each is a list: `stan_file` and `config` (paths under the project
 #' root), `read_config` (config path to config), `build` (`info_set()` and config to
-#' `list(data, meta)`), `extract` (draws, meta and directory to the parquets) and
-#' `variables` (what `extract` reads from a fit).
+#' `list(data, meta)`), `extract` (draws, meta and directory to the parquets), `variables`
+#' (what `extract` reads from a fit: a character vector, or a function of the config) and
+#' `role` (one of `ARM_ROLES`). R0 is the reference; `v2s-m0`, the core of V2's staircase,
+#' is a dev arm.
 #' @export
 ARMS <- local({
   box::use(R / harness / r0[r0_stan_data, read_r0_config, r0_extract, R0_EXTRACT_VARIABLES])
@@ -17,8 +50,10 @@ ARMS <- local({
       read_config = read_r0_config,
       build = r0_stan_data,
       extract = r0_extract,
-      variables = R0_EXTRACT_VARIABLES
-    )
+      variables = R0_EXTRACT_VARIABLES,
+      role = "reference"
+    ),
+    `v2s-m0` = v2_arm("harness/configs/steps/v2s-m0.json", "dev")
   )
 })
 

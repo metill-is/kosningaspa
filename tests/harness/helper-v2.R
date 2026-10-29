@@ -117,7 +117,9 @@ v2_model <- function(stan_file) {
 # The v2_model() whose executable ran the fit `m`.
 model_of <- function(m) {
   exe <- m$runset$exe_file()
-  for (sha in ls(methods_models)) if (identical(methods_models[[sha]]$exe_file(), exe)) return(methods_models[[sha]])
+  for (sha in ls(methods_models)) if (identical(methods_models[[sha]]$exe_file(), exe)) {
+    return(methods_models[[sha]])
+  }
   stop("no v2_model() in this session ran this fit")
 }
 
@@ -335,7 +337,8 @@ data_json <- function(data, dir) {
 # The parameter draws of a 4 x (50 + 20) fit of `m`'s model on `data` at max_treedepth 8,
 # init 0 and `seed`, read at sig_figs = 18 and projected (project_point()): a list of 80
 # parameter lists. The fit draws no forecast (draw_forecast = 0, as in v2_methods()): the
-# points need only the parameters. Its output is in a temporary directory, deleted on
+# points need only the parameters. It runs the executable of `m`'s model alone, without the
+# model methods. Its output is in a temporary directory, deleted on
 # return; only the parameters are read. Every transition reaching depth 8 is expected, so
 # the sampler's diagnostic warnings are off.
 short_fit_draws <- function(m, data, seed) {
@@ -343,7 +346,9 @@ short_fit_draws <- function(m, data, seed) {
   model <- model_of(m)
   if (!is.null(data$draw_forecast)) data$draw_forecast <- 0L
   run <- withr::local_tempdir("v2-points-")
-  fit <- model$sample(
+  # WHY: a fit of the methods-compiled model builds the model on its data in this R process (heap corruption under g++-16 on any C++ exception); the executable alone does not.
+  plain <- cmdstanr::cmdstan_model(exe_file = model$exe_file())
+  fit <- plain$sample(
     data = data_json(data, run), chains = 4, parallel_chains = 4, iter_warmup = 50, iter_sampling = 20,
     max_treedepth = 8, seed = seed, init = 0, sig_figs = 18, output_dir = run, refresh = 0, show_messages = FALSE,
     show_exceptions = FALSE, diagnostics = NULL
