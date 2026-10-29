@@ -381,3 +381,42 @@ test_that("the shock's rows run under its switch, with the bands written before 
   expect_true(grepl("on a 20% party", rows$label[1], fixed = TRUE))
   expect_true(grepl("on a 5% party", rows$label[2], fixed = TRUE))
 })
+
+test_that("delta_step_4y reads M_open of a 4-year step s_bar_zeta s_zeta_raw * zeta, kjordaemi by kjordaemi, on a 20% party", {
+  # K = 2 kjordaemi and P = 3 parties, the open epoch's weights (0.25, 0.75); at delta_years_bar
+  # 4 a 4-year gap scales the step by sqrt(4 / 4) = 1.
+  sim <- list(pars = list(s_bar_zeta = array(0.5, 1), s_zeta_raw = c(0.4, 1, 2)))
+  data <- list(K = 2L, P = 3L, n_epoch = 2L, w = rbind(c(0.5, 0.5), c(0.25, 0.75)), delta_years_bar = 4)
+  zeta <- withr::with_seed(21L, matrix(stats::rnorm(6), 2, 3))
+  X <- zeta %*% diag(0.5 * c(0.4, 1, 2))
+  Y <- X - matrix(drop(c(0.25, 0.75) %*% X), 2, 3, byrow = TRUE)
+  step <- Y - rowMeans(Y)
+  expect_equal(drop(c(0.25, 0.75) %*% step), rep(0, 3), tolerance = 1e-15)
+  want <- apply(step, 1, change_pp)
+  expect_equal(SUMMARY_FUNS$delta_step_4y(sim, data, 21L), want, tolerance = 1e-12)
+  # At delta_years_bar 1 the same gap scales it by sqrt(4).
+  want_1 <- apply(2 * step, 1, change_pp)
+  expect_equal(SUMMARY_FUNS$delta_step_4y(sim, utils::modifyList(data, list(delta_years_bar = 1)), 21L), want_1, tolerance = 1e-12)
+  # The coordinate party's own scale is s_zeta_raw[1]: at 0 its column is the weighted mean's
+  # and the other parties' move alone.
+  flat <- sim
+  flat$pars$s_zeta_raw[1] <- 0
+  X0 <- zeta %*% diag(0.5 * c(0, 1, 2))
+  Y0 <- X0 - matrix(drop(c(0.25, 0.75) %*% X0), 2, 3, byrow = TRUE)
+  expect_equal(SUMMARY_FUNS$delta_step_4y(flat, data, 21L), apply(Y0, 1, change_pp), tolerance = 1e-12)
+  # With delta_walk = 0 the point has no s_bar_zeta or s_zeta_raw to read.
+  off <- list(pars = list(s_bar_zeta = array(numeric(0), 0), s_zeta_raw = numeric(0)))
+  expect_error(SUMMARY_FUNS$delta_step_4y(off, data, 21L), "delta_walk = 1")
+})
+
+test_that("the delta walk's row runs under its switch, with the band written before any fit of its step", {
+  row <- ROWS[ROWS$step == "v2s-m4", ]
+  expect_identical(row$summary, "delta_step_4y")
+  expect_identical(row$kind, "config")
+  expect_identical(row$switch, "delta_walk")
+  expect_identical(row$band[[1]], band_inside(-15, 15))
+  expect_identical(row$keys[[1]], "prior_s_bar_zeta")
+  expect_length(row$held[[1]], 0)
+  # The label states the construction: a 4-year step, the open epoch's weights, no re-centring.
+  expect_true(all(vapply(c("4-year", "open epoch", "re-centring"), \(x) grepl(x, row$label, fixed = TRUE), logical(1))))
+})

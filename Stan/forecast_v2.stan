@@ -16,6 +16,9 @@
 // estimated, instead of fixed at 0 and 0.2023. Step v2s-m3 builds shock = 1 (§6.6): each
 // closed election's results and the forecast take an election-day shock C(s_bar_E d .* z),
 // one per election and shared by its kjordaemi, with d from the previous election's shares.
+// Step v2s-m4 builds delta_walk = 1 (§6.7): the kjordaemi deviations walk across elections,
+// delta_e = M_e(delta_{e-1} + sqrt(delta_years_e / delta_years_bar) s_zeta .* zeta_e), a
+// newcomer's column fresh at its entry epoch.
 functions {
   // The map M_e of §6.7 on a K x P matrix: subtract each party's w-weighted mean over the
   // kjordaemi, then centre each kjordaemi over the parties. The result's rows sum to 0 and
@@ -144,9 +147,8 @@ data {
 }
 
 transformed data {
-  // The core, the anchored walk, the epoch bias, the newcomer pool and the shock are built:
-  // each other switch is refused by name.
-  if (delta_walk) reject("forecast_v2: switch delta_walk = ", delta_walk, " is not built yet");
+  // The core, the anchored walk, the epoch bias, the newcomer pool, the shock and the delta
+  // walk are built: each other switch is refused by name.
   if (fundamentals) reject("forecast_v2: switch fundamentals = ", fundamentals, " is not built yet");
   if (delta_form) reject("forecast_v2: switch delta_form = ", delta_form, " is not built yet");
 
@@ -302,7 +304,7 @@ parameters {
   real<lower=0> sigma_phi;
   real log_phi_K_u;                                   // bounded log phi_K
   real log_kappa_u;                                   // bounded log kappa
-  array[1] matrix[K, P] delta_raw;                    // static delta: one zeta for every epoch
+  array[1 + delta_walk * (n_epoch - 1)] matrix[K, P] delta_raw;  // zeta: one, or one per epoch
   vector[P] s_delta0_raw;                             // log s_delta0 = mu_sd + tau_sd s_delta0_raw
   real mu_sd;
   real<lower=0> tau_sd;
@@ -321,6 +323,10 @@ parameters {
   // closed election e's z.
   matrix[P, shock * n_closed] z_shock;                // the shocks' standard normals z_e
   array[shock] real<lower=0> s_bar_E;                 // the shock's scale
+  // The delta walk (delta_walk = 1, §6.7), each size 0 with delta_walk = 0; its steps'
+  // zeta_2..zeta_n_epoch are delta_raw[2:n_epoch].
+  vector<lower=0>[delta_walk * P] s_zeta_raw;         // s_zeta = s_bar_zeta s_zeta_raw
+  array[delta_walk] real<lower=0> s_bar_zeta;         // the walk's scale
 }
 
 transformed parameters {
@@ -333,6 +339,8 @@ transformed parameters {
   real log_phi_K = phi_K_cap - (phi_K_cap - phi_K_init) * exp(log_phi_K_u);
   real log_kappa = kappa_cap - (kappa_cap - kappa_init) * exp(log_kappa_u);
   vector[P] s_delta0 = exp(mu_sd + tau_sd * s_delta0_raw);
+  vector[delta_walk * P] s_zeta;                      // the walk's per-party step scale
+  if (delta_walk) s_zeta = s_bar_zeta[1] * s_zeta_raw;
 
   // §6.2: coordinates 2:P step by sqrt(Delta_i) s_i L_walk z_i and party 1 by minus their
   // sum, so every theta_t sums to 0 and each step's covariance is Delta_i s_i^2 C Sigma C.
@@ -449,11 +457,26 @@ transformed parameters {
     }
   }
 
-  // §6.7, static: delta_e = M_e(s_delta0 .* zeta), one zeta for every epoch.
+  // §6.7: with delta_walk = 0, static, delta_e = M_e(s_delta0 .* zeta), one zeta for every
+  // epoch. With 1, the walk: delta_1 = M_1(s_delta0 .* zeta_1) and delta_e = M_e(delta_{e-1} +
+  // sqrt(delta_years_e / delta_years_bar) s_zeta .* zeta_e), except that a newcomer's column in
+  // its entry epoch e > 1 is s_delta0,p zeta_{e,.,p}; before it the column walks on the prior.
   {
     matrix[K, P] X = diag_post_multiply(delta_raw[1], s_delta0);
-    for (e in 1:n_epoch) {
-      delta[e] = kjordaemi_map(X, w[e]);
+    if (delta_walk == 0) {
+      for (e in 1:n_epoch) {
+        delta[e] = kjordaemi_map(X, w[e]);
+      }
+    } else {
+      delta[1] = kjordaemi_map(X, w[1]);
+      for (e in 2:n_epoch) {
+        X = delta[e - 1] + sqrt(delta_years[e] / delta_years_bar) * diag_post_multiply(delta_raw[e], s_zeta);
+        for (i in 1:n_enter[e]) {
+          int p = enter_idx[e, i];
+          X[ : , p] = s_delta0[p] * delta_raw[e][ : , p];
+        }
+        delta[e] = kjordaemi_map(X, w[e]);
+      }
     }
   }
 
@@ -565,6 +588,13 @@ model {
   // both size 0 with shock = 0.
   to_vector(z_shock) ~ std_normal();
   s_bar_E ~ normal(0, prior_s_bar_E);
+  // The delta walk (delta_walk = 1): N(0, 1) zeta for epochs 2..n_epoch, s_zeta_raw ~
+  // half-N(0, 1) and s_bar_zeta ~ half-N(0, prior_s_bar_zeta), all size 0 with delta_walk = 0.
+  for (e in 2:size(delta_raw)) {
+    to_vector(delta_raw[e]) ~ std_normal();
+  }
+  s_zeta_raw ~ std_normal();
+  s_bar_zeta ~ normal(0, prior_s_bar_zeta);
   // The bounded transforms' log-Jacobians, |d log c / d u| = (cap - init) exp(u).
   target += H * log(phi_cap - phi_init) + sum(log_phi_u);
   target += log(phi_K_cap - phi_K_init) + log_phi_K_u;

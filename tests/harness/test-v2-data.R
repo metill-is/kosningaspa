@@ -1,5 +1,5 @@
 box::use(
-  R / harness / constants[ELECTIONS],
+  R / harness / constants[ELECTIONS, TARGETS],
   R / harness / info_set[info_set],
   R / harness / tables[grid_dates, valid_votes],
   R / harness / truth[national_shares, read_truth],
@@ -233,5 +233,19 @@ test_that("a party exists from its entry date on, and throughout if present at t
       expect_identical(b$data$exists[, p], want, label = b$meta$party_order[p])
     }
     expect_true(any(b$data$exists == 0L))
+  }
+})
+
+test_that("delta_years is each epoch's gap in years from the previous election, the open epoch's running to E", {
+  # WHY: the delta walk (6.7) scales the step into epoch e by sqrt(delta_years[e] / 4); epoch 1
+  # has no step, and the 2024 cells' epochs close 2016, 2017, 2021 and run to E.
+  skip_without_snapshot()
+  cells <- TARGETS[TARGETS$E == as.Date("2024-11-30"), ]
+  expect_identical(nrow(cells), 4L)
+  for (i in seq_len(nrow(cells))) {
+    d <- v2_stan_data(info_set(cells$E[i], cells$F[i], v2_inputs()), cfg_m0())$data
+    expect_identical(as.integer(d$n_epoch), 4L)
+    expect_identical(round(c(d$delta_years), 2), c(0, 1.00, 3.91, 3.18), label = cells$tag[i])
+    expect_equal(c(d$delta_years)[4], as.numeric(as.Date("2024-11-30") - as.Date("2021-09-25")) / 365.25, tolerance = 1e-15)
   }
 })

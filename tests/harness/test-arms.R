@@ -98,15 +98,18 @@ test_that("v2_variables() names the forecast, the replicates and the parameters 
   expect_error(v2_variables(switched(shock = 2L)), "switches")
 })
 
-test_that("every variable v2_variables() names for v2s-m0, v2s-m1, v2s-m2 and v2s-m3 is declared in Stan/forecast_v2.stan", {
+test_that("every variable v2_variables() names for v2s-m0, v2s-m1, v2s-m2, v2s-m3 and v2s-m4 is declared in Stan/forecast_v2.stan", {
   skip_unless_slow()
   v <- cmdstanr::cmdstan_model(root(V2_STAN), compile = FALSE)$variables()
   declared <- c(names(v$parameters), names(v$transformed_parameters), names(v$generated_quantities))
-  for (a in c("v2s-m0", "v2s-m1", "v2s-m2", "v2s-m3")) {
+  for (a in c("v2s-m0", "v2s-m1", "v2s-m2", "v2s-m3", "v2s-m4")) {
     vars <- v2_variables(read_v2_config(root(arm(a)$config)))
     expect_true(all(vars %in% declared), info = paste(a, paste(setdiff(vars, declared), collapse = ", ")))
   }
-  expect_true(all(c("tau_mu", "tau_mu_A", "tau_house", "m_new", "s_new", "z_shock", "s_bar_E") %in% names(v$parameters)))
+  expect_true(all(c(
+    "tau_mu", "tau_mu_A", "tau_house", "m_new", "s_new", "z_shock", "s_bar_E", "s_zeta_raw", "s_bar_zeta"
+  ) %in% names(v$parameters)))
+  expect_true("s_zeta" %in% names(v$transformed_parameters))
   expect_true(all(V2_GQ %in% names(v$generated_quantities)))
 })
 
@@ -150,11 +153,22 @@ test_that("v2s-m3's config is v2s-m2's with shock = 1 and nothing else", {
   expect_identical(arm("v2s-m3")$role, "dev")
 })
 
+test_that("v2s-m4's config is v2s-m3's with delta_walk = 1 and nothing else", {
+  m3 <- jsonlite::read_json(root("harness", "configs", "steps", "v2s-m3.json"))
+  m4 <- jsonlite::read_json(root(arm("v2s-m4")$config))
+  expect_identical(m3$delta_walk, 0L)
+  expect_identical(m4$delta_walk, 1L)
+  expect_identical(c(m4$walk_form, m4$delta_form), c(0L, 0L))
+  expect_identical(names(m4), names(m3))
+  expect_identical(utils::modifyList(m4, list(delta_walk = 0L)), m3)
+  expect_identical(arm("v2s-m4")$role, "dev")
+})
+
 test_that("while P1's verdict stands (KEEP v2s-m0: the anchored walk is not adopted), every step config but v2s-p1 sets walk_form = 0", {
   # WHY: the steps after P1 build on the reference walk; a re-ruling that adopts the anchored
   # walk changes this test and the later step configs together.
   files <- Sys.glob(root("harness", "configs", "steps", "v2s-*.json"))
-  expect_true(all(root("harness", "configs", "steps", c("v2s-m1.json", "v2s-m2.json", "v2s-m3.json")) %in% files))
+  expect_true(all(root("harness", "configs", "steps", c("v2s-m1.json", "v2s-m2.json", "v2s-m3.json", "v2s-m4.json")) %in% files))
   for (f in files) {
     want <- if (basename(f) == "v2s-p1.json") 1L else 0L
     expect_identical(jsonlite::read_json(f)$walk_form, want, label = basename(f))

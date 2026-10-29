@@ -145,7 +145,7 @@ test_that("the reference refuses another form, an unbuilt switch, a missing para
   expect_setequal(v2_mutants(d), V2_MUTANTS$mutant[is.na(V2_MUTANTS$switch)])
   expect_false(any(c("previous_w", "next_epoch_delta") %in% v2_mutants(utils::modifyList(d, list(n_closed = 1L)))))
   expect_error(v2_lp_ref(pars, utils::modifyList(d, list(walk_form = 1L))), "reference forms")
-  expect_error(v2_lp_ref(pars, utils::modifyList(d, list(delta_walk = 1L))), "delta_walk")
+  expect_error(v2_lp_ref(pars, utils::modifyList(d, list(fundamentals = 1L))), "fundamentals")
   expect_error(v2_simulate(utils::modifyList(d, list(delta_form = 1L)), seed = 1), "reference forms")
   expect_error(v2_lp_ref(pars, d, "no_such_mutant"), "mutant")
   expect_error(v2_lp_ref(pars[-1], d), "theta1")
@@ -353,6 +353,11 @@ test_that("Stan declares the parameters V2_CORE_PARS names, with its types, boun
   expect_identical(V2_CORE_PARS$type[V2_CORE_PARS$name == "s_new"], "array[newcomer_pool] real<lower=0>")
   # §6.6: s_bar_E is the shock's scale, half-normal under shock = 1.
   expect_identical(V2_CORE_PARS$type[V2_CORE_PARS$name == "s_bar_E"], "array[shock] real<lower=0>")
+  # §6.7: the δ walk's scales are half-normal under delta_walk = 1, and delta_raw holds one ζ
+  # per epoch then, one for every epoch with delta_walk = 0.
+  expect_identical(V2_CORE_PARS$type[V2_CORE_PARS$name == "s_zeta_raw"], "vector<lower=0>[delta_walk * P]")
+  expect_identical(V2_CORE_PARS$type[V2_CORE_PARS$name == "s_bar_zeta"], "array[delta_walk] real<lower=0>")
+  expect_identical(V2_CORE_PARS$type[V2_CORE_PARS$name == "delta_raw"], "array[1 + delta_walk * (n_epoch - 1)] matrix[K, P]")
 })
 
 test_that("the newcomer-pool reference: its mutant changes the density on every cell, and the identity under permutation holds", {
@@ -521,4 +526,122 @@ test_that("at z_shock = 0 the shock's density is the shock-free one plus its pri
     prior_move <- d$n_closed * (stats::dnorm(1, log = TRUE) - stats::dnorm(0, log = TRUE))
     expect_gt(abs(v2_lp_ref(moved, d) - lp - prior_move), 1e-6, label = name)
   }
+})
+
+# The δ walk (step v2s-m4, §6.7, switch delta_walk): δ_1 = M_1(s_δ0 ⊙ ζ_1) and δ_e =
+# M_e(δ_{e−1} + √(Δyears_e / Δ̄) s_ζ ⊙ ζ_e), a newcomer's column fresh at its entry epoch.
+
+test_that("the delta-walk reference: its mutants change the density on every cell, and the identity under permutation holds", {
+  # WHY: every cell has a step whose delta_years is not delta_years_bar (2017 eve's one step is
+  # 1 year) and a newcomer entering after the first epoch (M, and J), so both mutants are
+  # exercised on each, 2017 eve's prior points included.
+  cells <- v2_test_cells(cfg_m4())
+  for (name in names(cells)) {
+    d <- cells[[name]]$data
+    expect_identical(as.integer(d$delta_walk), 1L)
+    expect_true(all(c("delta_years_unscaled", "no_delta_restart") %in% v2_mutants(d)))
+    expect_identical(
+      lapply(v2_par_dims(d)[c("delta_raw", "s_zeta_raw", "s_bar_zeta")], as.integer),
+      list(delta_raw = as.integer(c(d$n_epoch, d$K, d$P)), s_zeta_raw = as.integer(d$P), s_bar_zeta = 1L)
+    )
+    for (seed in 1:2) {
+      s <- v2_simulate(d, seed = seed, observe = FALSE)
+      expect_identical(dim(s$pars$delta_raw), as.integer(c(d$n_epoch, d$K, d$P)))
+      lp <- v2_lp_ref(s$pars, d)
+      for (m in c("delta_years_unscaled", "no_delta_restart")) {
+        expect_gt(abs(v2_lp_ref(s$pars, d, m) - lp), 1e-6, label = paste(name, m))
+      }
+      rp <- rev(seq_len(d$P))
+      rk <- rev(seq_len(d$K))
+      p <- permute_v2(s$pars, d, rp, rk)
+      expect_equal(p$pars$delta_raw, s$pars$delta_raw[, rk, rp, drop = FALSE], tolerance = 0)
+      expect_equal(p$pars$s_zeta_raw, s$pars$s_zeta_raw[rp], tolerance = 0)
+      expect_identical(p$pars$s_bar_zeta, s$pars$s_bar_zeta)
+      expect_lt(abs(v2_lp_ref(p$pars, p$data) - lp - attr(p, "ljac_L_Omega")), 1e-10 + 4 * .Machine$double.eps * abs(lp))
+      expect_equal(v2_natural(p$pars, p$data)$delta, v2_natural(s$pars, d)$delta[, rk, rp, drop = FALSE], tolerance = 1e-12)
+    }
+  }
+  expect_identical(V2_MUTANTS$min_closed[V2_MUTANTS$mutant %in% c("delta_years_unscaled", "no_delta_restart")], c(1L, 1L))
+  expect_identical(as.integer(cells$eve2017$data$n_closed), 1L)
+})
+
+test_that("each epoch's delta is the walk of 6.7 written out, a newcomer fresh at its entry epoch", {
+  # 6.7: delta_1 = M_1(s_delta0 zeta_1); delta_e = M_e(delta_{e-1} + sqrt(dyears_e / 4) s_zeta
+  # zeta_e), with s_zeta = s_bar_zeta s_zeta_raw, except that a newcomer's column in its entry
+  # epoch e_p > 1 is s_delta0,p zeta_{e_p,.,p}. The open epoch's dyears runs to E.
+  for (name in c("eve2024", "f180_2021", "eve2017")) {
+    d <- v2_test_cells(cfg_m4())[[name]]$data
+    expect_identical(d$delta_years_bar, 4)
+    entry <- c(d$entry_epoch)
+    expect_true(any(entry > 1L), label = name)
+    s <- v2_simulate(d, seed = 9, observe = FALSE)$pars
+    s$s_bar_zeta[] <- 0.3
+    nat <- v2_natural(s, d)
+    s0 <- exp(s$mu_sd + s$tau_sd * s$s_delta0_raw)
+    sz <- 0.3 * s$s_zeta_raw
+    expect_equal(nat$s_zeta, sz, tolerance = 1e-15)
+    zeta <- function(e) matrix(s$delta_raw[e, , ], d$K, d$P)
+    expect_equal(nat$delta[1, , ], M_e(zeta(1) %*% diag(s0), d$w[1, ]), tolerance = 1e-12, label = paste(name, "epoch 1"))
+    for (e in 2:d$n_epoch) {
+      X <- nat$delta[e - 1, , ] + sqrt(d$delta_years[e] / 4) * zeta(e) %*% diag(sz)
+      for (p in which(entry == e)) X[, p] <- s0[p] * zeta(e)[, p]
+      expect_equal(nat$delta[e, , ], M_e(X, d$w[e, ]), tolerance = 1e-12, label = paste(name, "epoch", e))
+    }
+    # The walk carries a step forward: moving the coordinate party's (present from the
+    # window's start) zeta_e in the first kjordaemi moves delta_e and every later epoch's, never
+    # an earlier one's. A shift of a whole column would not move delta: M_e removes it.
+    for (e in 2:d$n_epoch) {
+      moved <- s
+      moved$delta_raw[e, 1, 1] <- moved$delta_raw[e, 1, 1] + 1
+      dm <- v2_natural(moved, d)$delta
+      for (f in seq_len(d$n_epoch)) {
+        changed <- max(abs(dm[f, , ] - nat$delta[f, , ])) > 1e-6
+        expect_identical(changed, f >= e, label = paste(name, "zeta of epoch", e, "and delta of epoch", f))
+      }
+    }
+  }
+})
+
+test_that("with every step's zeta at 0 the walk's scales reach only their half-normal priors", {
+  for (name in c("eve2024", "eve2017")) {
+    d <- v2_test_cells(cfg_m4())[[name]]$data
+    s <- v2_simulate(d, seed = 10, observe = FALSE)$pars
+    s$delta_raw[-1, , ] <- 0
+    moved <- s
+    moved$s_zeta_raw <- 2 * s$s_zeta_raw
+    moved$s_bar_zeta[] <- 0.37
+    expect_equal(v2_natural(moved, d)$delta, v2_natural(s, d)$delta, tolerance = 1e-14)
+    prior <- sum(stats::dnorm(moved$s_zeta_raw, log = TRUE) - stats::dnorm(s$s_zeta_raw, log = TRUE)) +
+      stats::dnorm(0.37, 0, d$prior_s_bar_zeta, log = TRUE) - stats::dnorm(s$s_bar_zeta, 0, d$prior_s_bar_zeta, log = TRUE)
+    lp <- v2_lp_ref(s, d)
+    expect_lt(abs(v2_lp_ref(moved, d) - lp - prior), 1e-9 + 8 * .Machine$double.eps * abs(lp), label = name)
+    # A step's zeta reaches the likelihood beside its N(0, 1) prior.
+    stepped <- s
+    stepped$delta_raw[2, 1, 1] <- 1
+    expect_gt(abs(v2_lp_ref(stepped, d) - lp - (stats::dnorm(1, log = TRUE) - stats::dnorm(0, log = TRUE))), 1e-6, label = name)
+  }
+})
+
+test_that("with delta_walk = 0 delta_raw is one zeta, the walk's scales have size 0, and every epoch maps that one zeta", {
+  d <- v2_test_cells(cfg_m3())$eve2024$data
+  expect_identical(as.integer(d$delta_walk), 0L)
+  dims <- v2_par_dims(d)
+  expect_identical(lapply(dims[c("delta_raw", "s_zeta_raw", "s_bar_zeta")], as.integer), list(
+    delta_raw = as.integer(c(1L, d$K, d$P)), s_zeta_raw = 0L, s_bar_zeta = 0L
+  ))
+  s <- v2_simulate(d, seed = 11, observe = FALSE)$pars
+  expect_length(s$s_zeta_raw, 0)
+  expect_length(s$s_bar_zeta, 0)
+  nat <- v2_natural(s, d)
+  expect_length(nat$s_zeta, 0)
+  X <- matrix(s$delta_raw[1, , ], d$K, d$P) %*% diag(nat$s_delta0)
+  for (e in seq_len(d$n_epoch)) expect_equal(nat$delta[e, , ], M_e(X, d$w[e, ]), tolerance = 1e-12)
+  # The δ walk's draws come after every other parameter's, so the other parameters of a
+  # delta_walk = 1 draw are the delta_walk = 0 draw's, and so is its first zeta.
+  d1 <- d
+  d1$delta_walk <- 1L
+  s1 <- v2_simulate(d1, seed = 11, observe = FALSE)$pars
+  others <- setdiff(names(s), c("delta_raw", "s_zeta_raw", "s_bar_zeta"))
+  expect_identical(s1[others], s[others])
+  expect_identical(s1$delta_raw[1, , ], s$delta_raw[1, , ])
 })

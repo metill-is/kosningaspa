@@ -2,8 +2,8 @@
 
 Written by `LC_ALL=en_US.UTF-8 Rscript R/harness/v2_prior_predictive.R <config> [n_draws]`. Prior draws only (`v2_simulate(observe = FALSE)`): nothing is fitted and no forecast is computed.
 
-- Config: `harness/configs/steps/v2s-m3.json` (sha256 `5155797acba8482853a806e968756f113a72651523c63e875ba6df6370b39389`)
-- Prior draws: 1000 per cell and row, seeds 6001 to 7000 (the walk and shock rows' z: seeds 7000001 to 7001000)
+- Config: `harness/configs/steps/v2s-m4.json` (sha256 `2a950600e6274b0201369e41aa9b7353d6ceca06c2c01f1f2f28a625b243b3e6`)
+- Prior draws: 1000 per cell and row, seeds 6001 to 7000 (the walk, shock and δ-step rows' z: seeds 7000001 to 7001000)
 - Cell 2024-eve (E 2024-11-30, F 2024-11-29): P 10 parties, H 6 houses, K 6 kjördæmi, J 9 kjördæmi polls, 4 epochs
 - Cell 2021-f180 (E 2021-09-25, F 2021-03-29): P 10 parties, H 5 houses, K 6 kjördæmi, J 1 kjördæmi polls, 3 epochs
 - The 20% party is the coordinate party (the first of the order), in a composition of 20% beside P − 1 equal parties sharing 80%; each effect moves it on the log-ratio scale, and the summary is its change in pp. The script's header says which coordinate each effect reads.
@@ -21,6 +21,7 @@ Written by `LC_ALL=en_US.UTF-8 Rscript R/harness/v2_prior_predictive.R <config> 
 - **newcomer_entry** (step v2s-m2, switch `newcomer_pool`): A newcomer's entry bias against the existing parties' mean, on a 10% party (m_new + s_new η, m_new ~ N(0, 0.3), s_new ~ half-N(0, 0.3)). Band: [5%, 95%] inside [-10, 10].
 - **shock_sd_20** (step v2s-m3, switch `shock`): The election-day shock's sd on a 20% party: given the draw's s̄_E, the sd of its change over 200 draws of z, on the composition (20%, 80% / (P − 1), …), with ε = C(s̄_E d ⊙ z) and each d = √(min(0.2 / π, 10)) of that composition (s̄_E ~ half-N(0, `prior_s_bar_E`)). Band: median in [0.5, 2] × 1.6.
 - **shock_sd_05** (step v2s-m3, switch `shock`): The election-day shock's sd on a 5% party: given the draw's s̄_E, the sd of its change over 200 draws of z, on the composition (5%, 95% / (P − 1), …), with ε = C(s̄_E d ⊙ z) and each d = √(min(0.2 / π, 10)) of that composition (s̄_E ~ half-N(0, `prior_s_bar_E`)). Band: median in [0.5, 2] × 0.95.
+- **delta_step_4y** (step v2s-m4, switch `delta_walk`): A 20% party's change in its kjördæmi deviation over a 4-year gap: the walk's step M_e(√(4 / Δ̄) s_ζ ⊙ ζ) on the open epoch's weights, s_ζ = s̄_ζ s_zeta_raw, without the re-centring of δ_{e−1} on those weights (s̄_ζ ~ half-N(0, `prior_s_bar_zeta`), s_zeta_raw ~ half-N(0, 1)). Band: [5%, 95%] inside [-15, 15].
 
 ## Results
 
@@ -40,8 +41,8 @@ Quantiles in pp over the prior draws (`Values`: draws × houses, kjördæmi, epo
 | poll_sd | v2s-m0 | config | `prior_mu_phi` = 6.90776 | 2021-f180 | 5000 | 1.33 | 1.83 | 4.15 | [5%, 95%] inside [0.8, 6] | PASS |
 | poll_sd | v2s-m0 | comparison | `prior_mu_phi` = 0 (§6.10) | 2024-eve | 6000 | 12.63 | 28.49 | 38.21 | [5%, 95%] inside [0.8, 6] | FAIL (comparison) |
 | poll_sd | v2s-m0 | comparison | `prior_mu_phi` = 0 (§6.10) | 2021-f180 | 5000 | 12.13 | 28.97 | 38.11 | [5%, 95%] inside [0.8, 6] | FAIL (comparison) |
-| kd_delta | v2s-m0 | config | literals | 2024-eve | 6000 | -10.93 | -0.80 | 10.40 | [5%, 95%] inside [-25, 25] | PASS |
-| kd_delta | v2s-m0 | config | literals | 2021-f180 | 6000 | -11.44 | -0.77 | 11.58 | [5%, 95%] inside [-25, 25] | PASS |
+| kd_delta | v2s-m0 | config | literals | 2024-eve | 6000 | -12.49 | -1.12 | 12.77 | [5%, 95%] inside [-25, 25] | PASS |
+| kd_delta | v2s-m0 | config | literals | 2021-f180 | 6000 | -12.25 | -0.91 | 13.00 | [5%, 95%] inside [-25, 25] | PASS |
 | walk_180 | v2s-m0 | config | literals | 2024-eve | 1000 | -11.09 | -0.70 | 7.87 | 95% quantile in [2, 30] | PASS |
 | walk_180 | v2s-m0 | config | literals | 2021-f180 | 1000 | -10.90 | -0.99 | 9.83 | 95% quantile in [2, 30] | PASS |
 | industry_step | v2s-m1 | config | `prior_tau_mu` = 0.1 | 2024-eve | 3000 | -3.03 | -0.03 | 2.86 | [5%, 95%] inside [-6, 6] | PASS |
@@ -52,6 +53,8 @@ Quantiles in pp over the prior draws (`Values`: draws × houses, kjördæmi, epo
 | shock_sd_20 | v2s-m3 | config | `prior_s_bar_E` = 0.15 | 2021-f180 | 1000 | 0.18 | 1.70 | 5.13 | median in [0.5, 2] × 1.6 | PASS |
 | shock_sd_05 | v2s-m3 | config | `prior_s_bar_E` = 0.15 | 2024-eve | 1000 | 0.09 | 0.96 | 3.34 | median in [0.5, 2] × 0.95 | PASS |
 | shock_sd_05 | v2s-m3 | config | `prior_s_bar_E` = 0.15 | 2021-f180 | 1000 | 0.10 | 0.94 | 3.27 | median in [0.5, 2] × 0.95 | PASS |
+| delta_step_4y | v2s-m4 | config | `prior_s_bar_zeta` = 0.2 | 2024-eve | 6000 | -4.69 | -0.05 | 4.18 | [5%, 95%] inside [-15, 15] | PASS |
+| delta_step_4y | v2s-m4 | config | `prior_s_bar_zeta` = 0.2 | 2021-f180 | 6000 | -4.13 | -0.05 | 4.13 | [5%, 95%] inside [-15, 15] | PASS |
 
 Skipped, as the config holds their values: house_d comparison prior_rate_sigma_gamma=1 (§6.10); industry_mu1 comparison prior_sd_mu1=1 (§6.10); poll_sd comparison prior_mu_phi=6.90776 (proposal 1).
 
@@ -82,6 +85,8 @@ PRIOR PASS shock_sd_20/2024-eve/config
 PRIOR PASS shock_sd_20/2021-f180/config
 PRIOR PASS shock_sd_05/2024-eve/config
 PRIOR PASS shock_sd_05/2021-f180/config
+PRIOR PASS delta_step_4y/2024-eve/config
+PRIOR PASS delta_step_4y/2021-f180/config
 ```
 
 ## Reading the verdicts

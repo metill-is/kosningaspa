@@ -26,10 +26,11 @@ V2_STAN <- local({
 # reference's is constant over the cell's points (2024 eve and 2021 f180: posterior and
 # off-posterior points; 2017 eve: prior points only), each mutant of v2_mutants() that the
 # cell exercises is rejected, and every mutant of the 2024-eve cell is exercised on some
-# cell. Returns the mutants exercised, invisibly.
+# cell. Returns the mutants exercised, invisibly, with attribute `by_cell`: each cell's.
 expect_step_lp <- function(step, cfg) {
   cells <- v2_test_cells(cfg)
   hit <- character(0)
+  by_cell <- list()
   for (name in names(cells)) {
     cell <- cells[[name]]
     m <- v2_methods(V2_STAN, cell$data)
@@ -42,6 +43,7 @@ expect_step_lp <- function(step, cfg) {
         hit <- c(hit, mu)
       }
     }
+    by_cell[[name]] <- names(ratios)
     weakest <- if (length(ratios)) names(which.min(ratios)) else "none"
     unexercised <- setdiff(v2_mutants(cell$data), names(ratios))
     by_kind <- paste(vapply(names(ok$kind), \(k) sprintf("%s %.3g", k, ok$kind[[k]][["range"]] / ok$kind[[k]][["tol"]]), ""), collapse = ", ")
@@ -53,7 +55,7 @@ expect_step_lp <- function(step, cfg) {
     ))
   }
   expect_setequal(unique(hit), v2_mutants(cells$eve2024$data)) # every mutant is exercised on some cell
-  invisible(unique(hit))
+  invisible(structure(unique(hit), by_cell = by_cell))
 }
 
 test_that("v2s-m0: Stan's log density matches the reference up to a constant", {
@@ -116,7 +118,7 @@ test_that("v2s-m0: v2_methods stops on each unbuilt switch with CmdStan's text n
   skip_unless_slow()
   skip_unless_step("v2s-m0")
   d <- v2_test_cells(cfg_m0())$eve2024$data
-  for (sw in c("delta_walk", "fundamentals", "delta_form")) {
+  for (sw in c("fundamentals", "delta_form")) {
     d1 <- d
     d1[[sw]] <- 1L
     expect_error(v2_methods(V2_STAN, d1), paste0("forecast_v2: switch ", sw, " = 1 is not built yet"), fixed = TRUE)
@@ -798,4 +800,165 @@ test_that("v2s-m3: votes_kd carries a fresh shock on the open epoch's row of d_s
   last <- s_bar * d$d_shock[d$n_closed, ] * pars$z_shock[, d$n_closed]
   expect_true(isTRUE(max(abs(last[A[-1]] - last[q]) / se) > 20))
   expect_true(isTRUE(max(centre_z) < 4), info = sprintf("largest |z| of a contrast's mean: %.1f", max(centre_z)))
+})
+
+# Step v2s-m4, the delta walk (§6.7, switch delta_walk): delta_1 = M_1(s_delta0 zeta_1) and
+# delta_e = M_e(delta_{e-1} + sqrt(dyears_e / dyears_bar) s_zeta zeta_e), a newcomer's column
+# fresh at its entry epoch; on v2s-m3's shock.
+WALK_PARS <- c("delta_raw", "s_zeta_raw", "s_bar_zeta")
+
+test_that("v2s-m4: Stan's log density matches the reference up to a constant", {
+  skip_unless_slow()
+  skip_unless_step("v2s-m4")
+  hit <- expect_step_lp("v2s-m4", cfg_m4())
+  # WHY: every cell has a step whose gap is not dyears_bar, 2017 eve's one step (a year) too.
+  by_cell <- attr(hit, "by_cell")
+  expect_identical(names(by_cell), c("eve2024", "f180_2021", "eve2017"))
+  for (name in names(by_cell)) expect_true("delta_years_unscaled" %in% by_cell[[name]], label = name)
+  expect_true("no_delta_restart" %in% hit)
+  expect_true(all(c(
+    "shock_unscaled", "newcomer_mean_over_all", "house_walk_from_first_poll", "newcomer_mean_of_mu1", "no_mu_restart",
+    "no_house_restart"
+  ) %in% hit))
+})
+
+test_that("v2s-m4: with delta_years_bar at 2.5 and prior_s_bar_zeta at 0.37, Stan's log density matches the reference, each step on its own gap", {
+  skip_unless_slow()
+  skip_unless_step("v2s-m4")
+  # WHY: the other cells run at delta_years_bar = 4 and §6.10's prior_s_bar_zeta = 0.2, where a
+  # literal 4 or 0.2 in Stan would pass; the gap slip shows that these points tell Stan's
+  # delta_years[e] from the previous epoch's.
+  cfg <- utils::modifyList(cfg_m4(), list(walk_form = 0L, delta_form = 0L, delta_years_bar = 2.5, prior_s_bar_zeta = 0.37))
+  d <- v2_stan_data(info_2024eve(), cfg)$data
+  expect_identical(d$delta_years_bar, 2.5)
+  expect_identical(d$prior_s_bar_zeta, 0.37)
+  m <- v2_methods(V2_STAN, d)
+  pts <- lp_points(m, d, n_post = 0, n_off = 0, n_prior = 10)
+  ok <- expect_lp_matches(m, d, pts)
+  literal_bar <- d
+  literal_bar$delta_years_bar <- 4
+  literal_prior <- d
+  literal_prior$prior_s_bar_zeta <- 0.2
+  prev_years <- d
+  prev_years$delta_years[-1] <- d$delta_years[-d$n_epoch]
+  slips <- c(
+    literal_bar_4 = lp_range(lp_gap(m, literal_bar, pts)$gap), literal_0.2 = lp_range(lp_gap(m, literal_prior, pts)$gap),
+    prev_years = lp_range(lp_gap(m, prev_years, pts)$gap)
+  )
+  for (n in names(slips)) expect_gt(slips[[n]], 100 * ok$tol, label = n)
+  message(sprintf(
+    "v2s-m4 eve2024 at delta_years_bar 2.5, prior_s_bar_zeta 0.37: %d prior points, lp constant range %.3g (tol %.3g); range / (100 tol): %s",
+    length(pts), ok$range, ok$tol, paste(sprintf("%s %.3g", names(slips), slips / (100 * ok$tol)), collapse = ", ")
+  ))
+})
+
+test_that("v2s-m4: delta_raw, s_zeta_raw and s_bar_zeta have v2_par_dims()' sizes, and delta_walk = 0's with it off", {
+  skip_unless_slow()
+  skip_unless_step("v2s-m4")
+  for (cell in v2_test_cells(cfg_m4())) {
+    d <- cell$data
+    m <- v2_methods(V2_STAN, d)
+    expect_identical(names(v2_model(V2_STAN)$variables()$parameters), V2_CORE_PARS$name)
+    dims <- v2_par_dims(d)
+    expect_identical(lapply(dims[WALK_PARS], as.integer), list(
+      delta_raw = as.integer(c(d$n_epoch, d$K, d$P)), s_zeta_raw = as.integer(d$P), s_bar_zeta = 1L
+    ))
+    sizes <- m$metadata()$stan_variable_sizes
+    expect_identical(lapply(sizes[WALK_PARS], as.integer), lapply(dims[WALK_PARS], as.integer))
+    d0 <- d
+    d0$delta_walk <- 0L
+    expect_identical(lapply(v2_par_dims(d0)[WALK_PARS], as.integer), list(
+      delta_raw = as.integer(c(1L, d$K, d$P)), s_zeta_raw = 0L, s_bar_zeta = 0L
+    ))
+    # WHY: the walk adds the (n_epoch - 1) K P free elements of zeta_2..zeta_n_epoch, P of
+    # s_zeta_raw and one of s_bar_zeta.
+    expect_identical(as.numeric(n_unc(m) - n_unc(v2_methods(V2_STAN, d0))), as.numeric((d$n_epoch - 1) * d$K * d$P + d$P + 1))
+    s <- v2_simulate(d, seed = 1, observe = FALSE)
+    pars <- stan_pars(m, m$unconstrain_variables(s$pars))
+    for (n in WALK_PARS) expect_equal(as.numeric(pars[[n]]), c(s$pars[[n]]), tolerance = 1e-12, label = n)
+  }
+})
+
+test_that("v2s-m4: each epoch's delta and s_zeta are the reference's, and static with delta_walk = 0", {
+  skip_unless_slow()
+  skip_unless_step("v2s-m4")
+  for (cell in v2_test_cells(cfg_m4())) {
+    d <- cell$data
+    m <- v2_methods(V2_STAN, d)
+    for (seed in 1:3) {
+      s <- v2_simulate(d, seed = seed, observe = FALSE)
+      # WHY: near s_bar_zeta = 0 a Stan file that kept delta static would agree with the walk.
+      s$pars$s_bar_zeta[] <- c(0.1, 0.4, 0.9)[seed]
+      u <- m$unconstrain_variables(s$pars)
+      tp <- m$constrain_variables(u, transformed_parameters = TRUE, generated_quantities = FALSE)
+      ref <- v2_natural(stan_pars(m, u), d)
+      for (n in c("delta", "s_zeta")) {
+        dims <- dim(as.array(ref[[n]]))
+        expect_identical(length(tp[[n]]), as.integer(prod(dims)), label = paste("length of", n))
+        expect_equal(array(tp[[n]], dims), as.array(ref[[n]]), tolerance = 1e-10, label = n)
+      }
+      expect_gt(max(abs(ref$delta[d$n_epoch, , ] - ref$delta[1, , ])), 1e-3)
+    }
+    d0 <- d
+    d0$delta_walk <- 0L
+    m0 <- v2_methods(V2_STAN, d0)
+    u0 <- m0$unconstrain_variables(v2_simulate(d0, seed = 1, observe = FALSE)$pars)
+    tp0 <- m0$constrain_variables(u0, transformed_parameters = TRUE, generated_quantities = FALSE)
+    ref0 <- v2_natural(stan_pars(m0, u0), d0)
+    expect_length(tp0$s_zeta, 0)
+    expect_identical(length(tp0$delta), as.integer(prod(dim(ref0$delta))))
+    expect_equal(array(tp0$delta, dim(ref0$delta)), ref0$delta, tolerance = 1e-10)
+  }
+})
+
+test_that("v2s-m4: at a prior point the log-likelihood rows are the reference's and pi_latent_E reads the walked delta of the open epoch", {
+  skip_unless_slow()
+  skip_unless_step("v2s-m4")
+  # WHY: the reference's likelihood rows are internal to its module; they are the oracle here.
+  # No forecast quantity is printed, even on failure: those compare by isTRUE(all.equal()).
+  ref <- environment(v2_lp_ref)
+  cells <- v2_test_cells(cfg_m4())
+  for (name in names(cells)) {
+    d <- cells[[name]]$data
+    pars <- v2_simulate(d, seed = 2, observe = FALSE)$pars
+    pars$s_bar_zeta[] <- 0.5
+    r <- gq_at(V2_STAN, d, pars)
+    p <- ref$core_pars(r$pars, d)
+    nat <- ref$natural(p, d)
+    rows <- ref$dm_rows(p, nat, d)
+    expect_equal(r$gq$log_lik, vapply(rows, \(x) dirmult_lpmf(ref$row_counts(d, x), x$alpha), numeric(1)), tolerance = 1e-10)
+    # The power check: the walked delta of the open epoch is not the static one.
+    static <- ref$M_e(matrix(p$delta_raw[1, , ], d$K, d$P) %*% diag(nat$s_delta0), d$w[d$n_epoch, ])
+    expect_true(isTRUE(max(abs(nat$delta[d$n_epoch, , ] - static)) > 1e-2), label = name)
+    if (d$draw_forecast == 1L) {
+      A <- which(d$exists[d$G, ] == 1L)
+      latent <- numeric(d$P)
+      latent_static <- numeric(d$P)
+      for (k in seq_len(d$K)) {
+        latent[A] <- latent[A] + d$w[d$n_epoch, k] * ref$softmax(nat$theta[A, d$G] + nat$delta[d$n_epoch, k, A])
+        latent_static[A] <- latent_static[A] + d$w[d$n_epoch, k] * ref$softmax(nat$theta[A, d$G] + static[k, A])
+      }
+      expect_true(isTRUE(all.equal(c(r$gq$pi_latent_E), latent, tolerance = 1e-10)))
+      expect_false(isTRUE(all.equal(c(r$gq$pi_latent_E), latent_static, tolerance = 1e-6)))
+    } else {
+      expect_false(any(c("votes_kd", "pi_nat_eday", "pi_latent_E") %in% names(r$gq)))
+    }
+  }
+})
+
+test_that("v2s-m4: a fit_values() point keeps s_bar_zeta as a one-element array, so CmdStan reads it back", {
+  skip_unless_slow()
+  skip_unless_step("v2s-m4")
+  # WHY: write_stan_json() writes a plain length-1 numeric as a scalar, which CmdStan's init
+  # reader refuses for an array[1]; the forecast is off, so the runs compute none.
+  d <- v2_test_cells(cfg_m4())$eve2024$data
+  d$draw_forecast <- 0L
+  r <- gq_at(V2_STAN, d, v2_simulate(d, seed = 2, observe = FALSE)$pars)
+  json <- withr::local_tempfile(fileext = ".json")
+  cmdstanr::write_stan_json(r$pars, json)
+  back <- jsonlite::read_json(json)
+  expect_true(is.list(back$s_bar_zeta) && length(back$s_bar_zeta) == 1L, label = "s_bar_zeta is a one-element JSON array")
+  expect_identical(dim(r$pars$delta_raw), as.integer(c(d$n_epoch, d$K, d$P)))
+  again <- gq_at(V2_STAN, d, r$pars)
+  for (n in WALK_PARS) expect_equal(c(again$pars[[n]]), c(r$pars[[n]]), tolerance = 1e-12, label = n)
 })

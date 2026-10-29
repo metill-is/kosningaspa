@@ -66,6 +66,13 @@
 #     which cancels in the softmax), so its population medians are about 1.80 and 1.00 pp, and
 #     the ratios to §6.10's targets are expected near 1.13 and 1.05. They read no
 #     party-indexed parameter, so coordinate 1 is the 20% or 5% party.
+#   - delta_step_4y (step v2s-m4, switch delta_walk): the change in a party's kjördæmi
+#     deviation over a 4-year gap (§6.7): row k of M_e(√(4 / Δ̄) s_ζ ⊙ ζ), the walk's step on
+#     the open epoch's weights w, with ζ ~ N(0, 1) on every kjördæmi and party from seed
+#     SEED_AUX + i and s_ζ = s̄_ζ s_zeta_raw (pars s_bar_zeta and s_zeta_raw), coordinate 1 of
+#     every kjördæmi, the kjördæmi pooled. A change δ_e − δ_{e−1} also holds M_e(δ_{e−1}) −
+#     δ_{e−1}, the re-centring of the previous deviations on the new epoch's weights, which this
+#     row leaves out. Coordinate 1's own scale is s_zeta_raw[1].
 #
 # The bands, each built by its constructor and checked by in_band():
 #   band_inside(lo, hi)                      the 5% quantile at least lo, the 95% at most hi
@@ -100,7 +107,7 @@ box::use(
   R / harness / constants[harness_path, project_root, TARGETS],
   R / harness / info_set[info_set, read_inputs],
   R / harness / v2[read_v2_config, shock_scaling, stage1_placeholder, V2_SWITCHES, v2_stan_data],
-  R / harness / v2_reference[v2_simulate]
+  R / harness / v2_reference[M_e, v2_simulate]
 )
 
 #' The share of the party whose change the composition summaries read, the poll size of
@@ -111,6 +118,9 @@ WALK_DAYS <- 180
 
 #' The share of the newcomer whose entry bias the newcomer row reads.
 NEWCOMER_SHARE <- 0.1
+
+#' The gap in years of the δ-walk row's step.
+DELTA_GAP_YEARS <- 4
 
 #' The shares of the parties whose shock sd the shock rows read, and the draws of z each
 #' value's sd is taken over.
@@ -217,7 +227,19 @@ SUMMARY_FUNS <- list(
     vapply(x, \(v) share_change(c(v, rep(0, data$P - 1)), share = NEWCOMER_SHARE), numeric(1))
   },
   shock_sd_20 = function(sim, data, seed) shock_row(sim, data, seed, SHOCK_SHARES[["shock_sd_20"]]),
-  shock_sd_05 = function(sim, data, seed) shock_row(sim, data, seed, SHOCK_SHARES[["shock_sd_05"]])
+  shock_sd_05 = function(sim, data, seed) shock_row(sim, data, seed, SHOCK_SHARES[["shock_sd_05"]]),
+  delta_step_4y = function(sim, data, seed) {
+    if (length(sim$pars$s_bar_zeta) != 1 || length(sim$pars$s_zeta_raw) != data$P) {
+      stop(
+        "prior predictive: delta_step_4y needs s_bar_zeta and s_zeta_raw, which delta_walk = 1 puts in the model",
+        call. = FALSE
+      )
+    }
+    zeta <- withr::with_seed(seed, matrix(stats::rnorm(data$K * data$P), data$K, data$P))
+    s_zeta <- as.numeric(sim$pars$s_bar_zeta) * as.numeric(sim$pars$s_zeta_raw)
+    x <- sqrt(DELTA_GAP_YEARS / data$delta_years_bar) * zeta * matrix(s_zeta, data$K, data$P, byrow = TRUE)
+    apply(M_e(x, data$w[data$n_epoch, ]), 1, share_change)
+  }
 )
 
 #' `x` to 6 significant digits.
@@ -350,7 +372,9 @@ check_rows <- function(rows) {
 #' any fit of that step. The newcomer pool's (step v2s-m2, switch `newcomer_pool`): a
 #' newcomer's entry bias on a 10% party, its band written before any fit of that step. The
 #' shock's (step v2s-m3, switch `shock`): its sd on a 20% and on a 5% party, each median
-#' within [0.5×, 2×] of §6.10's 1.6 and 0.95 pp, written before any fit of that step.
+#' within [0.5×, 2×] of §6.10's 1.6 and 0.95 pp, written before any fit of that step. The δ
+#' walk's (step v2s-m4, switch `delta_walk`): the change in a 20% party's kjördæmi deviation
+#' over a 4-year gap, its band written before any fit of that step.
 #' @export
 ROWS <- check_rows(dplyr::bind_rows(
   summary_rows(
@@ -427,6 +451,16 @@ ROWS <- check_rows(dplyr::bind_rows(
       "(s\u0304_E ~ half-N(0, `prior_s_bar_E`))"
     ),
     "prior_s_bar_E", band_median_ratio(0.95)
+  ),
+  summary_rows(
+    "delta_step_4y", "v2s-m4", "delta_walk",
+    paste0(
+      "A 20% party's change in its kj\u00f6rd\u00e6mi deviation over a 4-year gap: the walk's step ",
+      "M_e(\u221a(4 / \u0394\u0304) s_\u03b6 \u2299 \u03b6) on the open epoch's weights, ",
+      "s_\u03b6 = s\u0304_\u03b6 s_zeta_raw, without the re-centring of \u03b4_{e\u22121} on those weights ",
+      "(s\u0304_\u03b6 ~ half-N(0, `prior_s_bar_zeta`), s_zeta_raw ~ half-N(0, 1))"
+    ),
+    "prior_s_bar_zeta", band_inside(-15, 15)
   )
 ))
 
@@ -601,7 +635,7 @@ main <- function(args) {
     "",
     sprintf("- Config: `%s` (sha256 `%s`)", config, digest::digest(file = args[1], algo = "sha256")),
     sprintf(
-      "- Prior draws: %d per cell and row, seeds %d to %d (the walk and shock rows' z: seeds %d to %d)",
+      "- Prior draws: %d per cell and row, seeds %d to %d (the walk, shock and \u03b4-step rows' z: seeds %d to %d)",
       n_draws, SEED + 1L, SEED + n_draws, SEED_AUX + 1L, SEED_AUX + n_draws
     ),
     paste("- Cell", designs),

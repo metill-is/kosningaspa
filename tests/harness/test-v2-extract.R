@@ -18,12 +18,11 @@ CORE <- c(
   "sigma", "L_Omega", "tau_camp", "mu_phi", "sigma_phi", "log_phi", "log_phi_K", "log_kappa", "sigma_gamma", "mu",
   "mu_sd", "tau_sd", "s_delta0"
 )
-SCALARS <- c(
-  "tau_camp", "mu_phi", "sigma_phi", "log_phi_K", "log_kappa", "sigma_gamma", "mu_sd", "tau_sd", "s_bar_zeta"
-)
-# The epoch bias's scales, the newcomer pool's mean and scale and the shock's scale, each
-# declared array[<switch>] real, so a fit writes tau_mu[1], m_new[1] and s_bar_E[1].
-ONE_ELEMENT <- c("tau_mu", "tau_mu_A", "tau_house", "m_new", "s_new", "s_bar_E")
+SCALARS <- c("tau_camp", "mu_phi", "sigma_phi", "log_phi_K", "log_kappa", "sigma_gamma", "mu_sd", "tau_sd")
+# The epoch bias's scales, the newcomer pool's mean and scale, the shock's scale and the delta
+# walk's, each declared array[<switch>] real, so a fit writes tau_mu[1], m_new[1], s_bar_E[1]
+# and s_bar_zeta[1].
+ONE_ELEMENT <- c("tau_mu", "tau_mu_A", "tau_house", "m_new", "s_new", "s_bar_E", "s_bar_zeta")
 MATRICES <- c("L_Omega", "mu", "anchor_w")
 DRAW <- seq_len(16)
 
@@ -206,6 +205,13 @@ test_that("param_draws holds the parameters the meta's switches put in the model
   pd <- extracted(synthetic_draws(c(with_shock, "z_shock")), shock)$read$param_draws
   expect_identical(names(pd), c(".chain", ".iteration", ".draw", columns_of(with_shock)))
   expect_true("s_bar_E[1]" %in% names(pd))
+  walked <- utils::modifyList(META, list(switches = replace(SWITCHES, c("epoch_bias", "newcomer_pool", "shock", "delta_walk"), 1L)))
+  with_walk <- c(with_shock, "s_bar_zeta", "s_zeta")
+  # WHY: s_zeta_raw and delta_raw are the walk's raw scales and zeta, which param_draws leaves
+  # out, like z_shock.
+  pd <- extracted(synthetic_draws(c(with_walk, "s_zeta_raw", "delta_raw")), walked)$read$param_draws
+  expect_identical(names(pd), c(".chain", ".iteration", ".draw", columns_of(with_walk)))
+  expect_true(all(c("s_bar_zeta[1]", "s_zeta[1]") %in% names(pd)))
 })
 
 test_that("v2_extract reads every variable v2_variables() names for the meta's switches, and no other", {
