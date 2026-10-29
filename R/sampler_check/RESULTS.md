@@ -74,9 +74,11 @@ on the window when it had one poll fewer, N = 335) reached the cap on all 1,800 
 transitions, with min bulk ESS 209, max R-hat 1.011 and 0.057 bulk ESS per 1,000 gradients,
 about a seventeenth of the new model's.
 
-The leave-future-out fits (`--cutoff=`, polls dated before the election) were clean as well:
-to 2024-11-30, 11.3 min with no divergent transition and none at the cap; to 2021-09-25,
-10.9 min, likewise. Their scores are in `Stan/polling_watch_variants.md`, §10.
+The leave-future-out fits (`--cutoff=`, polls dated before the election) were clean as well,
+with no divergent transition and none at the cap: v5 from 2016 to 2024-11-30 in 11.3 min and to
+2021-09-25 in 10.9 min; v4 from 2016 in 21.7 and 9.6 min; and v4 from the previous result, the
+live fit's window (`--start=2021-09-25` for 2024, `--start=2017-10-28` for 2021), in 3.6 and
+6.0 min. Their scores are in `Stan/polling_watch_variants.md`, §10.
 
 ### Reproducing
 
@@ -103,7 +105,8 @@ LC_ALL=en_US.UTF-8 Rscript R/sampler_check/compare_polling_watch.R --old=<dir>/v
 The leave-future-out fits are new fits, each with its own `--out=` and no `--data-json=`, so
 each builds its data and its `meta.rds`: `--start=2016-01-01 --cutoff=2024-11-30` (or
 `2021-09-25`), once with `--stan=Stan/polling_watch_v5_epoch.stan` and once with the default
-v4. `score_polling_watch_backtest.R <E> <fit dir> ...` scores them from each fit's draws and
+v4, and the default v4 again with `--start=` at the previous result.
+`score_polling_watch_backtest.R <E> <fit dir> ...` scores them from each fit's draws and
 `meta.rds`; it refuses 2017-10-28 until `harness/DECISION.md` exists.
 
 ## Fylgisvakt: anchored walk, bounded log φ (28 October 2026)

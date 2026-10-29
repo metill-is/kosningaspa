@@ -216,26 +216,36 @@ Leave-future-out fits on the production window, each to the polls dated before a
 with the shares at the last poll date scored against the official national result
 (`R/sampler_check/score_polling_watch_backtest.R`; percentage points over the ten parties):
 
-| Election | Model | MAE | RMSE | CRPS | 90% coverage | 90% width |
-|---|---|---|---|---|---|---|
-| 2024 | v4 | 1.01 | 1.35 | 0.844 | 4 of 10 | 1.60 |
-| 2024 | v5 | 0.73 | 0.85 | 0.542 | 7 of 10 | 2.86 |
-| 2021 | v4 | 1.12 | 1.51 | 0.854 | 8 of 10 | 5.53 |
-| 2021 | v5 | 1.29 | 1.50 | 0.865 | 10 of 10 | 6.33 |
+The rows marked "live" fit v4 from the previous result, the window the live fit read until
+now (with the anchored v4, whose posterior is the forward walk's apart from the bound on log φ,
+§9).
 
-In 2024 v4's intervals were too narrow and its largest error was Samfylkingin's (−3.2 points
+| Election | Model and window | MAE | RMSE | CRPS | 90% coverage | 90% width |
+|---|---|---|---|---|---|---|
+| 2024 | v4 from the 2021 result (live) | 1.08 | 1.34 | 0.770 | 5 of 10 | 2.73 |
+| 2024 | v4 from 2016 | 1.01 | 1.35 | 0.844 | 4 of 10 | 1.60 |
+| 2024 | v5 from 2016 | 0.73 | 0.85 | 0.542 | 7 of 10 | 2.86 |
+| 2021 | v4 from the 2017 result (live) | 1.78 | 2.19 | 1.293 | 7 of 10 | 6.45 |
+| 2021 | v4 from 2016 | 1.12 | 1.51 | 0.854 | 8 of 10 | 5.53 |
+| 2021 | v5 from 2016 | 1.29 | 1.50 | 0.865 | 10 of 10 | 6.33 |
+
+v5 scores better than the live configuration at both elections. On the same window, in 2024 v4's intervals were too narrow and its largest error was Samfylkingin's (−3.2 points
 against v5's −0.9): it applied to the 2021–2024 polls a correction learnt mostly from earlier
 epochs. In 2021 the window holds only the 2016 and 2017 results, the bias is poorly pinned in
 both models, and they tie on CRPS. Putting a fraction w of the industry bias back into the
 shares (softmax(log π + w·mu_gamma), the hedge of the forecast) helps v4 in 2024, at best to an
 MAE of 0.83 at w = 0.4, still worse than v5 without it, and hurts both models in 2021; v5 scores
-best at w = 0 in both. Two elections are thin evidence: v5 wins one clearly and ties the other.
-The case for it is that pollster bias does move between elections, which v4 cannot represent.
+best at w = 0 in both. Two elections are thin evidence: on the same window v5 wins one clearly
+and ties the other, and it beats the live configuration at both. The case for it is that pollster bias does move between elections, which v4 cannot represent.
 
-The switch moves the headline. On the polls to 27 September 2026, v4 put Samfylkingin at 25.8%
-(90% interval 24.1–27.6) and Sjálfstæðisflokkurinn at 27.2% (25.5–28.9), Samfylkingin ahead
-with probability 0.22; v5 puts them at 27.5% (24.8–30.2) and 24.8% (22.6–27.2), Samfylkingin
-ahead with probability 0.86. v4's industry bias, learnt over 2016–2024, says the polls
-understate Sjálfstæðisflokkurinn by 0.19 on the logit scale and overstate Samfylkingin by 0.05;
-v5's bias for the epoch since the 2024 election is −0.11 and −0.04, so it lifts
-Sjálfstæðisflokkurinn less and lifts Samfylkingin a little where v4 lowered it.
+The switch widens Samfylkingin's lead, mostly by lowering Sjálfstæðisflokkurinn. On the polls to
+27 September 2026 the live configuration, v4 from the 2021 election, puts Samfylkingin at 28.1%
+(90% interval 26.3–30.1) and Sjálfstæðisflokkurinn at 26.6% (24.8–28.4), Samfylkingin ahead
+with probability 0.80; v5 puts them at 27.5% (24.8–30.2) and 24.8% (22.6–27.2), Samfylkingin
+ahead with probability 0.86. The longer window alone would have reversed the order: v4 from
+2016 puts them at 25.8% (24.1–27.6) and 27.2% (25.5–28.9), Samfylkingin ahead with
+probability 0.22. v4's industry bias, learnt over 2016–2024, says the polls understate
+Sjálfstæðisflokkurinn by 0.19 on the logit scale and overstate Samfylkingin by 0.05; v5's bias
+for the epoch since the 2024 election says they understate both, Sjálfstæðisflokkurinn by 0.11
+and Samfylkingin by 0.04, so it lifts Sjálfstæðisflokkurinn less than v4 does and lifts
+Samfylkingin a little where v4 lowered it.
