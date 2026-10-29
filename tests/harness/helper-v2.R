@@ -1,15 +1,21 @@
 # Test fixtures for arm V2: its step configs, the 2024-eve cell and its Stan data, helpers
-# that each plant one fault in one table of an info_set(), and model methods on V2's Stan
-# files (v2_model(), v2_methods(), n_unc(), reverse_labels(), and stage 1's R reference),
-# random_sigma() for the walk's covariance algebra, and the comparison of
-# Stan/forecast_v2.stan with the R reference (skip_unless_step(), v2_test_cells(),
-# lp_points(), stan_pars(), expect_lp_matches(), expect_lp_rejects(), mutant_exercised(),
-# bounded_at()).
-# The V2 modules are imported inside the fixtures, so that a broken module fails the tests
-# that use it, not the sourcing of every test file.
+# that each plant one fault in one table of an info_set(), stage 1's data and R reference
+# (reverse_labels() and the stage1_* functions), random_sigma() for the walk's covariance
+# algebra, and the comparison of Stan/forecast_v2.stan with the R reference
+# (skip_unless_step(), v2_test_cells(), lp_points(), stan_pars(), expect_lp_matches(),
+# expect_lp_rejects(), mutant_exercised(), bounded_at()). The model methods on V2's Stan
+# files (v2_model(), v2_methods(), n_unc(), fixed_param_run(), short_fit_draws(), gq_at(),
+# ...) are R/harness/v2_methods.R's, imported below under their own names.
+# The other V2 modules are imported inside the fixtures, so that a broken module fails the
+# tests that use it, not the sourcing of every test file.
 box::use(
   R / harness / constants[project_root],
-  R / harness / info_set[info_set, read_inputs]
+  R / harness / info_set[info_set, read_inputs],
+  # WHY: the methods machinery is a module (Ruling T8a) so that R/harness/v2_equivalence.R runs the same heap-safe code; the tests use it under the same names.
+  R / harness / v2_methods[
+    v2_model, model_of, fixed_param_run, v2_methods, n_unc, draw_pars, project_point, OFF_SCALES, fit_values,
+    data_json, short_fit_draws, gq_at, gq_draws
+  ]
 )
 
 V2_M0_CONFIG <- file.path(project_root(), "harness", "configs", "steps", "v2s-m0.json")
@@ -92,101 +98,6 @@ random_sigma <- function(P) {
   L <- lkj_corr_cholesky_rng(P, 2)
   diag(s) %*% tcrossprod(L) %*% diag(s)
 }
-
-# The compiled models of v2_methods(), one per Stan file's sha256 in this R session.
-methods_models <- new.env(parent = emptyenv())
-
-# The model of `stan_file` compiled with its methods: compiled from a copy of the file in a
-# fresh temporary directory, never in place and never with force_recompile (which overwrites
-# an executable that running chains may be using), once per R session per file sha256. A
-# relative `stan_file` is read from the project root.
-v2_model <- function(stan_file) {
-  if (!startsWith(stan_file, "/")) stan_file <- file.path(project_root(), stan_file)
-  sha <- digest::digest(file = stan_file, algo = "sha256")
-  if (is.null(methods_models[[sha]])) {
-    # WHY: cmdstanr builds the methods only when it compiles, never from an executable it finds up to date.
-    dir <- tempfile("v2-methods-")
-    dir.create(dir)
-    copy <- file.path(dir, basename(stan_file))
-    stopifnot(file.copy(stan_file, copy))
-    methods_models[[sha]] <- cmdstanr::cmdstan_model(copy, compile_model_methods = TRUE, quiet = TRUE)
-  }
-  methods_models[[sha]]
-}
-
-# The v2_model() whose executable ran the fit `m`.
-model_of <- function(m) {
-  exe <- m$runset$exe_file()
-  for (sha in ls(methods_models)) if (identical(methods_models[[sha]]$exe_file(), exe)) {
-    return(methods_models[[sha]])
-  }
-  stop("no v2_model() in this session ran this fit")
-}
-
-# A fixed_param run of the executable of `stan_file` (v2_model()) on `data`: one chain of
-# `iter` iterations from `init` (0, or a parameter list such as a v2_simulate() draw), seed
-# 1, output in `dir`. The executable runs alone, without the model methods, so nothing of
-# the model runs in this R process. A run that fails stops with CmdStan's exception text.
-fixed_param_run <- function(stan_file, data, dir, init = 0, iter = 1, sig_figs = NULL) {
-  plain <- cmdstanr::cmdstan_model(exe_file = v2_model(stan_file)$exe_file())
-  if (is.list(init)) {
-    # WHY: CmdStan's init reader refuses a zero-size parameter (nu with J = 0) written as [], and
-    # there is nothing to initialise in it; cmdstanr would note that it was left out.
-    withr::local_options(cmdstanr_warn_inits = FALSE)
-    init <- list(init[lengths(init) > 0])
-  }
-  fit <- withCallingHandlers(
-    plain$sample(
-      data = data_json(data, dir), fixed_param = TRUE, chains = 1, iter_warmup = 0, iter_sampling = iter,
-      adapt_engaged = FALSE, seed = 1, init = init, sig_figs = sig_figs, output_dir = dir, refresh = 0,
-      show_messages = FALSE, show_exceptions = FALSE
-    ),
-    # WHY: cmdstanr's warning names no reason; the stop below gives CmdStan's.
-    warning = function(w) {
-      if (grepl("No chains finished successfully", conditionMessage(w), fixed = TRUE)) invokeRestart("muffleWarning")
-    }
-  )
-  if (!all(fit$return_codes() == 0)) {
-    out <- fit$runset$procs$proc_output(1)
-    said <- grep("Exception|Error", out, value = TRUE)
-    if (!length(said)) said <- utils::tail(out, 10)
-    stop("the fixed_param run failed; CmdStan said:\n", paste(said, collapse = "\n"), call. = FALSE)
-  }
-  fit
-}
-
-# A one-iteration fit that carries the model methods (log_prob, unconstrain_variables, ...)
-# of `stan_file` (v2_model()) on `data`. `data$draw_forecast` is set to 0 if the field
-# exists. The methods are attached by a fixed_param run in a temporary directory, deleted
-# unread. The data are first run by the executable alone (fixed_param_run()), so a reject
-# stops with CmdStan's text before anything of the model runs in this R process.
-v2_methods <- function(stan_file, data) {
-  model <- v2_model(stan_file)
-  if (!is.null(data$draw_forecast)) data$draw_forecast <- 0L
-  run <- tempfile("v2-methods-run-")
-  dir.create(run)
-  on.exit(unlink(run, recursive = TRUE), add = TRUE)
-  # WHY: a fit of a model compiled with its methods builds the model on its data in this R
-  # process as soon as cmdstanr creates the fit, before any return code can be read. The
-  # methods are built with g++-16 against a clang-built R, so a C++ exception there (a reject
-  # in transformed data) corrupts R's heap even when caught; nothing here catches it. The
-  # executable alone meets any reject first, in CmdStan's own process.
-  check <- file.path(run, "check")
-  dir.create(check)
-  fixed_param_run(stan_file, data, check)
-  fit <- model$sample(
-    data = data_json(data, run), fixed_param = TRUE, chains = 1, iter_warmup = 0, iter_sampling = 1, adapt_engaged = FALSE,
-    seed = 1, init = 0, output_dir = run, refresh = 0, show_messages = FALSE, show_exceptions = FALSE
-  )
-  stopifnot("the fixed_param run with the model methods failed" = all(fit$return_codes() == 0))
-  # WHY: the model pointer reads the data file, which on.exit deletes.
-  fit$init_model_methods()
-  fit
-}
-
-# The length of the unconstrained parameter vector of a v2_methods() fit.
-# WHY: cmdstanr keeps it only in the fit's private methods environment; reading it calls no model method.
-n_unc <- function(m) m$.__enclos_env__$private$model_methods_env_$num_upars_
 
 # Stage-1 data (stage1_data()) with the party labels in reverse order: label l becomes
 # L + 1 - l, the attribute `labels` is reversed, and the rows of each election and the
@@ -276,110 +187,6 @@ stan_pars <- function(m, u) {
   pars <- m$constrain_variables(u, transformed_parameters = FALSE, generated_quantities = FALSE)
   stopifnot(identical(names(pars), V2_CORE_PARS$name))
   pars
-}
-
-# One draw `x` (a named numeric vector of CmdStan columns) as a list of the parameters of
-# `dims`, each in cmdstanr's shape; `scalar` names the parameters declared as scalars.
-draw_pars <- function(x, dims, scalar) {
-  out <- list()
-  for (n in names(dims)) {
-    d <- dims[[n]]
-    if (prod(d) == 0) {
-      out[[n]] <- array(numeric(0), d)
-    } else if (scalar[[n]]) {
-      out[[n]] <- unname(x[[n]])
-    } else {
-      idx <- as.matrix(expand.grid(lapply(d, seq_len)))
-      v <- unname(x[paste0(n, "[", apply(idx, 1, paste, collapse = ","), "]")])
-      stopifnot(!anyNA(v))
-      out[[n]] <- if (length(d) == 1) v else array(v, d)
-    }
-  }
-  out
-}
-
-# A point read back from a CmdStan CSV, made safe for unconstrain_variables(), which throws a
-# C++ exception (corrupting R's heap, since it is built with g++-16) on a sum-to-zero vector
-# off by the CSV's rounding or a bound violated: every sum-to-zero group (theta1, mu1, each
-# nu[j]) projected to zero sum, and every lower-bounded parameter checked strictly positive.
-project_point <- function(p) {
-  p$theta1 <- p$theta1 - mean(p$theta1)
-  p$mu1 <- p$mu1 - mean(p$mu1)
-  if (length(p$nu)) p$nu <- p$nu - rowMeans(p$nu)
-  stopifnot(
-    abs(sum(p$theta1)) < 1e-12, abs(sum(p$mu1)) < 1e-12, all(abs(rowSums(p$nu)) < 1e-12),
-    all(unlist(p[OFF_SCALES]) > 0)
-  )
-  p
-}
-
-# The lower-bounded scale parameters that an off-posterior point multiplies by exp(N(0, 0.5)).
-OFF_SCALES <- c("sigma", "tau_camp", "sigma_gamma", "sigma_phi", "tau_sd")
-
-# The draws in `fit` (of `model`) of the variables named in `dims`, each in cmdstanr's
-# shape with its dims there; a list of one named list per draw.
-fit_values <- function(fit, model, dims) {
-  info <- do.call(c, unname(model$variables()[c("parameters", "transformed_parameters", "generated_quantities")]))
-  scalar <- vapply(names(dims), \(v) info[[v]]$dimensions == 0, logical(1))
-  present <- names(dims)[vapply(dims, prod, numeric(1)) > 0]
-  x <- unclass(posterior::as_draws_matrix(fit$draws(variables = present)))
-  lapply(seq_len(nrow(x)), \(i) draw_pars(x[i, ], dims, scalar))
-}
-
-# Data written as CmdStan JSON in `dir`; returns the path.
-data_json <- function(data, dir) {
-  json <- file.path(dir, "data.json")
-  attributes(data) <- list(names = names(data))
-  cmdstanr::write_stan_json(data, json)
-  json
-}
-
-# The parameter draws of a 4 x (50 + 20) fit of `m`'s model on `data` at max_treedepth 8,
-# init 0 and `seed`, read at sig_figs = 18 and projected (project_point()): a list of 80
-# parameter lists. The fit draws no forecast (draw_forecast = 0, as in v2_methods()): the
-# points need only the parameters. It runs the executable of `m`'s model alone, without the
-# model methods. Its output is in a temporary directory, deleted on
-# return; only the parameters are read. Every transition reaching depth 8 is expected, so
-# the sampler's diagnostic warnings are off.
-short_fit_draws <- function(m, data, seed) {
-  box::use(R / harness / v2_reference[v2_par_dims])
-  model <- model_of(m)
-  if (!is.null(data$draw_forecast)) data$draw_forecast <- 0L
-  run <- withr::local_tempdir("v2-points-")
-  # WHY: a fit of the methods-compiled model builds the model on its data in this R process (heap corruption under g++-16 on any C++ exception); the executable alone does not.
-  plain <- cmdstanr::cmdstan_model(exe_file = model$exe_file())
-  fit <- plain$sample(
-    data = data_json(data, run), chains = 4, parallel_chains = 4, iter_warmup = 50, iter_sampling = 20,
-    max_treedepth = 8, seed = seed, init = 0, sig_figs = 18, output_dir = run, refresh = 0, show_messages = FALSE,
-    show_exceptions = FALSE, diagnostics = NULL
-  )
-  stopifnot("the short fit failed" = all(fit$return_codes() == 0))
-  lapply(fit_values(fit, model, v2_par_dims(data)), project_point)
-}
-
-# The parameters and generated quantities of `stan_file` (v2_model()) on `data` at `pars` (a
-# v2_simulate() draw): a one-draw fixed_param run started at `pars`, read back at sig_figs =
-# 18, so `pars` is the point as the run holds it. Returns list(pars, gq), `gq` holding every
-# generated quantity of non-zero size in its shape.
-gq_at <- function(stan_file, data, pars) {
-  box::use(R / harness / v2_reference[v2_par_dims])
-  model <- v2_model(stan_file)
-  run <- withr::local_tempdir("v2-gq-")
-  fit <- fixed_param_run(stan_file, data, run, init = pars, sig_figs = 18)
-  sizes <- fit$metadata()$stan_variable_sizes
-  gq <- intersect(names(model$variables()$generated_quantities), names(sizes))
-  gq <- gq[vapply(sizes[gq], prod, numeric(1)) > 0]
-  list(pars = fit_values(fit, model, v2_par_dims(data))[[1]], gq = fit_values(fit, model, sizes[gq])[[1]])
-}
-
-# The draws of the generated quantity `variable` of `stan_file` on `data` in an
-# `iter`-iteration fixed_param run (fixed_param_run()) at `pars` (a v2_simulate() draw), as
-# an array [iter, dims of `variable`]: the draws are independent given the point. Read at
-# CmdStan's default 6 significant figures, which is exact for a count below 1e6.
-gq_draws <- function(stan_file, data, pars, variable, iter) {
-  run <- withr::local_tempdir("v2-gq-draws-")
-  fit <- fixed_param_run(stan_file, data, run, init = pars, iter = iter)
-  posterior::draws_of(posterior::as_draws_rvars(fit$draws(variables = variable))[[variable]])
 }
 
 # The points of the Stan lp tests on `data`, for the v2_methods() fit `m`: a list of

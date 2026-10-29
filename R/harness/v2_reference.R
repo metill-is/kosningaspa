@@ -14,16 +14,19 @@ box::use(
 #' `constrain_variables(..., transformed_parameters = FALSE)` returns and `v2_lp_ref()`
 #' reads. `N_new` is the number of parties with `entry_epoch` > 0, and `new_raw` holds one
 #' element per such party, in party order. `delta_raw` is one ζ, mapped through every
-#' epoch's M_e (static δ). `s_delta0_raw` is r, with log s_δ0 = μ_sd + τ_sd r.
+#' epoch's M_e (static δ). `s_delta0_raw` is r, with log s_δ0 = μ_sd + τ_sd r. `anchor_w` is
+#' the anchored walk's (walk_form = 1, §6.9): size 0 in the reference forms, where `z_walk`
+#' has its G − 1 columns.
 #' @export
 V2_CORE_PARS <- tibble::tibble(
   name = c(
-    "theta1", "z_walk", "sigma", "L_Omega", "tau_camp", "mu1", "house_raw", "sigma_gamma", "new_raw",
+    "theta1", "anchor_w", "z_walk", "sigma", "L_Omega", "tau_camp", "mu1", "house_raw", "sigma_gamma", "new_raw",
     "log_phi_u", "mu_phi", "sigma_phi", "log_phi_K_u", "log_kappa_u", "delta_raw", "s_delta0_raw", "mu_sd",
     "tau_sd", "nu"
   ),
   type = c(
-    "sum_to_zero_vector[P]", "matrix[P - 1, G - 1]", "vector<lower=0>[P]", "cholesky_factor_corr[P]",
+    "sum_to_zero_vector[P]", "array[walk_form * n_closed] vector[P - 1]", "matrix[P - 1, G - 1 - walk_form * n_closed]",
+    "vector<lower=0>[P]", "cholesky_factor_corr[P]",
     "real<lower=0>", "sum_to_zero_vector[P]", "matrix[H, P]", "real<lower=0>", "vector[N_new]", "vector[H]",
     "real", "real<lower=0>", "real", "real", "array[1] matrix[K, P]", "vector[P]", "real", "real<lower=0>",
     "array[J] sum_to_zero_vector[P]"
@@ -150,6 +153,9 @@ colsums_exact <- function(x) {
 #' The lower-triangular L with a positive diagonal and LLᵀ = BBᵀ, from the QR decomposition
 #' of Bᵀ, so the Gram matrix BBᵀ is never formed: its rounding would square the condition
 #' number. Mathematically chol(BBᵀ).
+#' @param B a matrix with full row rank
+#' @return the lower-triangular factor, `nrow(B)` square
+#' @export
 chol_of_gram <- function(B) {
   q <- qr(t(B), tol = 0)
   check(identical(q$pivot, seq_len(ncol(t(B)))), "chol_of_gram: the QR decomposition pivoted")
@@ -161,14 +167,26 @@ chol_of_gram <- function(B) {
 walk_steps <- function(L_walk, z, scale) (L_walk %*% z) * rep(scale, each = nrow(L_walk))
 
 #' The walk's per-step scale sqrt(Δ_i) s_i, with s_i = 1 + τ_camp c_i (§6.2).
+#' @param tau_camp the campaign multiplier τ_camp
+#' @param data a `v2_stan_data()` data list
+#' @return the G − 1 scales, one per grid step
+#' @export
 walk_scale <- function(tau_camp, data) sqrt(c(data$delta_days)) * (1 + tau_camp * c(data$campaign))
+
+#' The rows 2:P of C diag(σ) L, C = I − 11ᵀ/P: their Gram matrix is (CΣC)[2:P, 2:P] for
+#' Σ = diag(σ) Ω diag(σ), Ω = LLᵀ.
+#' @param sigma the P walk scales σ
+#' @param L_Omega the Cholesky factor of Ω, P × P
+#' @return a (P − 1) × P matrix
+#' @export
+walk_rows <- function(sigma, L_Omega) {
+  M <- sigma * L_Omega
+  (M - matrix(colMeans(M), nrow(M), ncol(M), byrow = TRUE))[-1, , drop = FALSE]
+}
 
 #' The factor L_walk = chol((CΣC)[2:P, 2:P]) of Σ = diag(σ) Ω diag(σ), Ω = LLᵀ, computed as
 #' the Cholesky factor of the Gram matrix of the rows 2:P of C diag(σ) L.
-walk_factor <- function(sigma, L_Omega) {
-  M <- sigma * L_Omega
-  chol_of_gram((M - matrix(colMeans(M), nrow(M), ncol(M), byrow = TRUE))[-1, , drop = FALSE])
-}
+walk_factor <- function(sigma, L_Omega) chol_of_gram(walk_rows(sigma, L_Omega))
 
 #' The map M_e of §6.7: (I − 1wᵀ) X C. It subtracts each party's w-weighted mean over the
 #' kjördæmi, then centres each kjördæmi over the parties, so the result's rows sum to 0 and
@@ -283,14 +301,20 @@ lkj_corr_cholesky_rng <- function(P, eta) {
 }
 
 #' The dimensions of the core's parameters on `data`, as cmdstanr's `stan_variable_sizes`
-#' gives them (1 for a scalar), named and ordered as `V2_CORE_PARS`.
+#' gives them (1 for a scalar), named and ordered as `V2_CORE_PARS`: with `walk_form` = 1,
+#' `anchor_w` is n_closed × (P − 1) and `z_walk` (P − 1) × (G − 1 − n_closed); with 0,
+#' `anchor_w` is 0 × (P − 1) and `z_walk` (P − 1) × (G − 1).
 #' @param data a `v2_stan_data()` data list
 #' @return a named list of integer vectors
 #' @export
 v2_par_dims <- function(data) {
   P <- data$P
+  wf <- as.integer(data$walk_form)
+  check(length(wf) == 1 && wf %in% 0:1, "data$walk_form must be 0 or 1")
+  n_anchor <- wf * as.integer(data$n_closed)
   list(
-    theta1 = P, z_walk = c(P - 1L, data$G - 1L), sigma = P, L_Omega = c(P, P), tau_camp = 1L, mu1 = P,
+    theta1 = P, anchor_w = c(n_anchor, P - 1L), z_walk = c(P - 1L, data$G - 1L - n_anchor), sigma = P,
+    L_Omega = c(P, P), tau_camp = 1L, mu1 = P,
     house_raw = c(data$H, P), sigma_gamma = 1L, new_raw = sum(c(data$entry_epoch) > 0), log_phi_u = data$H,
     mu_phi = 1L, sigma_phi = 1L, log_phi_K_u = 1L, log_kappa_u = 1L, delta_raw = c(1L, data$K, P),
     s_delta0_raw = P, mu_sd = 1L, tau_sd = 1L, nu = c(data$J, P)
@@ -579,6 +603,7 @@ draw_prior <- function(data) {
   phi_init <- mean(log(rowSums(data$y_nat)))
   pars <- list(
     theta1 = rstz(P, THETA1_SD),
+    anchor_w = array(numeric(0), c(0L, P - 1L)),
     z_walk = matrix(stats::rnorm((P - 1) * (G - 1)), P - 1, G - 1),
     sigma = abs(stats::rt(P, SIGMA_DF)) * SIGMA_SCALE,
     L_Omega = lkj_corr_cholesky_rng(P, LKJ_ETA),
@@ -740,7 +765,8 @@ permute_v2 <- function(pars, data, party_perm, kd_perm) {
   new_old <- which(entry > 0)
   new_new <- which(entry[pp] > 0)
   out_pars <- list(
-    theta1 = p$theta1[pp], z_walk = z_walk, sigma = sigma, L_Omega = L, tau_camp = p$tau_camp,
+    theta1 = p$theta1[pp], anchor_w = array(numeric(0), c(0L, P - 1L)), z_walk = z_walk, sigma = sigma,
+    L_Omega = L, tau_camp = p$tau_camp,
     mu1 = p$mu1[pp], house_raw = p$house_raw[, pp, drop = FALSE], sigma_gamma = p$sigma_gamma,
     new_raw = p$new_raw[match(pp[new_new], new_old)], log_phi_u = p$log_phi_u, mu_phi = p$mu_phi,
     sigma_phi = p$sigma_phi, log_phi_K_u = p$log_phi_K_u, log_kappa_u = p$log_kappa_u,

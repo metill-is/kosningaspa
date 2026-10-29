@@ -30,7 +30,14 @@ run only with `HARNESS_SLOW=1` in the environment:
 `HARNESS_SLOW=1 LC_ALL=en_US.UTF-8 Rscript tests/run.R`. The tests of `Stan/forecast_v2.stan`
 in `tests/harness/test-v2-stan.R` are slow and named by the V2 step they test (`v2s-m0: …`);
 `V2_STEPS=<step>[,<step>…]` runs only those steps' tests (`skip_unless_step()`), and unset it
-runs them all. The fast test of the cell runner's 2017 refusal reads this repository's real
+runs them all. The slow tests of the equivalence check in
+`tests/harness/test-v2-equivalence.R` are named and gated the same way (`v2s-p1: …`): each
+runs `R/harness/v2_equivalence.R` in a subprocess into a temporary CSV, one of them on a
+copy of the Stan file with a planted fault, which must fail; its fast tests check the CSV
+writer and the command lines the script refuses before it compiles anything. The model
+methods these tests use (`v2_model()`, `v2_methods()`, `short_fit_draws()`, …) are the
+module `R/harness/v2_methods.R`, which `tests/harness/helper-v2.R` imports, so the
+equivalence script runs the same heap-safe code. The fast test of the cell runner's 2017 refusal reads this repository's real
 freeze state, under a temporary `HARNESS_RESULTS`, and skips once the freeze is sealed. It
 runs the runner with `CMDSTAN` naming an empty directory, after checking that cmdstanr then
 finds no CmdStan, so a regressed refusal stops at its first cmdstanr call and can neither
@@ -411,12 +418,14 @@ V2 is built as a staircase of steps (the Phase 2 plan's step protocol): an M-ste
 component and so changes the posterior, and a P-step reparameterises the model and must not.
 Each step's sampler-check fits are lines of `harness/runs/v2-steps.txt`, at 400 + 400 on 2024
 eve (lane A) and 2021 f180 (lane B), seed 2701, and seed 2702 as well when the next step is a
-P-step. Each step appends its own lines, and the queue's sha-skip passes over the finished
-ones. From the project root, in a normal shell so that the queue outlives the session:
+P-step. Each step appends its lines to this record, and its queue runs a list of only those
+lines, because a Stan edit makes the earlier steps' runs STALE: the runner would retire and
+refit them. From the project root, in a normal shell so that the queue outlives the session:
 
 ```
 mkdir -p results/harness/logs
-nohup zsh R/harness/queue.sh harness/runs/v2-steps.txt 400 400 > results/harness/logs/v2-steps_nohup.log 2>&1 &
+grep -E '^[AB] <step> ' harness/runs/v2-steps.txt > results/harness/logs/<step>-runs.txt
+nohup zsh R/harness/queue.sh results/harness/logs/<step>-runs.txt 400 400 > results/harness/logs/<step>_nohup.log 2>&1 &
 LC_ALL=en_US.UTF-8 Rscript R/harness/tier0_report.R <step> harness/runs/v2-steps.txt harness/v2/steps/<step>.md
 LC_ALL=en_US.UTF-8 Rscript R/harness/compare_runs.R stop <step>
 ```
@@ -424,6 +433,36 @@ LC_ALL=en_US.UTF-8 Rscript R/harness/compare_runs.R stop <step>
 The last two, run once `queue.log` ends in `QUEUE FINISHED`, write the step's diagnostics table
 (committed) and print the stop rule's verdicts, which go into the step log,
 `harness/v2/steps.md`, one section per step.
+
+A P-step's form is first checked against the reference form, point by point, by
+`R/harness/v2_equivalence.R` (the plan's Decision 6, condition 1), once for each check of
+`EQUIVALENCE_REQUIRED` (below), all into the step's equivalence CSV:
+
+```
+LC_ALL=en_US.UTF-8 Rscript R/harness/v2_equivalence.R --config=harness/configs/steps/<step>.json --form=walk --cell=<E>,<F> --out=harness/v2/steps/<step>-equivalence.csv [--n=30] [--n-off=15] [--stan=Stan/forecast_v2.stan] [--reverse]
+```
+
+The new side is the config as written and the reference side the same config with the form
+at 0; a config whose form is 0 is refused. On a fitted cell the points are `--n` posterior and
+`--n-off` off-posterior draws (each scale of `OFF_SCALES` multiplied by exp(N(0, 0.5))) of a
+4 × (100 + 40) fit of the new side at seed 5100 and max_treedepth 10 that draws no forecast;
+on a 2017 cell they are `--n` prior draws of the reference side (`v2_simulate()`, seeds 5101,
+5102, …), nothing is fitted, and the check stops if either side's generated quantities hold
+a forecast variable. Each point maps to the other side through θ, every other parameter
+copied, and (lp_new − J_new) − (lp_ref − J_ref) must be one constant within
+1e-12 × max(1, |lp_new|), lp being `log_prob(jacobian = TRUE)` and J each side's
+log-Jacobian from its standard normals to θ (the script's header lists the terms). Each term
+left out alone, a negative control, must break it; a term constant over the points is reported
+as not exercised. Both sides' generated quantities at the posterior (or prior) points, by
+standalone `generate_quantities` at seed 1 and `sig_figs = 18`, must agree within 1e-9
+relative, and θ within 1e-8. A point with a bounded log concentration at its cap is excluded
+and counted; one whose log density is not finite on both sides is dropped and counted, and a
+dropped posterior point fails the check, as does one finite on one side only; each kind needs
+at least 5 kept points. It prints each point's constant and path error, the controls and the
+generated quantities' largest relative difference, never a forecast value, then `EQUIV PASS`
+or `EQUIV FAIL` (exit 1). Only the walk form's map is built: `--form=delta` and `--form=both`
+stop. A check of 10 + 5 points on 2021 f180 took 5 min 6 s (`time`, 29 Oct 2026); 2024 eve's
+grid has 274 dates to 2021 f180's 160.
 
 `R/harness/compare_runs.R` is a plain script with three subcommands, whose definitions also
 load as a box module (its test imports `perm_z()`, `perm_verdict()`, `relative()` and
@@ -486,6 +525,12 @@ check `R/harness/v2_equivalence.R` ran, with at least these columns; any others 
 | `E`, `F` | the cell, ISO dates |
 | `order` | `default` or `reversed`: the party and kjördæmi order of both sides (`--reverse`) |
 | `verdict` | `PASS` or `FAIL`: the check's `EQUIV` verdict, its negative controls included |
+
+`v2_equivalence.R` writes these first, then `form`, `config`, `stan_sha256`, the kept points
+by kind (`n_posterior`, `n_off`, `n_prior`), the dropped, excluded and one-sided counts
+(`n_rejected`, `n_outside`, `n_one_sided`), `const_range`, `tol`, `path_err`, `gq_points`,
+`gq_max_rel`, one `control_<term>` per log-Jacobian term (`fails`, `PASSES` or
+`not exercised`) and `reasons`, the failed conditions.
 
 **`perm <arm_a> <arm_b> [run_list]`**, the permutation rule (the plan's Decision 8), compares two
 different arms that must give the same forecast draws within Monte Carlo error, such as `v2` and

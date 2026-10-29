@@ -39,7 +39,7 @@ v2_arm <- function(config, role) {
 #' `list(data, meta)`), `extract` (draws, meta and directory to the parquets), `variables`
 #' (what `extract` reads from a fit: a character vector, or a function of the config) and
 #' `role` (one of `ARM_ROLES`). R0 is the reference; `v2s-m0`, the core of V2's staircase,
-#' is a dev arm.
+#' and `v2s-p1`, its walk anchored at the closed elections, are dev arms.
 #' @export
 ARMS <- local({
   box::use(R / harness / r0[r0_stan_data, read_r0_config, r0_extract, R0_EXTRACT_VARIABLES])
@@ -53,7 +53,8 @@ ARMS <- local({
       variables = R0_EXTRACT_VARIABLES,
       role = "reference"
     ),
-    `v2s-m0` = v2_arm("harness/configs/steps/v2s-m0.json", "dev")
+    `v2s-m0` = v2_arm("harness/configs/steps/v2s-m0.json", "dev"),
+    `v2s-p1` = v2_arm("harness/configs/steps/v2s-p1.json", "dev")
   )
 })
 

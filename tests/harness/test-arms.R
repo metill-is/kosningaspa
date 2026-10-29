@@ -106,3 +106,13 @@ test_that("every variable v2_variables() names for v2s-m0 is declared in Stan/fo
   expect_true(all(vars %in% declared), info = paste(setdiff(vars, declared), collapse = ", "))
   expect_true(all(V2_GQ %in% names(v$generated_quantities)))
 })
+
+test_that("v2s-p1's config is v2s-m0's with walk_form = 1 and nothing else", {
+  m0 <- jsonlite::read_json(root("harness", "configs", "steps", "v2s-m0.json"))
+  p1 <- jsonlite::read_json(root(arm("v2s-p1")$config))
+  expect_identical(m0$walk_form, 0L)
+  expect_identical(p1$walk_form, 1L)
+  expect_identical(names(p1), names(m0))
+  expect_identical(utils::modifyList(p1, list(walk_form = 0L)), m0)
+  expect_identical(arm("v2s-p1")$role, "dev")
+})

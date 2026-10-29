@@ -8,6 +8,8 @@
 // data come from v2_stan_data() in R/harness/v2.R, and tests/harness/test-v2-stan.R tests
 // the log density against the R reference R/harness/v2_reference.R. A component switch or
 // a form other than 0 is refused until the step that builds it (Stan/CLAUDE.md, switches).
+// Step v2s-p1 builds walk_form = 1, the walk anchored at the closed elections (§6.9), the
+// same model as the reference walk; R/harness/v2_equivalence.R checks that it is.
 functions {
   // The map M_e of §6.7 on a K x P matrix: subtract each party's w-weighted mean over the
   // kjordaemi, then centre each kjordaemi over the parties. The result's rows sum to 0 and
@@ -38,6 +40,21 @@ functions {
   vector national_alpha(vector pi, vector gamma_eh, real phi, array[] int S) {
     vector[size(S)] a = pi[S] .* exp(gamma_eh[S]);
     return phi * a / sum(a);
+  }
+
+  // The rows 2:P of C diag(sigma) L_Omega, C = I - 11'/P: their Gram matrix is the walk's
+  // step covariance (C Sigma C)[2:P, 2:P] per unit variance.
+  matrix walk_rows(vector sigma, matrix L_Omega) {
+    int P = rows(sigma);
+    matrix[P, P] CM = diag_pre_multiply(sigma, L_Omega);
+    CM -= rep_matrix(rep_row_vector(1, P) * CM / P, P);
+    return CM[2:P];
+  }
+
+  // The Cholesky factor of (B B')[rs, rs], with a positive diagonal, as R' from the thin QR
+  // decomposition of B[rs]': forming B B' would square the condition number (proposal 3).
+  matrix chol_gram_rows(matrix B, array[] int rs) {
+    return qr_thin_R(B[rs]')';
   }
 }
 
@@ -126,7 +143,6 @@ transformed data {
   if (shock) reject("forecast_v2: switch shock = ", shock, " is not built yet");
   if (delta_walk) reject("forecast_v2: switch delta_walk = ", delta_walk, " is not built yet");
   if (fundamentals) reject("forecast_v2: switch fundamentals = ", fundamentals, " is not built yet");
-  if (walk_form) reject("forecast_v2: switch walk_form = ", walk_form, " is not built yet");
   if (delta_form) reject("forecast_v2: switch delta_form = ", delta_form, " is not built yet");
 
   // Decision 4: log c = cap - (cap - init) exp(u), so u = 0 is the init and c stays below the cap.
@@ -152,6 +168,76 @@ transformed data {
   vector[G - 1] sqrt_delta = sqrt(delta_days);
   vector[G - 1] campaign_v = to_vector(campaign);
   real n_pred = sum(N_open);
+
+  // The anchored walk (walk_form = 1, §6.9): its anchors are the closed elections' dates. At
+  // anchor j the present parties A_j are the result's (those with national votes, idx_res)
+  // and the absent ones B_j the rest, both without the coordinate party and both as
+  // coordinates c = 1..P - 1 of theta[2:P] (party c + 1). It needs every anchor in 2..G, in
+  // date order, and the coordinate party in every result: z_walk's G - 1 - n_closed columns
+  // and the shift by |A_j u {1}| below assume both.
+  int n_anchor = walk_form * n_closed;
+  for (j in 1:n_anchor) {
+    if (grid_res[j] < 2 || grid_res[j] > G) {
+      reject("forecast_v2: walk_form = 1 needs every grid_res in 2..G, but grid_res[", j, "] = ", grid_res[j]);
+    }
+    if (j > 1 && grid_res[j] <= grid_res[j - 1]) {
+      reject("forecast_v2: walk_form = 1 needs grid_res strictly increasing, but grid_res[", j, "] = ", grid_res[j],
+             " follows ", grid_res[j - 1]);
+    }
+    int coord = 0;
+    for (i in 1:n_rep_res[j]) {
+      if (idx_res[j, i] == 1) coord = 1;
+    }
+    if (coord == 0 || sum(y_res[j, : , 1]) == 0) {
+      reject("forecast_v2: walk_form = 1 needs the coordinate party (index 1) to have national votes at every closed",
+             " election, but it has none at closed election ", j);
+    }
+  }
+  array[n_anchor] int n_pres = rep_array(0, n_anchor);
+  array[n_anchor, P - 1] int pres_idx = rep_array(0, n_anchor, P - 1);
+  array[n_anchor] int n_abs = rep_array(0, n_anchor);
+  array[n_anchor, P - 1] int abs_idx = rep_array(0, n_anchor, P - 1);
+  // Each anchor's present levels are stored relative to w_off, the result's national log
+  // shares centred over its parties (A_j u {1}), so that anchor_w = 0 starts the walk at
+  // each result rather than at equal shares. A constant shift: exact, no Jacobian.
+  array[n_anchor] vector[P - 1] w_off = rep_array(rep_vector(0, P - 1), n_anchor);
+  for (j in 1:n_anchor) {
+    array[P] int present = rep_array(0, P);
+    vector[n_rep_res[j]] l;
+    for (i in 1:n_rep_res[j]) {
+      present[idx_res[j, i]] = 1;
+      l[i] = log(sum(y_res[j, : , idx_res[j, i]]));
+    }
+    l -= mean(l);
+    for (i in 1:n_rep_res[j]) {
+      if (idx_res[j, i] > 1) w_off[j][idx_res[j, i] - 1] = l[i];
+    }
+    for (c in 1:(P - 1)) {
+      if (present[c + 1]) {
+        n_pres[j] += 1;
+        pres_idx[j, n_pres[j]] = c;
+      } else {
+        n_abs[j] += 1;
+        abs_idx[j, n_abs[j]] = c;
+      }
+    }
+  }
+  // The column of z_walk for each date 2..G that is not an anchor, in date order; 0 at an
+  // anchor and at date 1. With walk_form = 0 it is t - 1.
+  array[G] int zcol = rep_array(0, G);
+  {
+    array[G] int is_anchor = rep_array(0, G);
+    for (j in 1:n_anchor) {
+      is_anchor[grid_res[j]] = 1;
+    }
+    int c = 0;
+    for (t in 2:G) {
+      if (is_anchor[t] == 0) {
+        c += 1;
+        zcol[t] = c;
+      }
+    }
+  }
 
   // The parties existing at each grid date, by index.
   array[G] int n_exist;
@@ -197,7 +283,8 @@ parameters {
   // The names, types and order of V2_CORE_PARS in R/harness/v2_reference.R, so the tests can
   // move a point between the reference and Stan without renaming or reordering.
   sum_to_zero_vector[P] theta1;                       // the state at the first grid date
-  matrix[P - 1, G - 1] z_walk;                        // the walk's innovations in coordinates 2:P
+  array[walk_form * n_closed] vector[P - 1] anchor_w; // walk_form = 1: each anchor's levels in coordinates 2:P
+  matrix[P - 1, G - 1 - walk_form * n_closed] z_walk; // the walk's innovations in coordinates 2:P
   vector<lower=0>[P] sigma;                           // per sqrt(day), log-ratio
   cholesky_factor_corr[P] L_Omega;
   real<lower=0> tau_camp;                             // campaign multiplier
@@ -233,15 +320,55 @@ transformed parameters {
   // B' with B the rows 2:P of C diag(sigma) L_Omega, since B B' = (C Sigma C)[2:P, 2:P]:
   // forming B B' would square the condition number (proposal 3).
   {
-    matrix[P, P] CM = diag_pre_multiply(sigma, L_Omega);
-    CM -= rep_matrix(rep_row_vector(1, P) * CM / P, P);
-    matrix[P - 1, P - 1] L_walk = qr_thin_R(CM[2:P]')';
+    matrix[P - 1, P] B = walk_rows(sigma, L_Omega);
+    matrix[P - 1, P - 1] L_walk = qr_thin_R(B')';
     vector[G - 1] scale = sqrt_delta .* (1 + tau_camp * campaign_v);
-    matrix[P - 1, G - 1] step = diag_post_multiply(L_walk * z_walk, scale);
-    theta[ : , 1] = theta1;
-    for (i in 1:(G - 1)) {
-      theta[2:P, i + 1] = theta[2:P, i] + step[ : , i];
-      theta[1, i + 1] = theta[1, i] - sum(step[ : , i]);
+    if (walk_form == 0) {
+      matrix[P - 1, G - 1] step = diag_post_multiply(L_walk * z_walk, scale);
+      theta[ : , 1] = theta1;
+      for (i in 1:(G - 1)) {
+        theta[2:P, i + 1] = theta[2:P, i] + step[ : , i];
+        theta[1, i + 1] = theta[1, i] - sum(step[ : , i]);
+      }
+    } else {
+      // §6.9, the same walk anchored at the closed elections, forward from theta1. With
+      // v[t] = Delta s^2 of the step from t - 1 to t and cv its running total, the walk from
+      // the previous anchor (or date 1) to anchor a has covariance V Q, V = cv[a] - cv[prev]
+      // and Q = (C Sigma C)[2:P, 2:P]. At each anchor, the absent parties' coordinates are
+      // non-centred from the previous anchor, theta_B = theta_prev,B + sqrt(V) chol(Q_BB) w_B,
+      // and the present ones centred and shifted, theta_A = w_off_A + w_A - sum(theta_B) /
+      // |A u {1}|, so that the result's softmax over A u {1} does not depend on theta_B; the
+      // model block gives them their conditional normal. Between anchors (and from date 1 to
+      // the first) the path is the exact conditional of the walk given both ends, a
+      // non-centred Brownian bridge; after the last anchor it is the forward walk.
+      vector[G] v = append_row(0, square(scale));
+      vector[G] cv = cumulative_sum(v);
+      matrix[P - 1, G - 1 - n_anchor] Lz = L_walk * z_walk;
+      matrix[P - 1, G] th;
+      th[ : , 1] = theta1[2:P];
+      int prev = 1;
+      for (j in 1:n_anchor) {
+        int a = grid_res[j];
+        array[n_pres[j]] int pr = pres_idx[j, 1:n_pres[j]];
+        if (n_abs[j] > 0) {
+          array[n_abs[j]] int ab = abs_idx[j, 1:n_abs[j]];
+          th[ab, a] = th[ab, prev] + sqrt(cv[a] - cv[prev]) * chol_gram_rows(B, ab) * anchor_w[j][ab];
+          th[pr, a] = w_off[j][pr] + anchor_w[j][pr] - sum(th[ab, a]) / (n_pres[j] + 1);
+        } else {
+          th[ : , a] = w_off[j] + anchor_w[j];
+        }
+        for (t in (prev + 1):(a - 1)) {
+          real R = cv[a] - cv[t - 1];
+          th[ : , t] = th[ : , t - 1] + (v[t] / R) * (th[ : , a] - th[ : , t - 1])
+                       + sqrt(v[t] * (cv[a] - cv[t]) / R) * Lz[ : , zcol[t]];
+        }
+        prev = a;
+      }
+      for (t in (prev + 1):G) {
+        th[ : , t] = th[ : , t - 1] + scale[t - 1] * Lz[ : , zcol[t]];
+      }
+      theta[2:P, : ] = th;
+      theta[1, : ] = -rep_row_vector(1, P - 1) * th;
     }
   }
 
@@ -316,6 +443,33 @@ model {
   // Priors (§6.10, Decisions 1, 2 and 4). A normal on a sum_to_zero_vector is on every element.
   theta1 ~ normal(0, 2);
   to_vector(z_walk) ~ std_normal();
+  // The anchored walk (walk_form = 1): at each anchor, N(0, 1) on the absent parties' w_B and
+  // the present parties' conditional normal given theta_B and the previous anchor (or date
+  // 1), theta_A ~ N(theta_prev,A + sqrt(V) L_AB w_B, V L_AA L_AA'), from the Cholesky factor
+  // L of Q with the absent coordinates first (L_BB = chol(Q_BB)). With every party present,
+  // theta_a ~ N(theta_prev, V Q). The bridges and the forward steps are N(0, 1) on z_walk.
+  if (walk_form) {
+    matrix[P - 1, P] B = walk_rows(sigma, L_Omega);
+    vector[G] cv = cumulative_sum(append_row(0, square(sqrt_delta .* (1 + tau_camp * campaign_v))));
+    matrix[P - 1, G] th = theta[2:P, : ];
+    int prev = 1;
+    for (j in 1:n_anchor) {
+      int a = grid_res[j];
+      int na = n_abs[j];
+      real sV = sqrt(cv[a] - cv[prev]);
+      if (na > 0) {
+        array[na] int ab = abs_idx[j, 1:na];
+        array[n_pres[j]] int pr = pres_idx[j, 1:n_pres[j]];
+        matrix[P - 1, P - 1] L = chol_gram_rows(B, append_array(ab, pr));
+        anchor_w[j][ab] ~ std_normal();
+        th[pr, a] ~ multi_normal_cholesky(th[pr, prev] + sV * L[(na + 1):(P - 1), 1:na] * anchor_w[j][ab],
+                                          sV * L[(na + 1):(P - 1), (na + 1):(P - 1)]);
+      } else {
+        th[ : , a] ~ multi_normal_cholesky(th[ : , prev], sV * qr_thin_R(B')');
+      }
+      prev = a;
+    }
+  }
   sigma ~ student_t(3, 0, 0.02);
   L_Omega ~ lkj_corr_cholesky(10);
   tau_camp ~ exponential(1);

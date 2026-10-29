@@ -91,7 +91,7 @@ test_that("v2s-m0: v2_methods stops on each unbuilt switch with CmdStan's text n
   skip_unless_slow()
   skip_unless_step("v2s-m0")
   d <- v2_test_cells(cfg_m0())$eve2024$data
-  for (sw in c("epoch_bias", "newcomer_pool", "shock", "delta_walk", "fundamentals", "walk_form", "delta_form")) {
+  for (sw in c("epoch_bias", "newcomer_pool", "shock", "delta_walk", "fundamentals", "delta_form")) {
     d1 <- d
     d1[[sw]] <- 1L
     expect_error(v2_methods(V2_STAN, d1), paste0("forecast_v2: switch ", sw, " = 1 is not built yet"), fixed = TRUE)
@@ -239,6 +239,105 @@ test_that("v2s-m0: the generated quantities are the reference's at a prior point
       expect_true(isTRUE(all.equal(c(r$gq$pi_latent_E), pi[, d$G], tolerance = 1e-10)))
     } else {
       expect_false(any(c("votes_kd", "pi_nat_eday", "pi_latent_E") %in% names(r$gq)))
+    }
+  }
+})
+
+# The cell's data with the anchored walk (walk_form = 1, step v2s-p1); nothing else in the
+# data depends on the switch.
+p1_data <- function(d) {
+  d$walk_form <- 1L
+  d
+}
+
+# A point of the anchored walk on `d1` (p1_data()): a prior draw of the reference walk's
+# parameters at `seed`, its anchor_w and z_walk replaced by N(0, 1) draws of the anchored
+# walk's sizes; named and ordered as v2_par_dims(d1).
+p1_point <- function(d1, seed) {
+  d0 <- d1
+  d0$walk_form <- 0L
+  pars <- v2_simulate(d0, seed = seed, observe = FALSE)$pars
+  dims <- v2_par_dims(d1)
+  withr::with_seed(seed, {
+    pars$anchor_w <- array(stats::rnorm(prod(dims$anchor_w)), dims$anchor_w)
+    pars$z_walk <- array(stats::rnorm(prod(dims$z_walk)), dims$z_walk)
+  })
+  pars[names(dims)]
+}
+
+test_that("v2s-p1: transformed data refuses an anchored walk it cannot build, naming the condition", {
+  skip_unless_slow()
+  skip_unless_step("v2s-p1")
+  d <- p1_data(v2_test_cells(cfg_m0())$eve2024$data)
+  g <- as.integer(c(d$grid_res))
+  d1 <- d
+  d1$grid_res[1] <- 1L
+  expect_error(v2_methods(V2_STAN, d1), "forecast_v2: walk_form = 1 needs every grid_res in 2..G, but grid_res[1] = 1", fixed = TRUE)
+  d1 <- d
+  d1$grid_res[2] <- g[1]
+  expect_error(
+    v2_methods(V2_STAN, d1),
+    paste0("forecast_v2: walk_form = 1 needs grid_res strictly increasing, but grid_res[2] = ", g[1], " follows ", g[1]),
+    fixed = TRUE
+  )
+  d1 <- d
+  d1$y_res[1, , 1] <- 0L
+  expect_error(
+    v2_methods(V2_STAN, d1),
+    "forecast_v2: walk_form = 1 needs the coordinate party (index 1) to have national votes at every closed election, but it has none at closed election 1",
+    fixed = TRUE
+  )
+})
+
+test_that("v2s-p1: the anchored walk's parameters have v2_par_dims()' sizes and the reference walk's free size", {
+  skip_unless_slow()
+  skip_unless_step("v2s-p1")
+  for (cell in v2_test_cells(cfg_m0())) {
+    d <- p1_data(cell$data)
+    m <- v2_methods(V2_STAN, d)
+    dims <- v2_par_dims(d)
+    expect_identical(names(dims), V2_CORE_PARS$name)
+    expect_identical(as.integer(dims$anchor_w), as.integer(c(d$n_closed, d$P - 1)))
+    expect_identical(as.integer(dims$z_walk), as.integer(c(d$P - 1, d$G - 1 - d$n_closed)))
+    sizes <- m$metadata()$stan_variable_sizes
+    present <- names(dims)[vapply(dims, prod, numeric(1)) > 0]
+    expect_true("anchor_w" %in% present)
+    expect_identical(lapply(sizes[present], as.integer), lapply(dims[present], as.integer))
+    # WHY: the anchors take n_closed of z_walk's columns, so the free size is the reference walk's.
+    expect_identical(n_unc(m), n_unc(v2_methods(V2_STAN, cell$data)))
+  }
+})
+
+test_that("v2s-p1: with the present levels at 0 each anchor is at its result, whatever the absent parties do", {
+  skip_unless_slow()
+  skip_unless_step("v2s-p1")
+  softmax <- function(x) exp(x - max(x)) / sum(exp(x - max(x)))
+  for (cell in v2_test_cells(cfg_m0())[c("eve2024", "f180_2021")]) {
+    d <- p1_data(cell$data)
+    m <- v2_methods(V2_STAN, d)
+    P <- d$P
+    theta_at <- function(pars) {
+      tp <- m$constrain_variables(m$unconstrain_variables(pars), transformed_parameters = TRUE, generated_quantities = FALSE)
+      matrix(tp$theta, P, d$G)
+    }
+    idx <- matrix(as.integer(d$idx_res), d$n_closed, P)
+    present <- lapply(seq_len(d$n_closed), \(j) idx[j, seq_len(d$n_rep_res[j])])
+    pars <- p1_point(d, seed = 1)
+    for (j in seq_len(d$n_closed)) pars$anchor_w[j, setdiff(present[[j]], 1L) - 1L] <- 0
+    moved <- pars
+    for (j in seq_len(d$n_closed)) {
+      absent <- setdiff(seq_len(P - 1), present[[j]] - 1L)
+      moved$anchor_w[j, absent] <- pars$anchor_w[j, absent] + 1
+    }
+    th0 <- theta_at(pars)
+    th1 <- theta_at(moved)
+    for (j in seq_len(d$n_closed)) {
+      s <- present[[j]]
+      a <- as.integer(d$grid_res[j])
+      votes <- colSums(matrix(d$y_res[j, , ], d$K, P))[s]
+      expect_equal(softmax(th0[s, a]), votes / sum(votes), tolerance = 1e-12, label = paste("anchor", j))
+      expect_equal(softmax(th1[s, a]), votes / sum(votes), tolerance = 1e-12, label = paste("moved anchor", j))
+      if (length(s) < P) expect_gt(max(abs(th1[-s, a] - th0[-s, a])), 1e-6, label = paste("absent parties at anchor", j))
     }
   }
 })
