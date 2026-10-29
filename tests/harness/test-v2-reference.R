@@ -320,3 +320,91 @@ test_that("on every forecast cell no house's kjordaemi poll comes before its nat
     }
   }
 })
+
+# The newcomer pool (step v2s-m2, §6.4, switch newcomer_pool): the newcomer contrast's mean
+# m_new and scale s_new estimated, instead of fixed at 0 and 0.2023.
+
+test_that("the fixed s_new is the median of the pooled s_new's half-normal prior, in the reference and in Stan", {
+  # WHY: newcomer_pool = 0 holds s_new at the median of the prior newcomer_pool = 1 puts on it,
+  # so the two literals move together or this fails.
+  ref <- environment(v2_lp_ref)
+  expect_identical(ref$S_NEW, round(ref$S_NEW_SD * stats::qnorm(0.75), 4))
+  expect_identical(c(ref$M_NEW, ref$M_NEW_SD), c(0, 0.3))
+  stan <- readLines(root("Stan", "forecast_v2.stan"))
+  literal <- function(pattern) {
+    hit <- regmatches(stan, regexec(pattern, stan))
+    hit <- hit[lengths(hit) > 0]
+    expect_length(hit, 1)
+    if (length(hit) == 1) as.numeric(hit[[1]][2]) else NA_real_
+  }
+  expect_identical(literal("^ *real s_new_fixed = ([0-9.]+);"), ref$S_NEW)
+  expect_identical(literal("^ *real m_new_fixed = ([0-9.]+);"), ref$M_NEW)
+  expect_identical(literal("^ *s_new ~ normal\\(0, ([0-9.]+)\\);"), ref$S_NEW_SD)
+  expect_identical(literal("^ *m_new ~ normal\\(0, ([0-9.]+)\\);"), ref$M_NEW_SD)
+})
+
+test_that("the newcomer-pool reference: its mutant changes the density on every cell, and the identity under permutation holds", {
+  # WHY: every newcomer enters in an epoch of the window (C and F in the first), so the mean
+  # over every party differs from the mean over the existing ones on each cell, 2017 eve's
+  # prior points included; the epoch bias's mutants are the v2s-m1 test's.
+  cells <- v2_test_cells(cfg_m2())
+  for (name in names(cells)) {
+    d <- cells[[name]]$data
+    expect_identical(as.integer(c(d$epoch_bias, d$newcomer_pool)), c(1L, 1L))
+    expect_true("newcomer_mean_over_all" %in% v2_mutants(d))
+    expect_identical(lengths(v2_par_dims(d)[c("m_new", "s_new")]), c(m_new = 1L, s_new = 1L))
+    for (seed in 1:2) {
+      s <- v2_simulate(d, seed = seed, observe = FALSE)
+      expect_length(s$pars$m_new, 1)
+      lp <- v2_lp_ref(s$pars, d)
+      expect_gt(abs(v2_lp_ref(s$pars, d, "newcomer_mean_over_all") - lp), 1e-6, label = name)
+      p <- permute_v2(s$pars, d, rev(seq_len(d$P)), rev(seq_len(d$K)))
+      expect_identical(p$pars[c("m_new", "s_new")], s$pars[c("m_new", "s_new")])
+      expect_lt(abs(v2_lp_ref(p$pars, p$data) - lp - attr(p, "ljac_L_Omega")), 1e-10 + 4 * .Machine$double.eps * abs(lp))
+    }
+  }
+  # WHY: 2017 eve has one closed election, so min_closed = 1 is the fewest a cell can have.
+  expect_identical(V2_MUTANTS$min_closed[V2_MUTANTS$mutant == "newcomer_mean_over_all"], 1L)
+  expect_identical(as.integer(cells$eve2017$data$n_closed), 1L)
+})
+
+test_that("a newcomer enters at the existing parties' mean plus the point's m_new + s_new eta", {
+  # §6.4: the mean runs over the parties existing before e_p (spec values written out here).
+  for (name in c("eve2024", "f180_2021", "eve2017")) {
+    d <- v2_test_cells(cfg_m2())[[name]]$data
+    entry <- c(d$entry_epoch)
+    s <- v2_simulate(d, seed = 5, observe = FALSE)$pars
+    s$m_new[] <- 0.4
+    s$s_new[] <- 0.7
+    nat <- v2_natural(s, d)
+    for (p in which(entry > 0L)) {
+      ep <- entry[p]
+      expect_equal(
+        nat$mu[ep, p] - mean(nat$mu[ep, entry < ep]), 0.4 + 0.7 * s$new_raw[match(p, which(entry > 0L))],
+        tolerance = 1e-12, label = paste(name, "party", p, "entering at", ep)
+      )
+    }
+  }
+})
+
+test_that("at m_new = 0 and s_new = 0.2023 the pooled density is the fixed one plus the two priors", {
+  for (name in c("eve2024", "eve2017")) {
+    d <- v2_test_cells(cfg_m2())[[name]]$data
+    d0 <- d
+    d0$newcomer_pool <- 0L
+    s <- v2_simulate(d, seed = 6, observe = FALSE)$pars
+    s$m_new[] <- 0
+    s$s_new[] <- 0.2023
+    fixed <- s
+    fixed$m_new <- array(numeric(0), 0)
+    fixed$s_new <- array(numeric(0), 0)
+    priors <- stats::dnorm(0, 0, 0.3, log = TRUE) + log(2) + stats::dnorm(0.2023, 0, 0.3, log = TRUE)
+    lp <- v2_lp_ref(s, d)
+    expect_lt(abs(lp - v2_lp_ref(fixed, d0) - priors), 1e-10 + 4 * .Machine$double.eps * abs(lp), label = name)
+    expect_equal(v2_natural(s, d)$mu, v2_natural(fixed, d0)$mu, tolerance = 0)
+    # Moving m_new shifts every newcomer's contrast with the existing parties, so the likelihood sees it.
+    moved <- s
+    moved$m_new[] <- 0.5
+    expect_gt(abs(v2_lp_ref(moved, d) - lp - (stats::dnorm(0.5, 0, 0.3, log = TRUE) - stats::dnorm(0, 0, 0.3, log = TRUE))), 1e-6)
+  }
+})

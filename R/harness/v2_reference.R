@@ -1,5 +1,6 @@
 # Arm V2's R reference for the core (spec §6.2–§6.7 in the reference forms) and the components
-# built so far (step v2s-m1's epoch bias, §6.4, switch epoch_bias), written from the spec and
+# built so far (step v2s-m1's epoch bias, §6.4, switch epoch_bias; step v2s-m2's newcomer
+# pooling, §6.4, switch newcomer_pool), written from the spec and
 # never from Stan/forecast_v2.stan, so that the Stan file is tested against an independent
 # oracle: the log density that
 # log_prob(u, jacobian = FALSE) evaluates, a prior simulator, the kjördæmi map M_e, the
@@ -20,13 +21,16 @@ box::use(
 #' has its G − 1 columns. The epoch bias's (§6.4, `epoch_bias` = 1) come last, each size 0 with
 #' `epoch_bias` = 0: `mu_step_raw` holds ξ_e of the industry bias's steps, column e − 1 for
 #' e = 2..n_epoch; `house_step_raw` each house's ζ_{e,h}, in the same columns; `tau_mu`,
-#' `tau_mu_A` (Annað's) and `tau_house` are their scales, each an array of one.
+#' `tau_mu_A` (Annað's) and `tau_house` are their scales, each an array of one. The newcomer
+#' pool's (§6.4, `newcomer_pool` = 1) follow, each size 0 with `newcomer_pool` = 0: `m_new` and
+#' `s_new`, the mean and scale of a newcomer's bias contrast m_new + s_new η, each an array of
+#' one.
 #' @export
 V2_CORE_PARS <- tibble::tibble(
   name = c(
     "theta1", "anchor_w", "z_walk", "sigma", "L_Omega", "tau_camp", "mu1", "house_raw", "sigma_gamma", "new_raw",
     "log_phi_u", "mu_phi", "sigma_phi", "log_phi_K_u", "log_kappa_u", "delta_raw", "s_delta0_raw", "mu_sd",
-    "tau_sd", "nu", "mu_step_raw", "house_step_raw", "tau_mu", "tau_mu_A", "tau_house"
+    "tau_sd", "nu", "mu_step_raw", "house_step_raw", "tau_mu", "tau_mu_A", "tau_house", "m_new", "s_new"
   ),
   type = c(
     "sum_to_zero_vector[P]", "array[walk_form * n_closed] vector[P - 1]", "matrix[P - 1, G - 1 - walk_form * n_closed]",
@@ -35,7 +39,8 @@ V2_CORE_PARS <- tibble::tibble(
     "real", "real<lower=0>", "real", "real", "array[1] matrix[K, P]", "vector[P]", "real", "real<lower=0>",
     "array[J] sum_to_zero_vector[P]", "matrix[P, epoch_bias * (n_epoch - 1)]",
     "array[H] matrix[P, epoch_bias * (n_epoch - 1)]", "array[epoch_bias] real<lower=0>",
-    "array[epoch_bias] real<lower=0>", "array[epoch_bias] real<lower=0>"
+    "array[epoch_bias] real<lower=0>", "array[epoch_bias] real<lower=0>", "array[newcomer_pool] real",
+    "array[newcomer_pool] real<lower=0>"
   )
 )
 
@@ -61,20 +66,27 @@ V2_CORE_PARS <- tibble::tibble(
 #'   of epochs 2..e_p) on top of its entry value, instead of restarting at the entry value;
 #' - `no_house_restart`: a newcomer's level in each house walking before e_p keeps that
 #'   house's prior-only drift, instead of restarting at σ_γ ε_{h,p}.
+#'
+#' The newcomer pool's (`newcomer_pool`, §6.4):
+#' - `newcomer_mean_over_all`: a newcomer's entry value takes the mean of μ_{e_p} over every
+#'   party, the newcomer and the parties entering later included, instead of over the parties
+#'   existing before e_p. Any newcomer entering in the window exercises it, the 2017 cells'
+#'   (one closed election) included.
 #' @export
 V2_MUTANTS <- tibble::tibble(
   mutant = c(
     "positional_gather", "previous_w", "next_epoch_delta", "close_last_kjordaemi", "conditional_walk",
-    "house_walk_from_first_poll", "newcomer_mean_of_mu1", "no_mu_restart", "no_house_restart"
+    "house_walk_from_first_poll", "newcomer_mean_of_mu1", "no_mu_restart", "no_house_restart",
+    "newcomer_mean_over_all"
   ),
-  switch = c(rep(NA_character_, 5), rep("epoch_bias", 4)),
-  min_closed = c(1L, 2L, 2L, 1L, 1L, 1L, 1L, 1L, 1L)
+  switch = c(rep(NA_character_, 5), rep("epoch_bias", 4), "newcomer_pool"),
+  min_closed = c(1L, 2L, 2L, 1L, 1L, 1L, 1L, 1L, 1L, 1L)
 )
 
 #' The component switches the reference has (each 0 or 1), the switches of the components it
 #' does not have yet (the M-steps' tasks add them), and the parameterisation switches whose
 #' reference form is 0.
-BUILT_SWITCHES <- "epoch_bias"
+BUILT_SWITCHES <- c("epoch_bias", "newcomer_pool")
 FORM_SWITCHES <- c("walk_form", "delta_form")
 COMPONENT_SWITCHES <- setdiff(V2_SWITCHES, c(FORM_SWITCHES, BUILT_SWITCHES))
 
@@ -86,9 +98,12 @@ LKJ_ETA <- 10
 TAU_CAMP_RATE <- 1
 NU_SD <- 2
 #' The newcomer contrast with `newcomer_pool` = 0: m_new = 0 and s_new = 0.2023, the median
-#' of half-N(0, 0.3) to four digits.
+#' of half-N(0, 0.3) to four digits; with `newcomer_pool` = 1, m_new ~ N(0, 0.3) and
+#' s_new ~ half-N(0, 0.3) (§6.10). `tests/harness/test-v2-reference.R` ties S_NEW to S_NEW_SD.
 M_NEW <- 0
 S_NEW <- 0.2023
+M_NEW_SD <- 0.3
+S_NEW_SD <- 0.3
 LOG_PHI_CAP <- 20
 MU_PHI_SD <- 1
 SIGMA_PHI_SD <- 1
@@ -330,7 +345,8 @@ lkj_corr_cholesky_rng <- function(P, eta) {
 #' `anchor_w` is n_closed × (P − 1) and `z_walk` (P − 1) × (G − 1 − n_closed); with 0,
 #' `anchor_w` is 0 × (P − 1) and `z_walk` (P − 1) × (G − 1). With `epoch_bias` = 1,
 #' `mu_step_raw` is P × (n_epoch − 1), `house_step_raw` H × P × (n_epoch − 1) and `tau_mu`,
-#' `tau_mu_A` and `tau_house` 1 each; with 0, their last dimension is 0.
+#' `tau_mu_A` and `tau_house` 1 each; with 0, their last dimension is 0. With `newcomer_pool` =
+#' 1, `m_new` and `s_new` are 1 each; with 0, 0.
 #' @param data a `v2_stan_data()` data list
 #' @return a named list of integer vectors
 #' @export
@@ -342,13 +358,15 @@ v2_par_dims <- function(data) {
   eb <- as.integer(data$epoch_bias)
   check(length(eb) == 1 && eb %in% 0:1, "data$epoch_bias must be 0 or 1")
   n_step <- eb * (as.integer(data$n_epoch) - 1L)
+  np <- as.integer(data$newcomer_pool)
+  check(length(np) == 1 && np %in% 0:1, "data$newcomer_pool must be 0 or 1")
   list(
     theta1 = P, anchor_w = c(n_anchor, P - 1L), z_walk = c(P - 1L, data$G - 1L - n_anchor), sigma = P,
     L_Omega = c(P, P), tau_camp = 1L, mu1 = P,
     house_raw = c(data$H, P), sigma_gamma = 1L, new_raw = sum(c(data$entry_epoch) > 0), log_phi_u = data$H,
     mu_phi = 1L, sigma_phi = 1L, log_phi_K_u = 1L, log_kappa_u = 1L, delta_raw = c(1L, data$K, P),
     s_delta0_raw = P, mu_sd = 1L, tau_sd = 1L, nu = c(data$J, P), mu_step_raw = c(P, n_step),
-    house_step_raw = c(data$H, P, n_step), tau_mu = eb, tau_mu_A = eb, tau_house = eb
+    house_step_raw = c(data$H, P, n_step), tau_mu = eb, tau_mu_A = eb, tau_house = eb, m_new = np, s_new = np
   )
 }
 
@@ -399,7 +417,7 @@ core_pars <- function(pars, data) {
   check(zero_sum(p$theta1), "theta1 does not sum to 0")
   check(zero_sum(p$mu1), "mu1 does not sum to 0")
   check(all(apply(p$nu, 1, zero_sum)), "a row of nu does not sum to 0")
-  for (n in c("sigma", "tau_camp", "sigma_gamma", "sigma_phi", "tau_sd", "tau_mu", "tau_mu_A", "tau_house")) {
+  for (n in c("sigma", "tau_camp", "sigma_gamma", "sigma_phi", "tau_sd", "tau_mu", "tau_mu_A", "tau_house", "s_new")) {
     check(all(p[[n]] > 0), paste(n, "must be positive"))
   }
   L <- p$L_Omega
@@ -413,11 +431,12 @@ core_pars <- function(pars, data) {
 #' The natural quantities of a checked point `p` (`core_pars()`) on `data`: the walk θ
 #' (P × G) and its innovation factor, μ_e, γ_{e,h}, δ_e, the bounded log concentrations,
 #' `phi_init`, s_δ0 and π_nat at each national poll's date. `conditional`, `close_last`,
-#' `house_from_start`, `entry_mean_mu1`, `mu_carry` and `house_carry` switch to the
-#' `conditional_walk`, `close_last_kjordaemi`, `house_walk_from_first_poll`,
-#' `newcomer_mean_of_mu1`, `no_mu_restart` and `no_house_restart` mutants.
+#' `house_from_start`, `entry_mean_mu1`, `mu_carry`, `house_carry` and `entry_mean_all` switch
+#' to the `conditional_walk`, `close_last_kjordaemi`, `house_walk_from_first_poll`,
+#' `newcomer_mean_of_mu1`, `no_mu_restart`, `no_house_restart` and `newcomer_mean_over_all`
+#' mutants.
 natural <- function(p, data, conditional = FALSE, close_last = FALSE, house_from_start = FALSE, entry_mean_mu1 = FALSE,
-                    mu_carry = FALSE, house_carry = FALSE) {
+                    mu_carry = FALSE, house_carry = FALSE, entry_mean_all = FALSE) {
   P <- data$P
   G <- data$G
   H <- data$H
@@ -444,8 +463,12 @@ natural <- function(p, data, conditional = FALSE, close_last = FALSE, house_from
   # but τ_μ,A for Annað; with epoch_bias = 0 no step, so μ is constant over epochs. From its
   # entry epoch e_p on, a newcomer's bias is the mean of μ_{e_p} over the parties existing
   # before e_p (present at the window's start or entering earlier), plus m_new + s_new η; then
-  # μ_{e_p} is re-centred, and after e_p the newcomer walks with the rest.
+  # μ_{e_p} is re-centred, and after e_p the newcomer walks with the rest. With newcomer_pool = 0,
+  # m_new = 0 and s_new = 0.2023; with 1, both are the point's.
   eb <- identical(as.integer(data$epoch_bias), 1L)
+  pool <- identical(as.integer(data$newcomer_pool), 1L)
+  m_new <- if (pool) p$m_new else M_NEW
+  s_new <- if (pool) p$s_new else S_NEW
   tau <- if (eb) replace(rep(p$tau_mu, P), data$annad_idx, p$tau_mu_A) else numeric(P)
   new <- which(entry > 0)
   mu <- matrix(0, n_epoch, P)
@@ -460,7 +483,8 @@ natural <- function(p, data, conditional = FALSE, close_last = FALSE, house_from
     entering <- which(entry == e)
     if (length(entering)) {
       base <- if (entry_mean_mu1 && e > 1) mu[1, ] else m
-      m[entering] <- mean(base[entry < e]) + M_NEW + S_NEW * p$new_raw[match(entering, new)] +
+      existing <- if (entry_mean_all) seq_len(P) else which(entry < e)
+      m[entering] <- mean(base[existing]) + m_new + s_new * p$new_raw[match(entering, new)] +
         if (mu_carry) drift[entering] else 0
     }
     m <- centre(m)
@@ -524,7 +548,7 @@ natural <- function(p, data, conditional = FALSE, close_last = FALSE, house_from
 #' @param pars a named list as `constrain_variables(..., transformed_parameters = FALSE)`
 #'   returns it (`V2_CORE_PARS`)
 #' @param data a `v2_stan_data()` data list of the core in the reference forms, `epoch_bias`
-#'   0 or 1
+#'   and `newcomer_pool` 0 or 1
 #' @return a list: `theta` (P × G), `pi_nat` (N_nat × P: π_nat at each national poll's
 #'   date), `mu` (n_epoch × P, each row summing to 0), `gamma` (n_epoch × H × P), `delta`
 #'   (n_epoch × K × P), `eps` (n_closed × P: the election shock, 0 in the core), `log_phi`
@@ -626,12 +650,15 @@ prior_terms <- function(p, nat, data) {
     house_step_raw = ld(p$house_step_raw),
     tau_mu = sum(log(2) + stats::dnorm(p$tau_mu, 0, data$prior_tau_mu, log = TRUE)),
     tau_mu_A = sum(log(2) + stats::dnorm(p$tau_mu_A, 0, TAU_MU_A_SD, log = TRUE)),
-    tau_house = sum(log(2) + stats::dnorm(p$tau_house, 0, TAU_HOUSE_SD, log = TRUE))
+    tau_house = sum(log(2) + stats::dnorm(p$tau_house, 0, TAU_HOUSE_SD, log = TRUE)),
+    m_new = ld(p$m_new, 0, M_NEW_SD),
+    s_new = sum(log(2) + stats::dnorm(p$s_new, 0, S_NEW_SD, log = TRUE))
   )
 }
 
 #' The reference log density of the V2 core (spec §6.2–§6.7) and its built components (the
-#' epoch bias, §6.4, with `epoch_bias` = 1): what Stan's `log_prob(u, jacobian = FALSE)`
+#' epoch bias, §6.4, with `epoch_bias` = 1; the newcomer pool, §6.4, with `newcomer_pool` = 1:
+#' m_new and s_new estimated): what Stan's `log_prob(u, jacobian = FALSE)`
 #' evaluates in the reference forms, up to a constant. It is the density of the parameters
 #' on their constrained values (the §6.10
 #' priors, `lkj_corr_cholesky(10)` on L itself, the normals on every element of each
@@ -645,7 +672,7 @@ prior_terms <- function(p, nat, data) {
 #' @param pars a named list as `constrain_variables(..., transformed_parameters = FALSE)`
 #'   returns it: the `V2_CORE_PARS`, each in cmdstanr's column-major order
 #' @param data a `v2_stan_data()` data list with `walk_form`, `delta_form` and the
-#'   component switches 0, apart from `epoch_bias`, which is 0 or 1
+#'   component switches 0, apart from `epoch_bias` and `newcomer_pool`, each 0 or 1
 #' @param mutant "none", or a mutant of `v2_mutants(data)` (`V2_MUTANTS`)
 #' @return numeric(1). An error, "v2 reference: ...", for another form or switch, another
 #'   mutant, or a point with a missing, misshapen or out-of-bounds parameter
@@ -658,7 +685,8 @@ v2_lp_ref <- function(pars, data, mutant = "none") {
     p, data,
     conditional = mutant == "conditional_walk", close_last = mutant == "close_last_kjordaemi",
     house_from_start = mutant == "house_walk_from_first_poll", entry_mean_mu1 = mutant == "newcomer_mean_of_mu1",
-    mu_carry = mutant == "no_mu_restart", house_carry = mutant == "no_house_restart"
+    mu_carry = mutant == "no_mu_restart", house_carry = mutant == "no_house_restart",
+    entry_mean_all = mutant == "newcomer_mean_over_all"
   )
   rows <- dm_rows(p, nat, data, positional = mutant == "positional_gather", next_delta = mutant == "next_epoch_delta")
   lik <- vapply(rows, \(r) dirmult_lpmf(row_counts(data, r), r$alpha), numeric(1))
@@ -691,6 +719,7 @@ draw_prior <- function(data) {
   J <- data$J
   eb <- as.integer(data$epoch_bias)
   n_step <- eb * (data$n_epoch - 1L)
+  np <- as.integer(data$newcomer_pool)
   phi_init <- mean(log(rowSums(data$y_nat)))
   pars <- list(
     theta1 = rstz(P, THETA1_SD),
@@ -736,14 +765,18 @@ draw_prior <- function(data) {
     house_step_raw = array(stats::rnorm(H * P * n_step), c(H, P, n_step)),
     tau_mu = array(abs(stats::rnorm(eb, 0, data$prior_tau_mu)), eb),
     tau_mu_A = array(abs(stats::rnorm(eb, 0, TAU_MU_A_SD)), eb),
-    tau_house = array(abs(stats::rnorm(eb, 0, TAU_HOUSE_SD)), eb)
+    tau_house = array(abs(stats::rnorm(eb, 0, TAU_HOUSE_SD)), eb),
+    # WHY: drawn after the epoch bias, for the same reason: with newcomer_pool = 0 nothing is
+    # drawn, and with 1 every other parameter's draw is the one newcomer_pool = 0 gives.
+    m_new = array(stats::rnorm(np, 0, M_NEW_SD), np),
+    s_new = array(abs(stats::rnorm(np, 0, S_NEW_SD)), np)
   ))
 }
 
 #' A draw from V2's core: parameters from the prior, and, when `observe`, every count from
 #' the model given them.
 #' @param data a `v2_stan_data()` data list of the core in the reference forms, `epoch_bias`
-#'   0 or 1
+#'   and `newcomer_pool` 0 or 1
 #' @param seed the seed; the draw uses its own RNG stream (`withr::with_seed()`), leaving the
 #'   caller's untouched
 #' @param observe whether to replace the counts
@@ -751,7 +784,8 @@ draw_prior <- function(data) {
 #'   - `pars`, a prior draw of `V2_CORE_PARS` in cmdstanr's shapes (scalars and vectors
 #'     plain, `delta_raw` 1 × K × P, `nu` J × P), untruncated: σ ~ half-t(3, 0, 0.02),
 #'     Ω ~ LKJ(10) by the C-vine, and each bounded concentration from its normal below its
-#'     cap (the model's prior), and the epoch bias's τ_μ, τ_μ,A and τ_house half-normal;
+#'     cap (the model's prior), the epoch bias's τ_μ, τ_μ,A and τ_house half-normal, and the
+#'     newcomer pool's m_new normal and s_new half-normal;
 #'   - `truth`, `v2_natural(pars, data)`;
 #'   - `data`, the input with `y_nat`, `y_kd` and `y_res` replaced (when `observe`): each
 #'     row keeps its total and its reported parties (`idx_*`, `n_rep_*`), its other cells
@@ -827,14 +861,14 @@ permute_data <- function(data, pp, kp) {
 #' quantities, for the reference forms. The permuted data's party i is the input's party
 #' `party_perm[i]`, and its kjördæmi k the input's `kd_perm[k]`. θ_1, μ_1, the houses' ε,
 #' ν, ζ, r, the newcomers' η and the epoch bias's steps ξ and ζ are permuted, and Annað's
-#' index re-derived; `L_Omega` is re-derived as chol(Ω[pp, pp]),
+#' index re-derived (the scales, m_new and s_new are not party-indexed); `L_Omega` is re-derived as chol(Ω[pp, pp]),
 #' and `z_walk` from the permuted θ increments in the new coordinates 2:P. The data keep the
 #' builder's contract: counts, `exists`, `entry_epoch`, `d_shock`, `w` columns, `y_res`'s
 #' kjördæmi and party dimensions and `N_open` permuted; reported-party lists re-derived by
 #' identity; kjördæmi poll rows re-sorted by poll and new kjördæmi; `sf_idx` re-indexed.
 #' @param pars a named list of `V2_CORE_PARS`
 #' @param data a `v2_stan_data()` data list of the core in the reference forms, `epoch_bias`
-#'   0 or 1
+#'   and `newcomer_pool` 0 or 1
 #' @param party_perm a permutation of 1:P
 #' @param kd_perm a permutation of 1:K
 #' @return `list(pars, data)` with attribute `ljac_L_Omega`: the change in
@@ -876,7 +910,7 @@ permute_v2 <- function(pars, data, party_perm, kd_perm) {
     delta_raw = array(p$delta_raw[kp, pp, drop = FALSE], c(1L, K, P)), s_delta0_raw = p$s_delta0_raw[pp],
     mu_sd = p$mu_sd, tau_sd = p$tau_sd, nu = p$nu[, pp, drop = FALSE],
     mu_step_raw = p$mu_step_raw[pp, , drop = FALSE], house_step_raw = p$house_step_raw[, pp, , drop = FALSE],
-    tau_mu = pars$tau_mu, tau_mu_A = pars$tau_mu_A, tau_house = pars$tau_house
+    tau_mu = pars$tau_mu, tau_mu_A = pars$tau_mu_A, tau_house = pars$tau_house, m_new = pars$m_new, s_new = pars$s_new
   )
   ljac <- function(L) sum((P - 2:P) * log(diag(L)[2:P]))
   structure(list(pars = out_pars, data = out_data), ljac_L_Omega = ljac(L) - ljac(p$L_Omega))

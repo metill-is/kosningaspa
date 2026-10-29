@@ -102,7 +102,7 @@ test_that("v2s-m0: v2_methods stops on each unbuilt switch with CmdStan's text n
   skip_unless_slow()
   skip_unless_step("v2s-m0")
   d <- v2_test_cells(cfg_m0())$eve2024$data
-  for (sw in c("newcomer_pool", "shock", "delta_walk", "fundamentals", "delta_form")) {
+  for (sw in c("shock", "delta_walk", "fundamentals", "delta_form")) {
     d1 <- d
     d1[[sw]] <- 1L
     expect_error(v2_methods(V2_STAN, d1), paste0("forecast_v2: switch ", sw, " = 1 is not built yet"), fixed = TRUE)
@@ -481,4 +481,78 @@ test_that("v2s-m1: a fit_values() point keeps the epoch bias's scales as one-ele
   }
   again <- gq_at(V2_STAN, d, r$pars)
   for (n in c("tau_mu", "tau_mu_A", "tau_house")) expect_equal(c(again$pars[[n]]), c(r$pars[[n]]), tolerance = 1e-12, label = n)
+})
+
+# Step v2s-m2, the newcomer pool (§6.4, switch newcomer_pool): the mean m_new and scale s_new
+# of a newcomer's bias contrast m_new + s_new eta are estimated, on v2s-m1's epoch bias.
+POOL_PARS <- c("m_new", "s_new")
+
+test_that("v2s-m2: Stan's log density matches the reference up to a constant", {
+  skip_unless_slow()
+  skip_unless_step("v2s-m2")
+  hit <- expect_step_lp("v2s-m2", cfg_m2())
+  expect_true("newcomer_mean_over_all" %in% hit)
+  expect_true(all(c("house_walk_from_first_poll", "newcomer_mean_of_mu1", "no_mu_restart", "no_house_restart") %in% hit))
+})
+
+test_that("v2s-m2: m_new and s_new have v2_par_dims()' sizes, and size 0 with newcomer_pool = 0", {
+  skip_unless_slow()
+  skip_unless_step("v2s-m2")
+  for (cell in v2_test_cells(cfg_m2())) {
+    d <- cell$data
+    m <- v2_methods(V2_STAN, d)
+    expect_identical(names(v2_model(V2_STAN)$variables()$parameters), V2_CORE_PARS$name)
+    dims <- v2_par_dims(d)
+    expect_identical(lapply(dims[POOL_PARS], as.integer), list(m_new = 1L, s_new = 1L))
+    sizes <- m$metadata()$stan_variable_sizes
+    expect_identical(lapply(sizes[POOL_PARS], as.integer), lapply(dims[POOL_PARS], as.integer))
+    d0 <- d
+    d0$newcomer_pool <- 0L
+    expect_true(all(vapply(v2_par_dims(d0)[POOL_PARS], prod, numeric(1)) == 0))
+    # WHY: each is one free element, s_new's on the log scale.
+    expect_identical(as.numeric(n_unc(m) - n_unc(v2_methods(V2_STAN, d0))), 2)
+    s <- v2_simulate(d, seed = 1, observe = FALSE)
+    pars <- stan_pars(m, m$unconstrain_variables(s$pars))
+    for (n in POOL_PARS) expect_equal(as.numeric(pars[[n]]), c(s$pars[[n]]), tolerance = 1e-12, label = n)
+  }
+})
+
+test_that("v2s-m2: the industry and house biases are the reference's natural quantities, at m_new and s_new away from 0 and 0.2023", {
+  skip_unless_slow()
+  skip_unless_step("v2s-m2")
+  for (cell in v2_test_cells(cfg_m2())) {
+    d <- cell$data
+    m <- v2_methods(V2_STAN, d)
+    for (seed in 1:3) {
+      s <- v2_simulate(d, seed = seed, observe = FALSE)
+      # WHY: a Stan file that read the newcomer_pool = 0 constants would agree with the
+      # reference wherever the point sits near them.
+      s$pars$m_new[] <- c(-0.5, 0.3, 0.8)[seed]
+      s$pars$s_new[] <- c(0.05, 0.6, 1.1)[seed]
+      u <- m$unconstrain_variables(s$pars)
+      tp <- m$constrain_variables(u, transformed_parameters = TRUE, generated_quantities = FALSE)
+      ref <- v2_natural(stan_pars(m, u), d)
+      for (n in c("mu", "gamma")) {
+        dims <- dim(as.array(ref[[n]]))
+        expect_identical(length(tp[[n]]), as.integer(prod(dims)), label = paste("length of", n))
+        expect_equal(array(tp[[n]], dims), as.array(ref[[n]]), tolerance = 1e-10, label = n)
+      }
+    }
+  }
+})
+
+test_that("v2s-m2: a fit_values() point keeps m_new and s_new as one-element arrays, so CmdStan reads it back", {
+  skip_unless_slow()
+  skip_unless_step("v2s-m2")
+  # WHY: write_stan_json() writes a plain length-1 numeric as a scalar, which CmdStan's init
+  # reader refuses for an array[1]; the forecast is off, so the runs compute none.
+  d <- v2_test_cells(cfg_m2())$eve2024$data
+  d$draw_forecast <- 0L
+  r <- gq_at(V2_STAN, d, v2_simulate(d, seed = 2, observe = FALSE)$pars)
+  json <- withr::local_tempfile(fileext = ".json")
+  cmdstanr::write_stan_json(r$pars, json)
+  back <- jsonlite::read_json(json)
+  for (n in POOL_PARS) expect_true(is.list(back[[n]]) && length(back[[n]]) == 1L, label = paste(n, "is a one-element JSON array"))
+  again <- gq_at(V2_STAN, d, r$pars)
+  for (n in POOL_PARS) expect_equal(c(again$pars[[n]]), c(r$pars[[n]]), tolerance = 1e-12, label = n)
 })

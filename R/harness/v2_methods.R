@@ -156,10 +156,11 @@ project_point <- function(p) {
 }
 
 #' The lower-bounded scale parameters that an off-posterior point multiplies by exp(N(0, 0.5)).
-#' The epoch bias's scales come last: with `epoch_bias` = 0 they are size 0 and draw nothing,
-#' so the other scales' draws are as they were before the epoch bias existed.
+#' The epoch bias's scales come after the core's, and the newcomer pool's s_new last: each is
+#' size 0 with its switch at 0 and draws nothing, so the other scales' draws are as they were
+#' before it existed.
 #' @export
-OFF_SCALES <- c("sigma", "tau_camp", "sigma_gamma", "sigma_phi", "tau_sd", "tau_mu", "tau_mu_A", "tau_house")
+OFF_SCALES <- c("sigma", "tau_camp", "sigma_gamma", "sigma_phi", "tau_sd", "tau_mu", "tau_mu_A", "tau_house", "s_new")
 
 #' The draws in `fit` (of `model`) of the variables named in `dims`, each in cmdstanr's
 #' shape with its dims there; a list of one named list per draw. A parameter of

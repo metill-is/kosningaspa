@@ -300,3 +300,25 @@ test_that("a config row out of its band prints FAIL, still writes the report, an
   expect_true(any(grepl("| FAIL (stops) |", readLines(out), fixed = TRUE)))
   expect_identical(committed_sha(), before)
 })
+
+test_that("newcomer_entry reads m_new + s_new eta of every newcomer on a 10% party beside P - 1 equal parties", {
+  sim <- list(pars = list(m_new = array(0.2, 1), s_new = array(0.4, 1), new_raw = c(1, -2, 0)))
+  # The contrasts 0.6, -0.6 and 0.2 against the other three parties' common bias.
+  want <- vapply(c(0.6, -0.6, 0.2), \(x) 100 * (0.1 * exp(x) / (0.1 * exp(x) + 0.9) - 0.1), numeric(1))
+  expect_equal(SUMMARY_FUNS$newcomer_entry(sim, list(P = 4L), 1L), want, tolerance = 1e-12)
+  expect_gt(want[1], 0)
+  expect_lt(want[2], 0)
+  # With newcomer_pool = 0 the point has no m_new or s_new to read.
+  off <- list(pars = list(m_new = array(numeric(0), 0), s_new = array(numeric(0), 0), new_raw = 1))
+  expect_error(SUMMARY_FUNS$newcomer_entry(off, list(P = 4L), 1L), "newcomer_pool = 1")
+})
+
+test_that("the newcomer pool's row runs under its switch, with the band written before any fit of its step", {
+  row <- ROWS[ROWS$step == "v2s-m2", ]
+  expect_identical(row$summary, "newcomer_entry")
+  expect_identical(row$kind, "config")
+  expect_identical(row$switch, "newcomer_pool")
+  expect_identical(row$band[[1]], band_inside(-10, 10))
+  expect_length(row$keys[[1]], 0)
+  expect_length(row$held[[1]], 0)
+})

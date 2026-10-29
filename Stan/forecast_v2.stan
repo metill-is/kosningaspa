@@ -11,7 +11,9 @@
 // Step v2s-p1 builds walk_form = 1, the walk anchored at the closed elections (§6.9), the
 // same model as the reference walk; R/harness/v2_equivalence.R checks that it is. Step v2s-m1
 // builds epoch_bias = 1 (§6.4): the industry bias and each house's deviations walk across
-// epochs, Annad's industry-bias steps with a scale of their own.
+// epochs, Annad's industry-bias steps with a scale of their own. Step v2s-m2 builds
+// newcomer_pool = 1 (§6.4): the mean m_new and scale s_new of a newcomer's bias contrast are
+// estimated, instead of fixed at 0 and 0.2023.
 functions {
   // The map M_e of §6.7 on a K x P matrix: subtract each party's w-weighted mean over the
   // kjordaemi, then centre each kjordaemi over the parties. The result's rows sum to 0 and
@@ -101,7 +103,7 @@ data {
   array[n_closed, P] int<lower=0, upper=P> idx_res;   // [n_closed, P] those parties by index, 0-padded
 
   // Houses and parties (§6.4)
-  array[H] int<lower=1, upper=n_epoch> house_first_epoch;  // [H] epoch of each house's first poll
+  array[H] int<lower=1, upper=n_epoch> house_first_epoch;  // [H] epoch of each house's first national poll
   array[P] int<lower=0, upper=n_epoch> entry_epoch;   // [P] 0 for a party present at the window's start
   int<lower=0, upper=P> annad_idx;                    // Annad's index, 0 if none: its industry-bias steps scale by tau_mu_A
 
@@ -140,8 +142,8 @@ data {
 }
 
 transformed data {
-  // The core, the anchored walk and the epoch bias are built: each other switch is refused by name.
-  if (newcomer_pool) reject("forecast_v2: switch newcomer_pool = ", newcomer_pool, " is not built yet");
+  // The core, the anchored walk, the epoch bias and the newcomer pool are built: each other
+  // switch is refused by name.
   if (shock) reject("forecast_v2: switch shock = ", shock, " is not built yet");
   if (delta_walk) reject("forecast_v2: switch delta_walk = ", delta_walk, " is not built yet");
   if (fundamentals) reject("forecast_v2: switch fundamentals = ", fundamentals, " is not built yet");
@@ -164,8 +166,8 @@ transformed data {
 
   // The newcomer contrast with newcomer_pool = 0 (§6.4): m_new = 0, and s_new the median of
   // half-N(0, 0.3) to four digits.
-  real m_new = 0;
-  real s_new = 0.2023;
+  real m_new_fixed = 0;
+  real s_new_fixed = 0.2023;
 
   vector[G - 1] sqrt_delta = sqrt(delta_days);
   vector[G - 1] campaign_v = to_vector(campaign);
@@ -311,6 +313,9 @@ parameters {
   array[epoch_bias] real<lower=0> tau_mu;             // the industry bias's step scale
   array[epoch_bias] real<lower=0> tau_mu_A;           // Annad's
   array[epoch_bias] real<lower=0> tau_house;          // the houses' step scale
+  // The newcomer pool (newcomer_pool = 1, §6.4), each size 0 with newcomer_pool = 0.
+  array[newcomer_pool] real m_new;                    // the mean of a newcomer's bias contrast
+  array[newcomer_pool] real<lower=0> s_new;           // its scale
 }
 
 transformed parameters {
@@ -385,12 +390,20 @@ transformed parameters {
   // tau_p = tau_mu but tau_mu_A for Annad; with epoch_bias = 0 no step, so mu is constant over
   // epochs. From its entry epoch on, a newcomer's bias is the mean of the current biases of
   // the parties existing before that epoch, plus m_new + s_new eta; then mu_e is re-centred,
-  // and after it the newcomer walks with the rest.
+  // and after it the newcomer walks with the rest. With newcomer_pool = 1 m_new and s_new are
+  // the parameters, which the newcomers' entries inform; with newcomer_pool = 0 they are fixed
+  // at 0 and 0.2023.
   {
     vector[P] tau = rep_vector(0, P);
     if (epoch_bias) {
       tau = rep_vector(tau_mu[1], P);
       if (annad_idx > 0) tau[annad_idx] = tau_mu_A[1];
+    }
+    real mn = m_new_fixed;
+    real sn = s_new_fixed;
+    if (newcomer_pool) {
+      mn = m_new[1];
+      sn = s_new[1];
     }
     vector[P] m = mu1;
     for (e in 1:n_epoch) {
@@ -402,7 +415,7 @@ transformed parameters {
         real base = mean(m[before_idx[e, 1:n_before[e]]]);
         for (i in 1:n_enter[e]) {
           int p = enter_idx[e, i];
-          m[p] = base + m_new + s_new * new_raw[new_pos[p]];
+          m[p] = base + mn + sn * new_raw[new_pos[p]];
         }
       }
       m -= mean(m);
@@ -528,6 +541,10 @@ model {
   tau_mu ~ normal(0, prior_tau_mu);
   tau_mu_A ~ normal(0, 0.3);
   tau_house ~ normal(0, 0.1);
+  // The newcomer pool (newcomer_pool = 1): m_new ~ N(0, 0.3) and s_new ~ half-N(0, 0.3), both
+  // size 0 with newcomer_pool = 0.
+  m_new ~ normal(0, 0.3);
+  s_new ~ normal(0, 0.3);
   // The bounded transforms' log-Jacobians, |d log c / d u| = (cap - init) exp(u).
   target += H * log(phi_cap - phi_init) + sum(log_phi_u);
   target += log(phi_K_cap - phi_K_init) + log_phi_K_u;

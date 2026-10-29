@@ -20,6 +20,7 @@ box::use(
 
 V2_M0_CONFIG <- file.path(project_root(), "harness", "configs", "steps", "v2s-m0.json")
 V2_M1_CONFIG <- file.path(project_root(), "harness", "configs", "steps", "v2s-m1.json")
+V2_M2_CONFIG <- file.path(project_root(), "harness", "configs", "steps", "v2s-m2.json")
 
 # WHY: read_inputs() and v2_stan_data() take seconds, and the 2024-eve fixtures serve many tests.
 v2_cache <- new.env(parent = emptyenv())
@@ -37,6 +38,12 @@ cfg_m0 <- function() {
 cfg_m1 <- function() {
   box::use(R / harness / v2[read_v2_config])
   read_v2_config(V2_M1_CONFIG)
+}
+
+# Step v2s-m2's config: v2s-m1's with the newcomer contrast's mean and scale estimated (§6.4).
+cfg_m2 <- function() {
+  box::use(R / harness / v2[read_v2_config])
+  read_v2_config(V2_M2_CONFIG)
 }
 
 # A temporary copy of the m0 config with the named keys changed (NULL drops a key, a new

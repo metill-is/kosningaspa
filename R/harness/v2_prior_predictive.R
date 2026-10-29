@@ -49,6 +49,12 @@
 #     industry bias (§6.4; pars mu_step_raw, tau_mu and tau_mu_A), τ_p = τ_μ but τ_μ,A for
 #     Annað (the data's annad_idx), coordinate 1 of every step, the steps pooled (they are
 #     exchangeable). It stops if the coordinate party is Annað.
+#   - newcomer_entry (step v2s-m2, switch newcomer_pool): x = (m_new + s_new η_p, 0, ..., 0),
+#     a newcomer's entry bias against the mean bias of the parties existing before its entry
+#     epoch (§6.4; pars m_new, s_new and new_raw), read on a 10% party (NEWCOMER_SHARE) beside
+#     P − 1 equal parties, the newcomers pooled (they are exchangeable). The re-centring of μ
+#     after the entry is a common shift, which cancels in the softmax. It reads no
+#     party-indexed parameter, so coordinate 1 here is the newcomer, not the coordinate party.
 #
 # The bands, each built by its constructor and checked by in_band():
 #   band_inside(lo, hi)                      the 5% quantile at least lo, the 95% at most hi
@@ -92,6 +98,9 @@ SHARE <- 0.2
 POLL_N <- 1000
 WALK_DAYS <- 180
 
+#' The share of the newcomer whose entry bias the newcomer row reads.
+NEWCOMER_SHARE <- 0.1
+
 #' Prior draw i takes seed SEED + i; a summary that needs more randomness takes SEED_AUX + i.
 SEED <- 6000L
 SEED_AUX <- 7000000L
@@ -128,7 +137,7 @@ poll_sd_pp <- function(phi, s = SHARE, n = POLL_N) 100 * sqrt(s * (1 - s) / n * 
 
 #' The summaries, each a function of a `v2_simulate()` draw `sim`, its `data` and a `seed`
 #' for any further randomness, returning the draw's values in pp (one per house,
-#' kjördæmi or epoch step for a pooled summary). The header comment says which coordinate each reads.
+#' kjördæmi, epoch step or newcomer for a pooled summary). The header comment says which coordinate each reads.
 #' @export
 SUMMARY_FUNS <- list(
   house_d = function(sim, data, seed) {
@@ -152,6 +161,13 @@ SUMMARY_FUNS <- list(
     xi <- matrix(sim$pars$mu_step_raw, data$P, data$n_epoch - 1L)
     tau <- replace(rep(as.numeric(sim$pars$tau_mu), data$P), data$annad_idx, as.numeric(sim$pars$tau_mu_A))
     apply(tau * xi, 2, \(x) share_change(x - mean(x)))
+  },
+  newcomer_entry = function(sim, data, seed) {
+    if (length(sim$pars$m_new) != 1 || length(sim$pars$s_new) != 1) {
+      stop("prior predictive: newcomer_entry needs m_new and s_new, which newcomer_pool = 1 puts in the model", call. = FALSE)
+    }
+    x <- as.numeric(sim$pars$m_new) + as.numeric(sim$pars$s_new) * as.numeric(sim$pars$new_raw)
+    vapply(x, \(c) share_change(c(c, rep(0, data$P - 1)), share = NEWCOMER_SHARE), numeric(1))
   }
 )
 
@@ -282,7 +298,8 @@ check_rows <- function(rows) {
 #' were written before any V2 fit; the first three rows each have the other values of the
 #' plan's Decision 1 as comparisons (§6.10's, and proposals 1 and 4). The epoch bias's (step
 #' v2s-m1, switch `epoch_bias`): an epoch's step of the industry bias, its band written before
-#' any fit of that step.
+#' any fit of that step. The newcomer pool's (step v2s-m2, switch `newcomer_pool`): a
+#' newcomer's entry bias on a 10% party, its band written before any fit of that step.
 #' @export
 ROWS <- check_rows(dplyr::bind_rows(
   summary_rows(
@@ -331,6 +348,14 @@ ROWS <- check_rows(dplyr::bind_rows(
       "\u03c4_\u03bc,A ~ half-N(0, 0.3) for Anna\u00f0)"
     ),
     "prior_tau_mu", band_inside(-6, 6)
+  ),
+  summary_rows(
+    "newcomer_entry", "v2s-m2", "newcomer_pool",
+    paste0(
+      "A newcomer's entry bias against the existing parties' mean, on a 10% party (m_new + s_new \u03b7, ",
+      "m_new ~ N(0, 0.3), s_new ~ half-N(0, 0.3))"
+    ),
+    character(0), band_inside(-10, 10)
   )
 ))
 
@@ -512,7 +537,8 @@ main <- function(args) {
     paste(
       "- The 20% party is the coordinate party (the first of the order), in a composition of 20% beside",
       "P \u2212 1 equal parties sharing 80%; each effect moves it on the log-ratio scale, and the summary",
-      "is its change in pp. The script's header says which coordinate each effect reads."
+      "is its change in pp. The script's header says which coordinate each effect reads. A summary whose label",
+      "names another share reads a party of that share instead."
     ),
     "",
     "## Summaries",
@@ -525,7 +551,7 @@ main <- function(args) {
     "",
     "## Results",
     "",
-    "Quantiles in pp over the prior draws (`Values`: draws \u00d7 houses, kj\u00f6rd\u00e6mi or epoch steps for a pooled summary).",
+    "Quantiles in pp over the prior draws (`Values`: draws \u00d7 houses, kj\u00f6rd\u00e6mi, epoch steps or newcomers for a pooled summary).",
     "",
     table_row(c("Summary", "Step", "Kind", "Prior", "Cell", "Values", "q05", "q50", "q95", "Band", "Verdict")),
     table_row(rep("---", 11)),
