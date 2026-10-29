@@ -803,18 +803,23 @@ test_that("v2s-m3: votes_kd carries a fresh shock on the open epoch's row of d_s
 })
 
 # Step v2s-m4, the delta walk (§6.7, switch delta_walk): delta_1 = M_1(s_delta0 zeta_1) and
-# delta_e = M_e(delta_{e-1} + sqrt(dyears_e / dyears_bar) s_zeta zeta_e), a newcomer's column
-# fresh at its entry epoch; on v2s-m3's shock.
+# delta_e = M_e(delta_{e-1} - c_{e-1} 1' + sqrt(dyears_e / dyears_bar) s_zeta zeta_e), with
+# delta_{e-1} re-centred within each kjordaemi over the previous election's parties, a
+# newcomer's column fresh at its entry epoch; on v2s-m3's shock.
 WALK_PARS <- c("delta_raw", "s_zeta_raw", "s_bar_zeta")
 
 test_that("v2s-m4: Stan's log density matches the reference up to a constant", {
   skip_unless_slow()
   skip_unless_step("v2s-m4")
   hit <- expect_step_lp("v2s-m4", cfg_m4())
-  # WHY: every cell has a step whose gap is not dyears_bar, 2017 eve's one step (a year) too.
+  # WHY: every cell has a step whose gap is not dyears_bar, 2017 eve's one step (a year) too,
+  # and a newcomer entering after its first epoch, so the re-centring shows on each.
   by_cell <- attr(hit, "by_cell")
   expect_identical(names(by_cell), c("eve2024", "f180_2021", "eve2017"))
-  for (name in names(by_cell)) expect_true("delta_years_unscaled" %in% by_cell[[name]], label = name)
+  for (name in names(by_cell)) {
+    expect_true("delta_years_unscaled" %in% by_cell[[name]], label = name)
+    expect_true("delta_entry_leak" %in% by_cell[[name]], label = name)
+  }
   expect_true("no_delta_restart" %in% hit)
   expect_true(all(c(
     "shock_unscaled", "newcomer_mean_over_all", "house_walk_from_first_poll", "newcomer_mean_of_mu1", "no_mu_restart",

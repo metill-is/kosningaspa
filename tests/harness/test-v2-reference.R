@@ -539,7 +539,7 @@ test_that("the delta-walk reference: its mutants change the density on every cel
   for (name in names(cells)) {
     d <- cells[[name]]$data
     expect_identical(as.integer(d$delta_walk), 1L)
-    expect_true(all(c("delta_years_unscaled", "no_delta_restart") %in% v2_mutants(d)))
+    expect_true(all(c("delta_years_unscaled", "no_delta_restart", "delta_entry_leak") %in% v2_mutants(d)))
     expect_identical(
       lapply(v2_par_dims(d)[c("delta_raw", "s_zeta_raw", "s_bar_zeta")], as.integer),
       list(delta_raw = as.integer(c(d$n_epoch, d$K, d$P)), s_zeta_raw = as.integer(d$P), s_bar_zeta = 1L)
@@ -548,7 +548,7 @@ test_that("the delta-walk reference: its mutants change the density on every cel
       s <- v2_simulate(d, seed = seed, observe = FALSE)
       expect_identical(dim(s$pars$delta_raw), as.integer(c(d$n_epoch, d$K, d$P)))
       lp <- v2_lp_ref(s$pars, d)
-      for (m in c("delta_years_unscaled", "no_delta_restart")) {
+      for (m in c("delta_years_unscaled", "no_delta_restart", "delta_entry_leak")) {
         expect_gt(abs(v2_lp_ref(s$pars, d, m) - lp), 1e-6, label = paste(name, m))
       }
       rp <- rev(seq_len(d$P))
@@ -561,14 +561,18 @@ test_that("the delta-walk reference: its mutants change the density on every cel
       expect_equal(v2_natural(p$pars, p$data)$delta, v2_natural(s$pars, d)$delta[, rk, rp, drop = FALSE], tolerance = 1e-12)
     }
   }
-  expect_identical(V2_MUTANTS$min_closed[V2_MUTANTS$mutant %in% c("delta_years_unscaled", "no_delta_restart")], c(1L, 1L))
+  walk_mutants <- V2_MUTANTS[V2_MUTANTS$switch %in% "delta_walk", ]
+  expect_identical(walk_mutants$mutant, c("delta_years_unscaled", "no_delta_restart", "delta_entry_leak"))
+  expect_identical(walk_mutants$min_closed, c(1L, 1L, 1L))
   expect_identical(as.integer(cells$eve2017$data$n_closed), 1L)
 })
 
-test_that("each epoch's delta is the walk of 6.7 written out, a newcomer fresh at its entry epoch", {
-  # 6.7: delta_1 = M_1(s_delta0 zeta_1); delta_e = M_e(delta_{e-1} + sqrt(dyears_e / 4) s_zeta
-  # zeta_e), with s_zeta = s_bar_zeta s_zeta_raw, except that a newcomer's column in its entry
-  # epoch e_p > 1 is s_delta0,p zeta_{e_p,.,p}. The open epoch's dyears runs to E.
+test_that("each epoch's delta is the walk of 6.7 written out, re-centred over the previous election's parties, a newcomer fresh at its entry epoch", {
+  # 6.7: delta_1 = M_1(s_delta0 zeta_1); delta_e = M_e(delta_{e-1} - c 1' + sqrt(dyears_e / 4)
+  # s_zeta zeta_e), with s_zeta = s_bar_zeta s_zeta_raw and c_k the unweighted mean of
+  # delta_{e-1}[k, S] over the parties S with results at election e - 1, except that a
+  # newcomer's column in its entry epoch e_p > 1 is s_delta0,p zeta_{e_p,.,p}. The open
+  # epoch's dyears runs to E.
   for (name in c("eve2024", "f180_2021", "eve2017")) {
     d <- v2_test_cells(cfg_m4())[[name]]$data
     expect_identical(d$delta_years_bar, 4)
@@ -583,7 +587,9 @@ test_that("each epoch's delta is the walk of 6.7 written out, a newcomer fresh a
     zeta <- function(e) matrix(s$delta_raw[e, , ], d$K, d$P)
     expect_equal(nat$delta[1, , ], M_e(zeta(1) %*% diag(s0), d$w[1, ]), tolerance = 1e-12, label = paste(name, "epoch 1"))
     for (e in 2:d$n_epoch) {
-      X <- nat$delta[e - 1, , ] + sqrt(d$delta_years[e] / 4) * zeta(e) %*% diag(sz)
+      S <- d$idx_res[e - 1, seq_len(d$n_rep_res[e - 1])]
+      c_k <- rowMeans(nat$delta[e - 1, , S])
+      X <- nat$delta[e - 1, , ] - c_k + sqrt(d$delta_years[e] / 4) * zeta(e) %*% diag(sz)
       for (p in which(entry == e)) X[, p] <- s0[p] * zeta(e)[, p]
       expect_equal(nat$delta[e, , ], M_e(X, d$w[e, ]), tolerance = 1e-12, label = paste(name, "epoch", e))
     }
@@ -644,4 +650,65 @@ test_that("with delta_walk = 0 delta_raw is one zeta, the walk's scales have siz
   others <- setdiff(names(s), c("delta_raw", "s_zeta_raw", "s_bar_zeta"))
   expect_identical(s1[others], s[others])
   expect_identical(s1$delta_raw[1, , ], s$delta_raw[1, , ])
+})
+
+test_that("on 2024 eve no newcomer's zeta before its entry epoch reaches the likelihood, which the walk without the re-centring lets through", {
+  # WHY: before its entry epoch a newcomer is in no softmax, so its column of delta reaches the
+  # likelihood only through the walk into its entry epoch. Re-centring delta_{e-1} over the
+  # previous election's parties, which exclude it, keeps it out: moving one of its earlier zeta
+  # changes the density by that zeta's N(0, 1) prior alone.
+  d <- v2_test_cells(cfg_m4())$eve2024$data
+  entry <- c(d$entry_epoch)
+  late <- which(entry > 1L)
+  expect_true(length(late) >= 2)
+  s <- v2_simulate(d, seed = 9, observe = FALSE)$pars
+  s$s_bar_zeta[] <- 0.3
+  lp <- v2_lp_ref(s, d)
+  lp_leak <- v2_lp_ref(s, d, "delta_entry_leak")
+  tol <- lp_tol(lp)
+  for (p in late) {
+    for (e in seq_len(entry[p] - 1L)) {
+      for (k in 1:2) {
+        moved <- s
+        z <- s$delta_raw[e, k, p]
+        moved$delta_raw[e, k, p] <- z + 1
+        prior <- -0.5 * ((z + 1)^2 - z^2)
+        at <- sprintf("party %d (entry epoch %d), zeta of epoch %d, kjordaemi %d", p, entry[p], e, k)
+        expect_lt(abs(v2_lp_ref(moved, d) - lp - prior), tol, label = at)
+        expect_gt(abs(v2_lp_ref(moved, d, "delta_entry_leak") - lp_leak - prior), 100 * tol, label = paste(at, "under delta_entry_leak"))
+      }
+    }
+  }
+})
+
+test_that("on a toy input neither a newcomer's earlier zeta nor an offset shared by the previous election's parties moves the entry epoch's contrasts", {
+  # K = 4 kjordaemi, P = 5 parties, party 5 entering at epoch 2; S_1 = 1:4 have results at
+  # election 1. Both perturbations are flat at epoch 1, where party 5 is in no softmax and a
+  # row offset over S_1 cancels in every softmax over S_1. What a softmax over the parties
+  # sees at the entry epoch is each kjordaemi's contrasts, here against party 1.
+  ref <- environment(v2_lp_ref)
+  K <- 4L
+  P <- 5L
+  data <- list(
+    K = K, P = P, n_epoch = 2L, delta_walk = 1L, w = rbind(c(0.4, 0.3, 0.2, 0.1), c(0.35, 0.3, 0.2, 0.15)),
+    delta_years = c(0, 4), delta_years_bar = 4, entry_epoch = c(0L, 0L, 0L, 0L, 2L),
+    idx_res = matrix(c(1:4, 0L), 1), n_rep_res = 4L
+  )
+  zeta <- withr::with_seed(1, array(stats::rnorm(2 * K * P), c(2, K, P)))
+  s0 <- c(0.3, 0.25, 0.35, 0.3, 0.3)
+  sz <- c(0.2, 0.1, 0.3, 0.2, 0.25)
+  seen <- function(d, e, S) d[e, , S] - d[e, , S[1]]
+  pre <- zeta
+  pre[1, 2, 5] <- pre[1, 2, 5] + 1
+  offset <- zeta
+  for (q in 1:4) offset[1, , q] <- offset[1, , q] + c(1, -2, 0.5, 3) / s0[q]
+  for (leak in c(FALSE, TRUE)) {
+    a <- ref$delta_epochs(zeta, s0, sz, data, entry_leak = leak)
+    for (moved in list(pre, offset)) {
+      b <- ref$delta_epochs(moved, s0, sz, data, entry_leak = leak)
+      expect_lt(max(abs(seen(b, 1, 1:4) - seen(a, 1, 1:4))), 1e-12)
+      change <- max(abs(seen(b, 2, 1:5) - seen(a, 2, 1:5)))
+      if (leak) expect_gt(change, 1e-3) else expect_lt(change, 1e-12)
+    }
+  }
 })

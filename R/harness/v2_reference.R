@@ -104,16 +104,20 @@ V2_CORE_PARS <- tibble::tibble(
 #'   runs one year);
 #' - `no_delta_restart`: a newcomer's column at its entry epoch e_p > 1 keeps the prior-only
 #'   walk its slot gathered before e_p plus a step, instead of restarting at s_δ0,p ζ_{e_p,·,p}.
-#'   Any newcomer entering after the first epoch exercises it, the 2017 cells' included.
+#'   Any newcomer entering after the first epoch exercises it, the 2017 cells' included;
+#' - `delta_entry_leak`: each step starts from δ_{e−1} itself, not re-centred over the
+#'   previous election's parties, so at an entry epoch the newcomer's earlier column and an
+#'   offset shared by those parties reach the contrasts (`delta_epochs()`). Any newcomer
+#'   entering after the first epoch exercises it, the 2017 cells' included.
 #' @export
 V2_MUTANTS <- tibble::tibble(
   mutant = c(
     "positional_gather", "previous_w", "next_epoch_delta", "close_last_kjordaemi", "conditional_walk",
     "house_walk_from_first_poll", "newcomer_mean_of_mu1", "no_mu_restart", "no_house_restart",
-    "newcomer_mean_over_all", "shock_unscaled", "delta_years_unscaled", "no_delta_restart"
+    "newcomer_mean_over_all", "shock_unscaled", "delta_years_unscaled", "no_delta_restart", "delta_entry_leak"
   ),
-  switch = c(rep(NA_character_, 5), rep("epoch_bias", 4), "newcomer_pool", "shock", rep("delta_walk", 2)),
-  min_closed = c(1L, 2L, 2L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L)
+  switch = c(rep(NA_character_, 5), rep("epoch_bias", 4), "newcomer_pool", "shock", rep("delta_walk", 3)),
+  min_closed = c(1L, 2L, 2L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L)
 )
 
 #' The component switches the reference has (each 0 or 1), the switches of the components it
@@ -481,17 +485,71 @@ core_pars <- function(pars, data) {
   p
 }
 
+#' δ of every epoch (n_epoch × K × P, §6.7) from `zeta`, the point's `delta_raw` ((1 or
+#' n_epoch) × K × P), the scales `s_delta0` and `s_zeta` (P each; `s_zeta` unread with
+#' `delta_walk` = 0) and `data`'s `delta_walk`, `w`, `entry_epoch`, `delta_years`,
+#' `delta_years_bar`, `idx_res` and `n_rep_res`. With `delta_walk` = 0, static,
+#' δ_e = M_e(s_δ0 ⊙ ζ), one ζ for every epoch. With 1, the walk: δ_1 = M_1(s_δ0 ⊙ ζ_1) and
+#' δ_e = M_e(δ_{e−1} − c_{e−1} 1ᵀ + √(Δyears_e / Δ̄) s_ζ ⊙ ζ_e), where c_{e−1,k} is the
+#' unweighted mean of δ_{e−1}[k, S] over the parties S with results at election e − 1, except
+#' that a newcomer's column in its entry epoch e_p > 1 is s_δ0,p ζ_{e_p,·,p}. Before e_p the
+#' newcomer's column walks on the prior alone.
+#'
+#' The re-centring is §6.7's walk wherever no party enters, since M_e removes any constant
+#' within a kjördæmi. At an entry it keeps out what the likelihood cannot see before the entry:
+#' an offset within a kjördæmi shared by the parties S, which cancels in every softmax over S
+#' but would set the newcomer's entry level against theirs. The newcomer's own earlier column
+#' is one source of such an offset, through M_{e−1}'s centring over all P parties. So the
+#' newcomer's entry column is a fresh s_δ0 ζ draw against the existing parties' mean, as its
+#' industry bias is against theirs (§6.4).
+#'
+#' `close_last`, `years_unscaled`, `delta_carry` and `entry_leak` switch to the
+#' `close_last_kjordaemi`, `delta_years_unscaled`, `no_delta_restart` and `delta_entry_leak`
+#' mutants.
+delta_epochs <- function(zeta, s_delta0, s_zeta, data, close_last = FALSE, years_unscaled = FALSE, delta_carry = FALSE,
+                         entry_leak = FALSE) {
+  K <- data$K
+  P <- data$P
+  n_epoch <- data$n_epoch
+  entry <- c(data$entry_epoch)
+  z <- function(e) matrix(zeta[e, , ], K, P)
+  map <- function(X, e) if (close_last) close_on_last(X, data$w[e, ]) else M_e(X, data$w[e, ])
+  X <- z(1) * matrix(s_delta0, K, P, byrow = TRUE)
+  delta <- array(0, c(n_epoch, K, P))
+  if (!identical(as.integer(data$delta_walk), 1L)) {
+    for (e in seq_len(n_epoch)) delta[e, , ] <- map(X, e)
+    return(delta)
+  }
+  delta[1, , ] <- map(X, 1L)
+  for (e in seq_len(n_epoch)[-1]) {
+    scale <- if (years_unscaled) 1 else sqrt(data$delta_years[e] / data$delta_years_bar)
+    prev <- matrix(delta[e - 1, , ], K, P)
+    if (!entry_leak) {
+      S <- data$idx_res[e - 1, seq_len(data$n_rep_res[e - 1])]
+      prev <- prev - rowMeans(prev[, S, drop = FALSE])
+    }
+    X <- prev + scale * z(e) * matrix(s_zeta, K, P, byrow = TRUE)
+    entering <- which(entry == e)
+    if (!delta_carry) {
+      X[, entering] <- z(e)[, entering, drop = FALSE] * matrix(s_delta0[entering], K, length(entering), byrow = TRUE)
+    }
+    delta[e, , ] <- map(X, e)
+  }
+  delta
+}
+
 #' The natural quantities of a checked point `p` (`core_pars()`) on `data`: the walk θ
 #' (P × G) and its innovation factor, μ_e, γ_{e,h}, δ_e, the bounded log concentrations,
 #' `phi_init`, s_δ0, s_ζ, π_nat at each national poll's date and the closed elections' shocks
 #' ε. `conditional`, `close_last`, `house_from_start`, `entry_mean_mu1`, `mu_carry`,
-#' `house_carry`, `entry_mean_all`, `unscaled`, `years_unscaled` and `delta_carry` switch to the
-#' `conditional_walk`, `close_last_kjordaemi`, `house_walk_from_first_poll`,
-#' `newcomer_mean_of_mu1`, `no_mu_restart`, `no_house_restart`, `newcomer_mean_over_all`,
-#' `shock_unscaled`, `delta_years_unscaled` and `no_delta_restart` mutants.
+#' `house_carry`, `entry_mean_all`, `unscaled`, `years_unscaled`, `delta_carry` and
+#' `entry_leak` switch to the `conditional_walk`, `close_last_kjordaemi`,
+#' `house_walk_from_first_poll`, `newcomer_mean_of_mu1`, `no_mu_restart`, `no_house_restart`,
+#' `newcomer_mean_over_all`, `shock_unscaled`, `delta_years_unscaled`, `no_delta_restart` and
+#' `delta_entry_leak` mutants.
 natural <- function(p, data, conditional = FALSE, close_last = FALSE, house_from_start = FALSE, entry_mean_mu1 = FALSE,
                     mu_carry = FALSE, house_carry = FALSE, entry_mean_all = FALSE, unscaled = FALSE,
-                    years_unscaled = FALSE, delta_carry = FALSE) {
+                    years_unscaled = FALSE, delta_carry = FALSE, entry_leak = FALSE) {
   P <- data$P
   G <- data$G
   H <- data$H
@@ -571,30 +629,14 @@ natural <- function(p, data, conditional = FALSE, close_last = FALSE, house_from
     }
   }
 
-  # §6.7: with delta_walk = 0, static, δ_e = M_e(s_δ0 ⊙ ζ), one ζ for every epoch. With 1,
-  # the walk: δ_1 = M_1(s_δ0 ⊙ ζ_1) and δ_e = M_e(δ_{e−1} + √(Δyears_e / Δ̄) s_ζ ⊙ ζ_e), with
-  # s_ζ = s̄_ζ s_zeta_raw, except that a newcomer's column in its entry epoch e_p > 1 is
-  # s_δ0,p ζ_{e_p,·,p}. Before e_p the newcomer's column walks on the prior alone.
+  # §6.7: δ, static with delta_walk = 0 and the walk across elections with 1, s_ζ = s̄_ζ
+  # s_zeta_raw (delta_epochs()).
   s_delta0 <- exp(p$mu_sd + p$tau_sd * p$s_delta0_raw)
   s_zeta <- p$s_bar_zeta * p$s_zeta_raw
-  zeta <- function(e) matrix(p$delta_raw[e, , ], K, P)
-  map <- function(X, e) if (close_last) close_on_last(X, data$w[e, ]) else M_e(X, data$w[e, ])
-  X <- zeta(1) * matrix(s_delta0, K, P, byrow = TRUE)
-  delta <- array(0, c(n_epoch, K, P))
-  if (identical(as.integer(data$delta_walk), 1L)) {
-    delta[1, , ] <- map(X, 1L)
-    for (e in seq_len(n_epoch)[-1]) {
-      scale <- if (years_unscaled) 1 else sqrt(data$delta_years[e] / data$delta_years_bar)
-      X <- matrix(delta[e - 1, , ], K, P) + scale * zeta(e) * matrix(s_zeta, K, P, byrow = TRUE)
-      entering <- which(entry == e)
-      if (!delta_carry) {
-        X[, entering] <- zeta(e)[, entering, drop = FALSE] * matrix(s_delta0[entering], K, length(entering), byrow = TRUE)
-      }
-      delta[e, , ] <- map(X, e)
-    }
-  } else {
-    for (e in seq_len(n_epoch)) delta[e, , ] <- map(X, e)
-  }
+  delta <- delta_epochs(
+    p$delta_raw, s_delta0, s_zeta, data,
+    close_last = close_last, years_unscaled = years_unscaled, delta_carry = delta_carry, entry_leak = entry_leak
+  )
 
   # §6.6, the election-day shock: with shock = 1, ε_e = C(s̄_E d_e ⊙ z_e) at closed election e,
   # shared by its kjördæmi, d_e = √(min(0.2 / π̄, 10)) the row of d_shock of the epoch e closes
@@ -787,7 +829,8 @@ v2_lp_ref <- function(pars, data, mutant = "none") {
     house_from_start = mutant == "house_walk_from_first_poll", entry_mean_mu1 = mutant == "newcomer_mean_of_mu1",
     mu_carry = mutant == "no_mu_restart", house_carry = mutant == "no_house_restart",
     entry_mean_all = mutant == "newcomer_mean_over_all", unscaled = mutant == "shock_unscaled",
-    years_unscaled = mutant == "delta_years_unscaled", delta_carry = mutant == "no_delta_restart"
+    years_unscaled = mutant == "delta_years_unscaled", delta_carry = mutant == "no_delta_restart",
+    entry_leak = mutant == "delta_entry_leak"
   )
   rows <- dm_rows(p, nat, data, positional = mutant == "positional_gather", next_delta = mutant == "next_epoch_delta")
   lik <- vapply(rows, \(r) dirmult_lpmf(row_counts(data, r), r$alpha), numeric(1))

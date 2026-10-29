@@ -15,7 +15,7 @@ Written by `LC_ALL=en_US.UTF-8 Rscript R/harness/v2_prior_predictive.R <config> 
 - **house_d** (step v2s-m0): A house's deviation d from the industry, on a 20% party (d_h = σ_γ C ε_h, σ_γ ~ exponential(`prior_rate_sigma_gamma`)). Band: [5%, 95%] inside [-10, 10].
 - **industry_mu1** (step v2s-m0): Industry bias μ_1 on a 20% party (μ_1 sum-to-zero, normal(0, `prior_sd_mu1`) on every element). Band: [5%, 95%] inside [-12, 12].
 - **poll_sd** (step v2s-m0): A poll's sd around its mean, n = 1,000, 20% party, at the prior φ_h (μ_φ ~ N(`prior_mu_phi`, 1)). Band: [5%, 95%] inside [0.8, 6].
-- **kd_delta** (step v2s-m0): A party's kjördæmi deviation from its national share, 20% party (static δ, log s_δ0 = μ_sd + τ_sd r). Band: [5%, 95%] inside [-25, 25].
+- **kd_delta** (step v2s-m0): δ in the open epoch: a party's kjördæmi deviation from its national share, 20% party (static under `delta_walk` = 0, log s_δ0 = μ_sd + τ_sd r; the walk's under 1). Band: [5%, 95%] inside [-25, 25].
 - **walk_180** (step v2s-m0): A 20% party's 180-day walk change, off the campaign (covariance 180 CΣCᵀ). Band: 95% quantile in [2, 30].
 - **industry_step** (step v2s-m1, switch `epoch_bias`): An epoch's step in the industry bias on a 20% party (C(τ ⊙ ξ_e), τ_μ ~ half-N(0, `prior_tau_mu`), τ_μ,A ~ half-N(0, 0.3) for Annað). Band: [5%, 95%] inside [-6, 6].
 - **newcomer_entry** (step v2s-m2, switch `newcomer_pool`): A newcomer's entry bias against the existing parties' mean, on a 10% party (m_new + s_new η, m_new ~ N(0, 0.3), s_new ~ half-N(0, 0.3)). Band: [5%, 95%] inside [-10, 10].
@@ -41,8 +41,8 @@ Quantiles in pp over the prior draws (`Values`: draws × houses, kjördæmi, epo
 | poll_sd | v2s-m0 | config | `prior_mu_phi` = 6.90776 | 2021-f180 | 5000 | 1.33 | 1.83 | 4.15 | [5%, 95%] inside [0.8, 6] | PASS |
 | poll_sd | v2s-m0 | comparison | `prior_mu_phi` = 0 (§6.10) | 2024-eve | 6000 | 12.63 | 28.49 | 38.21 | [5%, 95%] inside [0.8, 6] | FAIL (comparison) |
 | poll_sd | v2s-m0 | comparison | `prior_mu_phi` = 0 (§6.10) | 2021-f180 | 5000 | 12.13 | 28.97 | 38.11 | [5%, 95%] inside [0.8, 6] | FAIL (comparison) |
-| kd_delta | v2s-m0 | config | literals | 2024-eve | 6000 | -12.49 | -1.12 | 12.77 | [5%, 95%] inside [-25, 25] | PASS |
-| kd_delta | v2s-m0 | config | literals | 2021-f180 | 6000 | -12.25 | -0.91 | 13.00 | [5%, 95%] inside [-25, 25] | PASS |
+| kd_delta | v2s-m0 | config | literals | 2024-eve | 6000 | -12.49 | -1.13 | 12.98 | [5%, 95%] inside [-25, 25] | PASS |
+| kd_delta | v2s-m0 | config | literals | 2021-f180 | 6000 | -12.24 | -0.93 | 12.92 | [5%, 95%] inside [-25, 25] | PASS |
 | walk_180 | v2s-m0 | config | literals | 2024-eve | 1000 | -11.09 | -0.70 | 7.87 | 95% quantile in [2, 30] | PASS |
 | walk_180 | v2s-m0 | config | literals | 2021-f180 | 1000 | -10.90 | -0.99 | 9.83 | 95% quantile in [2, 30] | PASS |
 | industry_step | v2s-m1 | config | `prior_tau_mu` = 0.1 | 2024-eve | 3000 | -3.03 | -0.03 | 2.86 | [5%, 95%] inside [-6, 6] | PASS |

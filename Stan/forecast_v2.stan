@@ -17,8 +17,9 @@
 // closed election's results and the forecast take an election-day shock C(s_bar_E d .* z),
 // one per election and shared by its kjordaemi, with d from the previous election's shares.
 // Step v2s-m4 builds delta_walk = 1 (§6.7): the kjordaemi deviations walk across elections,
-// delta_e = M_e(delta_{e-1} + sqrt(delta_years_e / delta_years_bar) s_zeta .* zeta_e), a
-// newcomer's column fresh at its entry epoch.
+// delta_e = M_e(delta_{e-1} - c_{e-1} 1' + sqrt(delta_years_e / delta_years_bar) s_zeta .*
+// zeta_e), with delta_{e-1} re-centred within each kjordaemi over the parties with results at
+// election e - 1, and a newcomer's column fresh at its entry epoch.
 functions {
   // The map M_e of §6.7 on a K x P matrix: subtract each party's w-weighted mean over the
   // kjordaemi, then centre each kjordaemi over the parties. The result's rows sum to 0 and
@@ -458,9 +459,14 @@ transformed parameters {
   }
 
   // §6.7: with delta_walk = 0, static, delta_e = M_e(s_delta0 .* zeta), one zeta for every
-  // epoch. With 1, the walk: delta_1 = M_1(s_delta0 .* zeta_1) and delta_e = M_e(delta_{e-1} +
-  // sqrt(delta_years_e / delta_years_bar) s_zeta .* zeta_e), except that a newcomer's column in
-  // its entry epoch e > 1 is s_delta0,p zeta_{e,.,p}; before it the column walks on the prior.
+  // epoch. With 1, the walk: delta_1 = M_1(s_delta0 .* zeta_1) and delta_e = M_e(delta_{e-1} -
+  // c_{e-1} 1' + sqrt(delta_years_e / delta_years_bar) s_zeta .* zeta_e), where c_{e-1,k} is the
+  // unweighted mean of delta_{e-1}[k, S] over the parties S with results at election e - 1,
+  // except that a newcomer's column in its entry epoch e > 1 is s_delta0,p zeta_{e,.,p}; before
+  // it the column walks on the prior. M_e removes any constant within a kjordaemi, so the
+  // re-centring is the plain walk wherever no party enters. At an entry it keeps the directions
+  // the likelihood cannot see before then, the newcomer's earlier column and an offset shared by
+  // the parties S, out of the contrasts: the newcomer enters against the existing parties' mean.
   {
     matrix[K, P] X = diag_post_multiply(delta_raw[1], s_delta0);
     if (delta_walk == 0) {
@@ -470,7 +476,13 @@ transformed parameters {
     } else {
       delta[1] = kjordaemi_map(X, w[1]);
       for (e in 2:n_epoch) {
-        X = delta[e - 1] + sqrt(delta_years[e] / delta_years_bar) * diag_post_multiply(delta_raw[e], s_zeta);
+        vector[K] c = rep_vector(0, K);
+        for (i in 1:n_rep_res[e - 1]) {
+          c += delta[e - 1][ : , idx_res[e - 1, i]];
+        }
+        c /= n_rep_res[e - 1];
+        X = delta[e - 1] - rep_matrix(c, P)
+            + sqrt(delta_years[e] / delta_years_bar) * diag_post_multiply(delta_raw[e], s_zeta);
         for (i in 1:n_enter[e]) {
           int p = enter_idx[e, i];
           X[ : , p] = s_delta0[p] * delta_raw[e][ : , p];

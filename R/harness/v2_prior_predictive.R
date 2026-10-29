@@ -37,10 +37,12 @@
 #   - poll_sd: no composition. The Dirichlet-multinomial sd of a share s = 0.2 in a poll of
 #     n = 1000, sqrt(s (1 − s) / n · (n + φ) / (1 + φ)), at each house's φ_h (v2_natural()'s
 #     phi), the houses pooled.
-#   - kd_delta: δ_open,k, v2_natural()'s δ of the open epoch (the core's static δ, with
-#     proposal 2's hyperprior log s_δ0 = μ_sd + τ_sd r), coordinate 1 of every kjördæmi, the
-#     kjördæmi pooled. Σ_k w_k δ_k = 0 makes log s0 the national log-ratio to first order, so
-#     the change is the kjördæmi's deviation from the party's national share to that order.
+#   - kd_delta: δ_open,k, v2_natural()'s δ in the open epoch, coordinate 1 of every
+#     kjördæmi, the kjördæmi pooled: the core's static δ under delta_walk = 0 (proposal 2's
+#     hyperprior log s_δ0 = μ_sd + τ_sd r), and under 1 the walk's δ (§6.7), which has taken
+#     every step to the open epoch, so it is wider. Σ_k w_k δ_k = 0 makes log s0 the national
+#     log-ratio to first order, so the change is the kjördæmi's deviation from the party's
+#     national share to that order.
 #   - walk_180: x = √180 · C(σ ⊙ L_Ω z), with z ~ N(0, I_P) from seed SEED_AUX + i and the
 #     draw's σ and L_Ω: covariance 180 CΣCᵀ, the walk's own innovation covariance (§6.2) over
 #     180 days off the campaign (s = 1). The campaign multiplier τ_camp has a prior of its own,
@@ -408,7 +410,7 @@ ROWS <- check_rows(dplyr::bind_rows(
   ),
   summary_rows(
     "kd_delta", "v2s-m0", NA_character_,
-    "A party's kj\u00f6rd\u00e6mi deviation from its national share, 20% party (static \u03b4, log s_\u03b40 = \u03bc_sd + \u03c4_sd r)",
+    "\u03b4 in the open epoch: a party's kj\u00f6rd\u00e6mi deviation from its national share, 20% party (static under `delta_walk` = 0, log s_\u03b40 = \u03bc_sd + \u03c4_sd r; the walk's under 1)",
     character(0), band_inside(-25, 25)
   ),
   summary_rows(

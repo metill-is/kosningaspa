@@ -194,6 +194,10 @@ test_that("kd_delta reads coordinate 1 of every kjordaemi's delta in the open ep
     100 * (0.2 * exp(-0.15 + 0.05 / 3) / (0.2 * exp(-0.15 + 0.05 / 3) + 0.4 * exp(0.075 + 0.05 / 3) + 0.4 * exp(0.025 + 0.05 / 3)) - 0.2)
   )
   expect_equal(SUMMARY_FUNS$kd_delta(sim, list(n_epoch = 2L, K = 2L, P = 3L), 1L), want, tolerance = 1e-12)
+  # The label says which delta it reads: the open epoch's, static under delta_walk = 0 and the walk's under 1.
+  label <- unique(ROWS$label[ROWS$summary == "kd_delta"])
+  expect_length(label, 1)
+  expect_true(all(vapply(c("open epoch", "`delta_walk` = 0", "the walk's under 1"), \(x) grepl(x, label, fixed = TRUE), logical(1))))
 })
 
 test_that("walk_180 maps z through sqrt(180) C (sigma * L_Omega z)", {
