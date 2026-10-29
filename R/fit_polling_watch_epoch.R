@@ -42,7 +42,7 @@ suppressMessages({
 
 box::use(
   R / data[read_polling_data],
-  R / stan_data[prepare_polling_watch_data]
+  R / stan_data[prepare_polling_watch_data, prepare_polling_watch_epochs]
 )
 
 # ---- options ----------------------------------------------------------------
@@ -77,95 +77,75 @@ if (!is.na(opt$data_rds)) {
   E <- stan_data$E
   saveRDS(meta, here(out_dir, "meta.rds"))
 } else {
-# ---- data (same assembly as fit_polling_watch.R) ------------------------------
-pre_election <- suppressMessages(read_polling_data()) |>
-  filter(date >= start_date) |>
-  select(-lokadagur, -p)
-post_election <- read_csv(here("data", "post_election_polls.csv"), show_col_types = FALSE) |>
-  filter(date >= start_date) |>
-  mutate(fyrirtaeki = factor(fyrirtaeki), flokkur = factor(flokkur)) |>
-  select(-lokadagur, -p)
+  # ---- data (fit_polling_watch.R's assembly before read_polling_watch_data(): ----
+  # same-day polls by one house are not merged, so a window from 2013 fails) --------
+  pre_election <- suppressMessages(read_polling_data()) |>
+    filter(date >= start_date) |>
+    select(-lokadagur, -p)
+  post_election <- read_csv(here("data", "post_election_polls.csv"), show_col_types = FALSE) |>
+    filter(date >= start_date) |>
+    mutate(fyrirtaeki = factor(fyrirtaeki), flokkur = factor(flokkur)) |>
+    select(-lokadagur, -p)
 
-polling_data <- bind_rows(pre_election, post_election) |>
-  # A zero count is "not reported": dropping it changes no likelihood term (only
-  # nonzero columns enter via party_index_n) but lets fct_drop remove a party
-  # never polled inside a short backtest window.
-  filter(n > 0) |>
-  mutate(
-    fyrirtaeki = fct_relevel(as_factor(fyrirtaeki), "Kosning"),
-    flokkur = fct_relevel(
-      as_factor(flokkur),
-      "Samfylkingin", "Sjálfstæðisflokkurinn", "Miðflokkurinn", "Viðreisn",
-      "Framsóknarflokkurinn", "Flokkur Fólksins", "Vinstri Græn",
-      "Sósíalistaflokkurinn", "Píratar", "Annað"
+  polling_data <- bind_rows(pre_election, post_election) |>
+    # A zero count is "not reported": dropping it changes no likelihood term (only
+    # nonzero columns enter via party_index_n) but lets fct_drop remove a party
+    # never polled inside a short backtest window.
+    filter(n > 0) |>
+    mutate(
+      fyrirtaeki = fct_relevel(as_factor(fyrirtaeki), "Kosning"),
+      flokkur = fct_relevel(
+        as_factor(flokkur),
+        "Samfylkingin", "Sjálfstæðisflokkurinn", "Miðflokkurinn", "Viðreisn",
+        "Framsóknarflokkurinn", "Flokkur Fólksins", "Vinstri Græn",
+        "Sósíalistaflokkurinn", "Píratar", "Annað"
+      )
     )
+  if (!is.na(cutoff)) {
+    polling_data <- filter(polling_data, date < cutoff)
+  }
+  polling_data <- polling_data |>
+    mutate(fyrirtaeki = fct_drop(fyrirtaeki), flokkur = fct_drop(flokkur)) |>
+    arrange(date, fyrirtaeki, flokkur)
+  stopifnot(
+    "party order not applied (check LC_ALL locale)" =
+      levels(polling_data$flokkur)[1] == "Samfylkingin" &&
+        tail(levels(polling_data$flokkur), 1) == "Annað",
+    "house 1 must be the election anchor" = levels(polling_data$fyrirtaeki)[1] == "Kosning"
   )
-if (!is.na(cutoff)) {
-  polling_data <- filter(polling_data, date < cutoff)
-}
-polling_data <- polling_data |>
-  mutate(fyrirtaeki = fct_drop(fyrirtaeki), flokkur = fct_drop(flokkur)) |>
-  arrange(date, fyrirtaeki, flokkur)
-stopifnot(
-  "party order not applied (check LC_ALL locale)" =
-    levels(polling_data$flokkur)[1] == "Samfylkingin" &&
-      tail(levels(polling_data$flokkur), 1) == "Annað",
-  "house 1 must be the election anchor" = levels(polling_data$fyrirtaeki)[1] == "Kosning"
-)
 
-prepared <- prepare_polling_watch_data(polling_data)
-stan_data <- prepared$stan_data
-date_mapping <- prepared$date_mapping
+  # ---- bias epochs (prepare_polling_watch_epochs() in R/stan_data.R) ----------------
+  prepared <- prepare_polling_watch_data(polling_data) |>
+    prepare_polling_watch_epochs(
+      estimate_tau = opt$estimate_tau == "1",
+      tau_prior_scale = as.numeric(opt$tau_prior),
+      tau_mu_fixed = as.numeric(opt$tau_mu),
+      tau_house_fixed = as.numeric(opt$tau_house)
+    )
+  stan_data <- prepared$stan_data
+  date_mapping <- prepared$date_mapping
+  E <- stan_data$E
+  epoch_table <- prepared$epoch_table
+  election_dates <- sort(unique(date_mapping$date[stan_data$date_n[stan_data$house_n == 1]]))
+  cat("Elections in window:", format(election_dates), "\n")
+  print(epoch_table)
 
-# ---- bias epochs ---------------------------------------------------------------
-# A poll dated after the k-th election in the window is in raw epoch k + 1. Raw
-# epochs holding no polls (e.g. before an election that opens the window) are
-# dropped by renumbering; a gap in the MIDDLE would silently merge two epochs, so
-# it is an error.
-election_dates <- polling_data |>
-  filter(fyrirtaeki == "Kosning") |>
-  distinct(date) |>
-  pull(date) |>
-  sort()
-poll_dates <- date_mapping$date[stan_data$date_n]
-raw_epoch <- 1L + map_int(poll_dates, \(d) sum(election_dates < d))
-is_poll <- stan_data$house_n > 1
-used <- sort(unique(raw_epoch[is_poll]))
-stopifnot("an epoch between two elections has no polls" = all(diff(used) == 1))
-epoch_n <- ifelse(is_poll, match(raw_epoch, used), 1L)
-E <- length(used)
-epoch_table <- tibble(
-  epoch = seq_len(E),
-  first_poll = map(used, \(u) min(poll_dates[is_poll & raw_epoch == u])) |> list_c(),
-  last_poll = map(used, \(u) max(poll_dates[is_poll & raw_epoch == u])) |> list_c(),
-  n_polls = map_int(used, \(u) sum(is_poll & raw_epoch == u))
-)
-cat("Elections in window:", format(election_dates), "\n")
-print(epoch_table)
-
-stan_data$E <- E
-stan_data$epoch_n <- as.integer(epoch_n)
-stan_data$estimate_tau <- as.integer(opt$estimate_tau)
-stan_data$tau_prior_scale <- as.numeric(opt$tau_prior)
-stan_data$tau_mu_fixed <- as.numeric(opt$tau_mu)
-stan_data$tau_house_fixed <- as.numeric(opt$tau_house)
-
-meta <- list(
-  opt = opt,
-  party_names = prepared$party_names,
-  house_names = prepared$house_names,
-  date_mapping = date_mapping,
-  election_dates = election_dates,
-  epoch_table = epoch_table,
-  stan_data = stan_data
-)
-cat(
-  "P =", stan_data$P, " H =", stan_data$H, " D =", stan_data$D,
-  " N =", stan_data$N, " E =", E, "\nparties:", prepared$party_names,
-  "\nhouses:", prepared$house_names, "\n"
-)
-if (opt$dry_run == "1") quit(save = "no")
-saveRDS(meta, here(out_dir, "meta.rds"))
+  meta <- list(
+    opt = opt,
+    party_names = prepared$party_names,
+    house_names = prepared$house_names,
+    date_mapping = date_mapping,
+    election_dates = election_dates,
+    epoch_table = epoch_table,
+    stan_data = stan_data
+  )
+  cat(
+    "P =", stan_data$P, " H =", stan_data$H, " D =", stan_data$D,
+    " N =", stan_data$N, " E =", E, "\nparties:", prepared$party_names,
+    "\nhouses:", prepared$house_names, "\n"
+  )
+  if (opt$dry_run == "1") quit(save = "no")
+  saveRDS(meta, here(out_dir, "meta.rds"))
 }
 
 # ---- fit -------------------------------------------------------------------------
@@ -181,7 +161,7 @@ fit <- model$sample(
   seed = as.integer(opt$seed),
   iter_warmup = as.integer(opt$warmup),
   iter_sampling = as.integer(opt$sampling),
-  max_treedepth = 11 # as production; see fit_polling_watch.R
+  max_treedepth = 11 # production's cap until 28 Oct 2026, kept for the recorded experiments
 )
 fit$save_object(here(out_dir, "fit.rds"))
 

@@ -1,4 +1,5 @@
-# House- and industry-bias plots from the newest polling_watch_v4 fit.
+# House- and industry-bias plots from the newest Fylgisvakt fit (polling_watch_v5_epoch),
+# for the bias epoch since the last election.
 # Three views of the same gamma / mu_gamma draws written by fit_polling_watch.R:
 #   1. logit scale (model-native)                -> Figures/polling_watch_house_effects.png
 #   2. pp vs 2024 election result (fixed p0)      -> Figures/polling_watch_house_effects_pp.png
@@ -33,7 +34,7 @@ industry_label <- "Sameiginleg skekkja (öll fyrirtæki)"
 
 caption <- str_c(
   "Mynd frá kannanavaktinni á www.metill.is", "\n",
-  "Húsáhrif (gamma) og sameiginleg skekkja (mu_gamma) úr polling_watch_v4 líkaninu"
+  "Húsáhrif (gamma) og sameiginleg skekkja (mu_gamma) úr polling_watch_v5_epoch líkaninu"
 )
 
 # Locate the most recent fit that persisted house-effect draws.
@@ -53,8 +54,11 @@ stopifnot(
 colors <- party_tibble() |>
   select(flokkur, litur)
 
-gamma_draws <- read_parquet(here("data", output_date, "polling_watch_gamma.parquet"))
-mu_draws <- read_parquet(here("data", output_date, "polling_watch_mu_gamma.parquet"))
+# WHY: v5 writes the bias per epoch; the plots show the epoch since the last election
+# (a v4 fit, with no epoch column, has one bias for its whole window)
+last_epoch <- function(draws) if ("epoch" %in% names(draws)) filter(draws, epoch == max(epoch)) else draws
+gamma_draws <- read_parquet(here("data", output_date, "polling_watch_gamma.parquet")) |> last_epoch()
+mu_draws <- read_parquet(here("data", output_date, "polling_watch_mu_gamma.parquet")) |> last_epoch()
 pi_draws <- read_parquet(here("data", output_date, "polling_watch_draws.parquet"))
 
 # --- Baselines for the percentage-point views ---
@@ -73,6 +77,15 @@ election_rows <- {
     filter(date == max(date))
 }
 election_date <- unique(election_rows$date)
+# WHY: an epoch exists only once it holds a poll, so a fit made before the first poll
+# after an election ends at the epoch before it, which the captions would misdate
+epochs_path <- here("data", output_date, "polling_watch_epochs.csv")
+if (file.exists(epochs_path)) {
+  last_epoch_start <- read_csv(epochs_path, show_col_types = FALSE) |>
+    filter(epoch == max(epoch)) |>
+    pull(first_poll)
+  stopifnot("the fit has no poll after the last election" = last_epoch_start > election_date)
+}
 baseline_election <- election_rows |>
   transmute(flokkur, p0 = n / sum(n))
 
@@ -159,7 +172,7 @@ p_logit <- make_forest(
   gamma_sum, mu_sum, party_order_of(mu_sum),
   scale_x_continuous(guide = ggh4x::guide_axis_truncated()),
   "Skekkja kannanafyrirtækja eftir flokkum",
-  glue("Húsáhrif úr kannanavaktinni (polling_watch_v4), keyrt {format_date(as.Date(output_date))}.\n",
+  glue("Húsáhrif úr kannanavaktinni (polling_watch_v5_epoch) frá kosningunum {format_date(election_date)}, keyrt {format_date(as.Date(output_date))}.\n",
        "Fyrsti reitur: sameiginleg skekkja allra fyrirtækja. Strik = 90% óvissubil."),
   "Skekkja á logit-kvarða  (0 = engin kerfisbundin skekkja; jákvætt = ofmetur flokkinn)"
 )

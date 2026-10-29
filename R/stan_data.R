@@ -471,11 +471,30 @@ prepare_polling_watch_data <- function(polling_data) {
     forcats[as_factor, fct_drop]
   )
 
+  # WHY: the data hold n = 0 rows for parties before they existed, so a window that ends
+  # early (a leave-future-out fit) can hold a party no poll reports. With no data its share
+  # would come from the prior alone, taken from the parties that have data.
+  unpolled <- polling_data |>
+    summarise(total = sum(n), .by = flokkur) |>
+    filter(total == 0) |>
+    pull(flokkur)
+  if (length(unpolled) > 0) {
+    message(
+      "prepare_polling_watch_data: dropped parties no poll in the window reports: ",
+      paste(unpolled, collapse = ", ")
+    )
+  }
   polling_data <- polling_data |>
+    filter(!flokkur %in% unpolled) |>
     mutate(
       fyrirtaeki = fct_drop(fyrirtaeki),
       flokkur = fct_drop(flokkur)
     )
+  # WHY: house 1 is the election result (gamma 0, and its rows anchor the walk); without a
+  # result in the window fct_drop() would make the first pollster house 1
+  stopifnot(
+    "the window holds no election result" = levels(polling_data$fyrirtaeki)[1] == "Kosning"
+  )
 
   dates <- sort(unique(polling_data$date))
   date_factor <- factor(dates)
@@ -500,10 +519,12 @@ prepare_polling_watch_data <- function(polling_data) {
     party_index
   }
 
+  # WHY: names_sort puts the columns in the factor's level order. Without it they come in
+  # order of first appearance, which differs once a window starts before a party exists.
   y_n <- polling_data |>
     select(date, fyrirtaeki, flokkur, n) |>
     mutate(n = as.integer(round(n))) |>
-    pivot_wider(names_from = flokkur, values_from = n, values_fill = 0) |>
+    pivot_wider(names_from = flokkur, values_from = n, values_fill = 0, names_sort = TRUE) |>
     select(-date, -fyrirtaeki) |>
     as.matrix()
 
@@ -554,4 +575,60 @@ prepare_polling_watch_data <- function(polling_data) {
     party_names = party_names,
     house_names = house_names
   )
+}
+
+
+#' Bias epochs for `polling_watch_v5_epoch.stan`
+#'
+#' Adds the epoch data to what `prepare_polling_watch_data()` returns. A poll dated after
+#' the k-th election result in the window is in raw epoch k + 1. Raw epochs that hold no
+#' polls (before a result that opens the window, or after the last result until a poll
+#' follows it) are dropped by renumbering; an empty epoch between two results would merge
+#' its neighbours, so it is an error.
+#'
+#' @param prepared The list `prepare_polling_watch_data()` returns.
+#' @param estimate_tau Sample the scales of the bias shocks between epochs (`TRUE`) or fix
+#'   them (`FALSE`).
+#' @param tau_prior_scale Half-normal prior scale of the sampled shock scales.
+#' @param tau_mu_fixed,tau_house_fixed The shock scales when `estimate_tau` is `FALSE`;
+#'   both 0 gives v4's constant bias.
+#' @return `prepared` with `E`, `epoch_n` and the tau settings added to `stan_data`, and an
+#'   `epoch_table` (epoch, first and last poll date, number of polls).
+#' @export
+prepare_polling_watch_epochs <- function(
+  prepared,
+  estimate_tau = TRUE,
+  tau_prior_scale = 0.1,
+  tau_mu_fixed = 0,
+  tau_house_fixed = 0
+) {
+  box::use(
+    dplyr[arrange, n, summarise],
+    tibble[tibble]
+  )
+
+  stan_data <- prepared$stan_data
+  poll_dates <- prepared$date_mapping$date[stan_data$date_n]
+  is_poll <- stan_data$house_n > 1
+  election_dates <- sort(unique(poll_dates[!is_poll]))
+  raw_epoch <- 1L + findInterval(
+    as.numeric(poll_dates), as.numeric(election_dates),
+    left.open = TRUE
+  )
+  used <- sort(unique(raw_epoch[is_poll]))
+  stopifnot("an epoch between two elections has no polls" = all(diff(used) == 1))
+  epoch_n <- ifelse(is_poll, match(raw_epoch, used), 1L)
+
+  stan_data$E <- length(used)
+  stan_data$epoch_n <- as.integer(epoch_n)
+  stan_data$estimate_tau <- as.integer(estimate_tau)
+  stan_data$tau_prior_scale <- tau_prior_scale
+  stan_data$tau_mu_fixed <- tau_mu_fixed
+  stan_data$tau_house_fixed <- tau_house_fixed
+
+  prepared$stan_data <- stan_data
+  prepared$epoch_table <- tibble(epoch = epoch_n[is_poll], date = poll_dates[is_poll]) |>
+    summarise(first_poll = min(date), last_poll = max(date), n_polls = n(), .by = epoch) |>
+    arrange(epoch)
+  prepared
 }
