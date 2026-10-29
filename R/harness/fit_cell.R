@@ -17,8 +17,9 @@
 #      Stan file and the frozen data still hash as expected;
 #   7. extracts the parquets (the arm's variables, a function of its config for V2), then
 #      summarises the diagnostics over the parameters present in the fit (a zero-size one is
-#      not in the CSVs) and the scored quantities, writes key_diagnostics.csv and applies the
-#      gate;
+#      not in the CSVs) and the scored quantities, writes key_diagnostics.csv (the scored
+#      quantities, the param_draws columns and lp__, whose R-hat the stop rule of
+#      R/harness/compare_runs.R reads) and applies the gate;
 #   8. writes meta.json last (with the arm's role), read-only with the other outputs, so that
 #      its presence means the run is complete; prints the DIAG line and "DONE <dir>"; deletes
 #      the CmdStan CSVs, unless HARNESS_KEEP_CMDSTAN is 1 (for a test that reads them back).
@@ -156,7 +157,7 @@ d <- summarise_diagnostics(params, scored, c(
   list(num_divergent = sampler$num_divergent, num_max_treedepth = sampler$num_max_treedepth, ebfmi = sampler$ebfmi),
   chain_sampler(fit$sampler_diagnostics())
 ))
-key <- rbind(measure(scored), measure(posterior::as_draws_df(arrow::read_parquet(paths[["param_draws"]]))))
+key <- rbind(measure(scored), measure(posterior::as_draws_df(arrow::read_parquet(paths[["param_draws"]]))), measure(lp))
 key_path <- file.path(dir, "key_diagnostics.csv")
 readr::write_csv(key[c("variable", "rhat", "ess_bulk", "ess_tail")], key_path)
 gate <- diagnostics_gate(d)

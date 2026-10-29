@@ -78,6 +78,13 @@ MU_SD_MEAN <- log(0.3)
 MU_SD_SD <- 0.5
 TAU_SD_SD <- 0.5
 
+#' The caps of the bounded log concentrations (Decision 4), named as their columns in
+#' `param_draws.parquet`: log φ_h (one column per house), log φ_K and log κ. The one place R
+#' reads them from; `R/harness/compare_runs.R`'s stop rule counts the draws within 0.5 of
+#' them.
+#' @export
+V2_LOG_CAPS <- c(log_phi = LOG_PHI_CAP, log_phi_K = LOG_PHI_K_CAP, log_kappa = LOG_KAPPA_CAP)
+
 #' Stop with "v2 reference: " and `...`.
 fail <- function(...) stop("v2 reference: ", ..., call. = FALSE)
 

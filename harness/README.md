@@ -172,7 +172,7 @@ results/harness/
     latent_national.parquet
     param_draws.parquet
     ppc_results.parquet     V2 only: the closed elections' in-sample replicates
-    key_diagnostics.csv     R-hat and ESS of the scored quantities and the kept parameters
+    key_diagnostics.csv     R-hat and ESS of the scored quantities, the kept parameters and lp__
     meta.json               written last by the runner: present means finished
   _stale/<id>_<YYYYmmddHHMMSS>/   a retired run, kept as it was
   stage1/<sha256>/mu_f.json  V2's stage-1 output, cached by the sha256 of its inputs (R/harness/stage1.R)
@@ -258,9 +258,10 @@ one of `ARM_ROLES`:
 `score_cell()` refuses a `check` or `dev` arm before the freeze guard, and a run whose
 `meta.json` records a role other than its arm's; a `meta.json` without `role`, as R0's
 Phase 1 runs have, takes its arm's. The role is not a sha-skip key (`expected_meta()`), so
-those runs still SKIP. If an arm's role changes in `ARMS`, its finished runs still SKIP,
-and `score_cell()` refuses each with "run role <old> differs from arm <arm>'s role <new>";
-retire such a run (`retire_run()`) and refit it. Plan 4 may add roles for the arms it scores. Every arm
+those runs still SKIP. If an arm's role changes in `ARMS`, its finished runs still SKIP.
+`score_cell()` refuses each one that records the old role with "run role <old> differs from
+arm <arm>'s role <new>"; retire such a run (`retire_run()`) and refit it. A run with no
+recorded role takes its arm's current role and is not refused. Plan 4 may add roles for the arms it scores. Every arm
 but `r0` runs `Stan/forecast_v2.stan` with its own config, an entry `v2_arm(config, role)`
 builds. `ARMS` holds `r0` and `v2s-m0`; each other V2 arm is registered as its config lands.
 
@@ -313,7 +314,9 @@ data still hash as expected. The extractor reads the arm's variables (for V2,
 `parameters`-block variable present in the fit (a zero-size one has no draws) and the scored quantities, the national shares of
 `kd_to_nat(eday_kjordaemi)` (`scored_nat[<flokkur>]`) and every kjördæmi cell's share
 (`scored_kd[<kjordaemi>,<flokkur>]`), writes `key_diagnostics.csv` (`variable`, `rhat`,
-`ess_bulk`, `ess_tail`) for those and the `param_draws` columns, and applies the gate.
+`ess_bulk`, `ess_tail`) for those, the `param_draws` columns and `lp__`, and applies the gate.
+The stop rule (Step checks, below) reads the `lp__` row; a run fitted before the row was
+written has none, and `compare_runs.R` stops on it rather than guess.
 `meta.json` comes last: the expected keys, `arm`, `role` (the arm's), `E`, `F`, `id`, the builder's meta
 (`n_pred_k` and `n_e` as objects named by kjördæmi and party), `minutes` (the fit's wall
 time, warmup and sampling), `diagnostics`, `gate` (`pass`, `reasons`) and the provenance of `inputs.json`.
@@ -384,6 +387,10 @@ of the arm in the run list it reads only the run's `meta.json`, and writes one t
 - both min bulk ESS per minute, and both scaled linearly to 2000 sampling iterations
   (× 2000 / `iter_sampling`). That projection informs the plan's Decision 5 (the centring),
   not the gate;
+- the gate-scope min bulk ESS per 1,000 gradients, 1000 × `min_ess_bulk` ÷ `n_leapfrog` (the
+  post-warmup leapfrog steps summed over chains, `diagnostics$n_leapfrog`), rounded down, or
+  `–` for a `meta.json` without `n_leapfrog`, such as R0's Tier 0 runs, fitted before it was
+  recorded. The Phase 2 plan's adoption rule (its Decision 6) compares it between two forms;
 - the gate's verdict and reasons, which are informational: Tier 0 is not gated;
 - the modification time of `meta.json`, the date of the measurement.
 
@@ -397,6 +404,99 @@ decoy field in its fixture, does. It stops, writing nothing, on a run list with 
 arm, a run without `meta.json`, a `meta.json` of another run, a cell that is not a forecast
 cell (naming the run), or a field it reads that is missing or does not parse, the gate's
 among them: `pass` must be true or false and `reasons` a list of strings, possibly empty.
+
+## Step checks
+
+V2 is built as a staircase of steps (the Phase 2 plan's step protocol): an M-step adds a
+component and so changes the posterior, and a P-step reparameterises the model and must not.
+Each step's sampler-check fits are lines of `harness/runs/v2-steps.txt`, at 400 + 400 on 2024
+eve (lane A) and 2021 f180 (lane B), seed 2701, and seed 2702 as well when the next step is a
+P-step. Each step appends its own lines, and the queue's sha-skip passes over the finished
+ones. From the project root, in a normal shell so that the queue outlives the session:
+
+```
+mkdir -p results/harness/logs
+nohup zsh R/harness/queue.sh harness/runs/v2-steps.txt 400 400 > results/harness/logs/v2-steps_nohup.log 2>&1 &
+LC_ALL=en_US.UTF-8 Rscript R/harness/tier0_report.R <step> harness/runs/v2-steps.txt harness/v2/steps/<step>.md
+LC_ALL=en_US.UTF-8 Rscript R/harness/compare_runs.R stop <step>
+```
+
+The last two, run once `queue.log` ends in `QUEUE FINISHED`, write the step's diagnostics table
+(committed) and print the stop rule's verdicts, which go into the step log,
+`harness/v2/steps.md`, one section per step.
+
+`R/harness/compare_runs.R` is a plain script with three subcommands. Each reads the runs of a
+run list, `harness/runs/v2-steps.txt` by default, from `results_root()`: a run only once its
+`meta.json` exists and names it. A 2017 cell is refused before the freeze (`forecast_free()`),
+before any run is read. Any other failure stops with `compare_runs: ...`.
+
+**`stop <arm> [run_list]`**, the M-step stop rule (the plan's Decision 5), prints one line per
+run of the arm, in the run list's order:
+
+```
+GO|STOP <id> lp_rhat=<x> divergent=<n>/<N> near_cap=<n>/<N> max_rhat=<x>; recorded: minutes=<x> treedepth_hits=<n> ess_bulk_per_1k_grad=<x>[; stop: <reason>; ...]
+```
+
+with N = chains × `iter_sampling`. A run STOPs on any of these signals, and on a missing one:
+
+| Signal | Read from | STOP when |
+|---|---|---|
+| `lp_rhat`, the R-hat of `lp__` (a stuck chain) | `key_diagnostics.csv`'s `lp__` row | above 1.1 |
+| `divergent`, the divergent transitions | `meta.json`'s diagnostics | more than 1% of N (more than 16 of 1,600) |
+| `near_cap`, the draws in which a bounded log concentration is within 0.5 of its cap | `param_draws.parquet`'s `log_phi` (one column per house), `log_phi_K` and `log_kappa`, against `V2_LOG_CAPS` (`R/harness/v2_reference.R`: 20, 20 and 2) | more than 1% of N; a draw counts once however many are near |
+| `max_rhat`, the gate-scope max R-hat | `meta.json`'s diagnostics | above 1.10 |
+
+R-hat is printed rounded up to four decimals, so a value printed at or below its limit is at
+or below it. The minutes, the treedepth hits and the gate-scope min bulk ESS per 1,000
+gradients (1000 × `min_ess_bulk` ÷ `n_leapfrog`, NA without `n_leapfrog`) are recorded, never a
+stop. It exits 1 on any STOP.
+
+**`adopt <ref_arm> <new_arm> <equivalence_csv> [run_list]`**, the P-step adoption rule (the
+plan's Decision 6), compares a P-step's form (`new_arm`) with the reference form (`ref_arm`,
+the step before it). Both arms must have runs on the same cells, and every `meta.json` must
+hold `n_leapfrog`. It prints a table of the fits (min bulk ESS per 1,000 gradients,
+divergences, the stop rule's verdict), a table of the cells (each arm's median over its fits
+of min bulk ESS per 1,000 gradients, and their ratio), the four conditions with yes or no, and
+a last line, `ADOPT <new_arm>` when all four hold and otherwise
+`KEEP <ref_arm>: <new_arm> fails condition(s) <i>, ...`:
+
+1. the equivalence check passes: every row of the equivalence CSV has verdict `PASS`, and each
+   cell of the fits has a row with order `default`;
+2. on each cell, `new_arm`'s median is at least 1.25 × `ref_arm`'s;
+3. `new_arm`'s divergences, summed over its fits, are at most `ref_arm`'s plus 4;
+4. no fit of either arm trips the stop rule.
+
+Both forms have the same posterior, so no forecast quantity is read. It exits 0 on `ADOPT` and
+on `KEEP`. The equivalence CSV (`harness/v2/steps/<step>-equivalence.csv`) has one row per
+check `R/harness/v2_equivalence.R` ran, with at least these columns; any others are ignored:
+
+| Column | Value |
+|---|---|
+| `E`, `F` | the cell, ISO dates |
+| `order` | `default` or `reversed`: the party and kjördæmi order of both sides (`--reverse`) |
+| `verdict` | `PASS` or `FAIL`: the check's `EQUIV` verdict, its negative controls included |
+
+**`perm <arm_a> <arm_b> [run_list]`**, the permutation rule (the plan's Decision 8), compares two
+arms that must give the same forecast draws within Monte Carlo error, such as `v2` and
+`v2-perm`. Their runs are paired by cell, in the run list's order, and each arm must have as
+many runs on each cell. Of each pair it reads only `eday_national.parquet` and
+`eday_kjordaemi.parquet`, and matches by name every national share (`eday_national[<flokkur>]`)
+and every kjördæmi share, a cell's votes over its kjördæmi's votes in the draw
+(`eday_kjordaemi[<kjordaemi>,<flokkur>]`); the two runs must have the same names. For the mean
+and the 5%, 50% and 95% quantiles of each, z = (a − b) / √(MCSE_a² + MCSE_b²), with posterior's
+`mcse_mean()` and `mcse_quantile()` (0 when a = b). A pair passes when at most 3 |z| exceed 3,
+none exceeds 5 and the sd of the mean z's is at most 1.5; a missing z exceeds both. It prints
+only those statistics, rounded up to two decimals, and the names of the variables whose |z|
+exceeds 3, never a share:
+
+```
+PERM PASS|FAIL <id_a> vs <id_b>: <n> z's, <k> with |z| > 3, max |z| <x>, sd of the mean z's <x>
+  |z| > 3: <variable> <mean|q05|q50|q95>, ...
+```
+
+It exits 1 on any `PERM FAIL`. `tests/harness/test-compare-runs.R` runs all three on synthetic
+run directories, made-up draws only, and checks that every line `perm` prints is a verdict or
+a list of names.
 
 ## R0's inputs
 
@@ -461,8 +561,10 @@ or `snapshot_manifest.csv`.
   map, the fieldwork corrections, the publication dates, the two correction tables
   (`poll_n_corrections.csv`, `fundamentals_corrections.csv`), the economy release dates,
   the house table and the coalition events. `harness/configs/` holds each arm's settings
-  (`r0.json`), `harness/runs/` the queue's run lists (`tier0.txt`), and `harness/tier0/` the
-  Tier 0 reports, which `tier0_report.R` writes from local runs (no offline rebuild).
+  (`r0.json`), `harness/runs/` the queue's run lists (`tier0.txt`, `v2-steps.txt`), and
+  `harness/tier0/` the Tier 0 reports, which `tier0_report.R` writes from local runs (no offline
+  rebuild). `harness/v2/steps.md` is V2's step log and `harness/v2/steps/` each step's
+  diagnostics table and equivalence CSV, from local runs too (Step checks).
   `harness/v2/prior_predictive.md` is V2's prior predictive check, from prior draws on the
   snapshot with no fit, which
   `LC_ALL=en_US.UTF-8 Rscript R/harness/v2_prior_predictive.R harness/configs/steps/<step>.json`

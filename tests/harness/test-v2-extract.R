@@ -68,7 +68,7 @@ extracted <- function(draws = synthetic_draws(), meta = META, env = parent.frame
 
 classes <- function(df) vapply(df, \(x) class(x)[1], character(1))
 
-test_that("V2_PARAM_VARIABLES lists the core's and the switched parameters in declaration order, and each switch adds its own", {
+test_that("V2_PARAM_VARIABLES lists the core's and the switched parameters in param_draws column order, and each switch adds its own", {
   expect_identical(V2_PARAM_VARIABLES, c(
     "sigma", "L_Omega", "tau_camp", "mu_phi", "sigma_phi", "log_phi", "log_phi_K", "log_kappa", "sigma_gamma", "mu",
     "tau_mu", "tau_mu_A", "tau_house", "m_new", "s_new", "s_bar_E", "mu_sd", "tau_sd", "s_delta0", "s_bar_zeta", "s_zeta",

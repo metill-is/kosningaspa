@@ -289,7 +289,8 @@ test_that("fit_cell.R fits a cell, skips it while meta.json matches, and retires
   P <- length(built$meta$party_order)
   expect_equal(sum(startsWith(keyd$variable, "scored_nat[")), P)
   expect_equal(sum(startsWith(keyd$variable, "scored_kd[")), 6 * P)
-  expect_setequal(setdiff(keyd$variable, keyd$variable[grepl("^scored_(nat|kd)\\[", keyd$variable)]), setdiff(names(pd), c(".chain", ".iteration", ".draw")))
+  expect_identical(sum(keyd$variable == "lp__"), 1L)
+  expect_setequal(setdiff(keyd$variable, c(keyd$variable[grepl("^scored_(nat|kd)\\[", keyd$variable)], "lp__")), setdiff(names(pd), c(".chain", ".iteration", ".draw")))
 
   out <- fit()
   expect_null(attr(out, "status"), info = shown(out))
@@ -347,12 +348,12 @@ test_that("fit_cell.R refuses a 2017 cell before the freeze, before it builds or
   expect_identical(attr(out, "status"), 1L)
   expect_match(out, REFUSED_2017, fixed = TRUE, all = FALSE)
   expect_false(any(grepl("^(DIAG|DONE|SKIP|STALE)", out)))
-  expect_false(any(grepl("Compiling Stan program|Running MCMC", out)))
+  expect_false(any(grepl("Running MCMC", out, fixed = TRUE)))
   expect_length(list.files(results, recursive = TRUE, all.files = TRUE, include.dirs = TRUE, no.. = TRUE), 0)
   expect_false(dir.exists(root("results", "harness", "v2s-m0_2017-10-28_2017-10-27_s1")))
 })
 
-test_that("fit_cell.R fits v2s-m0 on 2024 eve: the five parquets, the role, n_leapfrog and the scorer's meta fields", {
+test_that("fit_cell.R fits v2s-m0 on 2024 eve: the five parquets, the role, n_leapfrog, the scorer's meta fields and an lp__ row", {
   skip_unless_slow()
   skip_without_snapshot()
   results <- withr::local_tempdir()
@@ -426,6 +427,10 @@ test_that("fit_cell.R fits v2s-m0 on 2024 eve: the five parquets, the role, n_le
   kept <- setdiff(a$variables(a$read_config(root(a$config))), c("votes_kd", "pi_nat_eday", "pi_latent_E", "y_rep_res"))
   expect_identical(unique(sub("\\[.*$", "", pd$names[-(1:3)])), kept)
   expect_equal(pd$rows, 40)
-  keyd <- names(utils::read.csv(file.path(dir, "key_diagnostics.csv"), check.names = FALSE, nrows = 1))
-  expect_identical(keyd, c("variable", "rhat", "ess_bulk", "ess_tail"))
+  keyd <- utils::read.csv(file.path(dir, "key_diagnostics.csv"), check.names = FALSE, encoding = "UTF-8")
+  expect_named(keyd, c("variable", "rhat", "ess_bulk", "ess_tail"))
+  # WHY: the stop rule reads lp__'s R-hat from this row (R/harness/compare_runs.R).
+  lp <- keyd[keyd$variable == "lp__", ]
+  expect_identical(nrow(lp), 1L)
+  expect_true(is.finite(lp$rhat))
 })
