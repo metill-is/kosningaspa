@@ -22,6 +22,7 @@ box::use(
 V2_M0_CONFIG <- file.path(project_root(), "harness", "configs", "steps", "v2s-m0.json")
 V2_M1_CONFIG <- file.path(project_root(), "harness", "configs", "steps", "v2s-m1.json")
 V2_M2_CONFIG <- file.path(project_root(), "harness", "configs", "steps", "v2s-m2.json")
+V2_M3_CONFIG <- file.path(project_root(), "harness", "configs", "steps", "v2s-m3.json")
 
 # WHY: read_inputs() and v2_stan_data() take seconds, and the 2024-eve fixtures serve many tests.
 v2_cache <- new.env(parent = emptyenv())
@@ -45,6 +46,12 @@ cfg_m1 <- function() {
 cfg_m2 <- function() {
   box::use(R / harness / v2[read_v2_config])
   read_v2_config(V2_M2_CONFIG)
+}
+
+# Step v2s-m3's config: v2s-m2's with the election-day shock (§6.6).
+cfg_m3 <- function() {
+  box::use(R / harness / v2[read_v2_config])
+  read_v2_config(V2_M3_CONFIG)
 }
 
 # A temporary copy of the m0 config with the named keys changed (NULL drops a key, a new
@@ -309,7 +316,7 @@ bounded_at <- function(m, data, u) {
 # only blank or `//` lines gives 0 rows, with no error, but a `}` straight after `<block> {`
 # errors, naming the `}`. An error too if `<block> {` is not found exactly once, or no `}`
 # follows it. A garbled or empty result still fails the declaration test's exact comparison
-# with V2_CORE_PARS' 27 names and types.
+# with V2_CORE_PARS' 29 names and types.
 stan_block_decls <- function(lines, block) {
   start <- which(lines == paste(block, "{"))
   if (length(start) != 1) stop("stan_block_decls: block ", block, " found ", length(start), " times", call. = FALSE)

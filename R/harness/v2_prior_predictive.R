@@ -55,6 +55,13 @@
 #     P − 1 equal parties, the newcomers pooled (they are exchangeable). The re-centring of μ
 #     after the entry is a common shift, which cancels in the softmax. It reads no
 #     party-indexed parameter, so coordinate 1 here is the newcomer, not the coordinate party.
+#   - shock_sd_20 and shock_sd_05 (step v2s-m3, switch shock): the sd of the election-day
+#     shock's share change (§6.6) given the draw's s̄_E (par s_bar_E), on a 20% and on a 5%
+#     party: over SHOCK_INNER draws of z ~ N(0, I_P) from seed SEED_AUX + i, the sd of
+#     share_change(C(s̄_E d ⊙ z), share) on the composition (share, (1 − share) / (P − 1), ...),
+#     each element's d = √(min(0.2 / π_p, 10)) the builder's formula (shock_scaling()) on that
+#     composition. §6.10 puts the median at about 1.6 pp for a 20% party and 0.95 pp for a 5%
+#     one. They read no party-indexed parameter, so coordinate 1 is the 20% or 5% party.
 #
 # The bands, each built by its constructor and checked by in_band():
 #   band_inside(lo, hi)                      the 5% quantile at least lo, the 95% at most hi
@@ -88,7 +95,7 @@ if (is.null(box::name())) {
 box::use(
   R / harness / constants[harness_path, project_root, TARGETS],
   R / harness / info_set[info_set, read_inputs],
-  R / harness / v2[read_v2_config, stage1_placeholder, V2_SWITCHES, v2_stan_data],
+  R / harness / v2[read_v2_config, shock_scaling, stage1_placeholder, V2_SWITCHES, v2_stan_data],
   R / harness / v2_reference[v2_simulate]
 )
 
@@ -100,6 +107,11 @@ WALK_DAYS <- 180
 
 #' The share of the newcomer whose entry bias the newcomer row reads.
 NEWCOMER_SHARE <- 0.1
+
+#' The shares of the parties whose shock sd the shock rows read, and the draws of z each
+#' value's sd is taken over.
+SHOCK_SHARES <- c(shock_sd_20 = 0.2, shock_sd_05 = 0.05)
+SHOCK_INNER <- 200L
 
 #' Prior draw i takes seed SEED + i; a summary that needs more randomness takes SEED_AUX + i.
 SEED <- 6000L
@@ -127,6 +139,32 @@ share_change <- function(x, share = SHARE) {
   eta <- log(c(share, rep((1 - share) / (P - 1), P - 1))) + x
   e <- exp(eta - max(eta))
   100 * (e[1] / sum(e) - share)
+}
+
+#' The sd in pp of the first party's change under the election-day shock (§6.6) at scale
+#' `s_bar_E`: over `SHOCK_INNER` draws of z ~ N(0, I_P) from `seed`, the sd of
+#' `share_change(C(s_bar_E d ⊙ z), share)` on the composition (share, (1 − share) / (P − 1),
+#' ...), each element's d `shock_scaling()` of its share in that composition.
+#' @param s_bar_E the shock's scale, one positive number
+#' @param P the parties, at least 2
+#' @param share the first party's share
+#' @param seed the seed of the z draws
+#' @return numeric(1)
+#' @export
+shock_sd <- function(s_bar_E, P, share, seed) {
+  d <- shock_scaling(c(share, rep((1 - share) / (P - 1), P - 1)))
+  z <- withr::with_seed(seed, matrix(stats::rnorm(P * SHOCK_INNER), P, SHOCK_INNER))
+  x <- s_bar_E * d * z
+  x <- x - rep(colMeans(x), each = P)
+  stats::sd(apply(x, 2, share_change, share = share))
+}
+
+#' A shock row's value for one prior draw `sim`: `shock_sd()` at the draw's s̄_E.
+shock_row <- function(sim, data, seed, share) {
+  if (length(sim$pars$s_bar_E) != 1) {
+    stop("prior predictive: the shock rows need s_bar_E, which shock = 1 puts in the model", call. = FALSE)
+  }
+  shock_sd(as.numeric(sim$pars$s_bar_E), data$P, share, seed)
 }
 
 #' The Dirichlet-multinomial sd of a share `s` in a poll of `n` at concentration `phi`, in pp:
@@ -169,7 +207,9 @@ SUMMARY_FUNS <- list(
     }
     x <- as.numeric(sim$pars$m_new) + as.numeric(sim$pars$s_new) * as.numeric(sim$pars$new_raw)
     vapply(x, \(v) share_change(c(v, rep(0, data$P - 1)), share = NEWCOMER_SHARE), numeric(1))
-  }
+  },
+  shock_sd_20 = function(sim, data, seed) shock_row(sim, data, seed, SHOCK_SHARES[["shock_sd_20"]]),
+  shock_sd_05 = function(sim, data, seed) shock_row(sim, data, seed, SHOCK_SHARES[["shock_sd_05"]])
 )
 
 #' `x` to 6 significant digits.
@@ -300,7 +340,9 @@ check_rows <- function(rows) {
 #' plan's Decision 1 as comparisons (§6.10's, and proposals 1 and 4). The epoch bias's (step
 #' v2s-m1, switch `epoch_bias`): an epoch's step of the industry bias, its band written before
 #' any fit of that step. The newcomer pool's (step v2s-m2, switch `newcomer_pool`): a
-#' newcomer's entry bias on a 10% party, its band written before any fit of that step.
+#' newcomer's entry bias on a 10% party, its band written before any fit of that step. The
+#' shock's (step v2s-m3, switch `shock`): its sd on a 20% and on a 5% party, each median
+#' within [0.5×, 2×] of §6.10's 1.6 and 0.95 pp, written before any fit of that step.
 #' @export
 ROWS <- check_rows(dplyr::bind_rows(
   summary_rows(
@@ -357,6 +399,26 @@ ROWS <- check_rows(dplyr::bind_rows(
       "m_new ~ N(0, 0.3), s_new ~ half-N(0, 0.3))"
     ),
     character(0), band_inside(-10, 10)
+  ),
+  summary_rows(
+    "shock_sd_20", "v2s-m3", "shock",
+    paste0(
+      "The election-day shock's sd on a 20% party: given the draw's s\u0304_E, the sd of its change ",
+      "over ", SHOCK_INNER, " draws of z, on the composition (20%, 80% / (P \u2212 1), \u2026), with \u03b5 = ",
+      "C(s\u0304_E d \u2299 z) and each d = \u221a(min(0.2 / \u03c0, 10)) of that composition ",
+      "(s\u0304_E ~ half-N(0, `prior_s_bar_E`))"
+    ),
+    "prior_s_bar_E", band_median_ratio(1.6)
+  ),
+  summary_rows(
+    "shock_sd_05", "v2s-m3", "shock",
+    paste0(
+      "The election-day shock's sd on a 5% party: given the draw's s\u0304_E, the sd of its change ",
+      "over ", SHOCK_INNER, " draws of z, on the composition (5%, 95% / (P \u2212 1), \u2026), with \u03b5 = ",
+      "C(s\u0304_E d \u2299 z) and each d = \u221a(min(0.2 / \u03c0, 10)) of that composition ",
+      "(s\u0304_E ~ half-N(0, `prior_s_bar_E`))"
+    ),
+    "prior_s_bar_E", band_median_ratio(0.95)
   )
 ))
 
@@ -531,7 +593,7 @@ main <- function(args) {
     "",
     sprintf("- Config: `%s` (sha256 `%s`)", config, digest::digest(file = args[1], algo = "sha256")),
     sprintf(
-      "- Prior draws: %d per cell and row, seeds %d to %d (the walk row's z: seeds %d to %d)",
+      "- Prior draws: %d per cell and row, seeds %d to %d (the walk and shock rows' z: seeds %d to %d)",
       n_draws, SEED + 1L, SEED + n_draws, SEED_AUX + 1L, SEED_AUX + n_draws
     ),
     paste("- Cell", designs),
@@ -547,6 +609,15 @@ main <- function(args) {
           "P \u2212 1 equal parties sharing %g%%, moved by its entry bias against the existing parties' mean."
         ),
         100 * NEWCOMER_SHARE, 100 * (1 - NEWCOMER_SHARE)
+      )
+    },
+    if (any(c("shock_sd_20", "shock_sd_05") %in% rows$summary)) {
+      sprintf(
+        paste(
+          "- `shock_sd_20` and `shock_sd_05` read no coordinate party: their first party is a %g%% or a %g%% party beside",
+          "P \u2212 1 equal parties, and each value is the sd of its change over %d draws of z given the draw's s\u0304_E."
+        ),
+        100 * SHOCK_SHARES[["shock_sd_20"]], 100 * SHOCK_SHARES[["shock_sd_05"]], SHOCK_INNER
       )
     },
     "",

@@ -36,6 +36,16 @@ V2_VECTOR_FIELDS <- c(
 SHOCK_FLOOR <- 0.02
 SHOCK_CAP <- 10
 
+#' The shock scaling of §6.6, d = √(min(0.2 / π̄, 10)), with π̄ = 0.02 for a party with no
+#' previous result.
+#' @param share previous national shares π̄, NA for a party with none
+#' @return a numeric vector as long as `share`
+#' @export
+shock_scaling <- function(share) {
+  share[is.na(share)] <- SHOCK_FLOOR
+  sqrt(pmin(0.2 / share, SHOCK_CAP))
+}
+
 #' Stop with "v2 input: " and `...`.
 fail <- function(...) stop("v2 input: ", ..., call. = FALSE)
 
@@ -361,9 +371,7 @@ v2_stan_data <- function(info, cfg, stage1 = stage1_mu_f, party_order = NULL, ro
   for (e in seq_len(n_epoch)) {
     ps <- info$prev_shares[which(info$prev_shares$election == elections[e]), ]
     if (!all(party_order %in% ps$flokkur)) fail("info$prev_shares lacks a party at ", format(elections[e]))
-    share <- ps$share[match(party_order, ps$flokkur)]
-    share[is.na(share)] <- SHOCK_FLOOR
-    d_shock[e, ] <- sqrt(pmin(0.2 / share, SHOCK_CAP))
+    d_shock[e, ] <- shock_scaling(ps$share[match(party_order, ps$flokkur)])
   }
 
   free <- forecast_free(E, root)

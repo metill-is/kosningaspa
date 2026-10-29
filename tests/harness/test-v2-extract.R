@@ -19,11 +19,11 @@ CORE <- c(
   "mu_sd", "tau_sd", "s_delta0"
 )
 SCALARS <- c(
-  "tau_camp", "mu_phi", "sigma_phi", "log_phi_K", "log_kappa", "sigma_gamma", "mu_sd", "tau_sd", "s_bar_E", "s_bar_zeta"
+  "tau_camp", "mu_phi", "sigma_phi", "log_phi_K", "log_kappa", "sigma_gamma", "mu_sd", "tau_sd", "s_bar_zeta"
 )
-# The epoch bias's scales and the newcomer pool's mean and scale, each declared
-# array[<switch>] real, so a fit writes tau_mu[1] and m_new[1].
-ONE_ELEMENT <- c("tau_mu", "tau_mu_A", "tau_house", "m_new", "s_new")
+# The epoch bias's scales, the newcomer pool's mean and scale and the shock's scale, each
+# declared array[<switch>] real, so a fit writes tau_mu[1], m_new[1] and s_bar_E[1].
+ONE_ELEMENT <- c("tau_mu", "tau_mu_A", "tau_house", "m_new", "s_new", "s_bar_E")
 MATRICES <- c("L_Omega", "mu", "anchor_w")
 DRAW <- seq_len(16)
 
@@ -200,6 +200,12 @@ test_that("param_draws holds the parameters the meta's switches put in the model
   pd <- extracted(synthetic_draws(with_pool), pool)$read$param_draws
   expect_identical(names(pd), c(".chain", ".iteration", ".draw", columns_of(with_pool)))
   expect_true(all(c("m_new[1]", "s_new[1]") %in% names(pd)))
+  shock <- utils::modifyList(META, list(switches = replace(SWITCHES, c("epoch_bias", "newcomer_pool", "shock"), 1L)))
+  with_shock <- append(with_pool, "s_bar_E", after = match("s_new", with_pool))
+  # WHY: z_shock is the shock's raw z, which param_draws leaves out, like mu_step_raw.
+  pd <- extracted(synthetic_draws(c(with_shock, "z_shock")), shock)$read$param_draws
+  expect_identical(names(pd), c(".chain", ".iteration", ".draw", columns_of(with_shock)))
+  expect_true("s_bar_E[1]" %in% names(pd))
 })
 
 test_that("v2_extract reads every variable v2_variables() names for the meta's switches, and no other", {

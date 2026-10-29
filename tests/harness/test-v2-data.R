@@ -129,6 +129,24 @@ test_that("the shock scaling reads the previous election's national share, with 
   s21 <- national_shares(read_truth(), "2021-09-25")[[1]]
   expect_equal(d$d_shock[4, 1], sqrt(min(0.2 / s21, 10)))
 })
+test_that("2024 eve exercises the shock's floor: S\u00f3s\u00edalistaflokkurinn stands at 2021 with no 2017 result, so its 2021 shock uses sqrt(10)", {
+  # §6.6: d = sqrt(min(0.2 / pi_bar, 10)), pi_bar the previous election's share, 0.02 for a
+  # party with none; 2021 closes the epoch whose row of d_shock reads the 2017 shares.
+  info <- info_2024eve()
+  b <- v2_stan_data(info, cfg_m0())
+  d <- b$data
+  j <- match("S\u00f3s\u00edalistaflokkurinn", b$meta$party_order)
+  e21 <- match("2021-09-25", b$meta$closed_elections)
+  e17 <- match("2017-10-28", b$meta$closed_elections)
+  expect_false(anyNA(c(j, e21, e17)))
+  expect_identical(as.integer(d$grid_epoch[d$grid_res[e21]]), e21)
+  expect_true(j %in% d$idx_res[e21, seq_len(d$n_rep_res[e21])])
+  expect_false(j %in% d$idx_res[e17, seq_len(d$n_rep_res[e17])])
+  ps <- info$prev_shares
+  expect_true(is.na(ps$share[ps$election == as.Date("2021-09-25") & ps$flokkur == "S\u00f3s\u00edalistaflokkurinn"]))
+  expect_equal(d$d_shock[e21, j], sqrt(0.2 / 0.02))
+  expect_equal(d$d_shock[e21, j], sqrt(10))
+})
 test_that("the reversed order reverses parties and kjordaemi alike, so Anna\u00f0 is the coordinate party", {
   info <- info_2024eve()
   d <- d_2024eve()

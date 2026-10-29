@@ -40,8 +40,9 @@ v2_arm <- function(config, role) {
 #' (what `extract` reads from a fit: a character vector, or a function of the config) and
 #' `role` (one of `ARM_ROLES`). R0 is the reference; `v2s-m0`, the core of V2's staircase,
 #' `v2s-p1`, its walk anchored at the closed elections, `v2s-m1`, the core with the
-#' pollster biases drifting across epochs, and `v2s-m2`, `v2s-m1` with the newcomer
-#' contrast's mean and scale estimated, are dev arms.
+#' pollster biases drifting across epochs, `v2s-m2`, `v2s-m1` with the newcomer contrast's
+#' mean and scale estimated, and `v2s-m3`, `v2s-m2` with the election-day shock, are dev
+#' arms.
 #' @export
 ARMS <- local({
   box::use(R / harness / r0[r0_stan_data, read_r0_config, r0_extract, R0_EXTRACT_VARIABLES])
@@ -58,7 +59,8 @@ ARMS <- local({
     `v2s-m0` = v2_arm("harness/configs/steps/v2s-m0.json", "dev"),
     `v2s-p1` = v2_arm("harness/configs/steps/v2s-p1.json", "dev"),
     `v2s-m1` = v2_arm("harness/configs/steps/v2s-m1.json", "dev"),
-    `v2s-m2` = v2_arm("harness/configs/steps/v2s-m2.json", "dev")
+    `v2s-m2` = v2_arm("harness/configs/steps/v2s-m2.json", "dev"),
+    `v2s-m3` = v2_arm("harness/configs/steps/v2s-m3.json", "dev")
   )
 })
 

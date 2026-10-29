@@ -6,7 +6,7 @@
 box::use(
   R / harness / v2_prior_predictive[
     band_exact, band_inside, band_median_ratio, band_q95, band_report, check_rows, held_at, in_band,
-    poll_sd_pp, reference_forms, ROWS, row_verdict, same_as, share_change, SUMMARY_FUNS, verdict_line
+    poll_sd_pp, reference_forms, ROWS, row_verdict, same_as, share_change, shock_sd, SUMMARY_FUNS, verdict_line
   ]
 )
 
@@ -321,4 +321,54 @@ test_that("the newcomer pool's row runs under its switch, with the band written 
   expect_identical(row$band[[1]], band_inside(-10, 10))
   expect_length(row$keys[[1]], 0)
   expect_length(row$held[[1]], 0)
+})
+
+test_that("shock_sd is the sd over 200 z draws of the first party's change under C(s d z), d the builder's formula", {
+  # P = 3 at a 20% party: the others stand at 40%, so d = (1, sqrt(0.5), sqrt(0.5)).
+  z <- withr::with_seed(11L, matrix(stats::rnorm(3 * 200), 3, 200))
+  x <- 0.3 * c(1, sqrt(0.5), sqrt(0.5)) * z
+  want <- stats::sd(apply(x, 2, \(v) 100 * (0.2 * exp(v[1]) / (0.2 * exp(v[1]) + 0.4 * exp(v[2]) + 0.4 * exp(v[3])) - 0.2)))
+  expect_equal(shock_sd(0.3, 3L, 0.2, 11L), want, tolerance = 1e-12)
+  # At a 5% party beside nine of 95% / 9 its d is 2 and theirs sqrt(0.2 / (0.95 / 9)).
+  d <- c(2, rep(sqrt(0.2 / (0.95 / 9)), 9))
+  z <- withr::with_seed(12L, matrix(stats::rnorm(10 * 200), 10, 200))
+  want <- stats::sd(apply(d * 0.15 * z, 2, \(v) {
+    w <- c(0.05, rep(0.95 / 9, 9)) * exp(v)
+    100 * (w[1] / sum(w) - 0.05)
+  }))
+  expect_equal(shock_sd(0.15, 10L, 0.05, 12L), want, tolerance = 1e-12)
+  # The cap at 10 binds below 2%: a 1% party's d is sqrt(10), not sqrt(20). The centring
+  # cancels in the softmax, so the uncentred x gives the same change.
+  z <- withr::with_seed(13L, matrix(stats::rnorm(2 * 200), 2, 200))
+  want <- stats::sd(apply(c(sqrt(10), sqrt(0.2 / 0.99)) * 0.1 * z, 2, \(v) {
+    w <- c(0.01, 0.99) * exp(v)
+    100 * (w[1] / sum(w) - 0.01)
+  }))
+  expect_equal(shock_sd(0.1, 2L, 0.01, 13L), want, tolerance = 1e-12)
+  expect_equal(shock_sd(0, 10L, 0.2, 1L), 0)
+  expect_equal(shock_sd(0.2, 10L, 0.2, 1L), 2 * shock_sd(0.1, 10L, 0.2, 1L), tolerance = 0.05)
+})
+
+test_that("the shock rows read the draw's s_bar_E, and refuse a draw without one", {
+  sim <- list(pars = list(s_bar_E = array(0.12, 1)))
+  expect_equal(SUMMARY_FUNS$shock_sd_20(sim, list(P = 10L), 5L), shock_sd(0.12, 10L, 0.2, 5L), tolerance = 1e-12)
+  expect_equal(SUMMARY_FUNS$shock_sd_05(sim, list(P = 10L), 5L), shock_sd(0.12, 10L, 0.05, 5L), tolerance = 1e-12)
+  # With shock = 0 the point has no s_bar_E to read.
+  off <- list(pars = list(s_bar_E = array(numeric(0), 0)))
+  expect_error(SUMMARY_FUNS$shock_sd_20(off, list(P = 10L), 5L), "shock = 1")
+  expect_error(SUMMARY_FUNS$shock_sd_05(off, list(P = 10L), 5L), "shock = 1")
+})
+
+test_that("the shock's rows run under its switch, with the bands written before any fit of its step", {
+  rows <- ROWS[ROWS$step == "v2s-m3", ]
+  expect_identical(rows$summary, c("shock_sd_20", "shock_sd_05"))
+  expect_identical(rows$kind, c("config", "config"))
+  expect_identical(rows$switch, c("shock", "shock"))
+  expect_identical(rows$band[[1]], band_median_ratio(1.6))
+  expect_identical(rows$band[[2]], band_median_ratio(0.95))
+  expect_identical(rows$keys, list("prior_s_bar_E", "prior_s_bar_E"))
+  expect_true(all(lengths(rows$held) == 0))
+  expect_true(all(grepl("200 draws of z", rows$label, fixed = TRUE)))
+  expect_true(grepl("on a 20% party", rows$label[1], fixed = TRUE))
+  expect_true(grepl("on a 5% party", rows$label[2], fixed = TRUE))
 })

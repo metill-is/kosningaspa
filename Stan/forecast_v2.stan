@@ -13,7 +13,9 @@
 // builds epoch_bias = 1 (§6.4): the industry bias and each house's deviations walk across
 // epochs, Annad's industry-bias steps with a scale of their own. Step v2s-m2 builds
 // newcomer_pool = 1 (§6.4): the mean m_new and scale s_new of a newcomer's bias contrast are
-// estimated, instead of fixed at 0 and 0.2023.
+// estimated, instead of fixed at 0 and 0.2023. Step v2s-m3 builds shock = 1 (§6.6): each
+// closed election's results and the forecast take an election-day shock C(s_bar_E d .* z),
+// one per election and shared by its kjordaemi, with d from the previous election's shares.
 functions {
   // The map M_e of §6.7 on a K x P matrix: subtract each party's w-weighted mean over the
   // kjordaemi, then centre each kjordaemi over the parties. The result's rows sum to 0 and
@@ -142,9 +144,8 @@ data {
 }
 
 transformed data {
-  // The core, the anchored walk, the epoch bias and the newcomer pool are built: each other
-  // switch is refused by name.
-  if (shock) reject("forecast_v2: switch shock = ", shock, " is not built yet");
+  // The core, the anchored walk, the epoch bias, the newcomer pool and the shock are built:
+  // each other switch is refused by name.
   if (delta_walk) reject("forecast_v2: switch delta_walk = ", delta_walk, " is not built yet");
   if (fundamentals) reject("forecast_v2: switch fundamentals = ", fundamentals, " is not built yet");
   if (delta_form) reject("forecast_v2: switch delta_form = ", delta_form, " is not built yet");
@@ -316,6 +317,10 @@ parameters {
   // The newcomer pool (newcomer_pool = 1, §6.4), each size 0 with newcomer_pool = 0.
   array[newcomer_pool] real m_new;                    // the mean of a newcomer's bias contrast
   array[newcomer_pool] real<lower=0> s_new;           // its scale
+  // The election-day shock (shock = 1, §6.6), each size 0 with shock = 0. Column e holds
+  // closed election e's z.
+  matrix[P, shock * n_closed] z_shock;                // the shocks' standard normals z_e
+  array[shock] real<lower=0> s_bar_E;                 // the shock's scale
 }
 
 transformed parameters {
@@ -323,6 +328,7 @@ transformed parameters {
   array[n_epoch] vector[P] mu;                        // industry bias by epoch
   array[n_epoch, H] vector[P] gamma;                  // house bias by epoch
   array[n_epoch] matrix[K, P] delta;                  // kjordaemi deviations by epoch
+  matrix[n_closed, P] eps = rep_matrix(0, n_closed, P);  // the closed elections' shocks, 0 with shock = 0
   vector[H] log_phi = phi_cap - (phi_cap - phi_init) * exp(log_phi_u);
   real log_phi_K = phi_K_cap - (phi_K_cap - phi_K_init) * exp(log_phi_K_u);
   real log_kappa = kappa_cap - (kappa_cap - kappa_init) * exp(log_kappa_u);
@@ -450,6 +456,15 @@ transformed parameters {
       delta[e] = kjordaemi_map(X, w[e]);
     }
   }
+
+  // §6.6: eps_e = C(s_bar_E d_e .* z_e), one shock per closed election, shared by its
+  // kjordaemi; d_e is row e of d_shock, from the shares of the election before it.
+  if (shock) {
+    for (e in 1:n_closed) {
+      row_vector[P] x = s_bar_E[1] * d_shock[e] .* z_shock[ : , e]';
+      eps[e] = x - mean(x);
+    }
+  }
 }
 
 model {
@@ -473,13 +488,14 @@ model {
     y_kd[r, S] ~ dirichlet_multinomial(kappa * phi[house_kd[r]] * softmax(nu[poll_kd[r]][S] + delta[e][kd_kd[r], S]'));
   }
 
-  // Results (§6.6, no shock in the core): y_ek ~ DirMult(phi_K softmax over S of (theta_te + delta_{e,k})).
+  // Results (§6.6): y_ek ~ DirMult(phi_K softmax over S of (theta_te + eps_e + delta_{e,k})),
+  // eps_e = 0 with shock = 0.
   for (e in 1:n_closed) {
     int t = grid_res[e];
     int de = grid_epoch[t];
     array[n_rep_res[e]] int S = idx_res[e, 1:n_rep_res[e]];
     for (k in 1:K) {
-      y_res[e, k, S] ~ dirichlet_multinomial(phi_K * softmax(theta[S, t] + delta[de][k, S]'));
+      y_res[e, k, S] ~ dirichlet_multinomial(phi_K * softmax(theta[S, t] + eps[e, S]' + delta[de][k, S]'));
     }
   }
 
@@ -545,6 +561,10 @@ model {
   // size 0 with newcomer_pool = 0.
   m_new ~ normal(0, 0.3);
   s_new ~ normal(0, 0.3);
+  // The election-day shock (shock = 1): z ~ N(0, 1) and s_bar_E ~ half-N(0, prior_s_bar_E),
+  // both size 0 with shock = 0.
+  to_vector(z_shock) ~ std_normal();
+  s_bar_E ~ normal(0, prior_s_bar_E);
   // The bounded transforms' log-Jacobians, |d log c / d u| = (cap - init) exp(u).
   target += H * log(phi_cap - phi_init) + sum(log_phi_u);
   target += log(phi_K_cap - phi_K_init) + log_phi_K_u;
@@ -585,7 +605,7 @@ generated quantities {
       int de = grid_epoch[t];
       array[n_rep_res[e]] int S = idx_res[e, 1:n_rep_res[e]];
       for (k in 1:K) {
-        vector[n_rep_res[e]] alpha = phi_K * softmax(theta[S, t] + delta[de][k, S]');
+        vector[n_rep_res[e]] alpha = phi_K * softmax(theta[S, t] + eps[e, S]' + delta[de][k, S]');
         log_lik[N_nat + N_kd + (e - 1) * K + k] = dirichlet_multinomial_lpmf(y_res[e, k, S] | alpha);
         y_rep_res[e, k, S] = dirichlet_multinomial_rng(alpha, sum(y_res[e, k, S]));
       }
@@ -595,10 +615,18 @@ generated quantities {
       int nA = n_exist[G];
       array[nA] int A = exist_idx[G, 1:nA];
       vector[nA] latent = rep_vector(0, nA);
+      // E's shock (§6.6), drawn after y_rep_res and only with shock = 1, so that shock = 0
+      // draws what the core draws: eps_E = C(s_bar_E d_E .* z), d_E the open row of d_shock.
+      // The latent share at E stays shock-free.
+      vector[P] eps_E = rep_vector(0, P);
+      if (shock) {
+        vector[P] x = s_bar_E[1] * d_shock[n_epoch]' .* to_vector(normal_rng(rep_vector(0, P), 1));
+        eps_E = x - mean(x);
+      }
       for (k in 1:K) {
         vector[nA] s = softmax(theta[A, G] + delta[n_epoch][k, A]');
         votes_kd[k] = rep_array(0, P);
-        votes_kd[k, A] = dirichlet_multinomial_rng(phi_K * s, N_open[k]);
+        votes_kd[k, A] = dirichlet_multinomial_rng(phi_K * softmax(theta[A, G] + eps_E[A] + delta[n_epoch][k, A]'), N_open[k]);
         latent += w[n_epoch, k] * s;
       }
       pi_latent_E = rep_vector(0, P);

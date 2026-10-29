@@ -102,7 +102,7 @@ test_that("v2s-m0: v2_methods stops on each unbuilt switch with CmdStan's text n
   skip_unless_slow()
   skip_unless_step("v2s-m0")
   d <- v2_test_cells(cfg_m0())$eve2024$data
-  for (sw in c("shock", "delta_walk", "fundamentals", "delta_form")) {
+  for (sw in c("delta_walk", "fundamentals", "delta_form")) {
     d1 <- d
     d1[[sw]] <- 1L
     expect_error(v2_methods(V2_STAN, d1), paste0("forecast_v2: switch ", sw, " = 1 is not built yet"), fixed = TRUE)
@@ -574,4 +574,202 @@ test_that("v2s-m2: a fit_values() point keeps m_new and s_new as one-element arr
   for (n in POOL_PARS) expect_true(is.list(back[[n]]) && length(back[[n]]) == 1L, label = paste(n, "is a one-element JSON array"))
   again <- gq_at(V2_STAN, d, r$pars)
   for (n in POOL_PARS) expect_equal(c(again$pars[[n]]), c(r$pars[[n]]), tolerance = 1e-12, label = n)
+})
+
+# Step v2s-m3, the election-day shock (§6.6, switch shock): eps_e = C(s_bar_E d_e z_e) in each
+# closed election's kjordaemi softmax, d_e the row of d_shock of the epoch e closes, and in the
+# forecast a fresh eps_E with the open epoch's row in votes_kd (and so pi_nat_eday) but not in
+# pi_latent_E; on v2s-m2's newcomer pool.
+SHOCK_PARS <- c("z_shock", "s_bar_E")
+
+test_that("v2s-m3: Stan's log density matches the reference up to a constant", {
+  skip_unless_slow()
+  skip_unless_step("v2s-m3")
+  hit <- expect_step_lp("v2s-m3", cfg_m3())
+  expect_true("shock_unscaled" %in% hit)
+  expect_true(all(c(
+    "newcomer_mean_over_all", "house_walk_from_first_poll", "newcomer_mean_of_mu1", "no_mu_restart", "no_house_restart"
+  ) %in% hit))
+})
+
+test_that("v2s-m3: with prior_s_bar_E at 0.37, Stan's log density matches the reference, each closed shock on its own row of d_shock", {
+  skip_unless_slow()
+  skip_unless_step("v2s-m3")
+  # WHY: the other cells run at §6.10's prior_s_bar_E = 0.15, where a literal 0.15 in Stan would
+  # pass; the row slips show that these points tell Stan's row of d_shock from its neighbours.
+  cfg <- utils::modifyList(cfg_m3(), list(walk_form = 0L, delta_form = 0L, prior_s_bar_E = 0.37))
+  d <- v2_stan_data(info_2024eve(), cfg)$data
+  expect_identical(d$prior_s_bar_E, 0.37)
+  m <- v2_methods(V2_STAN, d)
+  pts <- lp_points(m, d, n_post = 0, n_off = 0, n_prior = 10)
+  ok <- expect_lp_matches(m, d, pts)
+  closed <- seq_len(d$n_closed)
+  literal <- d
+  literal$prior_s_bar_E <- 0.15
+  next_row <- d
+  next_row$d_shock[closed, ] <- d$d_shock[closed + 1L, ]
+  open_row <- d
+  open_row$d_shock[closed, ] <- d$d_shock[rep(d$n_epoch, d$n_closed), ]
+  slips <- c(
+    literal_0.15 = lp_range(lp_gap(m, literal, pts)$gap), next_row = lp_range(lp_gap(m, next_row, pts)$gap),
+    open_row = lp_range(lp_gap(m, open_row, pts)$gap)
+  )
+  for (n in names(slips)) expect_gt(slips[[n]], 100 * ok$tol, label = n)
+  message(sprintf(
+    "v2s-m3 eve2024 at prior_s_bar_E 0.37: %d prior points, lp constant range %.3g (tol %.3g); range / (100 tol): %s",
+    length(pts), ok$range, ok$tol, paste(sprintf("%s %.3g", names(slips), slips / (100 * ok$tol)), collapse = ", ")
+  ))
+})
+
+test_that("v2s-m3: z_shock and s_bar_E have v2_par_dims()' sizes, and size 0 with shock = 0", {
+  skip_unless_slow()
+  skip_unless_step("v2s-m3")
+  for (cell in v2_test_cells(cfg_m3())) {
+    d <- cell$data
+    m <- v2_methods(V2_STAN, d)
+    expect_identical(names(v2_model(V2_STAN)$variables()$parameters), V2_CORE_PARS$name)
+    dims <- v2_par_dims(d)
+    expect_identical(lapply(dims[SHOCK_PARS], as.integer), list(z_shock = as.integer(c(d$P, d$n_closed)), s_bar_E = 1L))
+    sizes <- m$metadata()$stan_variable_sizes
+    expect_identical(lapply(sizes[SHOCK_PARS], as.integer), lapply(dims[SHOCK_PARS], as.integer))
+    d0 <- d
+    d0$shock <- 0L
+    expect_true(all(vapply(v2_par_dims(d0)[SHOCK_PARS], prod, numeric(1)) == 0))
+    # WHY: z_shock adds P free elements per closed election, s_bar_E one.
+    expect_identical(as.numeric(n_unc(m) - n_unc(v2_methods(V2_STAN, d0))), as.numeric(d$P * d$n_closed + 1))
+    s <- v2_simulate(d, seed = 1, observe = FALSE)
+    pars <- stan_pars(m, m$unconstrain_variables(s$pars))
+    for (n in SHOCK_PARS) expect_equal(as.numeric(pars[[n]]), c(s$pars[[n]]), tolerance = 1e-12, label = n)
+  }
+})
+
+test_that("v2s-m3: the closed elections' shocks are the reference's, and 0 with shock = 0", {
+  skip_unless_slow()
+  skip_unless_step("v2s-m3")
+  for (cell in v2_test_cells(cfg_m3())) {
+    d <- cell$data
+    m <- v2_methods(V2_STAN, d)
+    for (seed in 1:3) {
+      s <- v2_simulate(d, seed = seed, observe = FALSE)
+      u <- m$unconstrain_variables(s$pars)
+      tp <- m$constrain_variables(u, transformed_parameters = TRUE, generated_quantities = FALSE)
+      ref <- v2_natural(stan_pars(m, u), d)
+      expect_identical(length(tp$eps), length(ref$eps))
+      expect_equal(array(tp$eps, dim(ref$eps)), ref$eps, tolerance = 1e-10)
+      expect_gt(max(abs(ref$eps)), 1e-6)
+    }
+    d0 <- d
+    d0$shock <- 0L
+    m0 <- v2_methods(V2_STAN, d0)
+    s0 <- v2_simulate(d0, seed = 1, observe = FALSE)
+    tp0 <- m0$constrain_variables(m0$unconstrain_variables(s0$pars), transformed_parameters = TRUE, generated_quantities = FALSE)
+    expect_identical(length(tp0$eps), as.integer(d$n_closed * d$P))
+    expect_true(all(tp0$eps == 0))
+  }
+})
+
+test_that("v2s-m3: at a prior point the results' rows carry their shocks, pi_latent_E is the shock-free latent share and pi_nat_eday aggregates votes_kd", {
+  skip_unless_slow()
+  skip_unless_step("v2s-m3")
+  # WHY: the reference's likelihood rows are internal to its module; they are the oracle here.
+  # No forecast quantity is printed, even on failure: those compare by isTRUE(all.equal()).
+  ref <- environment(v2_lp_ref)
+  cells <- v2_test_cells(cfg_m3())
+  expect_identical(
+    vapply(cells, \(cell) as.integer(cell$data$draw_forecast), integer(1)),
+    c(eve2024 = 1L, f180_2021 = 1L, eve2017 = 0L)
+  )
+  for (name in names(cells)) {
+    d <- cells[[name]]$data
+    pars <- v2_simulate(d, seed = 2, observe = FALSE)$pars
+    pars$s_bar_E[] <- 0.3
+    r <- gq_at(V2_STAN, d, pars)
+    p <- ref$core_pars(r$pars, d)
+    nat <- ref$natural(p, d)
+    expect_gt(max(abs(nat$eps)), 1e-3)
+    rows <- ref$dm_rows(p, nat, d)
+    expect_equal(r$gq$log_lik, vapply(rows, \(x) dirmult_lpmf(ref$row_counts(d, x), x$alpha), numeric(1)), tolerance = 1e-10)
+    expect_equal(apply(r$gq$y_rep_res, 1:2, sum), apply(d$y_res, 1:2, sum) + 0)
+    if (d$draw_forecast == 1L) {
+      A <- which(d$exists[d$G, ] == 1L)
+      latent <- numeric(d$P)
+      for (k in seq_len(d$K)) {
+        latent[A] <- latent[A] + d$w[d$n_epoch, k] * ref$softmax(nat$theta[A, d$G] + nat$delta[d$n_epoch, k, A])
+      }
+      v <- r$gq$votes_kd
+      expect_true(isTRUE(all.equal(rowSums(v), c(d$N_open))))
+      expect_true(isTRUE(all.equal(c(r$gq$pi_nat_eday), colSums(v) / sum(d$N_open), tolerance = 1e-12)))
+      expect_true(isTRUE(all.equal(c(r$gq$pi_latent_E), latent, tolerance = 1e-10)))
+    } else {
+      expect_false(any(c("votes_kd", "pi_nat_eday", "pi_latent_E") %in% names(r$gq)))
+    }
+  }
+})
+
+test_that("v2s-m3: with z_shock = 0 the results' rows are shock = 0's, and the forecast's shock is drawn after the replicates", {
+  skip_unless_slow()
+  skip_unless_step("v2s-m3")
+  # WHY: eps_E's z is drawn in the forecast block, after y_rep_res's draws; drawn before them it
+  # would move y_rep_res's RNG stream, which draw_forecast = 0 leaves where it is. Runs at
+  # shock = 1 and 0 cannot compare their replicates draw for draw: a fixed_param run's
+  # initialisation draws one uniform per unconstrained parameter even when every init is
+  # given, and the two are P n_closed + 1 parameters apart. That shock = 0 draws what the step
+  # before it drew is checked once against the previous step's Stan file, not here, and that
+  # votes_kd carries the shock by the next test. Nothing below prints a forecast draw.
+  d <- v2_test_cells(cfg_m3())$eve2024$data
+  expect_identical(as.integer(d$draw_forecast), 1L)
+  pars <- v2_simulate(d, seed = 3, observe = FALSE)$pars
+  pars$z_shock[] <- 0
+  d0 <- d
+  d0$shock <- 0L
+  p0 <- pars
+  p0$z_shock <- matrix(0, d$P, 0)
+  p0$s_bar_E <- array(numeric(0), 0)
+  r1 <- gq_at(V2_STAN, d, pars)
+  r0 <- gq_at(V2_STAN, d0, p0)
+  expect_identical(r1$gq$log_lik, r0$gq$log_lik)
+  d1 <- d
+  d1$draw_forecast <- 0L
+  r2 <- gq_at(V2_STAN, d1, pars)
+  expect_false(any(c("votes_kd", "pi_nat_eday", "pi_latent_E") %in% names(r2$gq)))
+  expect_identical(r2$gq$y_rep_res, r1$gq$y_rep_res)
+})
+
+test_that("v2s-m3: votes_kd carries a fresh shock on the open epoch's row of d_shock, one per draw for every kjordaemi", {
+  skip_unless_slow()
+  skip_unless_step("v2s-m3")
+  # WHY: at a prior draw with the walk, delta and the closed shocks at 0, every party's latent
+  # log-ratio at E is 0, and at phi_K = exp(19.5) the cell noise is about the multinomial's. So
+  # a draw's log count ratio of party p to party q, averaged over the kjordaemi, is eps_E's
+  # contrast s_bar_E (d_p z_p - d_q z_q) up to noise far below it, with variance
+  # s_bar_E^2 (d_p^2 + d_q^2). Nothing below prints a draw: each check is a scalar compared
+  # inside isTRUE().
+  d <- v2_test_cells(cfg_m3())$eve2024$data
+  A <- which(d$exists[d$G, ] == 1L)
+  expect_true(isTRUE(length(A) >= 3))
+  pars <- v2_simulate(d, seed = 4, observe = FALSE)$pars
+  pars$theta1[] <- 0
+  pars$z_walk[] <- 0
+  pars$delta_raw[] <- 0
+  pars$z_shock[] <- 0
+  # log phi_K = cap - (cap - init) exp(u), cap 20 and init log(1000): u sets log phi_K to 19.5
+  pars$log_phi_K_u <- log((20 - 19.5) / (20 - log(1000)))
+  s_bar <- 0.2
+  pars$s_bar_E[] <- s_bar
+  n <- 4000
+  v <- gq_draws(V2_STAN, d, pars, "votes_kd", n)
+  expect_identical(dim(v), as.integer(c(n, d$K, d$P)))
+  expect_true(isTRUE(all(v[, , A] > 0)))
+  lv <- log(v)
+  q <- A[1]
+  contrast <- function(p) rowMeans(lv[, , p] - lv[, , q])
+  rows <- list(open = d$d_shock[d$n_epoch, ], last_closed = d$d_shock[d$n_closed, ], unscaled = rep(1, d$P))
+  ratio <- vapply(rows, \(dd) vapply(A[-1], \(p) stats::var(contrast(p)) / (s_bar^2 * (dd[p]^2 + dd[q]^2)), numeric(1)), numeric(length(A) - 1))
+  expect_true(isTRUE(max(abs(ratio[, "open"] - 1)) < 0.15))
+  # WHY: the test can tell the open row from the last closed election's and from d = 1.
+  expect_true(isTRUE(max(abs(ratio[, "last_closed"] - 1)) > 0.3))
+  expect_true(isTRUE(max(abs(ratio[, "unscaled"] - 1)) > 0.3))
+  # One shock per draw, shared by the kjordaemi: a contrast moves together in two of them.
+  k_cor <- stats::cor(lv[, 1, A[2]] - lv[, 1, q], lv[, 2, A[2]] - lv[, 2, q])
+  expect_true(isTRUE(k_cor > 0.9))
 })

@@ -2,12 +2,13 @@
 
 Written by `LC_ALL=en_US.UTF-8 Rscript R/harness/v2_prior_predictive.R <config> [n_draws]`. Prior draws only (`v2_simulate(observe = FALSE)`): nothing is fitted and no forecast is computed.
 
-- Config: `harness/configs/steps/v2s-m2.json` (sha256 `d50a7cb3b6104310eabc88688abce38f2701facda9c5eaf1af673760417b1e4a`)
-- Prior draws: 1000 per cell and row, seeds 6001 to 7000 (the walk row's z: seeds 7000001 to 7001000)
+- Config: `harness/configs/steps/v2s-m3.json` (sha256 `5155797acba8482853a806e968756f113a72651523c63e875ba6df6370b39389`)
+- Prior draws: 1000 per cell and row, seeds 6001 to 7000 (the walk and shock rows' z: seeds 7000001 to 7001000)
 - Cell 2024-eve (E 2024-11-30, F 2024-11-29): P 10 parties, H 6 houses, K 6 kjördæmi, J 9 kjördæmi polls, 4 epochs
 - Cell 2021-f180 (E 2021-09-25, F 2021-03-29): P 10 parties, H 5 houses, K 6 kjördæmi, J 1 kjördæmi polls, 3 epochs
 - The 20% party is the coordinate party (the first of the order), in a composition of 20% beside P − 1 equal parties sharing 80%; each effect moves it on the log-ratio scale, and the summary is its change in pp. The script's header says which coordinate each effect reads.
 - `newcomer_entry` reads no coordinate party: its first party is the newcomer, at 10% beside P − 1 equal parties sharing 90%, moved by its entry bias against the existing parties' mean.
+- `shock_sd_20` and `shock_sd_05` read no coordinate party: their first party is a 20% or a 5% party beside P − 1 equal parties, and each value is the sd of its change over 200 draws of z given the draw's s̄_E.
 
 ## Summaries
 
@@ -18,6 +19,8 @@ Written by `LC_ALL=en_US.UTF-8 Rscript R/harness/v2_prior_predictive.R <config> 
 - **walk_180** (step v2s-m0): A 20% party's 180-day walk change, off the campaign (covariance 180 CΣCᵀ). Band: 95% quantile in [2, 30].
 - **industry_step** (step v2s-m1, switch `epoch_bias`): An epoch's step in the industry bias on a 20% party (C(τ ⊙ ξ_e), τ_μ ~ half-N(0, `prior_tau_mu`), τ_μ,A ~ half-N(0, 0.3) for Annað). Band: [5%, 95%] inside [-6, 6].
 - **newcomer_entry** (step v2s-m2, switch `newcomer_pool`): A newcomer's entry bias against the existing parties' mean, on a 10% party (m_new + s_new η, m_new ~ N(0, 0.3), s_new ~ half-N(0, 0.3)). Band: [5%, 95%] inside [-10, 10].
+- **shock_sd_20** (step v2s-m3, switch `shock`): The election-day shock's sd on a 20% party: given the draw's s̄_E, the sd of its change over 200 draws of z, on the composition (20%, 80% / (P − 1), …), with ε = C(s̄_E d ⊙ z) and each d = √(min(0.2 / π, 10)) of that composition (s̄_E ~ half-N(0, `prior_s_bar_E`)). Band: median in [0.5, 2] × 1.6.
+- **shock_sd_05** (step v2s-m3, switch `shock`): The election-day shock's sd on a 5% party: given the draw's s̄_E, the sd of its change over 200 draws of z, on the composition (5%, 95% / (P − 1), …), with ε = C(s̄_E d ⊙ z) and each d = √(min(0.2 / π, 10)) of that composition (s̄_E ~ half-N(0, `prior_s_bar_E`)). Band: median in [0.5, 2] × 0.95.
 
 ## Results
 
@@ -45,6 +48,10 @@ Quantiles in pp over the prior draws (`Values`: draws × houses, kjördæmi, epo
 | industry_step | v2s-m1 | config | `prior_tau_mu` = 0.1 | 2021-f180 | 2000 | -2.72 | -0.04 | 2.63 | [5%, 95%] inside [-6, 6] | PASS |
 | newcomer_entry | v2s-m2 | config | literals | 2024-eve | 4000 | -4.77 | 0.18 | 7.65 | [5%, 95%] inside [-10, 10] | PASS |
 | newcomer_entry | v2s-m2 | config | literals | 2021-f180 | 4000 | -4.72 | 0.03 | 7.87 | [5%, 95%] inside [-10, 10] | PASS |
+| shock_sd_20 | v2s-m3 | config | `prior_s_bar_E` = 0.15 | 2024-eve | 1000 | 0.16 | 1.73 | 5.12 | median in [0.5, 2] × 1.6 | PASS |
+| shock_sd_20 | v2s-m3 | config | `prior_s_bar_E` = 0.15 | 2021-f180 | 1000 | 0.18 | 1.70 | 5.13 | median in [0.5, 2] × 1.6 | PASS |
+| shock_sd_05 | v2s-m3 | config | `prior_s_bar_E` = 0.15 | 2024-eve | 1000 | 0.09 | 0.96 | 3.34 | median in [0.5, 2] × 0.95 | PASS |
+| shock_sd_05 | v2s-m3 | config | `prior_s_bar_E` = 0.15 | 2021-f180 | 1000 | 0.10 | 0.94 | 3.27 | median in [0.5, 2] × 0.95 | PASS |
 
 Skipped, as the config holds their values: house_d comparison prior_rate_sigma_gamma=1 (§6.10); industry_mu1 comparison prior_sd_mu1=1 (§6.10); poll_sd comparison prior_mu_phi=6.90776 (proposal 1).
 
@@ -71,6 +78,10 @@ PRIOR PASS industry_step/2024-eve/config
 PRIOR PASS industry_step/2021-f180/config
 PRIOR PASS newcomer_entry/2024-eve/config
 PRIOR PASS newcomer_entry/2021-f180/config
+PRIOR PASS shock_sd_20/2024-eve/config
+PRIOR PASS shock_sd_20/2021-f180/config
+PRIOR PASS shock_sd_05/2024-eve/config
+PRIOR PASS shock_sd_05/2021-f180/config
 ```
 
 ## Reading the verdicts

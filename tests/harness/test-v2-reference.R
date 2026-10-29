@@ -145,7 +145,7 @@ test_that("the reference refuses another form, an unbuilt switch, a missing para
   expect_setequal(v2_mutants(d), V2_MUTANTS$mutant[is.na(V2_MUTANTS$switch)])
   expect_false(any(c("previous_w", "next_epoch_delta") %in% v2_mutants(utils::modifyList(d, list(n_closed = 1L)))))
   expect_error(v2_lp_ref(pars, utils::modifyList(d, list(walk_form = 1L))), "reference forms")
-  expect_error(v2_lp_ref(pars, utils::modifyList(d, list(shock = 1L))), "shock")
+  expect_error(v2_lp_ref(pars, utils::modifyList(d, list(delta_walk = 1L))), "delta_walk")
   expect_error(v2_simulate(utils::modifyList(d, list(delta_form = 1L)), seed = 1), "reference forms")
   expect_error(v2_lp_ref(pars, d, "no_such_mutant"), "mutant")
   expect_error(v2_lp_ref(pars[-1], d), "theta1")
@@ -351,6 +351,8 @@ test_that("Stan declares the parameters V2_CORE_PARS names, with its types, boun
   expect_identical(decl$type, V2_CORE_PARS$type)
   # §6.4: s_new is a scale, half-normal under newcomer_pool = 1.
   expect_identical(V2_CORE_PARS$type[V2_CORE_PARS$name == "s_new"], "array[newcomer_pool] real<lower=0>")
+  # §6.6: s_bar_E is the shock's scale, half-normal under shock = 1.
+  expect_identical(V2_CORE_PARS$type[V2_CORE_PARS$name == "s_bar_E"], "array[shock] real<lower=0>")
 })
 
 test_that("the newcomer-pool reference: its mutant changes the density on every cell, and the identity under permutation holds", {
@@ -429,5 +431,94 @@ test_that("at m_new = 0 and s_new = 0.2023 the pooled density is the fixed one p
     moved <- s
     moved$m_new[] <- 0.5
     expect_gt(abs(v2_lp_ref(moved, d) - lp - (stats::dnorm(0.5, 0, 0.3, log = TRUE) - stats::dnorm(0, 0, 0.3, log = TRUE))), 1e-6)
+  }
+})
+
+# The election-day shock (step v2s-m3, §6.6, switch shock): eps_e = C(s_bar_E d_e z_e) in each
+# closed election's kjordaemi softmax, d_e the row of d_shock of the epoch e closes.
+
+test_that("the shock reference: its mutant changes the density on every cell, and the identity under permutation holds", {
+  # WHY: no party's d is 1 unless its previous share is exactly 0.2, so every closed election,
+  # 2017 eve's one included, tells d from 1.
+  cells <- v2_test_cells(cfg_m3())
+  for (name in names(cells)) {
+    d <- cells[[name]]$data
+    expect_identical(as.integer(d$shock), 1L)
+    expect_true("shock_unscaled" %in% v2_mutants(d))
+    expect_identical(
+      lapply(v2_par_dims(d)[c("z_shock", "s_bar_E")], as.integer),
+      list(z_shock = as.integer(c(d$P, d$n_closed)), s_bar_E = 1L)
+    )
+    for (seed in 1:2) {
+      s <- v2_simulate(d, seed = seed, observe = FALSE)
+      lp <- v2_lp_ref(s$pars, d)
+      expect_gt(abs(v2_lp_ref(s$pars, d, "shock_unscaled") - lp), 1e-6, label = name)
+      rp <- rev(seq_len(d$P))
+      p <- permute_v2(s$pars, d, rp, rev(seq_len(d$K)))
+      expect_equal(p$pars$z_shock, s$pars$z_shock[rp, , drop = FALSE], tolerance = 0)
+      expect_identical(p$pars$s_bar_E, s$pars$s_bar_E)
+      expect_lt(abs(v2_lp_ref(p$pars, p$data) - lp - attr(p, "ljac_L_Omega")), 1e-10 + 4 * .Machine$double.eps * abs(lp))
+      expect_equal(v2_natural(p$pars, p$data)$eps, v2_natural(s$pars, d)$eps[, rp, drop = FALSE], tolerance = 1e-12)
+    }
+  }
+  expect_identical(V2_MUTANTS$min_closed[V2_MUTANTS$mutant == "shock_unscaled"], 1L)
+  expect_identical(as.integer(cells$eve2017$data$n_closed), 1L)
+})
+
+test_that("each closed election's shock is C(s_bar_E d_e z_e) with its own row of d_shock, shared by its kjordaemi and reaching only its results", {
+  # WHY: the reference's likelihood rows are internal to its module.
+  ref <- environment(v2_lp_ref)
+  for (name in c("eve2024", "f180_2021", "eve2017")) {
+    d <- v2_test_cells(cfg_m3())[[name]]$data
+    s <- v2_simulate(d, seed = 7, observe = FALSE)$pars
+    s$s_bar_E[] <- 0.3
+    eps <- v2_natural(s, d)$eps
+    expect_identical(dim(eps), as.integer(c(d$n_closed, d$P)))
+    for (e in seq_len(d$n_closed)) {
+      x <- 0.3 * d$d_shock[e, ] * s$z_shock[, e]
+      expect_equal(eps[e, ], x - mean(x), tolerance = 1e-14, label = paste(name, "election", e))
+    }
+    rows <- function(pars) {
+      p <- ref$core_pars(pars, d)
+      ref$dm_rows(p, ref$natural(p, d), d)
+    }
+    a <- rows(s)
+    for (e in seq_len(d$n_closed)) {
+      moved <- s
+      moved$z_shock[, e] <- moved$z_shock[, e] + seq_len(d$P) / d$P
+      b <- rows(moved)
+      hit <- vapply(seq_along(a), \(i) !identical(a[[i]]$alpha, b[[i]]$alpha), logical(1))
+      own <- vapply(a, \(r) r$field == "y_res" && r$at[1] == e, logical(1))
+      expect_identical(hit, own, label = paste(name, "rows moved by election", e))
+      # Every kjordaemi's log concentrations move by the same contrast: one shock per election.
+      moves <- vapply(which(own), \(i) {
+        x <- log(b[[i]]$alpha) - log(a[[i]]$alpha)
+        x - mean(x)
+      }, numeric(length(a[[which(own)[1]]]$alpha)))
+      expect_lt(max(abs(moves - moves[, 1])), 1e-10, label = paste(name, "election", e))
+      expect_gt(max(abs(moves[, 1])), 1e-3, label = paste(name, "election", e))
+    }
+  }
+})
+
+test_that("at z_shock = 0 the shock's density is the shock-free one plus its priors, and z_shock reaches the likelihood", {
+  for (name in c("eve2024", "eve2017")) {
+    d <- v2_test_cells(cfg_m3())[[name]]$data
+    d0 <- d
+    d0$shock <- 0L
+    s <- v2_simulate(d, seed = 8, observe = FALSE)$pars
+    s$z_shock[] <- 0
+    off <- s
+    off$z_shock <- matrix(0, d$P, 0)
+    off$s_bar_E <- array(numeric(0), 0)
+    priors <- d$P * d$n_closed * stats::dnorm(0, log = TRUE) + log(2) + stats::dnorm(s$s_bar_E, 0, d$prior_s_bar_E, log = TRUE)
+    lp <- v2_lp_ref(s, d)
+    expect_lt(abs(lp - v2_lp_ref(off, d0) - priors), 1e-10 + 4 * .Machine$double.eps * abs(lp), label = name)
+    expect_equal(v2_natural(s, d)$eps, matrix(0, d$n_closed, d$P), tolerance = 0)
+    expect_equal(v2_natural(off, d0)$eps, matrix(0, d$n_closed, d$P), tolerance = 0)
+    moved <- s
+    moved$z_shock[1, ] <- 1
+    prior_move <- d$n_closed * (stats::dnorm(1, log = TRUE) - stats::dnorm(0, log = TRUE))
+    expect_gt(abs(v2_lp_ref(moved, d) - lp - prior_move), 1e-6, label = name)
   }
 })

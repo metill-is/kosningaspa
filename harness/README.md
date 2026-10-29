@@ -273,8 +273,9 @@ those runs still SKIP. If an arm's role changes in `ARMS`, its finished runs sti
 arm <arm>'s role <new>"; retire such a run (`retire_run()`) and refit it. A run with no
 recorded role takes its arm's current role and is not refused. Plan 4 may add roles for the arms it scores. Every arm
 but `r0` runs `Stan/forecast_v2.stan` with its own config, an entry `v2_arm(config, role)`
-builds. `ARMS` holds `r0`, `v2s-m0`, `v2s-p1`, `v2s-m1` (the epoch bias) and `v2s-m2` (the
-newcomer pool); each other V2 arm is registered as its config lands.
+builds. `ARMS` holds `r0`, `v2s-m0`, `v2s-p1`, `v2s-m1` (the epoch bias), `v2s-m2` (the
+newcomer pool) and `v2s-m3` (the election-day shock); each other V2 arm is registered as its
+config lands.
 
 **R0's extraction.** `r0_extract(draws, meta, dir)` (`R/harness/r0.R`) writes the four
 parquets of spec §5.5 from a fit's draws: `eday_kjordaemi` (`.chain`, `.iteration`,
