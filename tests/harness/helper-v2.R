@@ -19,6 +19,7 @@ box::use(
 )
 
 V2_M0_CONFIG <- file.path(project_root(), "harness", "configs", "steps", "v2s-m0.json")
+V2_M1_CONFIG <- file.path(project_root(), "harness", "configs", "steps", "v2s-m1.json")
 
 # WHY: read_inputs() and v2_stan_data() take seconds, and the 2024-eve fixtures serve many tests.
 v2_cache <- new.env(parent = emptyenv())
@@ -30,6 +31,12 @@ cached <- function(key, value) {
 cfg_m0 <- function() {
   box::use(R / harness / v2[read_v2_config])
   read_v2_config(V2_M0_CONFIG)
+}
+
+# Step v2s-m1's config: the core with the epoch bias (§6.4).
+cfg_m1 <- function() {
+  box::use(R / harness / v2[read_v2_config])
+  read_v2_config(V2_M1_CONFIG)
 }
 
 # A temporary copy of the m0 config with the named keys changed (NULL drops a key, a new

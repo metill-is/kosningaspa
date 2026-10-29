@@ -209,6 +209,28 @@ test_that("walk_180 maps z through sqrt(180) C (sigma * L_Omega z)", {
   expect_gt(abs(got), 0.1)
 })
 
+test_that("industry_step reads coordinate 1 of every epoch step C(tau * xi_e), Annad's element at its own scale", {
+  xi <- matrix(c(1, 0, -1, 0.5, 0.5, 2), 3, 2)
+  sim <- list(pars = list(mu_step_raw = xi, tau_mu = array(0.1, 1), tau_mu_A = array(0.3, 1)))
+  data <- list(P = 3L, n_epoch = 3L, annad_idx = 3L)
+  # The steps (0.1, 0, -0.3) and (0.05, 0.05, 0.6), the third party's at 0.3.
+  want <- c(change_pp(c(0.1, 0, -0.3)), change_pp(c(0.05, 0.05, 0.6)))
+  expect_equal(SUMMARY_FUNS$industry_step(sim, data, 1L), want, tolerance = 1e-12)
+  # With no Annad every party's step scales by tau_mu.
+  expect_equal(SUMMARY_FUNS$industry_step(sim, utils::modifyList(data, list(annad_idx = 0L)), 1L)[2], change_pp(c(0.05, 0.05, 0.2)), tolerance = 1e-12)
+  expect_error(SUMMARY_FUNS$industry_step(sim, utils::modifyList(data, list(annad_idx = 1L)), 1L), "coordinate party")
+})
+
+test_that("the epoch bias's row runs under its switch, with the band written before any fit of its step", {
+  row <- ROWS[ROWS$step == "v2s-m1", ]
+  expect_identical(row$summary, "industry_step")
+  expect_identical(row$kind, "config")
+  expect_identical(row$switch, "epoch_bias")
+  expect_identical(row$band[[1]], band_inside(-6, 6))
+  expect_identical(row$keys[[1]], "prior_tau_mu")
+  expect_length(row$held[[1]], 0)
+})
+
 test_that("the 20% party's change is read off the composition beside P - 1 equal parties", {
   expect_equal(share_change(rep(0, 10)), 0)
   expect_equal(share_change(c(log(2), rep(0, 9))), 100 * (0.4 / 1.2 - 0.2))

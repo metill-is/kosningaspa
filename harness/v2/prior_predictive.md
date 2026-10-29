@@ -2,7 +2,7 @@
 
 Written by `LC_ALL=en_US.UTF-8 Rscript R/harness/v2_prior_predictive.R <config> [n_draws]`. Prior draws only (`v2_simulate(observe = FALSE)`): nothing is fitted and no forecast is computed.
 
-- Config: `harness/configs/steps/v2s-m0.json` (sha256 `7f5b1af0cedb15335998abf490b8d8480d767896a3aa24ec186348795f9a2eae`)
+- Config: `harness/configs/steps/v2s-m1.json` (sha256 `26062d17c91a63f9d81b52171a7bc4d7e246e57b6c207160b07abe1f26987bc3`)
 - Prior draws: 1000 per cell and row, seeds 6001 to 7000 (the walk row's z: seeds 7000001 to 7001000)
 - Cell 2024-eve (E 2024-11-30, F 2024-11-29): P 10 parties, H 6 houses, K 6 kjördæmi, J 9 kjördæmi polls, 4 epochs
 - Cell 2021-f180 (E 2021-09-25, F 2021-03-29): P 10 parties, H 5 houses, K 6 kjördæmi, J 1 kjördæmi polls, 3 epochs
@@ -15,6 +15,7 @@ Written by `LC_ALL=en_US.UTF-8 Rscript R/harness/v2_prior_predictive.R <config> 
 - **poll_sd** (step v2s-m0): A poll's sd around its mean, n = 1,000, 20% party, at the prior φ_h (μ_φ ~ N(`prior_mu_phi`, 1)). Band: [5%, 95%] inside [0.8, 6].
 - **kd_delta** (step v2s-m0): A party's kjördæmi deviation from its national share, 20% party (static δ, log s_δ0 = μ_sd + τ_sd r). Band: [5%, 95%] inside [-25, 25].
 - **walk_180** (step v2s-m0): A 20% party's 180-day walk change, off the campaign (covariance 180 CΣCᵀ). Band: 95% quantile in [2, 30].
+- **industry_step** (step v2s-m1, switch `epoch_bias`): An epoch's step in the industry bias on a 20% party (C(τ ⊙ ξ_e), τ_μ ~ half-N(0, `prior_tau_mu`), τ_μ,A ~ half-N(0, 0.3) for Annað). Band: [5%, 95%] inside [-6, 6].
 
 ## Results
 
@@ -38,6 +39,8 @@ Quantiles in pp over the prior draws (`Values`: draws × houses or kjördæmi fo
 | kd_delta | v2s-m0 | config | literals | 2021-f180 | 6000 | -11.44 | -0.77 | 11.58 | [5%, 95%] inside [-25, 25] | PASS |
 | walk_180 | v2s-m0 | config | literals | 2024-eve | 1000 | -11.09 | -0.70 | 7.87 | 95% quantile in [2, 30] | PASS |
 | walk_180 | v2s-m0 | config | literals | 2021-f180 | 1000 | -10.90 | -0.99 | 9.83 | 95% quantile in [2, 30] | PASS |
+| industry_step | v2s-m1 | config | `prior_tau_mu` = 0.1 | 2024-eve | 3000 | -3.03 | -0.03 | 2.86 | [5%, 95%] inside [-6, 6] | PASS |
+| industry_step | v2s-m1 | config | `prior_tau_mu` = 0.1 | 2021-f180 | 2000 | -2.72 | -0.04 | 2.63 | [5%, 95%] inside [-6, 6] | PASS |
 
 Skipped, as the config holds their values: house_d comparison prior_rate_sigma_gamma=1 (§6.10); industry_mu1 comparison prior_sd_mu1=1 (§6.10); poll_sd comparison prior_mu_phi=6.90776 (proposal 1).
 
@@ -60,6 +63,8 @@ PRIOR PASS kd_delta/2024-eve/config
 PRIOR PASS kd_delta/2021-f180/config
 PRIOR PASS walk_180/2024-eve/config
 PRIOR PASS walk_180/2021-f180/config
+PRIOR PASS industry_step/2024-eve/config
+PRIOR PASS industry_step/2021-f180/config
 ```
 
 ## Reading the verdicts

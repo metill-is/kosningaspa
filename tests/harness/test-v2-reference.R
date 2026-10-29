@@ -151,3 +151,83 @@ test_that("the reference refuses another form, an unbuilt switch, a missing para
   expect_error(v2_lp_ref(pars[-1], d), "theta1")
   expect_error(v2_lp_ref(utils::modifyList(pars, list(sigma = -pars$sigma)), d), "sigma")
 })
+
+# The epoch bias (step v2s-m1, §6.4, switch epoch_bias), on the cells of the Stan lp tests.
+
+test_that("the epoch-bias reference: each of its mutants changes the density, and the identity under permutation holds", {
+  cells <- v2_test_cells(cfg_m1())
+  for (name in c("eve2024", "f180_2021")) {
+    d <- cells[[name]]$data
+    expect_identical(as.integer(d$epoch_bias), 1L)
+    expect_true(all(c("house_walk_from_first_poll", "newcomer_mean_of_mu1") %in% v2_mutants(d)))
+    for (seed in 1:2) {
+      s <- v2_simulate(d, seed = seed, observe = FALSE)
+      lp <- v2_lp_ref(s$pars, d)
+      for (m in v2_mutants(d)) expect_gt(abs(v2_lp_ref(s$pars, d, m) - lp), 1e-6, label = paste(name, m))
+      p <- permute_v2(s$pars, d, rev(seq_len(d$P)), rev(seq_len(d$K)))
+      expect_lt(abs(v2_lp_ref(p$pars, p$data) - lp - attr(p, "ljac_L_Omega")), 1e-10 + 4 * .Machine$double.eps * abs(lp))
+      a <- v2_natural(s$pars, d)
+      b <- v2_natural(p$pars, p$data)
+      expect_equal(b$mu, a$mu[, rev(seq_len(d$P))], tolerance = 1e-12)
+      expect_equal(b$gamma, a$gamma[, , rev(seq_len(d$P))], tolerance = 1e-12)
+    }
+  }
+  # WHY: the reversed order puts Annað first, so its index must move with the parties.
+  built <- v2_stan_data(info_2024eve(), utils::modifyList(cfg_m1(), list(order = "reversed")))$data
+  expect_identical(built$annad_idx, 1L)
+  d <- d_2024eve()
+  expect_identical(permute_v2(v2_simulate(d, 1, FALSE)$pars, d, rev(seq_len(d$P)), rev(seq_len(d$K)))$data$annad_idx, 1L)
+})
+
+test_that("the epoch-bias reference walks the industry bias with Annad's own scale, and each house from its first epoch", {
+  d <- v2_test_cells(cfg_m1())$eve2024$data
+  s <- v2_simulate(d, seed = 3, observe = FALSE)
+  pars <- s$pars
+  a <- v2_natural(pars, d)
+  # Raising Annað's scale moves the industry bias's steps only through Annað's element.
+  big <- utils::modifyList(pars, list(tau_mu_A = pars$tau_mu_A * 3))
+  b <- v2_natural(big, d)
+  steps <- function(nat) nat$mu[2, ] - nat$mu[1, ]
+  annad <- d$annad_idx
+  stay <- which(c(d$entry_epoch) == 0L & seq_len(d$P) != annad)
+  expect_gt(abs(diff(steps(b)[c(annad, stay[1])]) - diff(steps(a)[c(annad, stay[1])])), 1e-6)
+  expect_equal(diff(steps(b)[stay]), diff(steps(a)[stay]), tolerance = 1e-12)
+  # A house's steps before or at its first epoch leave every gamma alone; a later one moves it.
+  h <- which(d$house_first_epoch > 1L)[1]
+  f <- d$house_first_epoch[h]
+  early <- pars
+  early$house_step_raw[h, , f - 1L] <- early$house_step_raw[h, , f - 1L] + 1
+  expect_equal(v2_natural(early, d)$gamma, a$gamma, tolerance = 0)
+  late <- pars
+  late$house_step_raw[h, , f] <- late$house_step_raw[h, , f] + c(1, rep(0, d$P - 1))
+  expect_gt(max(abs(v2_natural(late, d)$gamma[f + 1L, h, ] - a$gamma[f + 1L, h, ])), 1e-6)
+  expect_equal(v2_natural(late, d)$gamma[seq_len(f), , ], a$gamma[seq_len(f), , ], tolerance = 0)
+})
+
+test_that("with every epoch scale near 0 the epoch-bias reference gives the core's biases", {
+  d <- v2_test_cells(cfg_m1())$eve2024$data
+  s <- v2_simulate(d, seed = 4, observe = FALSE)$pars
+  tiny <- s
+  for (n in c("tau_mu", "tau_mu_A", "tau_house")) tiny[[n]][] <- 1e-14
+  d0 <- d
+  d0$epoch_bias <- 0L
+  core <- s
+  core$mu_step_raw <- matrix(0, d$P, 0)
+  core$house_step_raw <- array(0, c(d$H, d$P, 0))
+  for (n in c("tau_mu", "tau_mu_A", "tau_house")) core[[n]] <- array(numeric(0), 0)
+  a <- v2_natural(tiny, d)
+  b <- v2_natural(core, d0)
+  expect_equal(a$mu, b$mu, tolerance = 1e-12)
+  expect_equal(a$gamma, b$gamma, tolerance = 1e-12)
+})
+
+test_that("each house's first epoch is that of its first national poll on the lp tests' cells", {
+  # WHY: house_first_epoch also counts kjördæmi polls, but a house's deviation reaches the
+  # likelihood only through a national poll, so the house walk's start is right only where
+  # the two agree.
+  for (cell in v2_test_cells(cfg_m1())) {
+    d <- cell$data
+    first_nat <- vapply(seq_len(d$H), \(h) min(c(d$grid_epoch)[c(d$grid_nat)[c(d$house_nat) == h]]), numeric(1))
+    expect_identical(as.integer(first_nat), as.integer(c(d$house_first_epoch)))
+  }
+})

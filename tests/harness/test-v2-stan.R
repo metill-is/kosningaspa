@@ -6,13 +6,16 @@ box::use(
 
 V2_STAN <- "Stan/forecast_v2.stan"
 
-test_that("v2s-m0: Stan's log density matches the reference up to a constant", {
-  skip_unless_slow()
-  skip_unless_step("v2s-m0")
-  cells <- v2_test_cells(cfg_m0())
+# A step's lp test (the step protocol's Step B) on the cells of v2_test_cells(cfg), whose
+# walk and delta forms are the reference forms: on each cell Stan's log density minus the
+# reference's is constant over the cell's points (2024 eve and 2021 f180: posterior and
+# off-posterior points; 2017 eve: prior points only), each mutant of v2_mutants() that the
+# cell exercises is rejected, and every mutant of the 2024-eve cell is exercised on some
+# cell. Returns the mutants exercised, invisibly.
+expect_step_lp <- function(step, cfg) {
+  cells <- v2_test_cells(cfg)
   hit <- character(0)
   for (name in names(cells)) {
-    # 2024 eve, 2021 f180: posterior + off; 2017 eve: prior only
     cell <- cells[[name]]
     m <- v2_methods(V2_STAN, cell$data)
     pts <- lp_points(m, cell$data, n_post = cell$n_post, n_off = cell$n_off)
@@ -28,13 +31,20 @@ test_that("v2s-m0: Stan's log density matches the reference up to a constant", {
     unexercised <- setdiff(v2_mutants(cell$data), names(ratios))
     by_kind <- paste(vapply(names(ok$kind), \(k) sprintf("%s %.3g", k, ok$kind[[k]][["range"]] / ok$kind[[k]][["tol"]]), ""), collapse = ", ")
     message(sprintf(
-      "v2s-m0 %s: %d points, lp constant range %.3g (tol %.3g, ratio %.3g; ratio by kind: %s); weakest exercised mutant %s; range / (100 tol): %s; not exercised: %s",
-      name, length(pts), ok$range, ok$tol, ok$range / ok$tol, by_kind, weakest,
+      "%s %s: %d points, lp constant range %.3g (tol %.3g, ratio %.3g; ratio by kind: %s); weakest exercised mutant %s; range / (100 tol): %s; not exercised: %s",
+      step, name, length(pts), ok$range, ok$tol, ok$range / ok$tol, by_kind, weakest,
       paste(sprintf("%s %.3g", names(ratios), ratios), collapse = ", "),
       if (length(unexercised)) paste(unexercised, collapse = ", ") else "none"
     ))
   }
   expect_setequal(unique(hit), v2_mutants(cells$eve2024$data)) # every mutant is exercised on some cell
+  invisible(unique(hit))
+}
+
+test_that("v2s-m0: Stan's log density matches the reference up to a constant", {
+  skip_unless_slow()
+  skip_unless_step("v2s-m0")
+  expect_step_lp("v2s-m0", cfg_m0())
 })
 test_that("v2s-m0: positional-gather mutant is rejected", {
   skip_unless_slow()
@@ -91,7 +101,7 @@ test_that("v2s-m0: v2_methods stops on each unbuilt switch with CmdStan's text n
   skip_unless_slow()
   skip_unless_step("v2s-m0")
   d <- v2_test_cells(cfg_m0())$eve2024$data
-  for (sw in c("epoch_bias", "newcomer_pool", "shock", "delta_walk", "fundamentals", "delta_form")) {
+  for (sw in c("newcomer_pool", "shock", "delta_walk", "fundamentals", "delta_form")) {
     d1 <- d
     d1[[sw]] <- 1L
     expect_error(v2_methods(V2_STAN, d1), paste0("forecast_v2: switch ", sw, " = 1 is not built yet"), fixed = TRUE)
@@ -351,4 +361,80 @@ test_that("v2s-p1: with the present levels at 0 each anchor is at its result, wh
       if (length(s) < P) expect_gt(max(abs(th1[-s, a] - th0[-s, a])), 1e-6, label = paste("absent parties at anchor", j))
     }
   }
+})
+
+# Step v2s-m1, the epoch bias (§6.4, switch epoch_bias): the industry bias walks across
+# epochs, each house's deviations walk after its first epoch, and a newcomer restarts at its
+# entry epoch.
+EPOCH_PARS <- c("mu_step_raw", "house_step_raw", "tau_mu", "tau_mu_A", "tau_house")
+
+test_that("v2s-m1: Stan's log density matches the reference up to a constant", {
+  skip_unless_slow()
+  skip_unless_step("v2s-m1")
+  hit <- expect_step_lp("v2s-m1", cfg_m1())
+  expect_true(all(c("house_walk_from_first_poll", "newcomer_mean_of_mu1") %in% hit))
+})
+
+test_that("v2s-m1: the epoch bias's parameters have v2_par_dims()' sizes, and size 0 with epoch_bias = 0", {
+  skip_unless_slow()
+  skip_unless_step("v2s-m1")
+  for (cell in v2_test_cells(cfg_m1())) {
+    d <- cell$data
+    m <- v2_methods(V2_STAN, d)
+    expect_identical(names(v2_model(V2_STAN)$variables()$parameters), V2_CORE_PARS$name)
+    dims <- v2_par_dims(d)
+    n_step <- d$n_epoch - 1L
+    expect_identical(lapply(dims[EPOCH_PARS], as.integer), list(
+      mu_step_raw = c(d$P, n_step), house_step_raw = c(d$H, d$P, n_step), tau_mu = 1L, tau_mu_A = 1L, tau_house = 1L
+    ))
+    sizes <- m$metadata()$stan_variable_sizes
+    expect_identical(lapply(sizes[EPOCH_PARS], as.integer), lapply(dims[EPOCH_PARS], as.integer))
+    d0 <- d
+    d0$epoch_bias <- 0L
+    expect_true(all(vapply(v2_par_dims(d0)[EPOCH_PARS], prod, numeric(1)) == 0))
+    # WHY: every new parameter is unconstrained but the three scales, each one free element.
+    expect_identical(as.numeric(n_unc(m) - n_unc(v2_methods(V2_STAN, d0))), as.numeric((d$H + 1) * d$P * n_step + 3))
+    # WHY: utils::relist() drops the dims of the H x P x (n_epoch - 1) house_step_raw, which
+    # comes back flat in column-major order; the reference reads it so.
+    s <- v2_simulate(d, seed = 1, observe = FALSE)
+    pars <- stan_pars(m, m$unconstrain_variables(s$pars))
+    expect_equal(as.numeric(pars$house_step_raw), c(s$pars$house_step_raw), tolerance = 1e-12)
+    expect_equal(as.numeric(pars$mu_step_raw), c(s$pars$mu_step_raw), tolerance = 1e-12)
+    expect_equal(as.numeric(pars$tau_mu_A), c(s$pars$tau_mu_A), tolerance = 1e-12)
+  }
+})
+
+test_that("v2s-m1: the industry and house biases are the reference's natural quantities", {
+  skip_unless_slow()
+  skip_unless_step("v2s-m1")
+  for (cell in v2_test_cells(cfg_m1())) {
+    d <- cell$data
+    m <- v2_methods(V2_STAN, d)
+    for (seed in 1:3) {
+      s <- v2_simulate(d, seed = seed, observe = FALSE)
+      u <- m$unconstrain_variables(s$pars)
+      tp <- m$constrain_variables(u, transformed_parameters = TRUE, generated_quantities = FALSE)
+      ref <- v2_natural(stan_pars(m, u), d)
+      for (n in c("mu", "gamma")) {
+        dims <- dim(as.array(ref[[n]]))
+        expect_identical(length(tp[[n]]), as.integer(prod(dims)), label = paste("length of", n))
+        expect_equal(array(tp[[n]], dims), as.array(ref[[n]]), tolerance = 1e-10, label = n)
+      }
+    }
+  }
+})
+
+test_that("v2s-m1: the log-likelihood rows are the reference's at a prior point", {
+  skip_unless_slow()
+  skip_unless_step("v2s-m1")
+  # WHY: the reference's likelihood rows are internal to its module; they are the oracle here.
+  # The forecast is switched off, so the fixed_param run computes none.
+  ref <- environment(v2_lp_ref)
+  d <- v2_test_cells(cfg_m1())$eve2024$data
+  d$draw_forecast <- 0L
+  r <- gq_at(V2_STAN, d, v2_simulate(d, seed = 2, observe = FALSE)$pars)
+  p <- ref$core_pars(r$pars, d)
+  rows <- ref$dm_rows(p, ref$natural(p, d), d)
+  expect_equal(r$gq$log_lik, vapply(rows, \(x) dirmult_lpmf(ref$row_counts(d, x), x$alpha), numeric(1)), tolerance = 1e-10)
+  expect_false(any(c("votes_kd", "pi_nat_eday", "pi_latent_E") %in% names(r$gq)))
 })

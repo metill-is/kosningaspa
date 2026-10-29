@@ -27,7 +27,8 @@
 # v2_stan_data()). None of its effects is therefore replaced by a newcomer's construction
 # (§6.4), and in the default order it is Sjálfstæðisflokkurinn, a party of about that size.
 # Every prior read below is exchangeable over parties, so coordinate 1 stands for any party
-# present from the start. The effects:
+# present from the start, except Annað's industry-bias steps (industry_step), whose scale is
+# its own. The effects:
 #   - house_d: d_h = σ_γ C ε_h (pars sigma_gamma and house_raw), coordinate 1 of every house,
 #     the houses pooled (they are exchangeable).
 #   - industry_mu1: μ_1, the parameter mu1 (normal(0, prior_sd_mu1) on every element,
@@ -44,6 +45,10 @@
 #     draw's σ and L_Ω: covariance 180 CΣCᵀ, the walk's own innovation covariance (§6.2) over
 #     180 days off the campaign (s = 1). The campaign multiplier τ_camp has a prior of its own,
 #     which this row leaves out. The change is signed, so its band reads the upper tail.
+#   - industry_step (step v2s-m1, switch epoch_bias): x = C(τ ⊙ ξ_e), an epoch's step of the
+#     industry bias (§6.4; pars mu_step_raw, tau_mu and tau_mu_A), τ_p = τ_μ but τ_μ,A for
+#     Annað (the data's annad_idx), coordinate 1 of every step, the steps pooled (they are
+#     exchangeable). It stops if the coordinate party is Annað.
 #
 # The bands, each built by its constructor and checked by in_band():
 #   band_inside(lo, hi)                      the 5% quantile at least lo, the 95% at most hi
@@ -139,6 +144,14 @@ SUMMARY_FUNS <- list(
     z <- withr::with_seed(seed, stats::rnorm(data$P))
     v <- sim$pars$sigma * drop(matrix(sim$pars$L_Omega, data$P, data$P) %*% z)
     share_change(sqrt(WALK_DAYS) * (v - mean(v)))
+  },
+  industry_step = function(sim, data, seed) {
+    if (identical(as.integer(data$annad_idx), 1L)) {
+      stop("prior predictive: the coordinate party is Anna\u00f0, whose industry-bias steps have their own scale", call. = FALSE)
+    }
+    xi <- matrix(sim$pars$mu_step_raw, data$P, data$n_epoch - 1L)
+    tau <- replace(rep(as.numeric(sim$pars$tau_mu), data$P), data$annad_idx, as.numeric(sim$pars$tau_mu_A))
+    apply(tau * xi, 2, \(x) share_change(x - mean(x)))
   }
 )
 
@@ -267,7 +280,9 @@ check_rows <- function(rows) {
 
 #' Every row of the check, keyed by summary and step. The core's (step v2s-m0): the bands
 #' were written before any V2 fit; the first three rows each have the other values of the
-#' plan's Decision 1 as comparisons (§6.10's, and proposals 1 and 4).
+#' plan's Decision 1 as comparisons (§6.10's, and proposals 1 and 4). The epoch bias's (step
+#' v2s-m1, switch `epoch_bias`): an epoch's step of the industry bias, its band written before
+#' any fit of that step.
 #' @export
 ROWS <- check_rows(dplyr::bind_rows(
   summary_rows(
@@ -308,6 +323,14 @@ ROWS <- check_rows(dplyr::bind_rows(
     "walk_180", "v2s-m0", NA_character_,
     "A 20% party's 180-day walk change, off the campaign (covariance 180 C\u03a3C\u1d40)",
     character(0), band_q95(2, 30)
+  ),
+  summary_rows(
+    "industry_step", "v2s-m1", "epoch_bias",
+    paste0(
+      "An epoch's step in the industry bias on a 20% party (C(\u03c4 \u2299 \u03be_e), \u03c4_\u03bc ~ half-N(0, `prior_tau_mu`), ",
+      "\u03c4_\u03bc,A ~ half-N(0, 0.3) for Anna\u00f0)"
+    ),
+    "prior_tau_mu", band_inside(-6, 6)
   )
 ))
 

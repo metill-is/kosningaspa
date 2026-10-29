@@ -90,7 +90,7 @@ test_that("the data fields come in the contract's order, with integer counts and
     "N_nat", "grid_nat", "house_nat", "y_nat", "n_rep_nat", "idx_nat",
     "J", "N_kd", "poll_kd", "kd_kd", "grid_kd", "house_kd", "y_kd", "n_rep_kd", "idx_kd",
     "n_closed", "grid_res", "y_res", "n_rep_res", "idx_res",
-    "house_first_epoch", "entry_epoch",
+    "house_first_epoch", "entry_epoch", "annad_idx",
     "d_shock", "N_open", "draw_forecast", "latent_path",
     "n_sf", "sf_idx", "mu_f", "desired_weight", "weight_time", "campaign_days", "delta_years_bar",
     "prior_tau_mu", "prior_s_bar_E", "prior_s_bar_zeta", "prior_sd_log_kappa", "prior_mu_phi", "prior_sd_mu1",
@@ -114,6 +114,8 @@ test_that("the data fields come in the contract's order, with integer counts and
   expect_equal(rowSums(d$w), rep(1, d$n_epoch))
   expect_true(all(d$poll_kd == cummax(d$poll_kd)) && identical(sort(unique(c(d$poll_kd))), seq_len(d$J)))
   expect_true(all(d$house_first_epoch == cummax(d$house_first_epoch)))
+  # WHY: POLL_PARTIES, the default order, ends with Annað.
+  expect_identical(d$annad_idx, d$P)
 })
 test_that("the shock scaling reads the previous election's national share, with the floor for a party with none", {
   d <- d_2024eve()

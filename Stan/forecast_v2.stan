@@ -9,7 +9,9 @@
 // the log density against the R reference R/harness/v2_reference.R. A component switch or
 // a form other than 0 is refused until the step that builds it (Stan/CLAUDE.md, switches).
 // Step v2s-p1 builds walk_form = 1, the walk anchored at the closed elections (§6.9), the
-// same model as the reference walk; R/harness/v2_equivalence.R checks that it is.
+// same model as the reference walk; R/harness/v2_equivalence.R checks that it is. Step v2s-m1
+// builds epoch_bias = 1 (§6.4): the industry bias and each house's deviations walk across
+// epochs, Annad's industry-bias steps with a scale of their own.
 functions {
   // The map M_e of §6.7 on a K x P matrix: subtract each party's w-weighted mean over the
   // kjordaemi, then centre each kjordaemi over the parties. The result's rows sum to 0 and
@@ -101,6 +103,7 @@ data {
   // Houses and parties (§6.4)
   array[H] int<lower=1, upper=n_epoch> house_first_epoch;  // [H] epoch of each house's first poll
   array[P] int<lower=0, upper=n_epoch> entry_epoch;   // [P] 0 for a party present at the window's start
+  int<lower=0, upper=P> annad_idx;                    // Annad's index, 0 if none: its industry-bias steps scale by tau_mu_A
 
   // Shock scaling, the forecast and the outputs (§6.6, §6.8)
   matrix<lower=0>[n_epoch, P] d_shock;                // [n_epoch, P] shock scaling
@@ -137,8 +140,7 @@ data {
 }
 
 transformed data {
-  // Only the core in the reference forms is built: each other switch is refused by name.
-  if (epoch_bias) reject("forecast_v2: switch epoch_bias = ", epoch_bias, " is not built yet");
+  // The core, the anchored walk and the epoch bias are built: each other switch is refused by name.
   if (newcomer_pool) reject("forecast_v2: switch newcomer_pool = ", newcomer_pool, " is not built yet");
   if (shock) reject("forecast_v2: switch shock = ", shock, " is not built yet");
   if (delta_walk) reject("forecast_v2: switch delta_walk = ", delta_walk, " is not built yet");
@@ -302,6 +304,13 @@ parameters {
   real mu_sd;
   real<lower=0> tau_sd;
   array[J] sum_to_zero_vector[P] nu;                  // kjordaemi polls' levels
+  // The epoch bias (epoch_bias = 1, §6.4), each size 0 with epoch_bias = 0. Column e - 1 holds
+  // the step into epoch e = 2..n_epoch.
+  matrix[P, epoch_bias * (n_epoch - 1)] mu_step_raw;  // the industry bias's steps xi_e
+  array[H] matrix[P, epoch_bias * (n_epoch - 1)] house_step_raw;  // each house's steps zeta_{e,h}
+  array[epoch_bias] real<lower=0> tau_mu;             // the industry bias's step scale
+  array[epoch_bias] real<lower=0> tau_mu_A;           // Annad's
+  array[epoch_bias] real<lower=0> tau_house;          // the houses' step scale
 }
 
 transformed parameters {
@@ -372,12 +381,23 @@ transformed parameters {
     }
   }
 
-  // §6.4 with no drift over epochs: from its entry epoch on, a newcomer's bias is the mean of
-  // the current biases of the parties existing before that epoch, plus m_new + s_new eta;
-  // then mu_e is re-centred.
+  // §6.4, the industry bias: mu_1, then with epoch_bias = 1 mu_e = mu_{e-1} + C(tau .* xi_e),
+  // tau_p = tau_mu but tau_mu_A for Annad; with epoch_bias = 0 no step, so mu is constant over
+  // epochs. From its entry epoch on, a newcomer's bias is the mean of the current biases of
+  // the parties existing before that epoch, plus m_new + s_new eta; then mu_e is re-centred,
+  // and after it the newcomer walks with the rest.
   {
+    vector[P] tau = rep_vector(0, P);
+    if (epoch_bias) {
+      tau = rep_vector(tau_mu[1], P);
+      if (annad_idx > 0) tau[annad_idx] = tau_mu_A[1];
+    }
     vector[P] m = mu1;
     for (e in 1:n_epoch) {
+      if (epoch_bias && e > 1) {
+        vector[P] s = tau .* mu_step_raw[ : , e - 1];
+        m += s - mean(s);
+      }
       if (n_enter[e] > 0) {
         real base = mean(m[before_idx[e, 1:n_before[e]]]);
         for (i in 1:n_enter[e]) {
@@ -390,13 +410,23 @@ transformed parameters {
     }
   }
 
-  // gamma_{e,h} = mu_e + d_h, d_h = C(sigma_gamma eps_h): one eps per house and the same d_h
-  // in every epoch, so a newcomer's slot is its restarted deviation.
+  // gamma_{e,h} = mu_e + d_{e,h}, with d_{e,h} = C x_{e,h} for the house's levels x. They start
+  // at sigma_gamma eps_h and stay there up to the house's first epoch; with epoch_bias = 1 they
+  // walk after it, x_{e,h} = x_{e-1,h} + tau_house zeta_{e,h}, so d_{e,h} = d_{e-1,h} +
+  // C(tau_house zeta_{e,h}), and at a later entry epoch a newcomer's level restarts at
+  // sigma_gamma eps_{h,p} instead of carrying prior-only drift. With epoch_bias = 0, d_h =
+  // C(sigma_gamma eps_h) in every epoch, so a newcomer's slot is its restarted deviation.
   for (h in 1:H) {
-    row_vector[P] d = sigma_gamma * house_raw[h];
-    d -= mean(d);
+    row_vector[P] x = sigma_gamma * house_raw[h];
     for (e in 1:n_epoch) {
-      gamma[e, h] = d' + mu[e];
+      if (epoch_bias && e > house_first_epoch[h]) {
+        x += tau_house[1] * house_step_raw[h][ : , e - 1]';
+        for (i in 1:n_enter[e]) {
+          int p = enter_idx[e, i];
+          x[p] = sigma_gamma * house_raw[h, p];
+        }
+      }
+      gamma[e, h] = (x - mean(x))' + mu[e];
     }
   }
 
@@ -489,6 +519,15 @@ model {
   for (j in 1:J) {
     nu[j] ~ normal(0, 2);
   }
+  // The epoch bias (epoch_bias = 1): N(0, 1) steps and half-normal scales, all size 0 with
+  // epoch_bias = 0.
+  to_vector(mu_step_raw) ~ std_normal();
+  for (h in 1:H) {
+    to_vector(house_step_raw[h]) ~ std_normal();
+  }
+  tau_mu ~ normal(0, prior_tau_mu);
+  tau_mu_A ~ normal(0, 0.3);
+  tau_house ~ normal(0, 0.1);
   // The bounded transforms' log-Jacobians, |d log c / d u| = (cap - init) exp(u).
   target += H * log(phi_cap - phi_init) + sum(log_phi_u);
   target += log(phi_K_cap - phi_K_init) + log_phi_K_u;

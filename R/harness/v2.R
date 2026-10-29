@@ -171,8 +171,9 @@ reported <- function(y) {
 #'     and `idx_res` (the parties with national votes);
 #'   - `house_first_epoch` (the epoch of each house's first admitted national or kjördæmi
 #'     poll; houses are the house table's `house` of each pollster, ordered by that poll's
-#'     date, ties by name) and `entry_epoch` (0 for a party present at the window's start,
-#'     else its entry epoch);
+#'     date, ties by name), `entry_epoch` (0 for a party present at the window's start,
+#'     else its entry epoch) and `annad_idx` (Annað's index in the party order, 0 if the
+#'     cell has none: its industry-bias steps take their own scale τ_μ,A, §6.4);
 #'   - `d_shock` (n_epoch × P: √(min(0.2 / π̄, 10)), π̄ the national share at the election
 #'     before the one closing the epoch (`info$prev_shares`; 2013's for epoch 1, from the
 #'     fundamentals table), 0.02 for a party with none; the open epoch's row serves E),
@@ -390,6 +391,7 @@ v2_stan_data <- function(info, cfg, stage1 = stage1_mu_f, party_order = NULL, ro
     n_closed = n_closed, grid_res = grid_res, y_res = y_res, n_rep_res = as.integer(rowSums(nat_res > 0)),
     idx_res = reported(nat_res),
     house_first_epoch = epoch_of(firsts$first), entry_epoch = entry_epoch,
+    annad_idx = match("Anna\u00f0", party_order, nomatch = 0L),
     d_shock = d_shock, N_open = as.integer(N_open), draw_forecast = if (free) 0L else 1L, latent_path = 0L,
     n_sf = n_sf, sf_idx = sf_idx, mu_f = mu_f,
     desired_weight = cfg$desired_weight, weight_time = cfg$weight_time, campaign_days = cd,
