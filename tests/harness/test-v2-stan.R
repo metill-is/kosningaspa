@@ -5,7 +5,9 @@ box::use(
   ]
 )
 
-V2_STAN <- "Stan/forecast_v2.stan"
+# WHY: a planted fault's RED runs these tests on a scratch copy of the Stan file, named by
+# HARNESS_V2_STAN as an absolute path; unset, they test the repo's file.
+V2_STAN <- Sys.getenv("HARNESS_V2_STAN", "Stan/forecast_v2.stan")
 
 # A step's lp test (the step protocol's Step B) on the cells of v2_test_cells(cfg), whose
 # walk and delta forms are the reference forms: on each cell Stan's log density minus the
@@ -709,13 +711,15 @@ test_that("v2s-m3: at a prior point the results' rows carry their shocks, pi_lat
 test_that("v2s-m3: with z_shock = 0 the results' rows are shock = 0's, and the forecast's shock is drawn after the replicates", {
   skip_unless_slow()
   skip_unless_step("v2s-m3")
-  # WHY: eps_E's z is drawn in the forecast block, after y_rep_res's draws; drawn before them it
-  # would move y_rep_res's RNG stream, which draw_forecast = 0 leaves where it is. Runs at
-  # shock = 1 and 0 cannot compare their replicates draw for draw: a fixed_param run's
-  # initialisation draws one uniform per unconstrained parameter even when every init is
-  # given, and the two are P n_closed + 1 parameters apart. That shock = 0 draws what the step
-  # before it drew is checked once against the previous step's Stan file, not here, and that
-  # votes_kd carries the shock by the next test. Nothing below prints a forecast draw.
+  # WHY: the last check detects a forecast draw gated on draw_forecast and placed before the
+  # replicates, which would move y_rep_res's RNG stream against draw_forecast = 0. It cannot
+  # see a draw guarded only by if (shock) before the results loop, nor a draw outside
+  # if (draw_forecast): both runs make it. Runs at shock = 1 and 0 cannot compare their
+  # replicates draw for draw either: a fixed_param run's initialisation draws one uniform per
+  # unconstrained parameter even when every init is given, and the two are P n_closed + 1
+  # parameters apart. That shock = 0 draws exactly what the previous step's file drew is
+  # checked once and recorded in harness/v2/steps.md's v2s-m3 section, not here; that
+  # votes_kd carries the shock, the next test checks. Nothing below prints a forecast draw.
   d <- v2_test_cells(cfg_m3())$eve2024$data
   expect_identical(as.integer(d$draw_forecast), 1L)
   pars <- v2_simulate(d, seed = 3, observe = FALSE)$pars
@@ -738,12 +742,15 @@ test_that("v2s-m3: with z_shock = 0 the results' rows are shock = 0's, and the f
 test_that("v2s-m3: votes_kd carries a fresh shock on the open epoch's row of d_shock, one per draw for every kjordaemi", {
   skip_unless_slow()
   skip_unless_step("v2s-m3")
-  # WHY: at a prior draw with the walk, delta and the closed shocks at 0, every party's latent
-  # log-ratio at E is 0, and at phi_K = exp(19.5) the cell noise is about the multinomial's. So
-  # a draw's log count ratio of party p to party q, averaged over the kjordaemi, is eps_E's
-  # contrast s_bar_E (d_p z_p - d_q z_q) up to noise far below it, with variance
-  # s_bar_E^2 (d_p^2 + d_q^2). Nothing below prints a draw: each check is a scalar compared
-  # inside isTRUE().
+  # WHY: at a prior draw with the walk and delta at 0, every party's latent log-ratio at E is
+  # 0, and at phi_K = exp(19.5) the cell noise is about the multinomial's. So a draw's log
+  # count ratio of party p to party q, averaged over the kjordaemi, is eps_E's contrast
+  # s_bar_E (d_p z_p - d_q z_q) up to noise far below it, with mean 0 and variance
+  # s_bar_E^2 (d_p^2 + d_q^2). The closed elections' shocks are set far from 0 (z = +-2,
+  # alternating over the parties, its sign flipped from one election to the next) and must
+  # not reach votes_kd: each contrast's mean stays at the shock-free centre, 0. Nothing below
+  # prints a draw: each check is a scalar compared inside isTRUE(), and a failing centre
+  # check reports only its largest |z|.
   d <- v2_test_cells(cfg_m3())$eve2024$data
   A <- which(d$exists[d$G, ] == 1L)
   expect_true(isTRUE(length(A) >= 3))
@@ -751,7 +758,7 @@ test_that("v2s-m3: votes_kd carries a fresh shock on the open epoch's row of d_s
   pars$theta1[] <- 0
   pars$z_walk[] <- 0
   pars$delta_raw[] <- 0
-  pars$z_shock[] <- 0
+  pars$z_shock[] <- vapply(seq_len(d$n_closed), \(e) 2 * (-1)^(seq_len(d$P) + e), numeric(d$P))
   # log phi_K = cap - (cap - init) exp(u), cap 20 and init log(1000): u sets log phi_K to 19.5
   pars$log_phi_K_u <- log((20 - 19.5) / (20 - log(1000)))
   s_bar <- 0.2
@@ -772,4 +779,11 @@ test_that("v2s-m3: votes_kd carries a fresh shock on the open epoch's row of d_s
   # One shock per draw, shared by the kjordaemi: a contrast moves together in two of them.
   k_cor <- stats::cor(lv[, 1, A[2]] - lv[, 1, q], lv[, 2, A[2]] - lv[, 2, q])
   expect_true(isTRUE(k_cor > 0.9))
+  # The centre: each contrast's mean is the shock-free centre, 0, within 4 sd / sqrt(n). The
+  # last closed election's shock alone would move some contrast by more than 20 of those.
+  se <- vapply(A[-1], \(p) stats::sd(contrast(p)) / sqrt(n), numeric(1))
+  centre_z <- abs(vapply(A[-1], \(p) mean(contrast(p)), numeric(1))) / se
+  last <- s_bar * d$d_shock[d$n_closed, ] * pars$z_shock[, d$n_closed]
+  expect_true(isTRUE(max(abs(last[A[-1]] - last[q]) / se) > 20))
+  expect_true(isTRUE(max(centre_z) < 4), info = sprintf("largest |z| of a contrast's mean: %.1f", max(centre_z)))
 })

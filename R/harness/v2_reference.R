@@ -11,10 +11,11 @@ box::use(
   R / harness / v2[V2_SWITCHES]
 )
 
-#' The core's parameters (Ruling T3a), in the declaration order of Stan/forecast_v2.stan,
-#' with their Stan types: the names and order of the list that
-#' `constrain_variables(..., transformed_parameters = FALSE)` returns and `v2_lp_ref()`
-#' reads. `N_new` is the number of parties with `entry_epoch` > 0, and `new_raw` holds one
+#' The core's parameters, in the declaration order of Stan/forecast_v2.stan, with their Stan
+#' types: the Stan file's parameters block declares the same names in the same order with the
+#' same types, which the declaration test in tests/harness/test-v2-reference.R pins. They are
+#' the names and order of the list that `constrain_variables(..., transformed_parameters =
+#' FALSE)` returns and `v2_lp_ref()` reads. `N_new` is the number of parties with `entry_epoch` > 0, and `new_raw` holds one
 #' element per such party, in party order. `delta_raw` is one ζ, mapped through every
 #' epoch's M_e (static δ). `s_delta0_raw` is r, with log s_δ0 = μ_sd + τ_sd r. `anchor_w` is
 #' the anchored walk's (walk_form = 1, §6.9): size 0 in the reference forms, where `z_walk`

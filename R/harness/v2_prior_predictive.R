@@ -61,7 +61,11 @@
 #     share_change(C(s̄_E d ⊙ z), share) on the composition (share, (1 − share) / (P − 1), ...),
 #     each element's d = √(min(0.2 / π_p, 10)) the builder's formula (shock_scaling()) on that
 #     composition. §6.10 puts the median at about 1.6 pp for a 20% party and 0.95 pp for a 5%
-#     one. They read no party-indexed parameter, so coordinate 1 is the 20% or 5% party.
+#     one: the party-alone linearisation π(1 − π) s̄ d at s̄_E's median, 0.15 · qnorm(0.75).
+#     This construction also shocks the other P − 1 parties and centres, so its population
+#     medians are about 1.80 and 1.00 pp, and the ratios to §6.10's targets are expected near
+#     1.13 and 1.05. They read no party-indexed parameter, so coordinate 1 is the 20% or 5%
+#     party.
 #
 # The bands, each built by its constructor and checked by in_band():
 #   band_inside(lo, hi)                      the 5% quantile at least lo, the 95% at most hi
@@ -145,13 +149,17 @@ share_change <- function(x, share = SHARE) {
 #' `s_bar_E`: over `SHOCK_INNER` draws of z ~ N(0, I_P) from `seed`, the sd of
 #' `share_change(C(s_bar_E d ⊙ z), share)` on the composition (share, (1 − share) / (P − 1),
 #' ...), each element's d `shock_scaling()` of its share in that composition.
-#' @param s_bar_E the shock's scale, one positive number
-#' @param P the parties, at least 2
-#' @param share the first party's share
+#' @param s_bar_E the shock's scale, one non-negative number
+#' @param P the parties, a whole number of at least 2
+#' @param share the first party's share, in (0, 1)
 #' @param seed the seed of the z draws
 #' @return numeric(1)
 #' @export
 shock_sd <- function(s_bar_E, P, share, seed) {
+  one <- function(x) is.numeric(x) && length(x) == 1 && is.finite(x)
+  if (!(one(s_bar_E) && s_bar_E >= 0)) stop("prior predictive: shock_sd() needs s_bar_E, one non-negative number", call. = FALSE)
+  if (!(one(P) && P == round(P) && P >= 2)) stop("prior predictive: shock_sd() needs P, a whole number of at least 2", call. = FALSE)
+  if (!(one(share) && share > 0 && share < 1)) stop("prior predictive: shock_sd() needs share in (0, 1)", call. = FALSE)
   d <- shock_scaling(c(share, rep((1 - share) / (P - 1), P - 1)))
   z <- withr::with_seed(seed, matrix(stats::rnorm(P * SHOCK_INNER), P, SHOCK_INNER))
   x <- s_bar_E * d * z

@@ -349,6 +349,15 @@ test_that("shock_sd is the sd over 200 z draws of the first party's change under
   expect_equal(shock_sd(0.2, 10L, 0.2, 1L), 2 * shock_sd(0.1, 10L, 0.2, 1L), tolerance = 0.05)
 })
 
+test_that("shock_sd refuses a negative scale, fewer than 2 parties and a share outside (0, 1)", {
+  expect_error(shock_sd(-0.1, 10L, 0.2, 1L), "prior predictive: shock_sd() needs s_bar_E", fixed = TRUE)
+  expect_error(shock_sd(c(0.1, 0.2), 10L, 0.2, 1L), "prior predictive: shock_sd() needs s_bar_E", fixed = TRUE)
+  expect_error(shock_sd(0.1, 1L, 0.2, 1L), "prior predictive: shock_sd() needs P", fixed = TRUE)
+  expect_error(shock_sd(0.1, 2.5, 0.2, 1L), "prior predictive: shock_sd() needs P", fixed = TRUE)
+  expect_error(shock_sd(0.1, 10L, 1, 1L), "prior predictive: shock_sd() needs share", fixed = TRUE)
+  expect_error(shock_sd(0.1, 10L, 0, 1L), "prior predictive: shock_sd() needs share", fixed = TRUE)
+})
+
 test_that("the shock rows read the draw's s_bar_E, and refuse a draw without one", {
   sim <- list(pars = list(s_bar_E = array(0.12, 1)))
   expect_equal(SUMMARY_FUNS$shock_sd_20(sim, list(P = 10L), 5L), shock_sd(0.12, 10L, 0.2, 5L), tolerance = 1e-12)
