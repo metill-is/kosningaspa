@@ -273,7 +273,8 @@ those runs still SKIP. If an arm's role changes in `ARMS`, its finished runs sti
 arm <arm>'s role <new>"; retire such a run (`retire_run()`) and refit it. A run with no
 recorded role takes its arm's current role and is not refused. Plan 4 may add roles for the arms it scores. Every arm
 but `r0` runs `Stan/forecast_v2.stan` with its own config, an entry `v2_arm(config, role)`
-builds. `ARMS` holds `r0` and `v2s-m0`; each other V2 arm is registered as its config lands.
+builds. `ARMS` holds `r0`, `v2s-m0` and `v2s-p1`; each other V2 arm is registered as its
+config lands.
 
 **R0's extraction.** `r0_extract(draws, meta, dir)` (`R/harness/r0.R`) writes the four
 parquets of spec §5.5 from a fit's draws: `eday_kjordaemi` (`.chain`, `.iteration`,
@@ -437,6 +438,11 @@ The last two, run once `queue.log` ends in `QUEUE FINISHED`, write the step's di
 (committed) and print the stop rule's verdicts, which go into the step log,
 `harness/v2/steps.md`, one section per step.
 
+P1 (`v2s-p1`), the walk anchored at the closed elections, passed its four equivalence checks
+and was not adopted: `adopt` printed `KEEP v2s-m0`, condition 3 failing on its 10 divergences
+against `v2s-m0`'s none. The anchored form stays built behind `walk_form`, and every later
+step's config sets `walk_form = 0`.
+
 A P-step's form is first checked against the reference form, point by point, by
 `R/harness/v2_equivalence.R` (the plan's Decision 6, condition 1), once for each check of
 `EQUIVALENCE_REQUIRED` (below), all into the step's equivalence CSV:
@@ -455,22 +461,25 @@ a forecast variable. Each point maps to the other side through θ, every other p
 copied, and (lp_new − J_new) − (lp_ref − J_ref) must be one constant within
 1e-12 × max(1, |lp_new|), lp being `log_prob(jacobian = TRUE)` and J each side's
 log-Jacobian from its standard normals to θ (the script's header lists the terms). Each term
-left out alone, a negative control, must break it; a term constant over the points cannot be
-tested so, and fails the check as not exercised. Both sides' generated quantities at the posterior (or prior) points, by
-standalone `generate_quantities` at seed 1 and `sig_figs = 18`, must agree within 1e-9
-relative, and θ within 1e-8. A point with a bounded log concentration at its cap is excluded
-and counted; one whose log density is not finite on both sides is dropped and counted, and a
-dropped posterior point fails the check, as does one finite on one side only; each kind needs
-at least 5 kept points; with fewer of the main kind no generated quantities are compared and
-the check fails on that count. It prints the coordinate party (`coordinate party: <label>`),
-each point's constant and path error, the controls and the generated quantities' largest
-relative difference, never a forecast value, then `EQUIV PASS` or `EQUIV FAIL` (exit 1).
-`--out` must be a file in an existing directory. Once the command line is accepted, the
-script first writes a provisional `FAIL` row for its cell and order (reasons `incomplete`,
-the current `stan_sha256`), which its own row replaces at the end, so a check that stops
-leaves no earlier verdict standing. Only the walk form's map is built: `--form=delta` and
-`--form=both` stop until the plan's Task 13 builds the delta map. A check of 10 + 5 points on 2021 f180 took 5 min 6 s (`time`, 29 Oct 2026); 2024 eve's
-grid has 274 dates to 2021 f180's 160.
+left out alone, a negative control, must break it; under `--form=walk` every control must be
+exercised, so a term constant over the points fails the check as not exercised. Both sides'
+generated quantities at the posterior (or prior) points, by standalone `generate_quantities`
+at seed 1 and `sig_figs = 18`, must agree within 1e-9 relative, and θ within 1e-8. A point
+with a bounded log concentration at its cap is excluded and counted; one whose log density is
+not finite on both sides is dropped and counted, and a dropped posterior point fails the
+check, as does one finite on one side only; each kind needs at least 5 kept points; with
+fewer of the main kind no generated quantities are compared and the check fails on that
+count. `check_reasons()` gives the failed conditions and `control_verdicts()` the controls'
+verdicts. It prints the coordinate party (`coordinate party: <label>`; it stops if the two
+sides' differ), each point's constant and path error, the controls and the generated
+quantities' largest relative difference, never a forecast value, then `EQUIV PASS` or
+`EQUIV FAIL` (exit 1). `--out` must be a file in an existing directory. Once the command line
+is accepted, the script first writes a provisional `FAIL` row for its cell and order (reasons
+`incomplete`, the current `stan_sha256`), which its own row replaces at the end, so a check
+that stops leaves no earlier verdict standing. Only the walk form's map is built:
+`--form=delta` and `--form=both` stop until the plan's Task 13 builds the delta map. A check
+of 10 + 5 points on 2021 f180 took 5 min 6 s (`time`, 29 Oct 2026); 2024 eve's grid has 274
+dates to 2021 f180's 160.
 
 `R/harness/compare_runs.R` is a plain script with three subcommands, whose definitions also
 load as a box module (its test imports `perm_z()`, `perm_verdict()`, `relative()` and
@@ -532,13 +541,15 @@ check `R/harness/v2_equivalence.R` ran, with at least these columns; any others 
 |---|---|
 | `E`, `F` | the cell, ISO dates |
 | `order` | `default` or `reversed`: the party and kjördæmi order of both sides (`--reverse`) |
-| `verdict` | `PASS` or `FAIL`: the check's `EQUIV` verdict, its negative controls included |
+| `verdict` | `PASS` or `FAIL`: the check's `EQUIV` verdict, its negative controls included; a `FAIL` with reasons `incomplete` is the provisional row of a check that has not finished |
 
 `v2_equivalence.R` writes these first, then `form`, `config`, `stan_sha256`, the kept points
 by kind (`n_posterior`, `n_off`, `n_prior`), the dropped, excluded and one-sided counts
-(`n_rejected`, `n_outside`, `n_one_sided`), `const_range`, `tol`, `path_err`, `gq_points`,
-`gq_max_rel`, one `control_<term>` per log-Jacobian term (`fails`, `PASSES` or
-`not exercised`) and `reasons`, the failed conditions.
+(`n_rejected`, `n_outside`, `n_one_sided`), `const_range`, `tol`, `path_err`, `gq_points`
+(0 when no generated quantities were compared, `gq_max_rel` then empty), `gq_max_rel`, one
+`control_<term>` per log-Jacobian term (`fails`, `PASSES` or `not exercised`) and `reasons`,
+the failed conditions; reasons `incomplete` mark the provisional `FAIL` row of a check that
+has not finished, one that stopped or is still running.
 
 **`perm <arm_a> <arm_b> [run_list]`**, the permutation rule (the plan's Decision 8), compares two
 different arms that must give the same forecast draws within Monte Carlo error, such as `v2` and

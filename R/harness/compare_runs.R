@@ -33,10 +33,10 @@
 # arms must differ and have runs on the same cells, and on each cell each arm has exactly two
 # fits, of two different seeds that are the other arm's (Decision 6 runs seeds 2701 and 2702,
 # but any two seeds the arms share pass); this is checked before any run or the equivalence
-# CSV is read. It prints a table of the fits
-# (min bulk ESS per 1,000 gradients, divergences and the stop rule's verdict), a table of the
-# cells (each arm's median over its fits of min bulk ESS per 1,000 gradients, and their ratio),
-# the four conditions with yes or no, and a last line "ADOPT <new_arm>" if all four hold, else
+# CSV is read. It prints a table of the fits (min bulk ESS per 1,000 gradients, divergences
+# and the stop rule's verdict), a table of the cells (each arm's median over its fits of min
+# bulk ESS per 1,000 gradients, and their ratio), the four conditions with yes or no, and a
+# last line "ADOPT <new_arm>" if all four hold, else
 # "KEEP <ref_arm>: <new_arm> fails condition(s) <i>, ...":
 #   1. the equivalence check passes: equivalence_csv has no FAIL row, and a PASS row for each
 #      check of EQUIVALENCE_REQUIRED, the four the step's check writes (the plan's Task 8):

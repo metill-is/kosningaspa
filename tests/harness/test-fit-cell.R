@@ -338,12 +338,8 @@ test_that("fit_cell.R refuses a 2017 cell before the freeze, before it builds or
   skip_if(is_frozen(), "the freeze is sealed")
   results <- withr::local_tempdir()
   # WHY: with CMDSTAN naming an empty directory cmdstanr finds no CmdStan, so a regressed refusal stops at the first cmdstanr call, before any compile or sample.
-  withr::local_envvar(HARNESS_RESULTS = results, CMDSTAN = withr::local_tempdir())
-  probe <- withr::with_dir(root(), suppressWarnings(system2(
-    file.path(R.home("bin"), "Rscript"), c("-e", shQuote("cmdstanr::cmdstan_version()")),
-    stdout = TRUE, stderr = TRUE, env = "LC_ALL=en_US.UTF-8"
-  )))
-  if (is.null(attr(probe, "status"))) stop("cmdstanr finds CmdStan with CMDSTAN set to an empty directory: not running fit_cell.R on 2017")
+  withr::local_envvar(HARNESS_RESULTS = results)
+  local_no_cmdstan()
   out <- fit_cell(c("v2s-m0", "2017-10-28", "2017-10-27", "1", "10", "10"))
   expect_identical(attr(out, "status"), 1L)
   expect_match(out, REFUSED_2017, fixed = TRUE, all = FALSE)

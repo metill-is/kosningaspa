@@ -30,10 +30,12 @@
 # columns flattened in declaration order, column-major, since it matches them by position),
 # must agree; on a 2017 cell neither side may write votes_kd, pi_nat_eday or pi_latent_E.
 #
-# Pass: the constant's range over all kept points below tol = 1e-12 max(1, |lp_new|), every
-# exercised negative control above it, the generated quantities within 1e-9 relative
-# (|a - b| / max(1, |b|)), theta within 1e-8 on both sides, no one-sided point, no posterior
-# point dropped, and at least 5 kept points of each kind.
+# Pass: the constant's range over all kept points below tol = 1e-12 max(1, |lp_new|); under
+# --form=walk every negative control exercised and above tol; the generated quantities within
+# 1e-9 relative (|a - b| / max(1, |b|)); theta within 1e-8 on both sides; no one-sided point;
+# no posterior point dropped; and at least 5 kept points of each kind. With fewer than 5 kept
+# points of the main kind (posterior, or prior on a 2017 cell) no generated quantities are
+# compared, and the check fails on that count. check_reasons() gives the failed conditions.
 #
 # Usage, from the project root:
 #   LC_ALL=en_US.UTF-8 Rscript R/harness/v2_equivalence.R --config=<config> --form=walk|delta|both
@@ -51,9 +53,18 @@
 # provisional FAIL row (reasons "incomplete") is written first, so a check that stops before
 # its end leaves no earlier verdict of its cell and order standing.
 #
-# The definitions also load as a box module (its test imports write_equivalence_row() and
-# EQUIVALENCE_SUMMARY and provisional_row()); the script part runs only when box::name() is NULL. Every failure
-# outside the check itself stops with "v2_equivalence: ...".
+# Stops. Before that row: a bad command line, --form=delta or both, a config whose form is 0,
+# no Stan file, and point counts it cannot take (too few, more than the fit draws, or
+# off-posterior points on a 2017 cell). After it, the row left standing: the two sides'
+# coordinate parties differ, a 2017 cell's data draw a forecast or its generated quantities
+# hold a forecast variable, the Stan file's parameters are not v2_par_dims()' in its order,
+# the anchored map leaves a z_walk column unset, a parameter has the wrong number of values,
+# or the standalone generate_quantities run fails.
+#
+# The definitions also load as a box module (its test imports EQUIVALENCE_SUMMARY,
+# write_equivalence_row(), provisional_row(), control_verdicts() and check_reasons()); the
+# script part runs only when box::name() is NULL. Every failure outside the check itself
+# stops with "v2_equivalence: ...".
 if (is.null(box::name())) {
   if (!isTRUE(l10n_info()[["UTF-8"]])) stop("v2_equivalence: needs a UTF-8 locale: run under LC_ALL=en_US.UTF-8", call. = FALSE)
   # WHY: the box path below is the working directory, so check it is the project root first.
@@ -136,6 +147,52 @@ provisional_row <- function(E, F, order, form, config, stan_sha256) {
   utils::modifyList(row, list(
     E = E, F = F, order = order, verdict = "FAIL", form = form, config = config, stan_sha256 = stan_sha256,
     reasons = "incomplete"
+  ))
+}
+
+#' The negative controls' verdicts: "not exercised" for a term constant over the points (NA),
+#' "fails" for a control whose constant range exceeds tol, as it must, and "PASSES" otherwise.
+#' @param controls the constant's range with each term left out, named by `JACOBIAN_TERMS`
+#' @param tol the tolerance
+#' @return a character vector named as `controls`
+#' @export
+control_verdicts <- function(controls, tol) {
+  stats::setNames(ifelse(is.na(controls), "not exercised", ifelse(controls > tol, "fails", "PASSES")), names(controls))
+}
+
+#' Why a check fails, in the order its EQUIV line and the CSV's `reasons` give them; none when
+#' it passes. The generated quantities count only when compared: with fewer than `MIN_KEPT`
+#' kept points of the main kind they are not, and the check fails on that count instead.
+#' @param form the --form value; under "walk" every control must be exercised
+#' @param const_range the constant's range over the kept points
+#' @param tol the tolerance
+#' @param controls the controls' constant ranges, named by `JACOBIAN_TERMS`, NA where the term
+#'   is not exercised
+#' @param main_kind "posterior", or "prior" on a 2017 cell
+#' @param gq_max_rel the generated quantities' largest relative difference (NA if not compared;
+#'   an NA or NaN where they are compared fails, as an NA constant range or path error does)
+#' @param path_err the largest path error
+#' @param one_sided the points finite on one side only
+#' @param posterior_dropped whether a posterior point was dropped
+#' @param kept_n the kept points of each kind the check draws, named by kind
+#' @return a character vector
+#' @export
+check_reasons <- function(form, const_range, tol, controls, main_kind, gq_max_rel, path_err, one_sided,
+                          posterior_dropped, kept_n) {
+  verdict <- control_verdicts(controls, tol)
+  gq_ran <- kept_n[[main_kind]] >= MIN_KEPT
+  # WHY: isTRUE() so that an NA or NaN measure fails its condition instead of stopping the check.
+  as.character(c(
+    if (!isTRUE(const_range < tol)) sprintf("constant range %.3g is not below tol %.3g", const_range, tol),
+    if (any(verdict == "PASSES")) paste("a negative control passes:", paste(names(verdict)[verdict == "PASSES"], collapse = ", ")),
+    if (form == "walk" && any(verdict == "not exercised")) {
+      paste("a negative control is not exercised:", paste(names(verdict)[verdict == "not exercised"], collapse = ", "))
+    },
+    if (gq_ran && !isTRUE(gq_max_rel < GQ_TOL)) sprintf("generated quantities differ by %.3g relative", gq_max_rel),
+    if (!isTRUE(path_err < PATH_TOL)) sprintf("path error %.3g", path_err),
+    if (one_sided > 0) sprintf("%d points finite on one side only", one_sided),
+    if (posterior_dropped) "a posterior point was dropped",
+    if (any(kept_n < MIN_KEPT)) sprintf("fewer than %d kept points of a kind", MIN_KEPT)
   ))
 }
 
@@ -481,7 +538,7 @@ main <- function(args) {
     }
     spread(const + if (startsWith(t, "new_")) jac[, t] else -jac[, t])
   }, 0)
-  control_verdict <- ifelse(is.na(controls), "not exercised", ifelse(controls > tol, "fails", "PASSES"))
+  control_verdict <- control_verdicts(controls, tol)
   cat(sprintf(
     "negative control without_%s: %s\n", JACOBIAN_TERMS,
     ifelse(is.na(controls), "the term is constant over these points, so it is not exercised, which fails the check",
@@ -512,17 +569,9 @@ main <- function(args) {
   }
 
   kept_n <- vapply(c("posterior", "off-posterior", "prior"), \(k) sum(kept_kind == k), 0L)
-  reasons <- c(
-    if (!(spread(const) < tol)) sprintf("constant range %.3g is not below tol %.3g", spread(const), tol),
-    if (any(control_verdict == "PASSES")) paste("a negative control passes:", paste(JACOBIAN_TERMS[control_verdict == "PASSES"], collapse = ", ")),
-    if (a$form == "walk" && any(control_verdict == "not exercised")) {
-      paste("a negative control is not exercised:", paste(JACOBIAN_TERMS[control_verdict == "not exercised"], collapse = ", "))
-    },
-    if (gq_ran && !(gq_max_rel < GQ_TOL)) sprintf("generated quantities differ by %.3g relative", gq_max_rel),
-    if (!(path_err < PATH_TOL)) sprintf("path error %.3g", path_err),
-    if (one_sided > 0) sprintf("%d points finite on one side only", one_sided),
-    if (any(rejected & kind == "posterior")) "a posterior point was dropped",
-    if (any(kept_n[kinds] < MIN_KEPT)) sprintf("fewer than %d kept points of a kind", MIN_KEPT)
+  reasons <- check_reasons(
+    a$form, spread(const), tol, controls, main_kind, gq_max_rel, path_err, one_sided,
+    any(rejected & kind == "posterior"), kept_n[kinds]
   )
   pass <- !length(reasons)
   verdict <- if (pass) "PASS" else "FAIL"
@@ -531,7 +580,7 @@ main <- function(args) {
     stan_sha256 = stan_sha256, n_posterior = kept_n[["posterior"]],
     n_off = kept_n[["off-posterior"]], n_prior = kept_n[["prior"]], n_rejected = sum(rejected), n_outside = sum(outside),
     n_one_sided = one_sided, const_range = signif(spread(const), 4), tol = signif(tol, 4), path_err = signif(path_err, 4),
-    gq_points = length(gq_idx), gq_max_rel = signif(gq_max_rel, 4),
+    gq_points = if (gq_ran) length(gq_idx) else 0L, gq_max_rel = signif(gq_max_rel, 4),
     control_ref_walk = control_verdict[["ref_walk"]], control_new_anchor = control_verdict[["new_anchor"]],
     control_new_bridge = control_verdict[["new_bridge"]], control_new_forward = control_verdict[["new_forward"]],
     reasons = paste(reasons, collapse = "; ")

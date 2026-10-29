@@ -5,7 +5,7 @@
 # form it checks.
 box::use(
   R / harness / constants[POLL_PARTIES],
-  R / harness / v2_equivalence[EQUIVALENCE_SUMMARY, provisional_row, write_equivalence_row]
+  R / harness / v2_equivalence[EQUIVALENCE_SUMMARY, check_reasons, control_verdicts, provisional_row, write_equivalence_row]
 )
 
 P1_CONFIG <- "harness/configs/steps/v2s-p1.json"
@@ -19,17 +19,6 @@ run_equivalence <- function(args) {
 }
 
 shown <- function(out) paste(out, collapse = "\n")
-
-# Points CMDSTAN at an empty directory for the caller's frame, after checking that cmdstanr
-# then finds no CmdStan: the script then stops at its first CmdStan call, before any compile.
-local_no_cmdstan <- function(env = parent.frame()) {
-  withr::local_envvar(CMDSTAN = withr::local_tempdir(.local_envir = env), .local_envir = env)
-  probe <- withr::with_dir(root(), suppressWarnings(system2(
-    file.path(R.home("bin"), "Rscript"), c("-e", shQuote("cmdstanr::cmdstan_version()")),
-    stdout = TRUE, stderr = TRUE, env = "LC_ALL=en_US.UTF-8"
-  )))
-  if (is.null(attr(probe, "status"))) stop("cmdstanr finds CmdStan with CMDSTAN set to an empty directory: not running the script")
-}
 
 # A summary row with every EQUIVALENCE_SUMMARY column, these values set.
 summary_row <- function(...) {
@@ -81,6 +70,49 @@ test_that("a provisional row replaces an earlier verdict of its cell and order, 
   expect_identical(x$E, c("2024-11-30", "2021-09-25"))
   expect_identical(x$verdict, c("PASS", "PASS"))
   expect_identical(x$reasons, c("", "x"))
+})
+
+# check_reasons() at a passing check's values, these changed.
+reasons_at <- function(...) {
+  args <- utils::modifyList(list(
+    form = "walk", const_range = 1e-14, tol = 1e-12,
+    controls = c(ref_walk = 1, new_anchor = 1, new_bridge = 1, new_forward = 1),
+    main_kind = "posterior", gq_max_rel = 1e-15, path_err = 1e-12, one_sided = 0L, posterior_dropped = FALSE,
+    kept_n = c(posterior = 30L, `off-posterior` = 15L)
+  ), list(...))
+  do.call(check_reasons, args)
+}
+
+test_that("check_reasons() gives none at a passing check's values, and each failed condition in order", {
+  expect_identical(reasons_at(), character(0))
+  expect_identical(reasons_at(const_range = 1e-11), "constant range 1e-11 is not below tol 1e-12")
+  expect_identical(reasons_at(gq_max_rel = 1e-6), "generated quantities differ by 1e-06 relative")
+  expect_identical(reasons_at(one_sided = 2L), "2 points finite on one side only")
+  expect_identical(
+    reasons_at(const_range = Inf, path_err = 1e-7, posterior_dropped = TRUE),
+    c("constant range Inf is not below tol 1e-12", "path error 1e-07", "a posterior point was dropped")
+  )
+})
+
+test_that("check_reasons() fails a walk check on a negative control that is not exercised, naming its term", {
+  controls <- c(ref_walk = 1, new_anchor = NA, new_bridge = 1, new_forward = 1)
+  expect_identical(
+    control_verdicts(controls, 1e-12),
+    c(ref_walk = "fails", new_anchor = "not exercised", new_bridge = "fails", new_forward = "fails")
+  )
+  expect_identical(reasons_at(controls = controls), "a negative control is not exercised: new_anchor")
+  expect_identical(
+    reasons_at(controls = c(ref_walk = 1, new_anchor = NA, new_bridge = 1e-13, new_forward = NA)),
+    c("a negative control passes: new_bridge", "a negative control is not exercised: new_anchor, new_forward")
+  )
+})
+
+test_that("check_reasons() fails on fewer than 5 kept points of the main kind and judges no generated quantities then", {
+  expect_identical(reasons_at(kept_n = c(posterior = 4L, `off-posterior` = 15L), gq_max_rel = NA_real_), "fewer than 5 kept points of a kind")
+  expect_identical(reasons_at(main_kind = "prior", kept_n = c(prior = 4L), gq_max_rel = NA_real_), "fewer than 5 kept points of a kind")
+  # WHY: the control for the two above: with 5 kept points the same NA difference is judged.
+  expect_identical(reasons_at(kept_n = c(posterior = 5L, `off-posterior` = 15L), gq_max_rel = NA_real_), "generated quantities differ by NA relative")
+  expect_identical(reasons_at(kept_n = c(posterior = 30L, `off-posterior` = 4L)), "fewer than 5 kept points of a kind")
 })
 
 test_that("the script refuses a bad command line before it compiles anything, and writes no CSV", {
