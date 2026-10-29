@@ -449,6 +449,10 @@ stands (the previous M-step, or a P-step only when it is adopted) with the step'
 on. M1's is therefore `v2s-m0`'s with `epoch_bias = 1`, since P1 was kept, not adopted, and
 every later step keeps `epoch_bias = 1`.
 
+M2 (`v2s-m2`), the newcomer pool (`newcomer_pool = 1`), passed the stop rule as well: `GO` on
+both fits (`harness/v2/steps.md`). Its config is `v2s-m1`'s with `newcomer_pool = 1`, as the
+rule gives, and every later step keeps `newcomer_pool = 1`.
+
 A P-step's form is first checked against the reference form, point by point, by
 `R/harness/v2_equivalence.R` (the plan's Decision 6, condition 1), once for each check of
 `EQUIVALENCE_REQUIRED` (below), all into the step's equivalence CSV:

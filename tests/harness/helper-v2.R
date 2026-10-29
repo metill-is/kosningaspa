@@ -299,9 +299,14 @@ bounded_at <- function(m, data, u) {
   m$constrain_variables(m$unconstrain_variables(pars), transformed_parameters = TRUE, generated_quantities = FALSE)
 }
 
-# The declarations of block `block` ("parameters", say) of the Stan program `lines`, comments
-# dropped: a data frame of each declaration's `type` and `name`, in the file's order. An
-# error if the block is not found once, or if one of its lines is not one declaration.
+# The declarations of block `block` ("parameters", say) of the Stan program `lines`: a data
+# frame of `type` and `name`, one row per non-empty line between the line `<block> {` and the
+# next line `}`, in the file's order. It strips `//` comments only, and splits each line at
+# its last name before a final `;`, so a line holding two declarations parses as one row with
+# a garbled type rather than erroring; a garbled row still fails an exact comparison of names
+# and types. An error if the line `<block> {` is not found exactly once, if no line `}`
+# follows it, or if a line does not end in a name and `;` (a trailing `/* */` comment
+# included); an empty block errors too, naming its closing `}`.
 stan_block_decls <- function(lines, block) {
   start <- which(lines == paste(block, "{"))
   if (length(start) != 1) stop("stan_block_decls: block ", block, " found ", length(start), " times", call. = FALSE)

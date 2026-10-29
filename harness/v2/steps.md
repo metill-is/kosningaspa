@@ -362,3 +362,154 @@ LC_ALL=en_US.UTF-8 Rscript R/harness/compare_runs.R stop v2s-m1
 ```
 
 Next: M2 (`v2s-m2`), newcomer pooling (§6.4), on `v2s-m1`'s config with `newcomer_pool = 1`.
+
+## v2s-m2: the newcomer pool (M-step)
+
+`v2s-m1` with `newcomer_pool = 1` (config `harness/configs/steps/v2s-m2.json`): the newcomer
+pool of spec §6.4. A newcomer's entry value is the mean of μ_{e_p} over the parties existing
+before its entry epoch e_p (`entry_epoch` < e_p), plus m_new + s_new η, and μ_{e_p} is then
+re-centred. The step estimates the contrast's mean m_new ~ N(0, 0.3) and scale
+s_new ~ half-N(0, 0.3), which `newcomer_pool = 0` fixes at 0 and 0.2023, the median of that
+half-normal to four digits. A fast test ties those literals between `Stan/forecast_v2.stan`
+and the reference, and another compares every parameter declaration in the Stan file with
+`V2_CORE_PARS`' types, s_new's `<lower=0>` pinned by name. Its lp, size, natural-quantity and
+JSON round-trip tests are in `tests/harness/test-v2-stan.R`, its reference tests in
+`tests/harness/test-v2-reference.R`, and its prior predictive row in
+`harness/v2/prior_predictive.md`. This section is its sampler check.
+
+**Fits.** Two fits at 400 + 400, seed 2701: 2024 eve (lane A) and 2021 f180 (lane B), the two
+`v2s-m2` lines of `harness/runs/v2-steps.txt`. They ran under `R/harness/queue.sh` with the
+run list `results/harness/logs/v2s-m2-runs.txt` (`harness/README.md`, Step checks). The queue
+started at 2026-10-29 13:52:11, and its preflight (the full slow suite) passed. Both fits
+started at 14:33:25. 2021 f180 finished at 15:02:45 and 2024 eve at 15:27:18 (each run's
+`meta.json`), both exited 0, and `queue.log` ends in `QUEUE FINISHED`. CmdStan 2.38.0,
+`max_treedepth` 12, 10 cores (`hw.ncpu`). The diagnostics table is
+`harness/v2/steps/v2s-m2.md`.
+
+**Provenance.** Both fits ran at b0e4a69 on a clean tree (`meta.json`: `git_head` b0e4a69,
+`git_dirty` false), with `Stan/forecast_v2.stan` at sha256
+`934281745c266c4df9a20ceb9ac86e14d53c9f290a5236401e4ca1ff7415b3fa`. The next commit, f390638,
+changed no Stan line and no file the builder reads: in `R/harness` it changed only
+`v2_reference.R`'s roxygen and the prior predictive script. The Stan file's sha256 is the same
+there and in this step's commit. Each run's `meta.json` `data_sha256` equals `stan_data_sha()`
+(`R/harness/runs.R`) of the data that f390638's builder gives for the same cell through the
+arm, as `fit_cell.R` builds it, and equals the sha256 of the run's frozen
+`inputs/stan_data.json`:
+
+| Fit (cell, seed) | `git_head`, `git_dirty` | `data_sha256` (`meta.json`) | `stan_data_sha()` at f390638 |
+| --- | --- | --- | --- |
+| 2024 eve, 2701 | b0e4a69, false | `e39fd297d6a81c892eef4bba1bc3c2ebb9069e333d35548925321271c83b4103` | the same |
+| 2021 f180, 2701 | b0e4a69, false | `a44004d6b4f26768213882d3d9b12146c55536b79f256fd04cd6a1d00d926b76` | the same |
+
+To re-measure a cell's sha, from the project root, with the cell's E and F as the two
+arguments (`2024-11-30 2024-11-29` for 2024 eve and `2021-09-25 2021-03-29` for 2021 f180, the
+two lines below). It reproduces the recorded sha only on a tree whose `R/harness` builder and
+`harness/configs/steps/v2s-m2.json` build the data as f390638's do; after a later change to
+either it prints another sha, which is not a provenance failure:
+
+```
+LC_ALL=en_US.UTF-8 Rscript -e 'x <- commandArgs(TRUE); options(box.path = getwd()); box::use(R/harness/arms[arm], R/harness/info_set[info_set], R/harness/runs[stan_data_sha]); a <- arm("v2s-m2"); cat(stan_data_sha(a$build(info_set(as.Date(x[1]), as.Date(x[2])), a$read_config(a$config))$data), "\n")' 2024-11-30 2024-11-29
+LC_ALL=en_US.UTF-8 Rscript -e 'x <- commandArgs(TRUE); options(box.path = getwd()); box::use(R/harness/arms[arm], R/harness/info_set[info_set], R/harness/runs[stan_data_sha]); a <- arm("v2s-m2"); cat(stan_data_sha(a$build(info_set(as.Date(x[1]), as.Date(x[2])), a$read_config(a$config))$data), "\n")' 2021-09-25 2021-03-29
+```
+
+**Stop rule.** `LC_ALL=en_US.UTF-8 Rscript R/harness/compare_runs.R stop v2s-m2` (exit 0):
+
+```
+GO v2s-m2_2024-11-30_2024-11-29_s2701 lp_rhat=1.0062 divergent=0/1600 near_cap=0/1600 max_rhat=1.0192; recorded: minutes=53.6 treedepth_hits=0 ess_bulk_per_1k_grad=0.181
+GO v2s-m2_2021-09-25_2021-03-29_s2701 lp_rhat=1.0091 divergent=2/1600 near_cap=1/1600 max_rhat=1.0179; recorded: minutes=29.1 treedepth_hits=0 ess_bulk_per_1k_grad=0.271
+```
+
+| Fit (cell, seed) | Verdict | R-hat of `lp__` (STOP above 1.1) | Divergences (STOP above 16) | Draws within 0.5 of a cap (STOP above 16) | Max R-hat, gate scope (STOP above 1.10) | Minutes | Treedepth hits | Min bulk ESS per 1,000 gradients (gate scope) |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2024 eve, 2701 | GO | 1.0062 | 0 of 1,600 | 0 of 1,600 | 1.0192 | 53.6 | 0 | 0.181 |
+| 2021 f180, 2701 | GO | 1.0091 | 2 of 1,600 | 1 of 1,600 | 1.0179 | 29.1 | 0 | 0.271 |
+
+**Verdict: GO on both fits.** The stop rule's signals are all well inside their limits:
+- the largest R-hat of `lp__` is 1.0091;
+- 2 of 1,600 transitions diverged on 2021 f180, none on 2024 eve, against the limit of 16;
+- 1 of 1,600 draws on 2021 f180 came within 0.5 of a cap, none on 2024 eve, against the
+  limit of 16;
+- the largest gate-scope R-hat is 1.0192.
+
+Minutes, treedepth hits and ESS per 1,000 gradients are recorded, never a stop.
+
+- **The §5.7 gate is not the stop rule.** Each fit's DIAG line in `queue.log` reads `gate=FAIL`,
+  because its gate-scope max R-hat (1.0191 and 1.0179 as DIAG prints them; the stop rule
+  rounds the first up to 1.0192) is above the scoring gate's 1.01. On 2021 f180 its two
+  divergences fail the gate as well. A `dev` arm is never scored.
+- **The divergences and the cap.** `v2s-m1` had no divergence and no draw near a cap on
+  either cell. On 2021 f180, `v2s-m2` has 2 divergent transitions of 1,600 and 1 draw of
+  1,600 within 0.5 of a cap: log κ, in chain 4 (`param_draws.parquet`). The run does not keep
+  the divergences per chain. `fit_cell.R` deleted the CmdStan CSVs (`HARNESS_KEEP_CMDSTAN`
+  unset), `key_diagnostics.csv` holds R-hat and ESS only, `param_draws.parquet` has `.chain`
+  but no `divergent__`, and the fit's log prints only the total. They were not chased further.
+- **ESS per 1,000 gradients** is 0.181 on 2024 eve and 0.271 on 2021 f180, against
+  `v2s-m1`'s 0.197 and 0.347: 8% and 22% lower. Recorded, not a stop.
+- **The minutes read high.** They are 53.6 and 29.1, against `v2s-m1`'s 54.6 and 29.5. Other
+  work shared the 10 cores while the fits ran. Beside both fits ran:
+  - from about 14:35, the step's fix round: edits, two runs of the prior predictive script
+    (14:39 to 14:42 and 14:42 to 14:45, one after the other), single-file fast tests and short
+    scratch R scripts (14:41 to 14:46), the whole fast suite (14:46 to 14:51), then five
+    single-file fast test runs (14:51 to 14:53);
+  - a read-only re-review's fast probes, from about 14:55 to 15:02.
+
+  2021 f180 finished at 15:02:45. No other work of this step is known to have run beside
+  2024 eve after that, until it finished at 15:27:18. No slow test ran beside either fit:
+  the slow suite ran in the preflight, before the fits. No fit is known to have run unloaded,
+  so both fits' minutes read high, by an unknown amount.
+
+**What the lp test covers.** `HARNESS_SLOW=1 V2_STEPS=v2s-m2 LC_ALL=en_US.UTF-8 Rscript
+tests/run.R v2-stan` (at f390638, after `QUEUE FINISHED`, `[ FAIL 0 | WARN 0 | SKIP 19 | PASS 106 ]`).
+On each cell, Stan's log density minus the reference's (`v2_lp_ref()`) is constant within
+tol = 1e-9 · max(1, |lp_ref|):
+- on 2024 eve and 2021 f180, over 20 posterior and 10 off-posterior points of a short fit and
+  10 prior points;
+- on 2017 eve, over 10 prior points only (no fit, no forecast).
+
+Each mutant a cell exercises is rejected above 100 × tol: the core's five, the epoch bias's
+four, and the newcomer pool's `newcomer_mean_over_all`. Its limits:
+- `newcomer_mean_over_all` takes the entry mean over every party. μ sums to zero going into
+  every entry epoch, so that mean is 0 to rounding: the mutant amounts to a base of 0, and
+  does not test where the set of existing parties ends. That set, `entry_epoch` < e_p, is
+  pinned for the reference by the spec-valued fast test ("a newcomer enters at the existing
+  parties' mean plus the point's m_new + s_new eta", `tests/harness/test-v2-reference.R`), on
+  every cell with the epoch bias on and off, and for Stan by the lp tests against the
+  reference.
+- `house_walk_from_first_poll` is not exercised on 2017 eve, where every house starts in
+  epoch 1, as in M1.
+
+A fourth check runs 2024 eve's prior points (10, no fit) with `newcomer_pool = 1` and
+`epoch_bias = 0`, the combination Task 14's `v2-noepoch` ablation fits, where μ takes no step
+and the epoch bias's parameters have size 0. Stan matches the reference there, and
+`newcomer_mean_over_all` is rejected. The test's lines:
+
+```
+v2s-m2 eve2024: 40 points, lp constant range 1.28e-09 (tol 0.000667, ratio 1.92e-06; ratio by kind: post 4.88e-06, off 1.39e-06, prior 1.92e-06); weakest exercised mutant next_epoch_delta; range / (100 tol): positional_gather 1.56e+06, previous_w 4.05e+03, next_epoch_delta 3.69e+03, close_last_kjordaemi 2.26e+05, conditional_walk 7.4e+05, house_walk_from_first_poll 7.24e+04, newcomer_mean_of_mu1 7.39e+03, no_mu_restart 1.34e+05, no_house_restart 4.1e+04, newcomer_mean_over_all 3.45e+05; not exercised: none
+v2s-m2 f180_2021: 40 points, lp constant range 5.09e-10 (tol 0.000265, ratio 1.92e-06; ratio by kind: post 8.1e-06, off 1.77e-06, prior 1.48e-06); weakest exercised mutant next_epoch_delta; range / (100 tol): positional_gather 2.14e+06, previous_w 1.56e+03, next_epoch_delta 999, close_last_kjordaemi 9.27e+05, conditional_walk 4.04e+06, house_walk_from_first_poll 1.87e+03, newcomer_mean_of_mu1 7.84e+03, no_mu_restart 4.54e+04, no_house_restart 8.5e+04, newcomer_mean_over_all 1.44e+06; not exercised: none
+v2s-m2 eve2017: 10 points, lp constant range 5.82e-11 (tol 0.000103, ratio 5.67e-07; ratio by kind: prior 5.67e-07); weakest exercised mutant newcomer_mean_of_mu1; range / (100 tol): positional_gather 1.03e+06, close_last_kjordaemi 1.2e+06, conditional_walk 1.31e+06, newcomer_mean_of_mu1 594, no_mu_restart 4.51e+03, no_house_restart 4.66e+03, newcomer_mean_over_all 4.26e+05; not exercised: house_walk_from_first_poll
+v2s-m2 eve2024 with epoch_bias = 0: 10 prior points, lp constant range 5.82e-10 (tol 0.00056); range / (100 tol): newcomer_mean_over_all 4.5e+05
+```
+
+**The prior predictive row.** `newcomer_entry`: a newcomer's entry bias against the existing
+parties' mean, m_new + s_new η, read on a 10% newcomer beside P − 1 equal parties sharing 90%,
+in pp, the newcomers pooled (`harness/v2/prior_predictive.md`):
+
+| Cell | Values | q05 | q50 | q95 | Band | Verdict |
+| --- | --- | --- | --- | --- | --- | --- |
+| 2024 eve | 4000 | -4.77 | 0.18 | 7.65 | [5%, 95%] inside [-10, 10] | PASS |
+| 2021 f180 | 4000 | -4.72 | 0.03 | 7.87 | [5%, 95%] inside [-10, 10] | PASS |
+
+```
+PRIOR PASS newcomer_entry/2024-eve/config
+PRIOR PASS newcomer_entry/2021-f180/config
+```
+
+To rewrite the table and the verdicts from the finished runs under `results/harness/`, from the
+project root:
+
+```
+LC_ALL=en_US.UTF-8 Rscript R/harness/tier0_report.R v2s-m2 harness/runs/v2-steps.txt harness/v2/steps/v2s-m2.md
+LC_ALL=en_US.UTF-8 Rscript R/harness/compare_runs.R stop v2s-m2
+```
+
+Next: M3 (`v2s-m3`), the election-day shock (§6.6), on `v2s-m2`'s config with `shock = 1`.
