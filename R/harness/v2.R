@@ -169,9 +169,10 @@ reported <- function(y) {
 #'   - results of the `n_closed` window elections before E: `grid_res`, `y_res`
 #'     (n_closed × K × P, the official kjördæmi votes from `info$results`), `n_rep_res`
 #'     and `idx_res` (the parties with national votes);
-#'   - `house_first_epoch` (the epoch of each house's first admitted national or kjördæmi
-#'     poll; houses are the house table's `house` of each pollster, ordered by that poll's
-#'     date, ties by name), `entry_epoch` (0 for a party present at the window's start,
+#'   - `house_first_epoch` (the epoch of each house's first admitted national poll, where
+#'     its deviations' walk starts, or `n_epoch` for a house with none; houses are the house
+#'     table's `house` of each pollster, ordered by the date of its first admitted national
+#'     or kjördæmi poll, ties by name), `entry_epoch` (0 for a party present at the window's start,
 #'     else its entry epoch) and `annad_idx` (Annað's index in the party order, 0 if the
 #'     cell has none: its industry-bias steps take their own scale τ_μ,A, §6.4);
 #'   - `d_shock` (n_epoch × P: √(min(0.2 / π̄, 10)), π̄ the national share at the election
@@ -306,6 +307,13 @@ v2_stan_data <- function(info, cfg, stage1 = stage1_mu_f, party_order = NULL, ro
   )
   firsts <- sorted_by(firsts, c("first", "house"))
   house_levels <- firsts$house
+  # WHY: a kjördæmi poll reads φ_h but never γ, so a house's deviations reach the likelihood
+  # only from its first national poll, where their walk starts (§6.4); a house with no
+  # national poll never walks.
+  first_nat <- dplyr::summarise(tibble::tibble(house = house_of(nat$fyrirtaeki), date = nat$date), first = min(date), .by = house)
+  first_nat <- first_nat$first[match(house_levels, first_nat$house)]
+  house_first_epoch <- rep(n_epoch, length(house_levels))
+  house_first_epoch[!is.na(first_nat)] <- epoch_of(first_nat[!is.na(first_nat)])
 
   units_nat <- sorted_by(dplyr::distinct(nat, date, fyrirtaeki), c("date", "fyrirtaeki"))
   y_nat <- count_matrix(units_nat, nat, c("date", "fyrirtaeki"), party_order)
@@ -390,7 +398,7 @@ v2_stan_data <- function(info, cfg, stage1 = stage1_mu_f, party_order = NULL, ro
     y_kd = y_kd, n_rep_kd = as.integer(rowSums(y_kd > 0)), idx_kd = reported(y_kd),
     n_closed = n_closed, grid_res = grid_res, y_res = y_res, n_rep_res = as.integer(rowSums(nat_res > 0)),
     idx_res = reported(nat_res),
-    house_first_epoch = epoch_of(firsts$first), entry_epoch = entry_epoch,
+    house_first_epoch = as.integer(house_first_epoch), entry_epoch = entry_epoch,
     annad_idx = match("Anna\u00f0", party_order, nomatch = 0L),
     d_shock = d_shock, N_open = as.integer(N_open), draw_forecast = if (free) 0L else 1L, latent_path = 0L,
     n_sf = n_sf, sf_idx = sf_idx, mu_f = mu_f,

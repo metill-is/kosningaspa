@@ -55,15 +55,20 @@ V2_CORE_PARS <- tibble::tibble(
 #' - `house_walk_from_first_poll`: every house's deviations walk from epoch 1, the window's
 #'   start, instead of from its first epoch;
 #' - `newcomer_mean_of_mu1`: a newcomer entering in epoch e_p > 1 takes the mean over μ_1
-#'   of the parties existing before e_p, instead of over μ_{e_p}.
+#'   of the parties existing before e_p, instead of over μ_{e_p};
+#' - `no_mu_restart`: a newcomer's industry bias at its entry epoch e_p > 1 keeps the
+#'   prior-only drift its slot gathered before e_p (its own elements of the centred steps
+#'   of epochs 2..e_p) on top of its entry value, instead of restarting at the entry value;
+#' - `no_house_restart`: a newcomer's level in each house walking before e_p keeps that
+#'   house's prior-only drift, instead of restarting at σ_γ ε_{h,p}.
 #' @export
 V2_MUTANTS <- tibble::tibble(
   mutant = c(
     "positional_gather", "previous_w", "next_epoch_delta", "close_last_kjordaemi", "conditional_walk",
-    "house_walk_from_first_poll", "newcomer_mean_of_mu1"
+    "house_walk_from_first_poll", "newcomer_mean_of_mu1", "no_mu_restart", "no_house_restart"
   ),
-  switch = c(rep(NA_character_, 5), "epoch_bias", "epoch_bias"),
-  min_closed = c(1L, 2L, 2L, 1L, 1L, 1L, 1L)
+  switch = c(rep(NA_character_, 5), rep("epoch_bias", 4)),
+  min_closed = c(1L, 2L, 2L, 1L, 1L, 1L, 1L, 1L, 1L)
 )
 
 #' The component switches the reference has (each 0 or 1), the switches of the components it
@@ -354,7 +359,7 @@ check_core <- function(data, mutant = "none") {
   check(all(forms == 0L), "the reference forms only: walk_form and delta_form must be 0")
   on <- COMPONENT_SWITCHES[vapply(COMPONENT_SWITCHES, \(s) !identical(as.integer(data[[s]]), 0L), logical(1))]
   if (length(on)) fail("switch(es) not in the reference yet: ", listed(on))
-  built <- vapply(BUILT_SWITCHES, \(s) as.integer(data[[s]]) %in% 0:1 && length(data[[s]]) == 1, logical(1))
+  built <- vapply(BUILT_SWITCHES, \(s) length(data[[s]]) == 1 && as.integer(data[[s]]) %in% 0:1, logical(1))
   if (!all(built)) fail("switch(es) neither 0 nor 1: ", listed(BUILT_SWITCHES[!built]))
   if (identical(as.integer(data$epoch_bias), 1L)) {
     a <- data$annad_idx
@@ -408,9 +413,11 @@ core_pars <- function(pars, data) {
 #' The natural quantities of a checked point `p` (`core_pars()`) on `data`: the walk θ
 #' (P × G) and its innovation factor, μ_e, γ_{e,h}, δ_e, the bounded log concentrations,
 #' `phi_init`, s_δ0 and π_nat at each national poll's date. `conditional`, `close_last`,
-#' `house_from_start` and `entry_mean_mu1` switch to the `conditional_walk`,
-#' `close_last_kjordaemi`, `house_walk_from_first_poll` and `newcomer_mean_of_mu1` mutants.
-natural <- function(p, data, conditional = FALSE, close_last = FALSE, house_from_start = FALSE, entry_mean_mu1 = FALSE) {
+#' `house_from_start`, `entry_mean_mu1`, `mu_carry` and `house_carry` switch to the
+#' `conditional_walk`, `close_last_kjordaemi`, `house_walk_from_first_poll`,
+#' `newcomer_mean_of_mu1`, `no_mu_restart` and `no_house_restart` mutants.
+natural <- function(p, data, conditional = FALSE, close_last = FALSE, house_from_start = FALSE, entry_mean_mu1 = FALSE,
+                    mu_carry = FALSE, house_carry = FALSE) {
   P <- data$P
   G <- data$G
   H <- data$H
@@ -443,12 +450,18 @@ natural <- function(p, data, conditional = FALSE, close_last = FALSE, house_from
   new <- which(entry > 0)
   mu <- matrix(0, n_epoch, P)
   m <- p$mu1
+  drift <- numeric(P)
   for (e in seq_len(n_epoch)) {
-    if (eb && e > 1) m <- m + centre(tau * p$mu_step_raw[, e - 1])
+    if (eb && e > 1) {
+      s <- centre(tau * p$mu_step_raw[, e - 1])
+      m <- m + s
+      drift <- drift + s
+    }
     entering <- which(entry == e)
     if (length(entering)) {
       base <- if (entry_mean_mu1 && e > 1) mu[1, ] else m
-      m[entering] <- mean(base[entry < e]) + M_NEW + S_NEW * p$new_raw[match(entering, new)]
+      m[entering] <- mean(base[entry < e]) + M_NEW + S_NEW * p$new_raw[match(entering, new)] +
+        if (mu_carry) drift[entering] else 0
     }
     m <- centre(m)
     mu[e, ] <- m
@@ -468,7 +481,12 @@ natural <- function(p, data, conditional = FALSE, close_last = FALSE, house_from
       if (eb && e > start) {
         x <- x + p$tau_house * p$house_step_raw[h, , e - 1]
         entering <- which(entry == e)
-        x[entering] <- p$sigma_gamma * p$house_raw[h, entering]
+        # WHY: the restart sets the newcomer's element of the uncentred level x_h to σ_γ ε and
+        # then centres, the core's convention for its slot. Under this reading no prior-only
+        # drift reaches the likelihood, not even 1/P of it through the centring, and
+        # τ_house = 0 is the core. Restarting the centred d_{e_p,h,p} instead would shift the
+        # newcomer's contrast with every party by the house's mean uncentred level.
+        if (!house_carry) x[entering] <- p$sigma_gamma * p$house_raw[h, entering]
       }
       gamma[e, h, ] <- centre(x) + mu[e, ]
     }
@@ -639,7 +657,8 @@ v2_lp_ref <- function(pars, data, mutant = "none") {
   nat <- natural(
     p, data,
     conditional = mutant == "conditional_walk", close_last = mutant == "close_last_kjordaemi",
-    house_from_start = mutant == "house_walk_from_first_poll", entry_mean_mu1 = mutant == "newcomer_mean_of_mu1"
+    house_from_start = mutant == "house_walk_from_first_poll", entry_mean_mu1 = mutant == "newcomer_mean_of_mu1",
+    mu_carry = mutant == "no_mu_restart", house_carry = mutant == "no_house_restart"
   )
   rows <- dm_rows(p, nat, data, positional = mutant == "positional_gather", next_delta = mutant == "next_epoch_delta")
   lik <- vapply(rows, \(r) dirmult_lpmf(row_counts(data, r), r$alpha), numeric(1))

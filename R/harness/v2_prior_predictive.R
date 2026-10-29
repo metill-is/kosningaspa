@@ -127,8 +127,8 @@ share_change <- function(x, share = SHARE) {
 poll_sd_pp <- function(phi, s = SHARE, n = POLL_N) 100 * sqrt(s * (1 - s) / n * (n + phi) / (1 + phi))
 
 #' The summaries, each a function of a `v2_simulate()` draw `sim`, its `data` and a `seed`
-#' for any further randomness, returning the draw's values in pp (one per house or
-#' kjördæmi for a pooled summary). The header comment says which coordinate each reads.
+#' for any further randomness, returning the draw's values in pp (one per house,
+#' kjördæmi or epoch step for a pooled summary). The header comment says which coordinate each reads.
 #' @export
 SUMMARY_FUNS <- list(
   house_d = function(sim, data, seed) {
@@ -525,7 +525,7 @@ main <- function(args) {
     "",
     "## Results",
     "",
-    "Quantiles in pp over the prior draws (`Values`: draws \u00d7 houses or kj\u00f6rd\u00e6mi for a pooled summary).",
+    "Quantiles in pp over the prior draws (`Values`: draws \u00d7 houses, kj\u00f6rd\u00e6mi or epoch steps for a pooled summary).",
     "",
     table_row(c("Summary", "Step", "Kind", "Prior", "Cell", "Values", "q05", "q50", "q95", "Band", "Verdict")),
     table_row(rep("---", 11)),

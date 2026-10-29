@@ -113,6 +113,8 @@ test_that("the data fields come in the contract's order, with integer counts and
   expect_identical(c(d$n_epoch, d$n_closed, d$draw_forecast, d$latent_path, d$n_sf), c(4L, 3L, 1L, 0L, 0L))
   expect_equal(rowSums(d$w), rep(1, d$n_epoch))
   expect_true(all(d$poll_kd == cummax(d$poll_kd)) && identical(sort(unique(c(d$poll_kd))), seq_len(d$J)))
+  # WHY: a fact of this cell, not an invariant: houses are ordered by their first poll of
+  # either kind, but a house's walk starts at its first national poll.
   expect_true(all(d$house_first_epoch == cummax(d$house_first_epoch)))
   # WHY: POLL_PARTIES, the default order, ends with Annað.
   expect_identical(d$annad_idx, d$P)
@@ -190,7 +192,8 @@ test_that("the campaign flag covers exactly the steps within 47 days before an e
     inside <- vapply(seq_len(d$G - 1), \(i) any(g[i] >= els[els <= E] - 47 & g[i + 1] <= els[els <= E]), logical(1))
     expect_identical(c(d$campaign) == 1L, inside)
   }
-  d <- d_2024eve(); g <- grid_dates(info_2024eve())
+  d <- d_2024eve()
+  g <- grid_dates(info_2024eve())
   start <- match(as.Date("2024-10-14"), g)
   expect_identical(c(d$campaign[start - 1], d$campaign[start], d$campaign[d$G - 1]), c(0L, 1L, 1L))
   e21 <- match(as.Date("2021-09-25"), g)

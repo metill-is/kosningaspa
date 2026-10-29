@@ -19,7 +19,7 @@ Written by `LC_ALL=en_US.UTF-8 Rscript R/harness/v2_prior_predictive.R <config> 
 
 ## Results
 
-Quantiles in pp over the prior draws (`Values`: draws × houses or kjördæmi for a pooled summary).
+Quantiles in pp over the prior draws (`Values`: draws × houses, kjördæmi or epoch steps for a pooled summary).
 
 | Summary | Step | Kind | Prior | Cell | Values | q05 | q50 | q95 | Band | Verdict |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |

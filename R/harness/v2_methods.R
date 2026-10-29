@@ -115,9 +115,11 @@ v2_methods <- function(stan_file, data) {
 n_unc <- function(m) m$.__enclos_env__$private$model_methods_env_$num_upars_
 
 #' One draw `x` (a named numeric vector of CmdStan columns) as a list of the parameters of
-#' `dims`, each in cmdstanr's shape; `scalar` names the parameters declared as scalars.
+#' `dims`, each in cmdstanr's shape; `scalar` names the parameters declared as scalars, and
+#' `keep_dim` those whose one-dimensional value keeps its dim when it has one element (the
+#' `array[1] real` scales of the epoch bias, a `vector[1]`).
 #' @export
-draw_pars <- function(x, dims, scalar) {
+draw_pars <- function(x, dims, scalar, keep_dim = character(0)) {
   out <- list()
   for (n in names(dims)) {
     d <- dims[[n]]
@@ -129,7 +131,9 @@ draw_pars <- function(x, dims, scalar) {
       idx <- as.matrix(expand.grid(lapply(d, seq_len)))
       v <- unname(x[paste0(n, "[", apply(idx, 1, paste, collapse = ","), "]")])
       stopifnot(!anyNA(v))
-      out[[n]] <- if (length(d) == 1) v else array(v, d)
+      # WHY: write_stan_json() writes a plain length-1 numeric as a scalar, and CmdStan's
+      # init reader needs [x] for a parameter declared with one element.
+      out[[n]] <- if (length(d) == 1 && !(d == 1 && n %in% keep_dim)) v else array(v, d)
     }
   }
   out
@@ -158,14 +162,17 @@ project_point <- function(p) {
 OFF_SCALES <- c("sigma", "tau_camp", "sigma_gamma", "sigma_phi", "tau_sd", "tau_mu", "tau_mu_A", "tau_house")
 
 #' The draws in `fit` (of `model`) of the variables named in `dims`, each in cmdstanr's
-#' shape with its dims there; a list of one named list per draw.
+#' shape with its dims there; a list of one named list per draw. A parameter of
+#' `V2_CORE_PARS` with one element keeps its dim (`draw_pars()`), so the point can be
+#' written as a CmdStan init; a generated quantity's shape is as before.
 #' @export
 fit_values <- function(fit, model, dims) {
+  box::use(R / harness / v2_reference[V2_CORE_PARS])
   info <- do.call(c, unname(model$variables()[c("parameters", "transformed_parameters", "generated_quantities")]))
   scalar <- vapply(names(dims), \(v) info[[v]]$dimensions == 0, logical(1))
   present <- names(dims)[vapply(dims, prod, numeric(1)) > 0]
   x <- unclass(posterior::as_draws_matrix(fit$draws(variables = present)))
-  lapply(seq_len(nrow(x)), \(i) draw_pars(x[i, ], dims, scalar))
+  lapply(seq_len(nrow(x)), \(i) draw_pars(x[i, ], dims, scalar, keep_dim = V2_CORE_PARS$name))
 }
 
 #' Data written as CmdStan JSON in `dir`; returns the path.

@@ -1,4 +1,5 @@
 box::use(
+  R / harness / v2[v2_stan_data],
   R / harness / v2_reference[
     dirmult_lpmf, permute_v2, V2_CORE_PARS, v2_lp_ref, v2_mutants, v2_natural, v2_par_dims, v2_simulate
   ]
@@ -372,7 +373,32 @@ test_that("v2s-m1: Stan's log density matches the reference up to a constant", {
   skip_unless_slow()
   skip_unless_step("v2s-m1")
   hit <- expect_step_lp("v2s-m1", cfg_m1())
-  expect_true(all(c("house_walk_from_first_poll", "newcomer_mean_of_mu1") %in% hit))
+  expect_true(all(c("house_walk_from_first_poll", "newcomer_mean_of_mu1", "no_mu_restart", "no_house_restart") %in% hit))
+})
+
+test_that("v2s-m1: with Annad first and prior_tau_mu at 0.37, Stan's log density matches the reference", {
+  skip_unless_slow()
+  skip_unless_step("v2s-m1")
+  # WHY: the other cells put Annað last and run at §6.10's prior_tau_mu = 0.1, where Stan
+  # scaling party P instead of annad_idx, or a literal 0.1 for the data scale, would pass.
+  cfg <- utils::modifyList(cfg_m1(), list(order = "reversed", walk_form = 0L, delta_form = 0L, prior_tau_mu = 0.37))
+  d <- v2_stan_data(info_2024eve(), cfg)$data
+  expect_identical(d$annad_idx, 1L)
+  expect_identical(d$prior_tau_mu, 0.37)
+  m <- v2_methods(V2_STAN, d)
+  pts <- lp_points(m, d, n_post = 0, n_off = 0, n_prior = 10)
+  ok <- expect_lp_matches(m, d, pts)
+  # Each slip, planted in the reference's data, is told apart from Stan on these points.
+  last <- d
+  last$annad_idx <- d$P
+  literal <- d
+  literal$prior_tau_mu <- 0.1
+  slips <- c(annad_last = lp_range(lp_gap(m, last, pts)$gap), literal_0.1 = lp_range(lp_gap(m, literal, pts)$gap))
+  for (n in names(slips)) expect_gt(slips[[n]], 100 * ok$tol, label = n)
+  message(sprintf(
+    "v2s-m1 reversed eve2024 at prior_tau_mu 0.37: %d prior points, lp constant range %.3g (tol %.3g); range / (100 tol): %s",
+    length(pts), ok$range, ok$tol, paste(sprintf("%s %.3g", names(slips), slips / (100 * ok$tol)), collapse = ", ")
+  ))
 })
 
 test_that("v2s-m1: the epoch bias's parameters have v2_par_dims()' sizes, and size 0 with epoch_bias = 0", {
@@ -437,4 +463,22 @@ test_that("v2s-m1: the log-likelihood rows are the reference's at a prior point"
   rows <- ref$dm_rows(p, ref$natural(p, d), d)
   expect_equal(r$gq$log_lik, vapply(rows, \(x) dirmult_lpmf(ref$row_counts(d, x), x$alpha), numeric(1)), tolerance = 1e-10)
   expect_false(any(c("votes_kd", "pi_nat_eday", "pi_latent_E") %in% names(r$gq)))
+})
+
+test_that("v2s-m1: a fit_values() point keeps the epoch bias's scales as one-element arrays, so CmdStan reads it back", {
+  skip_unless_slow()
+  skip_unless_step("v2s-m1")
+  # WHY: write_stan_json() writes a plain length-1 numeric as a scalar, which CmdStan's init
+  # reader refuses for an array[1]; the forecast is off, so the runs compute none.
+  d <- v2_test_cells(cfg_m1())$eve2024$data
+  d$draw_forecast <- 0L
+  r <- gq_at(V2_STAN, d, v2_simulate(d, seed = 2, observe = FALSE)$pars)
+  json <- withr::local_tempfile(fileext = ".json")
+  cmdstanr::write_stan_json(r$pars, json)
+  back <- jsonlite::read_json(json)
+  for (n in c("tau_mu", "tau_mu_A", "tau_house")) {
+    expect_true(is.list(back[[n]]) && length(back[[n]]) == 1L, label = paste(n, "is a one-element JSON array"))
+  }
+  again <- gq_at(V2_STAN, d, r$pars)
+  for (n in c("tau_mu", "tau_mu_A", "tau_house")) expect_equal(c(again$pars[[n]]), c(r$pars[[n]]), tolerance = 1e-12, label = n)
 })

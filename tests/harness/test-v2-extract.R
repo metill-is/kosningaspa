@@ -19,15 +19,25 @@ CORE <- c(
   "mu_sd", "tau_sd", "s_delta0"
 )
 SCALARS <- c(
-  "tau_camp", "mu_phi", "sigma_phi", "log_phi_K", "log_kappa", "sigma_gamma", "mu_sd", "tau_sd", "tau_mu", "tau_mu_A",
-  "tau_house", "m_new", "s_new", "s_bar_E", "s_bar_zeta"
+  "tau_camp", "mu_phi", "sigma_phi", "log_phi_K", "log_kappa", "sigma_gamma", "mu_sd", "tau_sd", "m_new", "s_new",
+  "s_bar_E", "s_bar_zeta"
 )
+# The epoch bias's scales, each declared array[epoch_bias] real, so a fit writes tau_mu[1].
+ONE_ELEMENT <- c("tau_mu", "tau_mu_A", "tau_house")
 MATRICES <- c("L_Omega", "mu", "anchor_w")
 DRAW <- seq_len(16)
 
 # Element names of a parameter in Stan's (column-major) order.
 elements <- function(v) {
-  if (v %in% SCALARS) v else if (v %in% MATRICES) paste0(v, c("[1,1]", "[2,1]", "[1,2]")) else paste0(v, c("[1]", "[2]"))
+  if (v %in% SCALARS) {
+    v
+  } else if (v %in% ONE_ELEMENT) {
+    paste0(v, "[1]")
+  } else if (v %in% MATRICES) {
+    paste0(v, c("[1,1]", "[2,1]", "[1,2]"))
+  } else {
+    paste0(v, c("[1]", "[2]"))
+  }
 }
 columns_of <- function(vars) unlist(lapply(vars, elements))
 
@@ -184,6 +194,7 @@ test_that("param_draws holds the parameters the meta's switches put in the model
   with_epoch <- append(CORE, c("tau_mu", "tau_mu_A", "tau_house"), after = match("mu", CORE))
   pd <- extracted(synthetic_draws(with_epoch), epoch)$read$param_draws
   expect_identical(names(pd), c(".chain", ".iteration", ".draw", columns_of(with_epoch)))
+  expect_true(all(c("tau_mu[1]", "tau_mu_A[1]", "tau_house[1]") %in% names(pd)))
 })
 
 test_that("v2_extract reads every variable v2_variables() names for the meta's switches, and no other", {

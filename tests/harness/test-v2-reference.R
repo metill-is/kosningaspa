@@ -150,6 +150,7 @@ test_that("the reference refuses another form, an unbuilt switch, a missing para
   expect_error(v2_lp_ref(pars, d, "no_such_mutant"), "mutant")
   expect_error(v2_lp_ref(pars[-1], d), "theta1")
   expect_error(v2_lp_ref(utils::modifyList(pars, list(sigma = -pars$sigma)), d), "sigma")
+  expect_error(v2_lp_ref(pars, utils::modifyList(d, list(epoch_bias = c(0L, 1L)))), "neither 0 nor 1")
 })
 
 # The epoch bias (step v2s-m1, §6.4, switch epoch_bias), on the cells of the Stan lp tests.
@@ -159,7 +160,7 @@ test_that("the epoch-bias reference: each of its mutants changes the density, an
   for (name in c("eve2024", "f180_2021")) {
     d <- cells[[name]]$data
     expect_identical(as.integer(d$epoch_bias), 1L)
-    expect_true(all(c("house_walk_from_first_poll", "newcomer_mean_of_mu1") %in% v2_mutants(d)))
+    expect_true(all(c("house_walk_from_first_poll", "newcomer_mean_of_mu1", "no_mu_restart", "no_house_restart") %in% v2_mutants(d)))
     for (seed in 1:2) {
       s <- v2_simulate(d, seed = seed, observe = FALSE)
       lp <- v2_lp_ref(s$pars, d)
@@ -221,13 +222,101 @@ test_that("with every epoch scale near 0 the epoch-bias reference gives the core
   expect_equal(a$gamma, b$gamma, tolerance = 1e-12)
 })
 
-test_that("each house's first epoch is that of its first national poll on the lp tests' cells", {
-  # WHY: house_first_epoch also counts kjördæmi polls, but a house's deviation reaches the
-  # likelihood only through a national poll, so the house walk's start is right only where
-  # the two agree.
-  for (cell in v2_test_cells(cfg_m1())) {
-    d <- cell$data
-    first_nat <- vapply(seq_len(d$H), \(h) min(c(d$grid_epoch)[c(d$grid_nat)[c(d$house_nat) == h]]), numeric(1))
-    expect_identical(as.integer(first_nat), as.integer(c(d$house_first_epoch)))
+test_that("a newcomer restarts at its entry epoch: drift before it never reaches the likelihood, a step after it does", {
+  # §6.4: at e_p a newcomer's μ and its level in each house restart instead of carrying
+  # prior-only drift. Moving a pre-entry step changes the density only by that step's own
+  # std_normal prior, and the entry value is the mean over the parties existing before e_p
+  # plus m_new + s_new η (spec values written out here, not read from the module).
+  m_new <- 0
+  s_new <- 0.2023
+  checked <- c(mu = 0L, house = 0L, after = 0L)
+  for (name in c("eve2024", "f180_2021")) {
+    d <- v2_test_cells(cfg_m1())[[name]]$data
+    entry <- c(d$entry_epoch)
+    nat_epochs <- function(h) c(d$grid_epoch)[c(d$grid_nat)[c(d$house_nat) == h]]
+    s <- v2_simulate(d, seed = 3, observe = FALSE)$pars
+    lp <- v2_lp_ref(s, d)
+    tol <- 1e-10 + 4 * .Machine$double.eps * abs(lp)
+    # The bar for a change the likelihood sees, as mutant_exercised() has it.
+    moved <- 1e-6
+    # The change in the density's likelihood part when parameter `n`'s elements `at` (an
+    # index matrix) move by 1: the density's change less the moved elements' prior change.
+    lik_change <- function(n, at, mutant = "none") {
+      q <- s
+      q[[n]][at] <- q[[n]][at] + 1
+      v2_lp_ref(q, d, mutant) - v2_lp_ref(s, d, mutant) + 0.5 * sum(q[[n]][at]^2 - s[[n]][at]^2)
+    }
+    for (p in which(entry > 1L)) {
+      ep <- entry[p]
+      lbl <- paste(name, "party", p, "entering at", ep)
+      pre <- cbind(p, seq_len(ep - 1L))
+      expect_lt(abs(lik_change("mu_step_raw", pre)), tol, label = paste(lbl, "pre-entry industry steps"))
+      expect_gt(abs(lik_change("mu_step_raw", pre, "no_mu_restart")), moved, label = paste(lbl, "no_mu_restart"))
+      nat <- v2_natural(s, d)
+      expect_equal(
+        nat$mu[ep, p] - mean(nat$mu[ep, entry < ep]), m_new + s_new * s$new_raw[match(p, which(entry > 0L))],
+        tolerance = 1e-12, label = paste(lbl, "entry value")
+      )
+      checked[["mu"]] <- checked[["mu"]] + 1L
+      if (ep < d$n_epoch) {
+        expect_gt(abs(lik_change("mu_step_raw", cbind(p, ep))), moved, label = paste(lbl, "industry step after entry"))
+        checked[["after"]] <- checked[["after"]] + 1L
+      }
+      for (h in which(c(d$house_first_epoch) < ep)) {
+        pre_h <- cbind(h, p, seq(d$house_first_epoch[h], ep - 1L))
+        expect_lt(abs(lik_change("house_step_raw", pre_h)), tol, label = paste(lbl, "house", h, "pre-entry steps"))
+        # A house polling after e_p shows the drift a missing restart would carry, and its next step.
+        if (any(nat_epochs(h) > ep)) {
+          expect_gt(abs(lik_change("house_step_raw", pre_h, "no_house_restart")), moved, label = paste(lbl, "house", h, "no_house_restart"))
+          expect_gt(abs(lik_change("house_step_raw", cbind(h, p, ep))), moved, label = paste(lbl, "house", h, "step after entry"))
+          checked[["house"]] <- checked[["house"]] + 1L
+        }
+      }
+    }
+  }
+  expect_true(all(checked > 0L))
+})
+
+test_that("a house's walk starts at its first national poll's epoch, even after an earlier kjordaemi poll of it", {
+  box::use(R / harness / tables[epoch_of])
+  info <- info_2024eve()
+  house_of <- function(f) info$houses$house[match(f, info$houses$fyrirtaeki)]
+  kd_epoch <- vapply(split(info$polls_kd$date, house_of(info$polls_kd$fyrirtaeki)), \(x) epoch_of(min(x)), integer(1))
+  nat_house <- house_of(info$polls_nat$fyrirtaeki)
+  nat_epoch <- epoch_of(info$polls_nat$date)
+  # A house whose kjördæmi polls start in an epoch before some of its national polls.
+  later <- vapply(names(kd_epoch), \(h) any(nat_house == h & nat_epoch > kd_epoch[[h]]), logical(1))
+  h <- names(kd_epoch)[later][1]
+  e_k <- kd_epoch[[h]]
+  moved <- info
+  moved$polls_nat <- info$polls_nat[!(nat_house == h & nat_epoch <= e_k), ]
+  built <- v2_stan_data(moved, cfg_m1())
+  i <- match(h, built$meta$house_levels)
+  first <- epoch_of(min(moved$polls_nat$date[house_of(moved$polls_nat$fyrirtaeki) == h]))
+  expect_gt(first, e_k)
+  expect_identical(as.integer(built$data$house_first_epoch[i]), as.integer(first))
+  # With no national poll at all the house never walks.
+  none <- info
+  none$polls_nat <- info$polls_nat[nat_house != h, ]
+  built <- v2_stan_data(none, cfg_m1())
+  expect_identical(as.integer(built$data$house_first_epoch[match(h, built$meta$house_levels)]), built$data$n_epoch)
+})
+
+test_that("on every forecast cell no house's kjordaemi poll comes before its national ones, so the walk's start is unchanged", {
+  # WHY: the walk's start was the first poll of either kind before it was tied to the first
+  # national poll; on the snapshot the two agree for every house of the ten cells, so no
+  # cell's data changed. A 2017 cell is built under a root with no freeze (no forecast).
+  box::use(R / harness / constants[TARGETS])
+  root <- withr::local_tempdir("v2-cells-root-")
+  for (i in seq_len(nrow(TARGETS))) {
+    d <- v2_stan_data(info_set(TARGETS$E[i], TARGETS$F[i], v2_inputs()), cfg_m1(), root = root)$data
+    ge <- c(d$grid_epoch)
+    for (h in seq_len(d$H)) {
+      lbl <- paste(TARGETS$E[i], TARGETS$tag[i], "house", h)
+      nat <- ge[c(d$grid_nat)[c(d$house_nat) == h]]
+      kd <- ge[c(d$grid_kd)[c(d$house_kd) == h]]
+      expect_gt(length(nat), 0, label = paste(lbl, "national polls"))
+      expect_identical(as.integer(d$house_first_epoch[h]), as.integer(min(c(nat, kd))), label = lbl)
+    }
   }
 })
