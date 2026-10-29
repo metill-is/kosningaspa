@@ -9,11 +9,11 @@
 # from the project root, its output in $LOGS/<id>.log. LOGS is
 # ${HARNESS_RESULTS:-<project root>/results/harness}/logs, as the runner's results_root().
 #
-# Before any fit it takes the lock $LOGS/queue.lock (a directory holding the queue's pid),
+# Before the lock, whatever FORCE, it refuses to start while HARNESS_V2_STAN is set, since the
+# preflight's Stan tests would then test the file it names instead of the Stan file the fits
+# use. Before any fit it takes the lock $LOGS/queue.lock (a directory holding the queue's pid),
 # refuses to start while another queue holds it or a fit_cell.R runs (or when pgrep cannot
-# tell), unless FORCE=1, and runs the full slow test suite as a preflight; whatever FORCE, it
-# refuses to start while HARNESS_V2_STAN is set, since the preflight's Stan tests would then
-# test that scratch copy instead of the Stan file the fits use
+# tell), unless FORCE=1, and runs the full slow test suite as a preflight
 # ($LOGS/preflight.log), stopping if that fails. $LOGS/queue.log gets
 # "QUEUE START <time> <list> <warmup> <sampling> (pid <pid>)", "preflight PASS" (or
 # "preflight FAIL ..."), a "start <lane> <id> <time>" and an

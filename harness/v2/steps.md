@@ -619,18 +619,17 @@ Minutes, treedepth hits and ESS per 1,000 gradients are recorded, never a stop.
   had 2 divergent transitions and 1 draw near a cap on 2021 f180; `v2s-m3` has neither.
 - **ESS per 1,000 gradients** is 0.176 on 2024 eve and 0.292 on 2021 f180, against `v2s-m2`'s
   0.181 and 0.271: 3% lower and 8% higher. Recorded, not a stop.
-- **What sets the extremes.** M3 is the first step that adds a weakly identified scale: s̄_E is
-  read off 3 closed elections on 2024 eve and 2 on 2021 f180. It sets neither extreme: its
-  R-hat is 1.0066 and 1.0010 and its bulk ESS 447 and 808 (`key_diagnostics.csv`). The gate's
-  min bulk ESS is `tau_sd`'s on 2024 eve (288.8) and house 2's (Gallup) log φ on 2021 f180
-  (479.0; `key_diagnostics.csv` carries `log_phi`, a monotone map of the parameter
-  `log_phi_u`, whose bulk ESS is the same). The gate's max R-hat, 1.0215 and 1.0294, is above
-  every variable `key_diagnostics.csv` holds (at most 1.0150, `tau_sd` on 2024 eve, and 1.0096,
-  `s_delta0[7]` on 2021 f180; the scored quantities at most 1.0046 and 1.0077). So a
-  parameters-block variable outside `param_draws.parquet` sets it: one of the standard normals
-  (`z_walk`, `delta_raw`, `house_raw`, `nu`, `z_shock` and the like). The runs keep no
-  per-variable diagnostics for those and their CmdStan CSVs are deleted, so whether `z_shock`
-  sets it cannot be read from them. `v2s-m2`'s were 1.0192 and 1.0179.
+- **What sets the extremes.** M3 adds s̄_E, a scale read off only 3 closed elections on 2024 eve
+  and 2 on 2021 f180 (§6.6). It sets neither extreme: its R-hat is 1.0066 and 1.0011 and its
+  bulk ESS 447 and 808 (`key_diagnostics.csv`). The gate's min bulk ESS is `tau_sd`'s on 2024
+  eve (288.8) and house 2's (Gallup) log φ on 2021 f180 (479.0; `key_diagnostics.csv` carries
+  `log_phi`, a monotone map of the parameter `log_phi_u`, whose bulk ESS is the same). The
+  gate's max R-hat, 1.0215 and 1.0295 (the stop table's), is above every variable
+  `key_diagnostics.csv` holds (at most 1.0150, `tau_sd` on 2024 eve, and 1.0096, `s_delta0[7]`
+  on 2021 f180; the scored quantities at most 1.0046 and 1.0077). So a parameters-block variable
+  outside `param_draws.parquet` sets it, and the kept files cannot say which: the runs keep no
+  per-variable diagnostics for those variables, and their CmdStan CSVs are deleted. `z_shock` is
+  not ruled out. `v2s-m2`'s were 1.0192 and 1.0179.
 - **The minutes read high.** They are 54.3 and 30.7, against `v2s-m2`'s 53.6 and 29.1. Other
   work shared the 10 cores while the fits ran. Beside both fits ran:
   - throughout, a peer session's untimed profiling run (`sc_profile.R`): at most 3
@@ -660,7 +659,7 @@ are also checked against their own `lp_tol()` (`expect_lp_matches()`):
 Each mutant a cell exercises is rejected above 100 × tol: the core's five, the epoch bias's
 four, the newcomer pool's `newcomer_mean_over_all`, and the shock's `shock_unscaled` (d ≡ 1),
 which every cell exercises, 2017 eve's one closed election included: its range is 6.94e+04,
-6.97e+04 and 3.81e+04 times 100 × tol on 2024 eve, 2021 f180 and 2017 eve. A fifth check runs
+6.97e+04 and 3.81e+04 times 100 × tol on 2024 eve, 2021 f180 and 2017 eve. A fourth check runs
 2024 eve's prior points (10, no fit) at `prior_s_bar_E` = 0.37: Stan matches the reference
 there, and three slips are rejected: the prior's scale written as the literal 0.15 (127 times
 100 × tol), each closed election's shock read off the next row of `d_shock` (9.57e+04) and off
@@ -695,11 +694,12 @@ iteration, CmdStan seed 1, the point as its init) at one prior point,
 `v2_simulate(seed = 5, observe = FALSE)`, of the `v2s-m2` config's data (`shock = 0`,
 `draw_forecast = 1`) on 2024 eve and 2021 f180, built as the Stan tests' cells are
 (`v2_test_cells()`, `tests/harness/helper-v2.R`). Every quantity is identical between the two
-files; only TRUE or FALSE was printed:
+files; only TRUE or FALSE was printed. In the script's output below, the "new file" is the
+committed file (68c53ac's) and the "old file" 69b8978's:
 
 ```
-committed file (68c53ac) sha256 9149dbba616a972025d16e332adcd10585df861897e66eae6f49b796dc92c7ee
-69b8978 file sha256 934281745c266c4df9a20ceb9ac86e14d53c9f290a5236401e4ca1ff7415b3fa
+new file sha256 9149dbba616a972025d16e332adcd10585df861897e66eae6f49b796dc92c7ee
+old file sha256 934281745c266c4df9a20ceb9ac86e14d53c9f290a5236401e4ca1ff7415b3fa
 point: v2_simulate(seed = 5, observe = FALSE) on v2_test_cells(cfg_m2()) data; CmdStan seed 1
 eve2024: all five present in both: TRUE
 eve2024 log_lik identical: TRUE

@@ -79,7 +79,7 @@ test_that("the queue refuses a bad command line or run list", {
   out <- queue(c(file.path(lists, "absent.txt"), "200", "200"))
   expect_identical(attr(out, "status"), 2L)
   results <- withr::local_tempdir()
-  withr::local_envvar(HARNESS_RESULTS = results, DRY_RUN = NA)
+  withr::local_envvar(HARNESS_RESULTS = results, DRY_RUN = NA, HARNESS_V2_STAN = NA)
   out <- queue(c(bad, "200", "200"))
   expect_identical(attr(out, "status"), 2L)
   log <- readLines(file.path(results, "logs", "queue.log"))
@@ -91,7 +91,10 @@ test_that("the queue will not start beside a running fit_cell.R unless FORCE=1, 
   results <- withr::local_tempdir()
   bin <- withr::local_tempdir()
   stub(bin, "Rscript", "exit 3")
-  withr::local_envvar(HARNESS_RESULTS = results, DRY_RUN = NA, FORCE = NA, PATH = paste(bin, Sys.getenv("PATH"), sep = ":"))
+  withr::local_envvar(
+    HARNESS_RESULTS = results, DRY_RUN = NA, FORCE = NA, HARNESS_V2_STAN = NA,
+    PATH = paste(bin, Sys.getenv("PATH"), sep = ":")
+  )
   logs <- file.path(results, "logs")
   fake_fit()
   out <- queue(c("harness/runs/tier0.txt", "200", "200"))
@@ -121,7 +124,10 @@ test_that("the queue's guard refuses to start when pgrep fails", {
   results <- withr::local_tempdir()
   bin <- withr::local_tempdir()
   stub(bin, "Rscript", "exit 3")
-  withr::local_envvar(HARNESS_RESULTS = results, DRY_RUN = NA, FORCE = NA, PATH = paste(bin, Sys.getenv("PATH"), sep = ":"))
+  withr::local_envvar(
+    HARNESS_RESULTS = results, DRY_RUN = NA, FORCE = NA, HARNESS_V2_STAN = NA,
+    PATH = paste(bin, Sys.getenv("PATH"), sep = ":")
+  )
   for (rc in c(2L, 3L, 127L)) {
     stub(bin, "pgrep", paste("exit", rc))
     out <- queue(c("harness/runs/tier0.txt", "200", "200"))
@@ -149,11 +155,44 @@ test_that("the queue refuses to start while HARNESS_V2_STAN is set, FORCE=1 or n
     expect_match(out, "HARNESS_V2_STAN is set (/tmp/scratch/forecast_v2.stan)", fixed = TRUE, all = FALSE)
     log <- readLines(file.path(logs, "queue.log"))
     expect_match(log[length(log)], "^QUEUE ABORTED rc=1 HARNESS_V2_STAN is set ")
+    expect_match(log[length(log)], ABORTED)
     expect_false(any(startsWith(log, "QUEUE START")))
     expect_false(dir.exists(file.path(logs, "queue.lock")))
     expect_false(file.exists(file.path(logs, "preflight.log")))
   }
   expect_length(readLines(file.path(logs, "queue.log")), 2)
+})
+
+test_that("the queue's HARNESS_V2_STAN refusal comes before the lock and the guard, which it leaves as they were", {
+  # WHY: the exit trap removes a lock the queue owns, so "no lock left behind" holds wherever
+  # the refusal sits. Here another queue holds the lock and the guard sees a fit, so a refusal
+  # moved past either would lose to that one's own reason.
+  results <- withr::local_tempdir()
+  bin <- withr::local_tempdir()
+  stub(bin, "Rscript", "exit 3")
+  stub(bin, "pgrep", "exit 0")
+  logs <- file.path(results, "logs")
+  lock <- file.path(logs, "queue.lock")
+  dir.create(lock, recursive = TRUE)
+  writeLines("424242", file.path(lock, "pid"))
+  before <- file.info(file.path(lock, "pid"))$mtime
+  withr::local_envvar(
+    HARNESS_RESULTS = results, DRY_RUN = NA, FORCE = NA, HARNESS_V2_STAN = "/tmp/scratch/forecast_v2.stan",
+    PATH = paste(bin, Sys.getenv("PATH"), sep = ":")
+  )
+  out <- queue(c("harness/runs/tier0.txt", "200", "200"))
+  expect_identical(attr(out, "status"), 1L)
+  expect_match(out, "HARNESS_V2_STAN is set (/tmp/scratch/forecast_v2.stan)", fixed = TRUE, all = FALSE)
+  expect_false(any(grepl("another queue holds", out, fixed = TRUE)))
+  expect_false(any(grepl("fit_cell.R", out, fixed = TRUE)))
+  log <- readLines(file.path(logs, "queue.log"))
+  expect_length(log, 1)
+  expect_match(log, ABORTED)
+  expect_match(log, "^QUEUE ABORTED rc=1 HARNESS_V2_STAN is set ")
+  expect_identical(list.files(lock, all.files = TRUE, no.. = TRUE), "pid")
+  expect_identical(readLines(file.path(lock, "pid")), "424242")
+  expect_identical(file.info(file.path(lock, "pid"))$mtime, before)
+  expect_false(file.exists(file.path(logs, "preflight.log")))
 })
 
 test_that("a second queue is refused while the first holds the lock, and a killed queue logs QUEUE ABORTED", {
@@ -164,7 +203,7 @@ test_that("a second queue is refused while the first holds the lock, and a kille
   # WHY: the preflight waits for a file that never comes, so the first queue holds the lock in its preflight.
   stub(bin, "Rscript", c('echo "$*" >> "$CALLS"', 'while [ ! -f "$GO" ]; do sleep 0.1; done', "exit 0"))
   withr::local_envvar(
-    HARNESS_RESULTS = results, DRY_RUN = NA, FORCE = NA, GO = go, CALLS = calls,
+    HARNESS_RESULTS = results, DRY_RUN = NA, FORCE = NA, HARNESS_V2_STAN = NA, GO = go, CALLS = calls,
     PATH = paste(bin, Sys.getenv("PATH"), sep = ":")
   )
   lock <- file.path(results, "logs", "queue.lock")
@@ -210,7 +249,7 @@ test_that("the queue runs each lane's runs in order, the lanes side by side, and
     "  A   r0 2024-11-30 2024-11-29 13"
   ), list)
   withr::local_envvar(
-    HARNESS_RESULTS = results, DRY_RUN = NA, FORCE = "1", HARNESS_SLOW = NA, CALLS = calls,
+    HARNESS_RESULTS = results, DRY_RUN = NA, FORCE = "1", HARNESS_SLOW = NA, HARNESS_V2_STAN = NA, CALLS = calls,
     PATH = paste(stub, Sys.getenv("PATH"), sep = ":")
   )
   out <- queue(c(list, "200", "300"))
