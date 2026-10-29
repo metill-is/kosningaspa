@@ -3,9 +3,10 @@
 # (reverse_labels() and the stage1_* functions), random_sigma() for the walk's covariance
 # algebra, and the comparison of Stan/forecast_v2.stan with the R reference
 # (skip_unless_step(), v2_test_cells(), lp_points(), stan_pars(), expect_lp_matches(),
-# expect_lp_rejects(), mutant_exercised(), bounded_at()). The model methods on V2's Stan
-# files (v2_model(), v2_methods(), n_unc(), fixed_param_run(), short_fit_draws(), gq_at(),
-# ...) are R/harness/v2_methods.R's, imported below under their own names.
+# expect_lp_rejects(), mutant_exercised(), bounded_at(), stan_block_decls()). The model
+# methods on V2's Stan files (v2_model(), v2_methods(), n_unc(), fixed_param_run(),
+# short_fit_draws(), gq_at(), ...) are R/harness/v2_methods.R's, imported below under their
+# own names.
 # The other V2 modules are imported inside the fixtures, so that a broken module fails the
 # tests that use it, not the sourcing of every test file.
 box::use(
@@ -296,4 +297,20 @@ bounded_at <- function(m, data, u) {
   pars$log_phi_K_u <- u
   pars$log_kappa_u <- u
   m$constrain_variables(m$unconstrain_variables(pars), transformed_parameters = TRUE, generated_quantities = FALSE)
+}
+
+# The declarations of block `block` ("parameters", say) of the Stan program `lines`, comments
+# dropped: a data frame of each declaration's `type` and `name`, in the file's order. An
+# error if the block is not found once, or if one of its lines is not one declaration.
+stan_block_decls <- function(lines, block) {
+  start <- which(lines == paste(block, "{"))
+  if (length(start) != 1) stop("stan_block_decls: block ", block, " found ", length(start), " times", call. = FALSE)
+  end <- start + which(lines[-seq_len(start)] == "}")[1]
+  if (is.na(end)) stop("stan_block_decls: block ", block, " has no closing brace", call. = FALSE)
+  body <- trimws(sub("//.*$", "", lines[seq(start + 1, end - 1)]))
+  body <- body[nzchar(body)]
+  m <- regmatches(body, regexec("^(.*\\S)\\s+([A-Za-z_][A-Za-z0-9_]*);$", body))
+  bad <- lengths(m) != 3
+  if (any(bad)) stop("stan_block_decls: not one declaration: ", body[bad][1], call. = FALSE)
+  data.frame(type = vapply(m, `[`, "", 2), name = vapply(m, `[`, "", 3))
 }

@@ -70,8 +70,15 @@ V2_CORE_PARS <- tibble::tibble(
 #' The newcomer pool's (`newcomer_pool`, §6.4):
 #' - `newcomer_mean_over_all`: a newcomer's entry value takes the mean of μ_{e_p} over every
 #'   party, the newcomer and the parties entering later included, instead of over the parties
-#'   existing before e_p. Any newcomer entering in the window exercises it, the 2017 cells'
-#'   (one closed election) included.
+#'   existing before e_p. μ sums to zero going into every entry epoch (μ_1 is sum-to-zero, the
+#'   steps are centred and μ is re-centred after each epoch), so that mean is 0 to rounding:
+#'   the mutant drops the base, and the entry value is m_new + s_new η alone. It does not test
+#'   where the set of existing parties ends: the spec-valued test "a newcomer enters at the
+#'   existing parties' mean plus the point's m_new + s_new eta", in
+#'   `tests/harness/test-v2-reference.R`, pins the reference's set, entry_epoch < e_p, and the
+#'   lp tests pin Stan to the reference.
+#'   Any newcomer entering in the window exercises the mutant, the 2017 cells' (one closed
+#'   election) included.
 #' @export
 V2_MUTANTS <- tibble::tibble(
   mutant = c(

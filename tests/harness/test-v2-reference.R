@@ -343,6 +343,16 @@ test_that("the fixed s_new is the median of the pooled s_new's half-normal prior
   expect_identical(literal("^ *m_new ~ normal\\(0, ([0-9.]+)\\);"), ref$M_NEW_SD)
 })
 
+test_that("Stan declares the parameters V2_CORE_PARS names, with its types, bounds included, in its order", {
+  # WHY: the Stan tests' free sizes and round trips cannot tell a bounded scalar such as
+  # real<lower=0> s_new from an unbounded real; this compares the declarations as written.
+  decl <- stan_block_decls(readLines(root("Stan", "forecast_v2.stan")), "parameters")
+  expect_identical(decl$name, V2_CORE_PARS$name)
+  expect_identical(decl$type, V2_CORE_PARS$type)
+  # §6.4: s_new is a scale, half-normal under newcomer_pool = 1.
+  expect_identical(V2_CORE_PARS$type[V2_CORE_PARS$name == "s_new"], "array[newcomer_pool] real<lower=0>")
+})
+
 test_that("the newcomer-pool reference: its mutant changes the density on every cell, and the identity under permutation holds", {
   # WHY: every newcomer enters in an epoch of the window (C and F in the first), so the mean
   # over every party differs from the mean over the existing ones on each cell, 2017 eve's
@@ -369,20 +379,33 @@ test_that("the newcomer-pool reference: its mutant changes the density on every 
 })
 
 test_that("a newcomer enters at the existing parties' mean plus the point's m_new + s_new eta", {
-  # §6.4: the mean runs over the parties existing before e_p (spec values written out here).
-  for (name in c("eve2024", "f180_2021", "eve2017")) {
-    d <- v2_test_cells(cfg_m2())[[name]]$data
-    entry <- c(d$entry_epoch)
-    s <- v2_simulate(d, seed = 5, observe = FALSE)$pars
-    s$m_new[] <- 0.4
-    s$s_new[] <- 0.7
-    nat <- v2_natural(s, d)
-    for (p in which(entry > 0L)) {
-      ep <- entry[p]
-      expect_equal(
-        nat$mu[ep, p] - mean(nat$mu[ep, entry < ep]), 0.4 + 0.7 * s$new_raw[match(p, which(entry > 0L))],
-        tolerance = 1e-12, label = paste(name, "party", p, "entering at", ep)
-      )
+  # §6.4: the mean runs over the parties existing before e_p (spec values written out here),
+  # with the epoch bias on (v2s-m2) and off (newcomer_pool = 1 with epoch_bias = 0, as the
+  # v2-noepoch ablation fits it, where μ takes no step).
+  configs <- list(epoch_bias = cfg_m2(), no_epoch_bias = utils::modifyList(cfg_m2(), list(epoch_bias = 0L)))
+  for (cfg_name in names(configs)) {
+    for (name in c("eve2024", "f180_2021", "eve2017")) {
+      d <- v2_test_cells(configs[[cfg_name]])[[name]]$data
+      label <- paste(cfg_name, name)
+      expect_identical(as.integer(c(d$epoch_bias, d$newcomer_pool)), c(as.integer(cfg_name == "epoch_bias"), 1L), label = label)
+      if (cfg_name == "no_epoch_bias") {
+        epoch_pars <- c("mu_step_raw", "house_step_raw", "tau_mu", "tau_mu_A", "tau_house")
+        expect_true(all(vapply(v2_par_dims(d)[epoch_pars], prod, numeric(1)) == 0), label = label)
+      }
+      entry <- c(d$entry_epoch)
+      expect_gt(sum(entry > 0L), 0, label = label)
+      s <- v2_simulate(d, seed = 5, observe = FALSE)$pars
+      s$m_new[] <- 0.4
+      s$s_new[] <- 0.7
+      nat <- v2_natural(s, d)
+      for (p in which(entry > 0L)) {
+        ep <- entry[p]
+        expect_equal(
+          nat$mu[ep, p] - mean(nat$mu[ep, entry < ep]), 0.4 + 0.7 * s$new_raw[match(p, which(entry > 0L))],
+          tolerance = 1e-12, label = paste(label, "party", p, "entering at", ep)
+        )
+      }
+      expect_gt(abs(v2_lp_ref(s, d, "newcomer_mean_over_all") - v2_lp_ref(s, d)), 1e-6, label = label)
     }
   }
 })

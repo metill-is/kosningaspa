@@ -495,6 +495,25 @@ test_that("v2s-m2: Stan's log density matches the reference up to a constant", {
   expect_true(all(c("house_walk_from_first_poll", "newcomer_mean_of_mu1", "no_mu_restart", "no_house_restart") %in% hit))
 })
 
+test_that("v2s-m2: with the pool on and the epoch bias off, Stan's log density matches the reference", {
+  skip_unless_slow()
+  skip_unless_step("v2s-m2")
+  # WHY: the v2-noepoch ablation fits newcomer_pool = 1 with epoch_bias = 0, where μ takes no
+  # step and the epoch bias's parameters, size 0, sit before m_new and s_new.
+  cfg <- utils::modifyList(cfg_m2(), list(epoch_bias = 0L, walk_form = 0L, delta_form = 0L))
+  d <- v2_stan_data(info_2024eve(), cfg)$data
+  expect_identical(as.integer(c(d$epoch_bias, d$newcomer_pool)), c(0L, 1L))
+  m <- v2_methods(V2_STAN, d)
+  pts <- lp_points(m, d, n_post = 0, n_off = 0, n_prior = 10)
+  ok <- expect_lp_matches(m, d, pts)
+  expect_true(mutant_exercised(d, pts, "newcomer_mean_over_all"))
+  ratio <- expect_lp_rejects(m, d, pts, "newcomer_mean_over_all")
+  message(sprintf(
+    "v2s-m2 eve2024 with epoch_bias = 0: %d prior points, lp constant range %.3g (tol %.3g); range / (100 tol): newcomer_mean_over_all %.3g",
+    length(pts), ok$range, ok$tol, ratio
+  ))
+})
+
 test_that("v2s-m2: m_new and s_new have v2_par_dims()' sizes, and size 0 with newcomer_pool = 0", {
   skip_unless_slow()
   skip_unless_step("v2s-m2")
@@ -509,7 +528,7 @@ test_that("v2s-m2: m_new and s_new have v2_par_dims()' sizes, and size 0 with ne
     d0 <- d
     d0$newcomer_pool <- 0L
     expect_true(all(vapply(v2_par_dims(d0)[POOL_PARS], prod, numeric(1)) == 0))
-    # WHY: each is one free element, s_new's on the log scale.
+    # WHY: m_new and s_new add one free element each.
     expect_identical(as.numeric(n_unc(m) - n_unc(v2_methods(V2_STAN, d0))), 2)
     s <- v2_simulate(d, seed = 1, observe = FALSE)
     pars <- stan_pars(m, m$unconstrain_variables(s$pars))

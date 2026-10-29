@@ -6,7 +6,8 @@ Written by `LC_ALL=en_US.UTF-8 Rscript R/harness/v2_prior_predictive.R <config> 
 - Prior draws: 1000 per cell and row, seeds 6001 to 7000 (the walk row's z: seeds 7000001 to 7001000)
 - Cell 2024-eve (E 2024-11-30, F 2024-11-29): P 10 parties, H 6 houses, K 6 kjördæmi, J 9 kjördæmi polls, 4 epochs
 - Cell 2021-f180 (E 2021-09-25, F 2021-03-29): P 10 parties, H 5 houses, K 6 kjördæmi, J 1 kjördæmi polls, 3 epochs
-- The 20% party is the coordinate party (the first of the order), in a composition of 20% beside P − 1 equal parties sharing 80%; each effect moves it on the log-ratio scale, and the summary is its change in pp. The script's header says which coordinate each effect reads. A summary whose label names another share reads a party of that share instead.
+- The 20% party is the coordinate party (the first of the order), in a composition of 20% beside P − 1 equal parties sharing 80%; each effect moves it on the log-ratio scale, and the summary is its change in pp. The script's header says which coordinate each effect reads.
+- `newcomer_entry` reads no coordinate party: its first party is the newcomer, at 10% beside P − 1 equal parties sharing 90%, moved by its entry bias against the existing parties' mean.
 
 ## Summaries
 

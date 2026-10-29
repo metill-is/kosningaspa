@@ -115,8 +115,9 @@ CELLS <- tibble::tibble(
   F = as.Date(c("2024-11-29", "2021-03-29"))
 )
 
-#' The 20% party's change in pp when the composition (share, (1 − share) / (P − 1), ...)
-#' moves by `x` on the log-ratio scale: 100 (softmax(log s0 + x)_1 − share).
+#' The first party's change in pp, at share `share` (20% by default), when the composition
+#' (share, (1 − share) / (P − 1), ...) moves by `x` on the log-ratio scale:
+#' 100 (softmax(log s0 + x)_1 − share).
 #' @param x a numeric P-vector, P at least 2
 #' @param share the first party's share
 #' @return numeric(1)
@@ -167,7 +168,7 @@ SUMMARY_FUNS <- list(
       stop("prior predictive: newcomer_entry needs m_new and s_new, which newcomer_pool = 1 puts in the model", call. = FALSE)
     }
     x <- as.numeric(sim$pars$m_new) + as.numeric(sim$pars$s_new) * as.numeric(sim$pars$new_raw)
-    vapply(x, \(c) share_change(c(c, rep(0, data$P - 1)), share = NEWCOMER_SHARE), numeric(1))
+    vapply(x, \(v) share_change(c(v, rep(0, data$P - 1)), share = NEWCOMER_SHARE), numeric(1))
   }
 )
 
@@ -537,9 +538,17 @@ main <- function(args) {
     paste(
       "- The 20% party is the coordinate party (the first of the order), in a composition of 20% beside",
       "P \u2212 1 equal parties sharing 80%; each effect moves it on the log-ratio scale, and the summary",
-      "is its change in pp. The script's header says which coordinate each effect reads. A summary whose label",
-      "names another share reads a party of that share instead."
+      "is its change in pp. The script's header says which coordinate each effect reads."
     ),
+    if ("newcomer_entry" %in% rows$summary) {
+      sprintf(
+        paste(
+          "- `newcomer_entry` reads no coordinate party: its first party is the newcomer, at %g%% beside",
+          "P \u2212 1 equal parties sharing %g%%, moved by its entry bias against the existing parties' mean."
+        ),
+        100 * NEWCOMER_SHARE, 100 * (1 - NEWCOMER_SHARE)
+      )
+    },
     "",
     "## Summaries",
     "",
