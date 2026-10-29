@@ -251,10 +251,15 @@ cell through the arm, as `fit_cell.R` builds it, and equals the sha256 of the ru
 | 2024 eve, 2701 | 5a53130, false | `0a8f392b5e19f2ea71ed4278f2d913adee1768fbfc16f580eddff1c4e94aaf06` | the same |
 | 2021 f180, 2701 | 5a53130, false | `9616f525a8005c80e8b1e5de6f0931e87bcf689f204212bd5bb130c5d8655ca5` | the same |
 
-To re-measure one cell's sha (here 2024 eve), from the project root:
+To re-measure a cell's sha, from the project root, with the cell's E and F as the two
+arguments (`2024-11-30 2024-11-29` for 2024 eve and `2021-09-25 2021-03-29` for 2021 f180, the
+two lines below). It reproduces the recorded sha only on a tree whose `R/harness` builder and
+`harness/configs/steps/v2s-m1.json` build the data as 3b9503a's do; after a later change to
+either it prints another sha, which is not a provenance failure:
 
 ```
 LC_ALL=en_US.UTF-8 Rscript -e 'x <- commandArgs(TRUE); options(box.path = getwd()); box::use(R/harness/arms[arm], R/harness/info_set[info_set], R/harness/runs[stan_data_sha]); a <- arm("v2s-m1"); cat(stan_data_sha(a$build(info_set(as.Date(x[1]), as.Date(x[2])), a$read_config(a$config))$data), "\n")' 2024-11-30 2024-11-29
+LC_ALL=en_US.UTF-8 Rscript -e 'x <- commandArgs(TRUE); options(box.path = getwd()); box::use(R/harness/arms[arm], R/harness/info_set[info_set], R/harness/runs[stan_data_sha]); a <- arm("v2s-m1"); cat(stan_data_sha(a$build(info_set(as.Date(x[1]), as.Date(x[2])), a$read_config(a$config))$data), "\n")' 2021-09-25 2021-03-29
 ```
 
 **Stop rule.** `LC_ALL=en_US.UTF-8 Rscript R/harness/compare_runs.R stop v2s-m1` (exit 0):
@@ -281,13 +286,19 @@ Minutes, treedepth hits and ESS per 1,000 gradients are recorded, never a stop.
   because its gate-scope max R-hat (1.0177 and 1.0197 as DIAG prints them; the stop rule
   rounds the second up to 1.0198) is above the scoring gate's 1.01. A `dev` arm is never
   scored.
-- **The minutes read high.** Both fits ran beside other work on the 10 cores. A scratch script
-  compiled `Stan/forecast_v2.stan` and ran three one-draw fixed_param runs, the load average
-  about 25 at its start (11:52). Fast test runs went alongside: the reference, extract, data,
-  arms, prior predictive and run-comparison tests, then the whole fast suite. The prior
-  predictive report was regenerated, and a process outside the harness used about one core.
-  No slow test ran beside them; the slow suite ran in the preflight, before the fits. No fit
-  is known to have run unloaded, so both fits' minutes read high, by an unknown amount.
+- **The minutes read high.** Other work shared the 10 cores while the fits ran. 2021 f180
+  finished at 12:05:02 (its `meta.json`) and 2024 eve at 12:30:13. Beside both fits ran:
+  - single-file test runs (the reference, extract, escapes, data, arms, prior predictive and
+    run-comparison tests), from about 11:47 to 11:52 and 12:03 to 12:05;
+  - a scratch script that compiled `Stan/forecast_v2.stan` and ran three one-draw
+    fixed_param runs, from 11:52 to 12:00, with the load average about 25 at its start;
+  - the prior predictive report's regeneration, from 12:00 to 12:03;
+  - a process outside the harness, seen at about one core at 11:52 and 12:00.
+
+  The whole fast suite started at about 12:05:06, after 2021 f180 had finished, so it ran
+  beside 2024 eve only, until 12:08. No slow test ran beside either fit: the slow suite ran in
+  the preflight, before the fits. No fit is known to have run unloaded, so both fits' minutes
+  read high, by an unknown amount.
 
 **The newcomer restart.** At a newcomer's entry epoch e_p, its μ restarts at the entry mean:
 the mean over the parties existing before e_p of μ_{e_p}, plus m_new + s_new η (0 and 0.2023

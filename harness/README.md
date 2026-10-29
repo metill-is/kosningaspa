@@ -444,8 +444,10 @@ against `v2s-m0`'s none. The anchored form stays built behind `walk_form`, and e
 step's config sets `walk_form = 0`.
 
 M1 (`v2s-m1`), the epoch bias (`epoch_bias = 1`), passed the stop rule: `GO` on both fits
-(`harness/v2/steps.md`). Each later step's config is the previous step's with its own switch
-on, so it keeps `epoch_bias = 1`.
+(`harness/v2/steps.md`). Each step's config is the config of the last step whose form
+stands (the previous M-step, or a P-step only when it is adopted) with the step's own switch
+on. M1's is therefore `v2s-m0`'s with `epoch_bias = 1`, since P1 was kept, not adopted, and
+every later step keeps `epoch_bias = 1`.
 
 A P-step's form is first checked against the reference form, point by point, by
 `R/harness/v2_equivalence.R` (the plan's Decision 6, condition 1), once for each check of
