@@ -62,9 +62,9 @@
 #     each element's d = √(min(0.2 / π_p, 10)) the builder's formula (shock_scaling()) on that
 #     composition. §6.10 puts the median at about 1.6 pp for a 20% party and 0.95 pp for a 5%
 #     one: the party-alone linearisation π(1 − π) s̄ d at s̄_E's median, 0.15 · qnorm(0.75).
-#     This construction also shocks the other P − 1 parties and centres, so its population
-#     medians are about 1.80 and 1.00 pp, and the ratios to §6.10's targets are expected near
-#     1.13 and 1.05. They read no party-indexed parameter, so coordinate 1 is the 20% or 5%
+#     This construction also shocks the other P − 1 parties (the centring is a common shift,
+#     which cancels in the softmax), so its population medians are about 1.80 and 1.00 pp,
+#     and the ratios to §6.10's targets are expected near 1.13 and 1.05. They read no party-indexed parameter, so coordinate 1 is the 20% or 5%
 #     party.
 #
 # The bands, each built by its constructor and checked by in_band():

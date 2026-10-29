@@ -11,7 +11,9 @@
 #
 # Before any fit it takes the lock $LOGS/queue.lock (a directory holding the queue's pid),
 # refuses to start while another queue holds it or a fit_cell.R runs (or when pgrep cannot
-# tell), unless FORCE=1, and runs the full slow test suite as a preflight
+# tell), unless FORCE=1, and runs the full slow test suite as a preflight; whatever FORCE, it
+# refuses to start while HARNESS_V2_STAN is set, since the preflight's Stan tests would then
+# test that scratch copy instead of the Stan file the fits use
 # ($LOGS/preflight.log), stopping if that fails. $LOGS/queue.log gets
 # "QUEUE START <time> <list> <warmup> <sampling> (pid <pid>)", "preflight PASS" (or
 # "preflight FAIL ..."), a "start <lane> <id> <time>" and an
@@ -98,6 +100,10 @@ if [[ ${DRY_RUN:-0} == 1 ]]; then
 fi
 
 mkdir -p $LOGS || die 1 "cannot make $LOGS"
+# WHY: the preflight must certify the Stan file the fits use, never a scratch copy.
+if [[ -n ${HARNESS_V2_STAN:-} ]]; then
+  die 1 "HARNESS_V2_STAN is set ($HARNESS_V2_STAN): the preflight would test that file, not the one the fits use; unset it"
+fi
 if mkdir $lock 2> /dev/null; then
   owns_lock=1
   print -r -- $$ > $lock/pid

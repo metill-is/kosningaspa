@@ -30,7 +30,12 @@ run only with `HARNESS_SLOW=1` in the environment:
 `HARNESS_SLOW=1 LC_ALL=en_US.UTF-8 Rscript tests/run.R`. The tests of `Stan/forecast_v2.stan`
 in `tests/harness/test-v2-stan.R` are slow and named by the V2 step they test (`v2s-m0: …`);
 `V2_STEPS=<step>[,<step>…]` runs only those steps' tests (`skip_unless_step()`), and unset it
-runs them all. The slow tests of the equivalence check in
+runs them all. `HARNESS_V2_STAN=<absolute path>` runs that file's tests on a scratch copy of
+the Stan file instead, for a planted fault's RED: the file must exist and the path be
+absolute, or the test file stops as it loads, and the tests announce the path and its
+sha256, so every log records the switch; unset, they test `Stan/forecast_v2.stan` and print
+nothing. `queue.sh` refuses to start while it is set, so the preflight never certifies
+another file than the one the fits use. The slow tests of the equivalence check in
 `tests/harness/test-v2-equivalence.R` are named and gated the same way (`v2s-p1: …`): each
 runs `R/harness/v2_equivalence.R` in a subprocess into a temporary CSV, one of them on a
 copy of the Stan file with a planted fault, which must fail for the constant's range alone. Its
@@ -350,7 +355,8 @@ A or B; lines starting with `#` are comments. `harness/runs/tier0.txt` is Tier 0
 directory is `${HARNESS_RESULTS:-results/harness}/logs`. Before any fit the queue takes the
 lock `<logs>/queue.lock`, a directory holding its pid, and refuses to start while another
 queue holds it, while a `fit_cell.R` runs (`pgrep -f -- '--file=R/harness/fit_cell.R'`), or
-when `pgrep` fails and so cannot tell (an exit other than 0 or 1), unless `FORCE=1`. It runs
+when `pgrep` fails and so cannot tell (an exit other than 0 or 1), unless `FORCE=1`; whatever
+`FORCE`, it refuses to start while `HARNESS_V2_STAN` is set (Tests). It runs
 the full slow suite as a preflight (`<logs>/preflight.log`) and stops if that fails, then
 runs lanes A and B side by side, each lane's runs one after another, each run's output in
 `<logs>/<id>.log`. `queue.log` there gets

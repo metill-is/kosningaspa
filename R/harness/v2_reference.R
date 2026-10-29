@@ -13,21 +13,21 @@ box::use(
 
 #' The core's parameters, in the declaration order of Stan/forecast_v2.stan, with their Stan
 #' types: the Stan file's parameters block declares the same names in the same order with the
-#' same types, which the declaration test in tests/harness/test-v2-reference.R pins. They are
-#' the names and order of the list that `constrain_variables(..., transformed_parameters =
-#' FALSE)` returns and `v2_lp_ref()` reads. `N_new` is the number of parties with `entry_epoch` > 0, and `new_raw` holds one
-#' element per such party, in party order. `delta_raw` is one ζ, mapped through every
-#' epoch's M_e (static δ). `s_delta0_raw` is r, with log s_δ0 = μ_sd + τ_sd r. `anchor_w` is
-#' the anchored walk's (walk_form = 1, §6.9): size 0 in the reference forms, where `z_walk`
-#' has its G − 1 columns. The epoch bias's (§6.4, `epoch_bias` = 1) come last, each size 0 with
-#' `epoch_bias` = 0: `mu_step_raw` holds ξ_e of the industry bias's steps, column e − 1 for
-#' e = 2..n_epoch; `house_step_raw` each house's ζ_{e,h}, in the same columns; `tau_mu`,
-#' `tau_mu_A` (Annað's) and `tau_house` are their scales, each an array of one. The newcomer
-#' pool's (§6.4, `newcomer_pool` = 1) follow, each size 0 with `newcomer_pool` = 0: `m_new` and
-#' `s_new`, the mean and scale of a newcomer's bias contrast m_new + s_new η, each an array of
-#' one. The shock's (§6.6, `shock` = 1) come last, each size 0 with `shock` = 0: `z_shock`,
-#' P × n_closed, column e holding closed election e's z_e, and `s_bar_E`, the shock's scale
-#' s̄_E, an array of one.
+#' same types, which the declaration test in tests/harness/test-v2-reference.R pins.
+#' `constrain_variables(..., transformed_parameters = FALSE)` returns a list with these names
+#' in this order, and `v2_lp_ref()` reads one. `N_new` is the number of parties with
+#' `entry_epoch` > 0, and `new_raw` holds one element per such party, in party order.
+#' `delta_raw` is one ζ, mapped through every epoch's M_e (static δ). `s_delta0_raw` is r,
+#' with log s_δ0 = μ_sd + τ_sd r. `anchor_w` is the anchored walk's (walk_form = 1, §6.9):
+#' size 0 in the reference forms, where `z_walk` has its G − 1 columns. The epoch bias's
+#' (§6.4, `epoch_bias` = 1) come next, each size 0 with `epoch_bias` = 0: `mu_step_raw` holds
+#' ξ_e of the industry bias's steps, column e − 1 for e = 2..n_epoch; `house_step_raw` each
+#' house's ζ_{e,h}, in the same columns; `tau_mu`, `tau_mu_A` (Annað's) and `tau_house` are
+#' their scales, each an array of one. The newcomer pool's (§6.4, `newcomer_pool` = 1)
+#' follow, each size 0 with `newcomer_pool` = 0: `m_new` and `s_new`, the mean and scale of a
+#' newcomer's bias contrast m_new + s_new η, each an array of one. The shock's (§6.6,
+#' `shock` = 1) come last, each size 0 with `shock` = 0: `z_shock`, P × n_closed, column e
+#' holding closed election e's z_e, and `s_bar_E`, the shock's scale s̄_E, an array of one.
 #' @export
 V2_CORE_PARS <- tibble::tibble(
   name = c(

@@ -6,8 +6,20 @@ box::use(
 )
 
 # WHY: a planted fault's RED runs these tests on a scratch copy of the Stan file, named by
-# HARNESS_V2_STAN as an absolute path; unset, they test the repo's file.
-V2_STAN <- Sys.getenv("HARNESS_V2_STAN", "Stan/forecast_v2.stan")
+# HARNESS_V2_STAN as an absolute path; unset, they test the repo's file and print nothing.
+# Set, the file must exist, and it is announced with its sha256 so that every log, the
+# queue's preflight.log included, records the switch (queue.sh refuses to start with it set).
+V2_STAN <- local({
+  f <- Sys.getenv("HARNESS_V2_STAN")
+  if (!nzchar(f)) {
+    return("Stan/forecast_v2.stan")
+  }
+  if (!startsWith(f, "/") || !file.exists(f)) {
+    stop("HARNESS_V2_STAN must be the absolute path of an existing Stan file: ", f, call. = FALSE)
+  }
+  message("HARNESS_V2_STAN: the Stan tests run on ", f, " (sha256 ", digest::digest(file = f, algo = "sha256"), ")")
+  f
+})
 
 # A step's lp test (the step protocol's Step B) on the cells of v2_test_cells(cfg), whose
 # walk and delta forms are the reference forms: on each cell Stan's log density minus the
@@ -708,7 +720,7 @@ test_that("v2s-m3: at a prior point the results' rows carry their shocks, pi_lat
   }
 })
 
-test_that("v2s-m3: with z_shock = 0 the results' rows are shock = 0's, and the forecast's shock is drawn after the replicates", {
+test_that("v2s-m3: with z_shock = 0 the results' rows are shock = 0's, and no forecast draw gated on draw_forecast precedes the replicates", {
   skip_unless_slow()
   skip_unless_step("v2s-m3")
   # WHY: the last check detects a forecast draw gated on draw_forecast and placed before the

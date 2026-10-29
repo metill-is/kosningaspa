@@ -133,6 +133,29 @@ test_that("the queue's guard refuses to start when pgrep fails", {
   }
 })
 
+test_that("the queue refuses to start while HARNESS_V2_STAN is set, FORCE=1 or not", {
+  results <- withr::local_tempdir()
+  bin <- withr::local_tempdir()
+  stub(bin, "Rscript", "exit 3")
+  logs <- file.path(results, "logs")
+  withr::local_envvar(
+    HARNESS_RESULTS = results, DRY_RUN = NA, HARNESS_V2_STAN = "/tmp/scratch/forecast_v2.stan",
+    PATH = paste(bin, Sys.getenv("PATH"), sep = ":")
+  )
+  for (force in c(NA, "1")) {
+    withr::local_envvar(FORCE = force)
+    out <- queue(c("harness/runs/tier0.txt", "200", "200"))
+    expect_identical(attr(out, "status"), 1L)
+    expect_match(out, "HARNESS_V2_STAN is set (/tmp/scratch/forecast_v2.stan)", fixed = TRUE, all = FALSE)
+    log <- readLines(file.path(logs, "queue.log"))
+    expect_match(log[length(log)], "^QUEUE ABORTED rc=1 HARNESS_V2_STAN is set ")
+    expect_false(any(startsWith(log, "QUEUE START")))
+    expect_false(dir.exists(file.path(logs, "queue.lock")))
+    expect_false(file.exists(file.path(logs, "preflight.log")))
+  }
+  expect_length(readLines(file.path(logs, "queue.log")), 2)
+})
+
 test_that("a second queue is refused while the first holds the lock, and a killed queue logs QUEUE ABORTED", {
   results <- withr::local_tempdir()
   bin <- withr::local_tempdir()
