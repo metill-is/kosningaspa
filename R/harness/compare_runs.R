@@ -1,14 +1,16 @@
 # Sampler checks between runs: the stop rule, the adoption rule and the permutation rule of the
 # Phase 2 plan (its Decisions 5, 6 and 8; docs/superpowers/plans/2026-10-28-v2-harness-phase2-v2-model.md).
-# A plain script, not a box module. Run from the project root:
+# A plain script whose definitions also load as a box module, so that its test can import
+# perm_z(), perm_verdict() and EQUIVALENCE_REQUIRED; the script part runs only when box::name()
+# is NULL. Run from the project root:
 #   LC_ALL=en_US.UTF-8 Rscript R/harness/compare_runs.R stop <arm> [run_list]
 #   LC_ALL=en_US.UTF-8 Rscript R/harness/compare_runs.R adopt <ref_arm> <new_arm> <equivalence_csv> [run_list]
 #   LC_ALL=en_US.UTF-8 Rscript R/harness/compare_runs.R perm <arm_a> <arm_b> [run_list]
 #
 # The run list is the queue's (harness/runs/; "lane arm E F seed" per line, # for comments),
 # harness/runs/v2-steps.txt by default. Each run of an arm in it is read from
-# results_root()/<run_id>, once its meta.json exists and names that run. A 2017 cell is
-# refused before the freeze (forecast_free(); spec section 5.7), before any run is read.
+# results_root()/<run_id>, once its meta.json exists and names that run. A 2017 cell of the run
+# list is refused before the freeze (forecast_free(); spec section 5.7), before any run is read.
 #
 # stop <arm>: the M-step stop rule (Decision 5). One line per run of <arm>, in run list order:
 #   GO|STOP <id> lp_rhat=<x> divergent=<n>/<N> near_cap=<n>/<N> max_rhat=<x>; recorded:
@@ -21,19 +23,25 @@
 #     columns of log_phi (one per house), log_phi_K and log_kappa, their caps V2_LOG_CAPS
 #     (R/harness/v2_reference.R); a draw counts once however many of them are near;
 #   - max_rhat, the gate-scope max R-hat of meta.json's diagnostics, above 1.10.
-# A missing value (NA) of a signal is a STOP. R-hat is printed rounded up to four decimals, so
-# a value printed at or below its limit is at or below it. Recorded, never a stop: the minutes,
-# the treedepth hits and the gate-scope min bulk ESS per 1,000 gradients,
-# 1000 * min_ess_bulk / n_leapfrog (NA for a meta.json without n_leapfrog). Exits 1 on any STOP.
+# A signal that is NA, or absent (the R-hat of the lp__ row, meta.json's diagnostics$divergent
+# or $max_rhat), is a STOP. R-hat is printed rounded up to four decimals, so a value printed at
+# or below its limit is at or below it. Recorded, never a stop: the minutes, the treedepth hits
+# and the gate-scope min bulk ESS per 1,000 gradients, 1000 * min_ess_bulk / n_leapfrog (NA for
+# a meta.json without n_leapfrog). Exits 1 on any STOP.
 #
-# adopt <ref_arm> <new_arm> <equivalence_csv>: the P-step adoption rule (Decision 6). Both arms
-# must have runs on the same cells. It prints a table of the fits (min bulk ESS per 1,000
-# gradients, divergences and the stop rule's verdict), a table of the cells (each arm's median
-# over its fits of min bulk ESS per 1,000 gradients, and their ratio), the four conditions with
-# yes or no, and a last line "ADOPT <new_arm>" if all four hold, else
+# adopt <ref_arm> <new_arm> <equivalence_csv>: the P-step adoption rule (Decision 6). The two
+# arms must differ and have runs on the same cells, and on each cell each arm has exactly two
+# fits (Decision 6's seeds 2701 and 2702), of different seeds, the same as the other arm's;
+# this is checked before any run or the equivalence CSV is read. It prints a table of the fits
+# (min bulk ESS per 1,000 gradients, divergences and the stop rule's verdict), a table of the
+# cells (each arm's median over its fits of min bulk ESS per 1,000 gradients, and their ratio),
+# the four conditions with yes or no, and a last line "ADOPT <new_arm>" if all four hold, else
 # "KEEP <ref_arm>: <new_arm> fails condition(s) <i>, ...":
-#   1. the equivalence check passes: every row of equivalence_csv has verdict PASS, and each
-#      cell of the fits has a row with order "default";
+#   1. the equivalence check passes: equivalence_csv has no FAIL row, and a PASS row for each
+#      check of EQUIVALENCE_REQUIRED, the four the step's check writes (the plan's Task 8):
+#      2024 eve, 2021 f180 and 2017 eve (prior points only) in the default order, and 2024 eve
+#      in the reversed order. A 2017 row is only a verdict, so the 2017 refusal, which is about
+#      the runs read, does not apply to it;
 #   2. on each cell, new_arm's median min bulk ESS per 1,000 gradients is at least 1.25 times
 #      ref_arm's;
 #   3. new_arm's divergences, summed over its fits, are at most ref_arm's plus 4;
@@ -47,33 +55,40 @@
 #   order    "default" or "reversed", the party and kjördæmi order of both sides
 #   verdict  "PASS" or "FAIL": the check's EQUIV verdict, its negative controls included
 #
-# perm <arm_a> <arm_b>: the permutation rule (Decision 8). The runs of the two arms are paired
-# by cell, in run list order, and each arm must have as many runs on each cell. For each pair it
-# reads only eday_national.parquet and eday_kjordaemi.parquet, and matches by name each
-# national share (eday_national[<flokkur>]) and each kjördæmi share, votes over the kjördæmi's
-# votes in the draw (eday_kjordaemi[<kjordaemi>,<flokkur>]); the two runs must have the same
-# names. For the mean and the 5%, 50% and 95% quantiles of each, z = (a - b) /
-# sqrt(MCSE_a^2 + MCSE_b^2) (posterior's mcse_mean() and mcse_quantile(); 0 when a = b). A pair
-# passes when at most 3 |z| exceed 3, none exceeds 5 and the sd of the mean z's is at most 1.5;
-# a missing z exceeds both. It prints only these statistics and the names of the variables
-# whose |z| exceeds 3, never a share:
+# perm <arm_a> <arm_b>: the permutation rule (Decision 8). The two arms must differ. Their runs
+# are paired by cell, in run list order, and each arm must have as many runs on each cell. For
+# each pair it reads only eday_national.parquet and eday_kjordaemi.parquet, and matches by name
+# each national share (eday_national[<flokkur>]) and each kjördæmi share, votes over the
+# kjördæmi's votes in the draw (eday_kjordaemi[<kjordaemi>,<flokkur>]); the two runs must have
+# the same names. For the mean and the 5%, 50% and 95% quantiles of each, z = (a - b) /
+# sqrt(MCSE_a^2 + MCSE_b^2) (posterior's mcse_mean() and mcse_quantile(); 0 when a = b; perm_z()).
+# A pair passes when at most 3 |z| exceed 3, none exceeds 5 and the sd of the mean z's is at
+# most 1.5 (perm_verdict()). A missing z (from a missing draw or an undefined MCSE) exceeds both:
+# it is counted above 3, and the max |z| is then Inf. It prints only these statistics and the
+# names of the variables whose |z| exceeds 3, never a share:
 #   PERM PASS|FAIL <id_a> vs <id_b>: <n> z's, <k> with |z| > 3, max |z| <x>, sd of the mean z's <x>
 #     |z| > 3: <variable> <mean|q05|q50|q95>, ...
 # with |z| and the sd rounded up to two decimals. Exits 1 on any PERM FAIL.
 #
 # Any other failure (a bad command line, a run list without a run of the arm, a missing or
-# foreign meta.json, a missing lp__ row or parquet column) stops with "compare_runs: ...".
-if (!isTRUE(l10n_info()[["UTF-8"]])) stop("compare_runs.R needs a UTF-8 locale: run under LC_ALL=en_US.UTF-8", call. = FALSE)
-# WHY: the box path below is the working directory, so check it is the project root first.
-stopifnot("run from the project root (no R/harness/constants.R here)" = file.exists("R/harness/constants.R"))
-options(box.path = normalizePath("."), width = 120, warn = 1)
+# foreign meta.json, a missing lp__ row or parquet column, an error from a package) stops with
+# "compare_runs: ...", with each path under the project root printed relative to it and each
+# under the results root as $HARNESS_RESULTS/..., never an absolute run directory.
+if (is.null(box::name())) {
+  if (!isTRUE(l10n_info()[["UTF-8"]])) stop("compare_runs: needs a UTF-8 locale: run under LC_ALL=en_US.UTF-8", call. = FALSE)
+  # WHY: the box path below is the working directory, so check it is the project root first.
+  if (!file.exists("R/harness/constants.R")) stop("compare_runs: run from the project root (no R/harness/constants.R here)", call. = FALSE)
+  options(box.path = normalizePath("."), width = 120, warn = 1)
+}
 box::use(
+  R / harness / constants[project_root],
   R / harness / freeze[forecast_free, target_cell],
-  R / harness / runs[run_id, run_dir],
+  R / harness / runs[results_root, run_id, run_dir],
   R / harness / v2_reference[V2_LOG_CAPS]
 )
 
 DEFAULT_RUN_LIST <- "harness/runs/v2-steps.txt"
+PREFIX <- "compare_runs: "
 USAGE <- paste(
   "usage: Rscript R/harness/compare_runs.R stop <arm> [run_list]",
   "       Rscript R/harness/compare_runs.R adopt <ref_arm> <new_arm> <equivalence_csv> [run_list]",
@@ -90,15 +105,42 @@ RHAT_MAX <- 1.10
 # Decision 6.
 ESS_RATIO_MIN <- 1.25
 DIVERGENT_MARGIN <- 4
+ADOPT_FITS <- 2L
 EQUIVALENCE_COLUMNS <- c("E", "F", "order", "verdict")
+
+#' The checks a P-step's equivalence CSV must hold a PASS row of (Decision 6's condition 1):
+#' 2024 eve, 2021 f180 and 2017 eve (prior points only) in the default order, and 2024 eve in
+#' the reversed order.
+#' @export
+EQUIVALENCE_REQUIRED <- data.frame(
+  E = c("2024-11-30", "2021-09-25", "2017-10-28", "2024-11-30"),
+  F = c("2024-11-29", "2021-03-29", "2017-10-27", "2024-11-29"),
+  order = c("default", "default", "default", "reversed")
+)
+
 # Decision 8.
 PERM_PROBS <- c(q05 = 0.05, q50 = 0.5, q95 = 0.95)
+PERM_STATS <- c("mean", names(PERM_PROBS))
 PERM_Z <- 3
 PERM_Z_COUNT <- 3
 PERM_Z_MAX <- 5
 PERM_SD_MAX <- 1.5
 
-fail <- function(...) stop("compare_runs: ", ..., call. = FALSE)
+fail <- function(...) stop(PREFIX, ..., call. = FALSE)
+
+#' `text` with every path under the project root relative to it, and every path under the
+#' results root (when outside the project) written as $HARNESS_RESULTS/..., so that no message
+#' prints an absolute run directory.
+relative <- function(text) {
+  bases <- list(project_root(), results_root())
+  labels <- c("", "$HARNESS_RESULTS/")
+  for (i in seq_along(bases)) {
+    for (base in unique(c(bases[[i]], normalizePath(bases[[i]], mustWork = FALSE)))) {
+      text <- gsub(paste0(sub("/+$", "", base), "/"), labels[i], text, fixed = TRUE)
+    }
+  }
+  text
+}
 
 #' A number of meta.json, where a non-finite one is the string "Inf", "-Inf", "NaN" or "NA".
 #' @return a double; an error naming `field` for anything else, a missing field included
@@ -112,6 +154,9 @@ number <- function(x, field) {
   }
   fail("meta.json: ", field, " is not a number")
 }
+
+#' A stop signal of meta.json: as number(), but NA when the field is absent, so that it STOPs.
+signal <- function(x, field) if (is.null(x)) NA_real_ else number(x, field)
 
 #' `x` to `digits` decimals, rounded up or down; Inf, NaN and NA print as such.
 shown <- function(x, digits, up = FALSE) {
@@ -156,24 +201,26 @@ read_meta <- function(run) {
   if (!file.exists(path)) fail("no meta.json in ", dir, ": the run has not finished")
   meta <- jsonlite::read_json(path, simplifyVector = TRUE)
   as_day <- function(x) if (is.character(x) && length(x) == 1) tryCatch(as.Date(x), error = function(e) as.Date(NA)) else as.Date(NA)
-  own <- identical(meta$arm, run$arm) && identical(as_day(meta$E), run$E) && identical(as_day(meta$F), run$F) &&
-    is.numeric(meta$seed) && length(meta$seed) == 1 && isTRUE(meta$seed == run$seed)
+  seed <- meta[["seed"]]
+  own <- identical(meta[["arm"]], run$arm) && identical(as_day(meta[["E"]]), run$E) && identical(as_day(meta[["F"]]), run$F) &&
+    is.numeric(seed) && length(seed) == 1 && isTRUE(seed == run$seed)
   if (!own) fail("the meta.json in ", dir, " is not of the run list's run ", run$id)
   meta
 }
 
-#' The R-hat of lp__ in a run's key_diagnostics.csv.
+#' The R-hat of lp__ in a run's key_diagnostics.csv; NA for an empty or NA value.
 lp_rhat <- function(dir) {
   path <- file.path(dir, "key_diagnostics.csv")
   if (!file.exists(path)) fail("no key_diagnostics.csv in ", dir)
   # WHY: readr reads "Inf" and "NaN" as NA; as.numeric() keeps them.
   key <- readr::read_csv(path, col_types = readr::cols(.default = "c"), progress = FALSE)
-  rows <- which(key$variable == "lp__")
+  if (!all(c("variable", "rhat") %in% names(key))) fail("key_diagnostics.csv lacks its variable or rhat column (", dir, ")")
+  rows <- which(key[["variable"]] == "lp__")
   if (!length(rows)) {
     fail("key_diagnostics.csv has no lp__ row (", dir, "): the run was fitted before it was written; retire it and refit")
   }
   if (length(rows) > 1) fail("key_diagnostics.csv has ", length(rows), " lp__ rows (", dir, ")")
-  suppressWarnings(as.numeric(key$rhat[rows]))
+  suppressWarnings(as.numeric(key[["rhat"]][rows]))
 }
 
 #' The number of a run's `n` draws in which a bounded log concentration is within NEAR_CAP of
@@ -204,16 +251,16 @@ above <- function(value, limit, reason) if (isTRUE(value <= limit)) NULL else re
 stop_rule <- function(run) {
   meta <- read_meta(run)
   dir <- run_dir(run$id)
-  d <- meta$diagnostics
-  if (!is.list(d)) fail("meta.json: diagnostics is not an object")
-  n <- number(meta$chains, "chains") * number(meta$iter_sampling, "iter_sampling")
+  d <- meta[["diagnostics"]]
+  if (!is.list(d)) fail("the meta.json in ", dir, ": diagnostics is not an object")
+  n <- number(meta[["chains"]], "chains") * number(meta[["iter_sampling"]], "iter_sampling")
   lp <- lp_rhat(dir)
-  divergent <- number(d$divergent, "diagnostics$divergent")
+  divergent <- signal(d[["divergent"]], "diagnostics$divergent")
   near <- near_cap(dir, n)
-  rhat <- number(d$max_rhat, "diagnostics$max_rhat")
-  has_leapfrog <- !is.null(d$n_leapfrog)
+  rhat <- signal(d[["max_rhat"]], "diagnostics$max_rhat")
+  has_leapfrog <- !is.null(d[["n_leapfrog"]])
   per_gradient <- if (has_leapfrog) {
-    1000 * number(d$min_ess_bulk, "diagnostics$min_ess_bulk") / number(d$n_leapfrog, "diagnostics$n_leapfrog")
+    1000 * number(d[["min_ess_bulk"]], "diagnostics$min_ess_bulk") / number(d[["n_leapfrog"]], "diagnostics$n_leapfrog")
   } else {
     NA_real_
   }
@@ -227,8 +274,8 @@ stop_rule <- function(run) {
   verdict <- if (length(reasons)) "STOP" else "GO"
   line <- sprintf(
     "%s %s lp_rhat=%s divergent=%.0f/%.0f near_cap=%d/%.0f max_rhat=%s; recorded: minutes=%.1f treedepth_hits=%.0f ess_bulk_per_1k_grad=%s%s",
-    verdict, run$id, rhat_shown(lp), divergent, n, near, n, rhat_shown(rhat), number(meta$minutes, "minutes"),
-    number(d$treedepth_hits, "diagnostics$treedepth_hits"), shown(per_gradient, 3),
+    verdict, run$id, rhat_shown(lp), divergent, n, near, n, rhat_shown(rhat), number(meta[["minutes"]], "minutes"),
+    number(d[["treedepth_hits"]], "diagnostics$treedepth_hits"), shown(per_gradient, 3),
     if (length(reasons)) paste0("; stop: ", paste(reasons, collapse = "; ")) else ""
   )
   list(
@@ -243,7 +290,8 @@ run_stop <- function(arm, path) {
   if (any(vapply(rules, \(r) length(r$reasons) > 0, logical(1)))) 1L else 0L
 }
 
-#' The equivalence CSV, validated: EQUIVALENCE_COLUMNS as text, E and F as dates.
+#' The equivalence CSV, validated: EQUIVALENCE_COLUMNS as text, E and F as dates, with `check`,
+#' "<E>, <F>, <order>", added.
 read_equivalence <- function(path) {
   if (!file.exists(path)) fail("no equivalence table: ", path)
   x <- readr::read_csv(path, col_types = readr::cols(.default = "c"), progress = FALSE)
@@ -252,13 +300,37 @@ read_equivalence <- function(path) {
   if (!nrow(x)) fail(path, " has no rows")
   dates <- lapply(x[c("E", "F")], \(d) as.Date(d, format = "%Y-%m-%d"))
   if (anyNA(unlist(dates))) fail(path, ": E and F must be ISO dates")
-  if (!all(x$order %in% c("default", "reversed"))) fail(path, ": order must be default or reversed")
-  if (!all(x$verdict %in% c("PASS", "FAIL"))) fail(path, ": verdict must be PASS or FAIL")
-  x$cell <- paste(format(dates$E), format(dates$F), sep = ", ")
+  if (!all(x[["order"]] %in% c("default", "reversed"))) fail(path, ": order must be default or reversed")
+  if (!all(x[["verdict"]] %in% c("PASS", "FAIL"))) fail(path, ": verdict must be PASS or FAIL")
+  x$check <- paste(format(dates$E), format(dates$F), x[["order"]], sep = ", ")
   x
 }
 
+#' An error unless, on each cell, each arm has exactly ADOPT_FITS fits of different seeds, the
+#' same seeds as the other arm's.
+check_fit_sets <- function(ref, new, ref_runs, new_runs, cells) {
+  seeds_on <- function(runs, cell) vapply(Filter(\(r) identical(r$cell, cell), runs), \(r) r$seed, numeric(1))
+  for (cell in cells) {
+    for (side in list(list(ref, ref_runs), list(new, new_runs))) {
+      s <- seeds_on(side[[2]], cell)
+      if (length(s) != ADOPT_FITS || anyNA(s) || anyDuplicated(s)) {
+        plural <- if (length(s) != 1) "s" else ""
+        fail(
+          side[[1]], " has ", length(s), " fit", plural, " on ", cell, " (seed", plural, " ", paste(s, collapse = ", "),
+          "), not ", ADOPT_FITS, " of different seeds"
+        )
+      }
+    }
+    a <- seeds_on(ref_runs, cell)
+    b <- seeds_on(new_runs, cell)
+    if (!setequal(a, b)) {
+      fail("the seeds of ", new, " on ", cell, ", ", paste(b, collapse = " and "), ", are not ", ref, "'s, ", paste(a, collapse = " and "))
+    }
+  }
+}
+
 run_adopt <- function(ref, new, csv, path) {
+  if (identical(ref, new)) fail("adopt compares two different arms, not ", ref, " with itself")
   fields <- read_run_list(path)
   ref_runs <- arm_runs(fields, ref, path)
   new_runs <- arm_runs(fields, new, path)
@@ -270,6 +342,7 @@ run_adopt <- function(ref, new, csv, path) {
       paste(new_cells, collapse = "; ")
     )
   }
+  check_fit_sets(ref, new, ref_runs, new_runs, cells)
   equivalence <- read_equivalence(csv)
   ref_rules <- lapply(ref_runs, stop_rule)
   new_rules <- lapply(new_runs, stop_rule)
@@ -294,27 +367,28 @@ run_adopt <- function(ref, new, csv, path) {
   })
   cell_rows <- vapply(by_cell, \(x) table_row(c(x$row, if (x$pass) "yes" else "no")), character(1))
 
-  failed <- equivalence[equivalence$verdict != "PASS", ]
-  uncovered <- setdiff(cells, equivalence$cell[equivalence$order == "default"])
+  required <- paste(EQUIVALENCE_REQUIRED$E, EQUIVALENCE_REQUIRED$F, EQUIVALENCE_REQUIRED$order, sep = ", ")
+  failed <- unique(equivalence$check[equivalence[["verdict"]] == "FAIL"])
+  missing <- setdiff(required, equivalence$check[equivalence[["verdict"]] == "PASS"])
   ref_divergent <- sum(vapply(ref_rules, \(r) r$divergent, numeric(1)))
   new_divergent <- sum(vapply(new_rules, \(r) r$divergent, numeric(1)))
   pass <- c(
-    !nrow(failed) && !length(uncovered),
+    !length(failed) && !length(missing),
     all(vapply(by_cell, \(x) x$pass, logical(1))),
     isTRUE(new_divergent <= ref_divergent + DIVERGENT_MARGIN),
     !any(vapply(rules, \(r) length(r$reasons) > 0, logical(1)))
   )
   equivalence_detail <- if (pass[1]) {
-    sprintf("%d rows, each PASS; a default-order row on each cell", nrow(equivalence))
+    sprintf("%d rows, none FAIL, a PASS row of each of the %d required checks", nrow(equivalence), length(required))
   } else {
     paste(c(
-      if (nrow(failed)) paste("a FAIL row on", paste(failed$cell, failed$order, sep = ", ")),
-      if (length(uncovered)) paste("no default-order row on", uncovered)
+      if (length(failed)) paste("a FAIL row on", paste(failed, collapse = "; ")),
+      if (length(missing)) paste("no PASS row on", paste(missing, collapse = "; "))
     ), collapse = "; ")
   }
   yes <- function(ok) if (ok) "yes" else "no"
   conditions <- c(
-    sprintf("1. The equivalence check passes (%s): %s (%s)", csv, yes(pass[1]), equivalence_detail),
+    sprintf("1. The equivalence check passes (%s): %s (%s)", relative(csv), yes(pass[1]), equivalence_detail),
     sprintf(
       "2. On each cell, %s's median min bulk ESS per 1,000 gradients is at least %s \u00d7 %s's: %s",
       new, format(ESS_RATIO_MIN), ref, yes(pass[2])
@@ -331,7 +405,7 @@ run_adopt <- function(ref, new, csv, path) {
     sprintf("KEEP %s: %s fails condition%s %s", ref, new, if (sum(!pass) > 1) "s" else "", paste(which(!pass), collapse = ", "))
   }
   cat(c(
-    sprintf("Adoption rule (Decision 6): %s against the reference form %s; run list %s", new, ref, path),
+    sprintf("Adoption rule (Decision 6): %s against the reference form %s; run list %s", new, ref, relative(path)),
     "",
     table_row(c("Fit", "Min bulk ESS per 1,000 gradients (gate scope)", "Divergences", "Stop rule")),
     table_row(rep("---", 4)),
@@ -379,11 +453,49 @@ eday_matrices <- function(run) {
   })
 }
 
-#' The estimates and their MCSEs of one variable's draws: the mean and the PERM_PROBS quantiles.
+#' The estimates and their MCSEs of one variable's draws: the mean and the PERM_PROBS quantiles,
+#' all NA when a draw is missing.
 estimates <- function(m) {
+  if (anyNA(m)) {
+    none <- stats::setNames(rep(NA_real_, length(PERM_STATS)), PERM_STATS)
+    return(list(value = none, mcse = none))
+  }
   list(
-    value = c(mean = mean(m), stats::setNames(stats::quantile(c(m), PERM_PROBS, names = FALSE), names(PERM_PROBS))),
-    mcse = c(mean = posterior::mcse_mean(m), stats::setNames(unname(posterior::mcse_quantile(m, probs = PERM_PROBS)), names(PERM_PROBS)))
+    value = stats::setNames(c(mean(m), stats::quantile(c(m), PERM_PROBS, names = FALSE)), PERM_STATS),
+    mcse = stats::setNames(c(posterior::mcse_mean(m), unname(posterior::mcse_quantile(m, probs = PERM_PROBS))), PERM_STATS)
+  )
+}
+
+#' Decision 8's z-statistics of one variable between two runs.
+#' @param a,b the variable's draws in the two runs, iterations x chains matrices
+#' @return a double vector named mean, q05, q50, q95: for each estimate, (a - b) /
+#'   sqrt(MCSE_a^2 + MCSE_b^2) with posterior's mcse_mean() and mcse_quantile(); 0 when a = b,
+#'   NA when a draw is missing or an MCSE undefined and a != b
+#' @export
+perm_z <- function(a, b) {
+  x <- estimates(a)
+  y <- estimates(b)
+  delta <- x$value - y$value
+  z <- delta / sqrt(x$mcse^2 + y$mcse^2)
+  z[!is.na(delta) & delta == 0] <- 0
+  stats::setNames(z, PERM_STATS)
+}
+
+#' Decision 8's verdict on one pair's z-statistics.
+#' @param z the pair's z-statistics, named "<variable> <mean|q05|q50|q95>"
+#' @return a list: `over` (a logical vector, |z| > PERM_Z, a missing z included), `biggest` (the
+#'   max |z|, Inf when a z is missing), `spread` (the sd of the mean z's) and `pass` (at most
+#'   PERM_Z_COUNT over, `biggest` at most PERM_Z_MAX and `spread` at most PERM_SD_MAX)
+#' @export
+perm_verdict <- function(z) {
+  size <- abs(unname(z))
+  size[is.na(size)] <- Inf
+  over <- size > PERM_Z
+  biggest <- max(size)
+  spread <- stats::sd(z[endsWith(names(z), " mean")])
+  list(
+    over = over, biggest = biggest, spread = spread,
+    pass = sum(over) <= PERM_Z_COUNT && biggest <= PERM_Z_MAX && isTRUE(spread <= PERM_SD_MAX)
   )
 }
 
@@ -399,26 +511,19 @@ perm_pair <- function(run_a, run_b) {
       "; ", run_b$id, " alone has ", paste(c(only_b, "none")[1:max(1, length(only_b))], collapse = ", ")
     )
   }
-  z <- unlist(lapply(names(a), \(v) {
-    x <- estimates(a[[v]])
-    y <- estimates(b[[v]])
-    delta <- x$value - y$value
-    out <- ifelse(delta == 0, 0, delta / sqrt(x$mcse^2 + y$mcse^2))
-    stats::setNames(out, paste(v, names(x$value)))
-  }))
-  over <- !(abs(z) <= PERM_Z)
-  biggest <- max(abs(z))
-  spread <- stats::sd(z[endsWith(names(z), " mean")])
-  pass <- sum(over) <= PERM_Z_COUNT && isTRUE(biggest <= PERM_Z_MAX) && isTRUE(spread <= PERM_SD_MAX)
+  z <- unlist(lapply(names(a), \(v) stats::setNames(perm_z(a[[v]], b[[v]]), paste(v, PERM_STATS))))
+  verdict <- perm_verdict(z)
   lines <- sprintf(
     "PERM %s %s vs %s: %d z's, %d with |z| > %s, max |z| %s, sd of the mean z's %s",
-    if (pass) "PASS" else "FAIL", run_a$id, run_b$id, length(z), sum(over), format(PERM_Z), z_shown(biggest), z_shown(spread)
+    if (verdict$pass) "PASS" else "FAIL", run_a$id, run_b$id, length(z), sum(verdict$over), format(PERM_Z),
+    z_shown(verdict$biggest), z_shown(verdict$spread)
   )
-  if (any(over)) lines <- c(lines, paste0("  |z| > ", format(PERM_Z), ": ", paste(names(z)[over], collapse = ", ")))
-  list(pass = pass, lines = lines)
+  if (any(verdict$over)) lines <- c(lines, paste0("  |z| > ", format(PERM_Z), ": ", paste(names(z)[verdict$over], collapse = ", ")))
+  list(pass = verdict$pass, lines = lines)
 }
 
 run_perm <- function(arm_a, arm_b, path) {
+  if (identical(arm_a, arm_b)) fail("perm compares two different arms, not ", arm_a, " with itself")
   fields <- read_run_list(path)
   runs_a <- arm_runs(fields, arm_a, path)
   runs_b <- arm_runs(fields, arm_b, path)
@@ -435,14 +540,25 @@ run_perm <- function(arm_a, arm_b, path) {
   if (all(vapply(results, \(r) r$pass, logical(1)))) 0L else 1L
 }
 
-args <- commandArgs(trailingOnly = TRUE)
-run_list <- function(i) if (length(args) >= i) args[i] else DEFAULT_RUN_LIST
-command <- if (length(args)) args[1] else ""
-counts <- list(stop = 2:3, adopt = 4:5, perm = 3:4)
-if (!command %in% names(counts) || !length(args) %in% counts[[command]]) fail(USAGE)
-status <- switch(command,
-  stop = run_stop(args[2], run_list(3)),
-  adopt = run_adopt(args[2], args[3], args[4], run_list(5)),
-  perm = run_perm(args[2], args[3], run_list(4))
-)
-quit(save = "no", status = status)
+#' The script: its exit status, or an error "compare_runs: ..." with no absolute run directory.
+main <- function(args) {
+  run_list <- function(i) if (length(args) >= i) args[i] else DEFAULT_RUN_LIST
+  command <- if (length(args)) args[1] else ""
+  counts <- list(stop = 2:3, adopt = 4:5, perm = 3:4)
+  tryCatch(
+    {
+      if (!command %in% names(counts) || !length(args) %in% counts[[command]]) fail(USAGE)
+      switch(command,
+        stop = run_stop(args[2], run_list(3)),
+        adopt = run_adopt(args[2], args[3], args[4], run_list(5)),
+        perm = run_perm(args[2], args[3], run_list(4))
+      )
+    },
+    error = function(e) {
+      message <- relative(conditionMessage(e))
+      stop(if (startsWith(message, PREFIX)) "" else PREFIX, message, call. = FALSE)
+    }
+  )
+}
+
+if (is.null(box::name())) quit(save = "no", status = main(commandArgs(trailingOnly = TRUE)))

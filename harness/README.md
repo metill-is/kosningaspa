@@ -425,10 +425,14 @@ The last two, run once `queue.log` ends in `QUEUE FINISHED`, write the step's di
 (committed) and print the stop rule's verdicts, which go into the step log,
 `harness/v2/steps.md`, one section per step.
 
-`R/harness/compare_runs.R` is a plain script with three subcommands. Each reads the runs of a
-run list, `harness/runs/v2-steps.txt` by default, from `results_root()`: a run only once its
-`meta.json` exists and names it. A 2017 cell is refused before the freeze (`forecast_free()`),
-before any run is read. Any other failure stops with `compare_runs: ...`.
+`R/harness/compare_runs.R` is a plain script with three subcommands, whose definitions also
+load as a box module (its test imports `perm_z()`, `perm_verdict()` and
+`EQUIVALENCE_REQUIRED`). Each reads the runs of a run list, `harness/runs/v2-steps.txt` by
+default, from `results_root()`: a run only once its `meta.json` exists and names it. A 2017
+cell of the run list is refused before the freeze (`forecast_free()`), before any run is read.
+Any other failure stops with `compare_runs: ...`, a path under the project root printed
+relative to it and one under the results root as `$HARNESS_RESULTS/...`, never an absolute run
+directory.
 
 **`stop <arm> [run_list]`**, the M-step stop rule (the plan's Decision 5), prints one line per
 run of the arm, in the run list's order:
@@ -437,7 +441,8 @@ run of the arm, in the run list's order:
 GO|STOP <id> lp_rhat=<x> divergent=<n>/<N> near_cap=<n>/<N> max_rhat=<x>; recorded: minutes=<x> treedepth_hits=<n> ess_bulk_per_1k_grad=<x>[; stop: <reason>; ...]
 ```
 
-with N = chains × `iter_sampling`. A run STOPs on any of these signals, and on a missing one:
+with N = chains × `iter_sampling`. A run STOPs on any of these signals, and on one that is
+NA or absent:
 
 | Signal | Read from | STOP when |
 |---|---|---|
@@ -453,15 +458,20 @@ stop. It exits 1 on any STOP.
 
 **`adopt <ref_arm> <new_arm> <equivalence_csv> [run_list]`**, the P-step adoption rule (the
 plan's Decision 6), compares a P-step's form (`new_arm`) with the reference form (`ref_arm`,
-the step before it). Both arms must have runs on the same cells, and every `meta.json` must
-hold `n_leapfrog`. It prints a table of the fits (min bulk ESS per 1,000 gradients,
+the step before it). The two arms must differ and have runs on the same cells, and on each
+cell each arm has exactly two fits (seeds 2701 and 2702), of different seeds and the same as
+the other arm's; this is checked from the run list before anything is read. Every `meta.json`
+must hold `n_leapfrog`. It prints a table of the fits (min bulk ESS per 1,000 gradients,
 divergences, the stop rule's verdict), a table of the cells (each arm's median over its fits
 of min bulk ESS per 1,000 gradients, and their ratio), the four conditions with yes or no, and
 a last line, `ADOPT <new_arm>` when all four hold and otherwise
 `KEEP <ref_arm>: <new_arm> fails condition(s) <i>, ...`:
 
-1. the equivalence check passes: every row of the equivalence CSV has verdict `PASS`, and each
-   cell of the fits has a row with order `default`;
+1. the equivalence check passes: the equivalence CSV has no `FAIL` row, and a `PASS` row for
+   each check of `EQUIVALENCE_REQUIRED`, the four that P1's check writes (the plan's Task 8):
+   2024 eve, 2021 f180 and 2017 eve (prior points only) in the default order, and 2024 eve in
+   the reversed order. A 2017 row is only a verdict, so the 2017 refusal, which is about the
+   runs read, does not apply to it;
 2. on each cell, `new_arm`'s median is at least 1.25 × `ref_arm`'s;
 3. `new_arm`'s divergences, summed over its fits, are at most `ref_arm`'s plus 4;
 4. no fit of either arm trips the stop rule.
@@ -477,17 +487,18 @@ check `R/harness/v2_equivalence.R` ran, with at least these columns; any others 
 | `verdict` | `PASS` or `FAIL`: the check's `EQUIV` verdict, its negative controls included |
 
 **`perm <arm_a> <arm_b> [run_list]`**, the permutation rule (the plan's Decision 8), compares two
-arms that must give the same forecast draws within Monte Carlo error, such as `v2` and
+different arms that must give the same forecast draws within Monte Carlo error, such as `v2` and
 `v2-perm`. Their runs are paired by cell, in the run list's order, and each arm must have as
 many runs on each cell. Of each pair it reads only `eday_national.parquet` and
 `eday_kjordaemi.parquet`, and matches by name every national share (`eday_national[<flokkur>]`)
 and every kjördæmi share, a cell's votes over its kjördæmi's votes in the draw
 (`eday_kjordaemi[<kjordaemi>,<flokkur>]`); the two runs must have the same names. For the mean
 and the 5%, 50% and 95% quantiles of each, z = (a − b) / √(MCSE_a² + MCSE_b²), with posterior's
-`mcse_mean()` and `mcse_quantile()` (0 when a = b). A pair passes when at most 3 |z| exceed 3,
-none exceeds 5 and the sd of the mean z's is at most 1.5; a missing z exceeds both. It prints
-only those statistics, rounded up to two decimals, and the names of the variables whose |z|
-exceeds 3, never a share:
+`mcse_mean()` and `mcse_quantile()` (0 when a = b; `perm_z()`). A pair passes when at most
+3 |z| exceed 3, none exceeds 5 and the sd of the mean z's is at most 1.5 (`perm_verdict()`).
+A missing z, from a missing draw or an undefined MCSE, exceeds both: it is counted above 3
+and makes the max |z| Inf. It prints only those statistics, rounded up to two decimals, and
+the names of the variables whose |z| exceeds 3, never a share:
 
 ```
 PERM PASS|FAIL <id_a> vs <id_b>: <n> z's, <k> with |z| > 3, max |z| <x>, sd of the mean z's <x>
@@ -496,7 +507,8 @@ PERM PASS|FAIL <id_a> vs <id_b>: <n> z's, <k> with |z| > 3, max |z| <x>, sd of t
 
 It exits 1 on any `PERM FAIL`. `tests/harness/test-compare-runs.R` runs all three on synthetic
 run directories, made-up draws only, and checks that every line `perm` prints is a verdict or
-a list of names.
+a list of names. It also tests `perm_z()` against a hand computation with posterior's MCSEs,
+and `perm_verdict()` on made-up z's that break each of its three conditions alone.
 
 ## R0's inputs
 
