@@ -460,6 +460,10 @@ M2 (`v2s-m2`), the newcomer pool (`newcomer_pool = 1`), passed the stop rule as 
 both fits (`harness/v2/steps.md`). Its config is `v2s-m1`'s with `newcomer_pool = 1`, as the
 rule gives, and every later step keeps `newcomer_pool = 1`.
 
+M3 (`v2s-m3`), the election-day shock (`shock = 1`), passed the stop rule too: `GO` on both
+fits, with no divergence and no draw near a cap (`harness/v2/steps.md`). Its config is
+`v2s-m2`'s with `shock = 1`, as the rule gives, and every later step keeps `shock = 1`.
+
 A P-step's form is first checked against the reference form, point by point, by
 `R/harness/v2_equivalence.R` (the plan's Decision 6, condition 1), once for each check of
 `EQUIVALENCE_REQUIRED` (below), all into the step's equivalence CSV:

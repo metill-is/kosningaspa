@@ -523,3 +523,240 @@ LC_ALL=en_US.UTF-8 Rscript R/harness/compare_runs.R stop v2s-m2
 ```
 
 Next: M3 (`v2s-m3`), the election-day shock (§6.6), on `v2s-m2`'s config with `shock = 1`.
+
+## v2s-m3: the election-day shock (M-step)
+
+`v2s-m2` with `shock = 1` (config `harness/configs/steps/v2s-m3.json`): the election-day shock
+of spec §6.6. Each closed election e's kjördæmi results take one shock
+ε_e = C(s̄_E d_e ⊙ z_e), shared by the election's kjördæmi, with z_e ~ N(0, I_P),
+s̄_E ~ half-N(0, `prior_s_bar_E`) (0.15 in the config) and d_e = √(min(0.2 / π̄, 10)) from the
+national shares π̄ of the election before e (row e of `d_shock`; a party with no previous
+result reaches the builder's `shock_scaling()` as NA, is floored at π̄ = 0.02 and gets √10). The
+forecast draws a fresh ε_E on the open row of `d_shock`, after the in-sample replicates and
+only with `shock = 1`. It enters `votes_kd`, and through it `pi_nat_eday`, but never
+`pi_latent_E`. The parameters are `z_shock` (P × n_closed) and `s_bar_E` (an array of one),
+declared after `s_new`; ε is the transformed parameter `eps` [n_closed, P], all zeros with
+`shock = 0`. Its lp, size, transformed-parameter and generated-quantity tests are in
+`tests/harness/test-v2-stan.R`, its reference tests in `tests/harness/test-v2-reference.R`, the
+floor case (2024 eve's Sósíalistaflokkurinn, present at 2021 with no 2017 result, so its 2021
+row of `d_shock` is √10) in `tests/harness/test-v2-data.R`, and its prior predictive rows in
+`harness/v2/prior_predictive.md`. This section is its sampler check.
+
+**Fits.** Two fits at 400 + 400, seed 2701: 2024 eve (lane A) and 2021 f180 (lane B), the two
+`v2s-m3` lines of `harness/runs/v2-steps.txt`. They ran under `R/harness/queue.sh` with the
+run list `results/harness/logs/v2s-m3-runs.txt` (`harness/README.md`, Step checks). The queue
+started at 2026-10-29 17:33:08, its preflight (the full slow suite) passed, and both fits
+started at 18:21:20: the preflight took about 48 minutes, longer than before, with M3's new
+slow tests in it and a peer's load beside it. 2021 f180 finished at 18:52:13 and 2024 eve at
+19:15:58 (each run's `meta.json`), both exited 0, and `queue.log` ends in `QUEUE FINISHED`.
+CmdStan 2.38.0, `max_treedepth` 12, 10 cores (`hw.ncpu`). The diagnostics table is
+`harness/v2/steps/v2s-m3.md`. `queue.log` after its `QUEUE START` line (left out here: it names
+the run list by its absolute path):
+
+```
+preflight PASS
+start B v2s-m3_2021-09-25_2021-03-29_s2701 2026-10-29 18:21:20
+start A v2s-m3_2024-11-30_2024-11-29_s2701 2026-10-29 18:21:20
+end v2s-m3_2021-09-25_2021-03-29_s2701 rc=0 DIAG run=v2s-m3_2021-09-25_2021-03-29_s2701 minutes=30.7 max_rhat=1.0294 min_ess_bulk=479 min_ess_tail=651 divergent=0 treedepth_hits=0 max_depth=10 min_ebfmi=0.636 gate=FAIL
+end v2s-m3_2024-11-30_2024-11-29_s2701 rc=0 DIAG run=v2s-m3_2024-11-30_2024-11-29_s2701 minutes=54.3 max_rhat=1.0215 min_ess_bulk=289 min_ess_tail=461 divergent=0 treedepth_hits=0 max_depth=10 min_ebfmi=0.679 gate=FAIL
+QUEUE FINISHED
+```
+
+**Provenance.** Both fits ran at 68c53ac on a clean tree (`meta.json`: `git_head` 68c53ac,
+`git_dirty` false), with `Stan/forecast_v2.stan` at sha256
+`9149dbba616a972025d16e332adcd10585df861897e66eae6f49b796dc92c7ee`. The next two commits,
+b878d39 and 1afba4d, changed no Stan line and no file the builder reads: in `R/harness` they
+changed `v2_reference.R`'s roxygen, the prior predictive script (its header and `shock_sd()`'s
+guard) and `queue.sh`, which the builder never reads. The Stan file's sha256 is the same there
+and in this step's commit. Each run's `meta.json` `data_sha256` equals `stan_data_sha()`
+(`R/harness/runs.R`) of the data that 1afba4d's builder gives for the same cell through the
+arm, as `fit_cell.R` builds it, and equals the sha256 of the run's frozen
+`inputs/stan_data.json`:
+
+| Fit (cell, seed) | `git_head`, `git_dirty` | `stan_sha256` | `data_sha256` (`meta.json`) | `stan_data_sha()` at 1afba4d | sha256 of `inputs/stan_data.json` |
+| --- | --- | --- | --- | --- | --- |
+| 2024 eve, 2701 | 68c53ac, false | `9149dbba616a972025d16e332adcd10585df861897e66eae6f49b796dc92c7ee` | `06aa215b114495ede3d8e44995eda30bccc5ff1885060b25a73451b2e7add347` | the same | the same |
+| 2021 f180, 2701 | 68c53ac, false | `9149dbba616a972025d16e332adcd10585df861897e66eae6f49b796dc92c7ee` | `8b67379378fd8bec278f6976f81bfd2ec70c8561e6f187808dd4ec6098fff024` | the same | the same |
+
+To re-measure a cell's sha, from the project root, with the cell's E and F as the two
+arguments (`2024-11-30 2024-11-29` for 2024 eve and `2021-09-25 2021-03-29` for 2021 f180, the
+two lines below). It reproduces the recorded sha only on a tree whose `R/harness` builder and
+`harness/configs/steps/v2s-m3.json` build the data as 1afba4d's do; after a later change to
+either it prints another sha, which is not a provenance failure:
+
+```
+LC_ALL=en_US.UTF-8 Rscript -e 'x <- commandArgs(TRUE); options(box.path = getwd()); box::use(R/harness/arms[arm], R/harness/info_set[info_set], R/harness/runs[stan_data_sha]); a <- arm("v2s-m3"); cat(stan_data_sha(a$build(info_set(as.Date(x[1]), as.Date(x[2])), a$read_config(a$config))$data), "\n", sep = "")' 2024-11-30 2024-11-29
+LC_ALL=en_US.UTF-8 Rscript -e 'x <- commandArgs(TRUE); options(box.path = getwd()); box::use(R/harness/arms[arm], R/harness/info_set[info_set], R/harness/runs[stan_data_sha]); a <- arm("v2s-m3"); cat(stan_data_sha(a$build(info_set(as.Date(x[1]), as.Date(x[2])), a$read_config(a$config))$data), "\n", sep = "")' 2021-09-25 2021-03-29
+```
+
+**Stop rule.** `LC_ALL=en_US.UTF-8 Rscript R/harness/compare_runs.R stop v2s-m3` (exit 0):
+
+```
+GO v2s-m3_2024-11-30_2024-11-29_s2701 lp_rhat=1.0064 divergent=0/1600 near_cap=0/1600 max_rhat=1.0215; recorded: minutes=54.3 treedepth_hits=0 ess_bulk_per_1k_grad=0.176
+GO v2s-m3_2021-09-25_2021-03-29_s2701 lp_rhat=1.0039 divergent=0/1600 near_cap=0/1600 max_rhat=1.0295; recorded: minutes=30.7 treedepth_hits=0 ess_bulk_per_1k_grad=0.292
+```
+
+| Fit (cell, seed) | Verdict | R-hat of `lp__` (STOP above 1.1) | Divergences (STOP above 16) | Draws within 0.5 of a cap (STOP above 16) | Max R-hat, gate scope (STOP above 1.10) | Minutes | Treedepth hits | Min bulk ESS per 1,000 gradients (gate scope) |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2024 eve, 2701 | GO | 1.0064 | 0 of 1,600 | 0 of 1,600 | 1.0215 | 54.3 | 0 | 0.176 |
+| 2021 f180, 2701 | GO | 1.0039 | 0 of 1,600 | 0 of 1,600 | 1.0295 | 30.7 | 0 | 0.292 |
+
+**Verdict: GO on both fits.** The stop rule's signals are all well inside their limits:
+- the largest R-hat of `lp__` is 1.0064;
+- no transition diverged on either cell (0 of 1,600 each), against the limit of 16;
+- no draw came within 0.5 of a cap on either cell, against the limit of 16;
+- the largest gate-scope R-hat is 1.0295.
+
+Minutes, treedepth hits and ESS per 1,000 gradients are recorded, never a stop.
+
+- **The §5.7 gate is not the stop rule.** Each fit's DIAG line in `queue.log` reads `gate=FAIL`,
+  because its gate-scope max R-hat (1.0215 and 1.0294 as DIAG prints them; the stop rule
+  rounds the second up to 1.0295) is above the scoring gate's 1.01. A `dev` arm is never
+  scored.
+- **Divergences per chain.** None diverged on either fit (`meta.json` `divergent` 0), so none in
+  any chain. The run keeps no per-chain counts: `fit_cell.R` deleted the CmdStan CSVs
+  (`HARNESS_KEEP_CMDSTAN` unset), and `key_diagnostics.csv` holds R-hat and ESS only. `v2s-m2`
+  had 2 divergent transitions and 1 draw near a cap on 2021 f180; `v2s-m3` has neither.
+- **ESS per 1,000 gradients** is 0.176 on 2024 eve and 0.292 on 2021 f180, against `v2s-m2`'s
+  0.181 and 0.271: 3% lower and 8% higher. Recorded, not a stop.
+- **What sets the extremes.** M3 is the first step that adds a weakly identified scale: s̄_E is
+  read off 3 closed elections on 2024 eve and 2 on 2021 f180. It sets neither extreme: its
+  R-hat is 1.0066 and 1.0010 and its bulk ESS 447 and 808 (`key_diagnostics.csv`). The gate's
+  min bulk ESS is `tau_sd`'s on 2024 eve (288.8) and house 2's (Gallup) log φ on 2021 f180
+  (479.0; `key_diagnostics.csv` carries `log_phi`, a monotone map of the parameter
+  `log_phi_u`, whose bulk ESS is the same). The gate's max R-hat, 1.0215 and 1.0294, is above
+  every variable `key_diagnostics.csv` holds (at most 1.0150, `tau_sd` on 2024 eve, and 1.0096,
+  `s_delta0[7]` on 2021 f180; the scored quantities at most 1.0046 and 1.0077). So a
+  parameters-block variable outside `param_draws.parquet` sets it: one of the standard normals
+  (`z_walk`, `delta_raw`, `house_raw`, `nu`, `z_shock` and the like). The runs keep no
+  per-variable diagnostics for those and their CmdStan CSVs are deleted, so whether `z_shock`
+  sets it cannot be read from them. `v2s-m2`'s were 1.0192 and 1.0179.
+- **The minutes read high.** They are 54.3 and 30.7, against `v2s-m2`'s 53.6 and 29.1. Other
+  work shared the 10 cores while the fits ran. Beside both fits ran:
+  - throughout, a peer session's untimed profiling run (`sc_profile.R`): at most 3
+    single-threaded R processes, BLAS on 1 thread;
+  - about 18:22 to 18:31, the step's fix round: edits and fast tests (escapes, v2-reference and
+    v2-prior-predictive, the last of which runs the prior predictive script at 20 draws in a
+    subprocess), then the whole fast suite (18:25:55 to 18:29:16), in which
+    `tests/harness/test-fit-cell.R`'s stubbed queue was refused because these fits were running;
+  - about 18:31 to 18:40, a read-only re-review's reads and fast probes.
+
+  No other work of this step is known to have run beside either fit after 18:40: 2021 f180
+  finished at 18:52:13 and 2024 eve at 19:15:58. No slow test ran beside either fit: the slow
+  suite ran in the preflight, before the fits. No fit is known to have run unloaded, so both
+  fits' minutes read high, by an unknown amount.
+
+**What the lp tests cover.** `HARNESS_SLOW=1 V2_STEPS=v2s-m3 LC_ALL=en_US.UTF-8 Rscript
+tests/run.R v2-stan` (on the tree committed as 1afba4d, after `QUEUE FINISHED`,
+`[ FAIL 0 | WARN 0 | SKIP 24 | PASS 133 ]`). On each cell, Stan's log density minus the
+reference's (`v2_lp_ref()`) is constant over the cell's points within one tolerance per cell,
+tol = 1e-9 · max(1, |lp_ref|) with |lp_ref| the largest over the cell's points (`lp_tol()`,
+`tests/harness/helper-v2.R`), and the points of each kind (posterior, off-posterior, prior)
+are also checked against their own `lp_tol()` (`expect_lp_matches()`):
+- on 2024 eve and 2021 f180, over 20 posterior and 10 off-posterior points of a short fit and
+  10 prior points;
+- on 2017 eve, over 10 prior points only (no fit, no forecast).
+
+Each mutant a cell exercises is rejected above 100 × tol: the core's five, the epoch bias's
+four, the newcomer pool's `newcomer_mean_over_all`, and the shock's `shock_unscaled` (d ≡ 1),
+which every cell exercises, 2017 eve's one closed election included: its range is 6.94e+04,
+6.97e+04 and 3.81e+04 times 100 × tol on 2024 eve, 2021 f180 and 2017 eve. A fifth check runs
+2024 eve's prior points (10, no fit) at `prior_s_bar_E` = 0.37: Stan matches the reference
+there, and three slips are rejected: the prior's scale written as the literal 0.15 (127 times
+100 × tol), each closed election's shock read off the next row of `d_shock` (9.57e+04) and off
+the open row (1.28e+05). Its limits:
+- `house_walk_from_first_poll` is not exercised on 2017 eve, where every house starts in
+  epoch 1, as in M1 and M2.
+- The centring of ε is invisible to the likelihood and to the forecast: a shift common to the
+  parties cancels in every softmax. Only the `eps` transformed-parameter test, eps equal to the
+  reference's C(s̄_E d_e ⊙ z_e) to 1e-10, pins it.
+- The forecast side is tested at fixed points: the results' rows carry their shocks,
+  `pi_latent_E` is the shock-free latent share and `pi_nat_eday` aggregates `votes_kd`; and at a
+  point whose walk and δ are 0 and whose closed shocks are far from 0, `votes_kd`'s log-ratio
+  contrasts have the open row's variance s̄_E² (d_p² + d_q²), move together across kjördæmi,
+  and stay centred at the shock-free value. A copy of the Stan file with the last closed
+  election's ε planted in `votes_kd`'s softmax fails that centre check alone, its largest |z|
+  200.3 against the threshold of 4.
+
+The test's lines:
+
+```
+v2s-m3 eve2024: 40 points, lp constant range 1.16e-09 (tol 0.000667, ratio 1.75e-06; ratio by kind: post 4.68e-06, off 7.63e-07, prior 1.75e-06); weakest exercised mutant previous_w; range / (100 tol): positional_gather 1.46e+06, previous_w 3.16e+03, next_epoch_delta 3.5e+03, close_last_kjordaemi 2.3e+05, conditional_walk 7.39e+05, house_walk_from_first_poll 7.66e+04, newcomer_mean_of_mu1 1.47e+04, no_mu_restart 1.63e+05, no_house_restart 5.46e+04, newcomer_mean_over_all 3.45e+05, shock_unscaled 6.94e+04; not exercised: none
+v2s-m3 f180_2021: 40 points, lp constant range 4.07e-10 (tol 0.000265, ratio 1.54e-06; ratio by kind: post 5.32e-06, off 1.25e-06, prior 1.54e-06); weakest exercised mutant next_epoch_delta; range / (100 tol): positional_gather 2.27e+06, previous_w 1.56e+03, next_epoch_delta 1.05e+03, close_last_kjordaemi 1.4e+06, conditional_walk 1.53e+06, house_walk_from_first_poll 2.07e+03, newcomer_mean_of_mu1 1.18e+04, no_mu_restart 1.18e+05, no_house_restart 1.34e+05, newcomer_mean_over_all 1.52e+06, shock_unscaled 6.97e+04; not exercised: none
+v2s-m3 eve2017: 10 points, lp constant range 5.82e-11 (tol 0.000103, ratio 5.67e-07; ratio by kind: prior 5.67e-07); weakest exercised mutant newcomer_mean_of_mu1; range / (100 tol): positional_gather 1.04e+06, close_last_kjordaemi 1.2e+06, conditional_walk 1.3e+06, newcomer_mean_of_mu1 593, no_mu_restart 4.5e+03, no_house_restart 4.66e+03, newcomer_mean_over_all 4.26e+05, shock_unscaled 3.81e+04; not exercised: house_walk_from_first_poll
+v2s-m3 eve2024 at prior_s_bar_E 0.37: 10 prior points, lp constant range 8.73e-10 (tol 0.000667); range / (100 tol): literal_0.15 127, next_row 9.57e+04, open_row 1.28e+05
+```
+
+**Shock off means off.** With `shock = 0`, ε ≡ 0 and the generated quantities make no extra
+random draw. Checked once, after `QUEUE FINISHED`: plain executables of the committed
+`Stan/forecast_v2.stan` (68c53ac's, unchanged since) and of 69b8978's (the step before), each
+compiled from a copy in a temporary directory, ran as `fixed_param_run()` does (one chain, one
+iteration, CmdStan seed 1, the point as its init) at one prior point,
+`v2_simulate(seed = 5, observe = FALSE)`, of the `v2s-m2` config's data (`shock = 0`,
+`draw_forecast = 1`) on 2024 eve and 2021 f180, built as the Stan tests' cells are
+(`v2_test_cells()`, `tests/harness/helper-v2.R`). Every quantity is identical between the two
+files; only TRUE or FALSE was printed:
+
+```
+committed file (68c53ac) sha256 9149dbba616a972025d16e332adcd10585df861897e66eae6f49b796dc92c7ee
+69b8978 file sha256 934281745c266c4df9a20ceb9ac86e14d53c9f290a5236401e4ca1ff7415b3fa
+point: v2_simulate(seed = 5, observe = FALSE) on v2_test_cells(cfg_m2()) data; CmdStan seed 1
+eve2024: all five present in both: TRUE
+eve2024 log_lik identical: TRUE
+eve2024 y_rep_res identical: TRUE
+eve2024 votes_kd identical: TRUE
+eve2024 pi_nat_eday identical: TRUE
+eve2024 pi_latent_E identical: TRUE
+f180_2021: all five present in both: TRUE
+f180_2021 log_lik identical: TRUE
+f180_2021 y_rep_res identical: TRUE
+f180_2021 votes_kd identical: TRUE
+f180_2021 pi_nat_eday identical: TRUE
+f180_2021 pi_latent_E identical: TRUE
+```
+
+The standing test can see less. Its draw-order check, `y_rep_res` identical with
+`draw_forecast` 1 and 0 at `shock = 1`, detects a forecast draw gated on `draw_forecast` and
+placed before the replicates (a planted one fails it). It cannot see a draw guarded only by
+`if (shock)` before the results loop, nor one outside `if (draw_forecast)`, since both of its
+runs make such a draw. Runs at `shock = 1` and 0 cannot be compared draw for draw: a
+fixed_param run's initialisation draws one uniform per unconstrained parameter even when every
+init is given, and the two are P n_closed + 1 parameters apart (the newcomer pool's two
+parameters show the same offset at an equal likelihood).
+
+**The prior predictive rows.** `shock_sd_20` and `shock_sd_05`: the sd of a 20% and of a 5%
+party's change under the shock, given the draw's s̄_E, over 200 draws of z on the composition
+(share, (1 − share) / (P − 1), ...), in pp (`harness/v2/prior_predictive.md`):
+
+| Row | Cell | Values | q05 | q50 | q95 | Band | Median ÷ target | Verdict |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `shock_sd_20` | 2024 eve | 1000 | 0.16 | 1.73 | 5.12 | median in [0.5, 2] × 1.6 | 1.08 | PASS |
+| `shock_sd_20` | 2021 f180 | 1000 | 0.18 | 1.70 | 5.13 | median in [0.5, 2] × 1.6 | 1.06 | PASS |
+| `shock_sd_05` | 2024 eve | 1000 | 0.09 | 0.96 | 3.34 | median in [0.5, 2] × 0.95 | 1.01 | PASS |
+| `shock_sd_05` | 2021 f180 | 1000 | 0.10 | 0.94 | 3.27 | median in [0.5, 2] × 0.95 | 0.99 | PASS |
+
+```
+PRIOR PASS shock_sd_20/2024-eve/config
+PRIOR PASS shock_sd_20/2021-f180/config
+PRIOR PASS shock_sd_05/2024-eve/config
+PRIOR PASS shock_sd_05/2021-f180/config
+```
+
+§6.10's 1.6 and 0.95 pp are the party-alone linearisation π(1 − π) s̄ d at s̄_E's median,
+0.15 · qnorm(0.75) = 0.1012. The rows' construction also shocks the other P − 1 parties, so its
+population medians are about 1.80 and 1.00 pp, and their ratios to §6.10's targets about 1.13
+and 1.05. The rows sit lower because their 1,000-draw sample of s̄_E has a median below its
+population median: 0.0982 on 2024 eve and 0.0936 on 2021 f180 (ratios 0.971 and 0.926; measured
+with `v2_simulate()` at the report's seeds 6001 to 7000 on the v2s-m3 config, only s̄_E's median
+printed). Every earlier row of the report is byte-identical to the one `v2s-m2`'s config wrote.
+
+To rewrite the table and the verdicts from the finished runs under `results/harness/`, from the
+project root:
+
+```
+LC_ALL=en_US.UTF-8 Rscript R/harness/tier0_report.R v2s-m3 harness/runs/v2-steps.txt harness/v2/steps/v2s-m3.md
+LC_ALL=en_US.UTF-8 Rscript R/harness/compare_runs.R stop v2s-m3
+```
+
+Next: M4 (`v2s-m4`), the kjördæmi deviations' walk, on `v2s-m3`'s config with `delta_walk = 1`,
+as long as M3 stands. M4 precedes P2, so its queue lines need seed 2702 as well as 2701.
