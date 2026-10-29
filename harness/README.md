@@ -426,7 +426,7 @@ The last two, run once `queue.log` ends in `QUEUE FINISHED`, write the step's di
 `harness/v2/steps.md`, one section per step.
 
 `R/harness/compare_runs.R` is a plain script with three subcommands, whose definitions also
-load as a box module (its test imports `perm_z()`, `perm_verdict()` and
+load as a box module (its test imports `perm_z()`, `perm_verdict()`, `relative()` and
 `EQUIVALENCE_REQUIRED`). Each reads the runs of a run list, `harness/runs/v2-steps.txt` by
 default, from `results_root()`: a run only once its `meta.json` exists and names it. A 2017
 cell of the run list is refused before the freeze (`forecast_free()`), before any run is read.
@@ -459,8 +459,9 @@ stop. It exits 1 on any STOP.
 **`adopt <ref_arm> <new_arm> <equivalence_csv> [run_list]`**, the P-step adoption rule (the
 plan's Decision 6), compares a P-step's form (`new_arm`) with the reference form (`ref_arm`,
 the step before it). The two arms must differ and have runs on the same cells, and on each
-cell each arm has exactly two fits (seeds 2701 and 2702), of different seeds and the same as
-the other arm's; this is checked from the run list before anything is read. Every `meta.json`
+cell each arm has exactly two fits, of two different seeds that are the other arm's (the plan
+runs seeds 2701 and 2702, but any two seeds the arms share pass); this is checked from the run
+list before anything is read. Every `meta.json`
 must hold `n_leapfrog`. It prints a table of the fits (min bulk ESS per 1,000 gradients,
 divergences, the stop rule's verdict), a table of the cells (each arm's median over its fits
 of min bulk ESS per 1,000 gradients, and their ratio), the four conditions with yes or no, and

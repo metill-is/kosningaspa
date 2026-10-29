@@ -1,13 +1,13 @@
 # compare_runs.R (the Phase 2 plan's Decisions 5, 6 and 8), run as a script on synthetic run
 # directories: made-up meta.json, key_diagnostics.csv and parquets, never a fit's draws. Its z
 # and pass rule, perm_z() and perm_verdict(), are also tested as functions, on made-up draws and
-# z-statistics.
+# z-statistics, and so is relative(), which keeps absolute paths out of its messages.
 box::use(
   R / harness / runs[run_id],
   R / harness / freeze[is_frozen],
   R / harness / v2[read_v2_config, v2_variables, V2_PARAM_SWITCH],
   R / harness / v2_reference[V2_LOG_CAPS],
-  R / harness / compare_runs[perm_z, perm_verdict, EQUIVALENCE_REQUIRED]
+  R / harness / compare_runs[perm_z, perm_verdict, relative, EQUIVALENCE_REQUIRED]
 )
 
 EVE <- c("2024-11-30", "2024-11-29")
@@ -404,6 +404,12 @@ test_that("perm's pass rule trips on each of its three conditions alone, at the 
   expect_true(at_three$pass)
   expect_identical(sum(at_three$over), 0L)
 
+  # WHY: the sd bound itself: mean z's whose squares sum to 60.75, so their variance is 60.75 / 27 = 2.25 and their sd 1.5, each step exact in binary, pass; a hair above fails.
+  at_sd <- c(rep(c(2.5, -2.5), 4), 2, -2, 1, -1, 0.5, -0.5, 0.25, -0.25, 0.25, -0.25, rep(0, 10))
+  expect_identical(stats::sd(at_sd), 1.5)
+  expect_true(verdict(mean = at_sd)$pass)
+  expect_false(verdict(mean = at_sd * (1 + 1e-12))$pass)
+
   big <- verdict(q = replace(q, 1, 5.5))
   expect_false(big$pass)
   expect_identical(sum(big$over), 1L)
@@ -417,6 +423,18 @@ test_that("perm's pass rule trips on each of its three conditions alone, at the 
   missing_mean <- verdict(mean = replace(rep(0, 28), 1, NA))
   expect_false(missing_mean$pass)
   expect_identical(sum(missing_mean$over), 1L)
+})
+
+test_that("relative() writes a results-root path as $HARNESS_RESULTS/..., resolved or as given, and a project path relative to it", {
+  # WHY: without the doubled slash a trailing-slash TMPDIR leaves (".../T//Rtmp..."), the given form is a substring of the resolved one.
+  results <- gsub("/+", "/", withr::local_tempdir())
+  withr::local_envvar(HARNESS_RESULTS = results)
+  expect_identical(relative(paste("in", file.path(results, "v2s-x"))), "in $HARNESS_RESULTS/v2s-x")
+  expect_identical(relative(file.path(root(), "harness", "runs", "x.txt")), "harness/runs/x.txt")
+  resolved <- normalizePath(results)
+  # WHY: a temporary directory on macOS resolves to a longer path that holds the given one (/private/var/... for /var/...), so replacing the given form first would leave "/private" in front.
+  skip_if(identical(resolved, results), "the temporary directory is already resolved")
+  expect_identical(relative(paste("in", file.path(resolved, "v2s-x"))), "in $HARNESS_RESULTS/v2s-x")
 })
 
 test_that("the permutation rule passes two runs of one distribution, matched by name, and fails a 10-MCSE shift", {

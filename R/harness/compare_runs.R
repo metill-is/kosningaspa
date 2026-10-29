@@ -1,8 +1,8 @@
 # Sampler checks between runs: the stop rule, the adoption rule and the permutation rule of the
 # Phase 2 plan (its Decisions 5, 6 and 8; docs/superpowers/plans/2026-10-28-v2-harness-phase2-v2-model.md).
 # A plain script whose definitions also load as a box module, so that its test can import
-# perm_z(), perm_verdict() and EQUIVALENCE_REQUIRED; the script part runs only when box::name()
-# is NULL. Run from the project root:
+# perm_z(), perm_verdict(), relative() and EQUIVALENCE_REQUIRED; the script part runs only when
+# box::name() is NULL. Run from the project root:
 #   LC_ALL=en_US.UTF-8 Rscript R/harness/compare_runs.R stop <arm> [run_list]
 #   LC_ALL=en_US.UTF-8 Rscript R/harness/compare_runs.R adopt <ref_arm> <new_arm> <equivalence_csv> [run_list]
 #   LC_ALL=en_US.UTF-8 Rscript R/harness/compare_runs.R perm <arm_a> <arm_b> [run_list]
@@ -31,8 +31,9 @@
 #
 # adopt <ref_arm> <new_arm> <equivalence_csv>: the P-step adoption rule (Decision 6). The two
 # arms must differ and have runs on the same cells, and on each cell each arm has exactly two
-# fits (Decision 6's seeds 2701 and 2702), of different seeds, the same as the other arm's;
-# this is checked before any run or the equivalence CSV is read. It prints a table of the fits
+# fits, of two different seeds that are the other arm's (Decision 6 runs seeds 2701 and 2702,
+# but any two seeds the arms share pass); this is checked before any run or the equivalence
+# CSV is read. It prints a table of the fits
 # (min bulk ESS per 1,000 gradients, divergences and the stop rule's verdict), a table of the
 # cells (each arm's median over its fits of min bulk ESS per 1,000 gradients, and their ratio),
 # the four conditions with yes or no, and a last line "ADOPT <new_arm>" if all four hold, else
@@ -131,13 +132,16 @@ fail <- function(...) stop(PREFIX, ..., call. = FALSE)
 #' `text` with every path under the project root relative to it, and every path under the
 #' results root (when outside the project) written as $HARNESS_RESULTS/..., so that no message
 #' prints an absolute run directory.
+#' @param text a message
+#' @return `text` with those paths replaced
+#' @export
 relative <- function(text) {
   bases <- list(project_root(), results_root())
   labels <- c("", "$HARNESS_RESULTS/")
   for (i in seq_along(bases)) {
-    for (base in unique(c(bases[[i]], normalizePath(bases[[i]], mustWork = FALSE)))) {
-      text <- gsub(paste0(sub("/+$", "", base), "/"), labels[i], text, fixed = TRUE)
-    }
+    forms <- unique(sub("/+$", "", c(bases[[i]], normalizePath(bases[[i]], mustWork = FALSE))))
+    # WHY: the longer form first, since a resolved path can hold the given one (/private/var/... holds /var/...).
+    for (base in forms[order(-nchar(forms))]) text <- gsub(paste0(base, "/"), labels[i], text, fixed = TRUE)
   }
   text
 }
