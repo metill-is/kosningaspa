@@ -14,7 +14,8 @@
 #   new_forward  each forward step after the last anchor, as in the reference walk;
 #   new_anchor   each anchor's absent block, log|chol(Q_BB)| + |B_j|/2 log V_j.
 # The present blocks contribute none: they are centred, and their density is on theta itself.
-# Each negative control drops one term and must then fail. A point with a bounded log
+# Each negative control drops one term and must then fail; a term constant over the points
+# cannot be checked so, and fails the check as not exercised. A point with a bounded log
 # concentration at its cap is outside the claim: counted and excluded. A point whose log
 # density is not finite on both sides is dropped and counted; one finite on one side only
 # fails the check.
@@ -40,15 +41,18 @@
 # The config is a path under harness/configs/. --reverse sets `order` to "reversed" on both
 # sides, so the coordinate party is the last of the default order. Both sides' data are
 # v2_stan_data()'s under a temporary root (no freeze), so a 2017 cell is its pre-freeze form.
-# Only the walk form's map is built: --form=delta and --form=both stop. It prints each point's
-# kind, constant and path error, the bookkeeping, the negative controls, the generated
-# quantities' largest relative difference (never a value of one) and a last line, EQUIV PASS or
-# EQUIV FAIL, and exits 1 on a FAIL. --out gets one summary row per check (E, F, order,
-# verdict, then the summary columns), replacing an earlier row of the same E, F and order;
-# the file is created with a header if absent.
+# Only the walk form's map is built: --form=delta and --form=both stop until the plan's Task 13
+# builds the delta map. It prints the coordinate party, each point's kind, constant and path
+# error, the bookkeeping, the negative controls, the generated quantities' largest relative
+# difference (never a value of one) and a last line, EQUIV PASS or EQUIV FAIL, and exits 1 on
+# a FAIL. --out, a file in an existing directory, gets one summary row per check (E, F,
+# order, verdict, then the summary columns), replacing an earlier row of the same E, F and
+# order; the file is created with a header if absent. Once the command line is accepted, a
+# provisional FAIL row (reasons "incomplete") is written first, so a check that stops before
+# its end leaves no earlier verdict of its cell and order standing.
 #
 # The definitions also load as a box module (its test imports write_equivalence_row() and
-# EQUIVALENCE_SUMMARY); the script part runs only when box::name() is NULL. Every failure
+# EQUIVALENCE_SUMMARY and provisional_row()); the script part runs only when box::name() is NULL. Every failure
 # outside the check itself stops with "v2_equivalence: ...".
 if (is.null(box::name())) {
   if (!isTRUE(l10n_info()[["UTF-8"]])) stop("v2_equivalence: needs a UTF-8 locale: run under LC_ALL=en_US.UTF-8", call. = FALSE)
@@ -117,6 +121,24 @@ write_equivalence_row <- function(path, row) {
   invisible(path)
 }
 
+#' The provisional summary row of a check, written before anything is built or fitted: verdict
+#' FAIL and reasons "incomplete", so a check that stops before its end leaves no earlier verdict
+#' of the same E, F and order standing. The check's own row replaces it.
+#' @param E,F the cell, ISO dates
+#' @param order `"default"` or `"reversed"`
+#' @param form the --form value
+#' @param config the config, a path under the project root
+#' @param stan_sha256 the Stan file's sha256
+#' @return a named list of `EQUIVALENCE_SUMMARY`'s columns, the others NA
+#' @export
+provisional_row <- function(E, F, order, form, config, stan_sha256) {
+  row <- as.list(stats::setNames(rep(NA_character_, length(EQUIVALENCE_SUMMARY)), EQUIVALENCE_SUMMARY))
+  utils::modifyList(row, list(
+    E = E, F = F, order = order, verdict = "FAIL", form = form, config = config, stan_sha256 = stan_sha256,
+    reasons = "incomplete"
+  ))
+}
+
 #' The command line as a list, or an error naming what is wrong.
 parse_args <- function(args) {
   known <- c("config", "form", "cell", "out", "n", "n-off", "stan", "reverse")
@@ -148,6 +170,7 @@ parse_args <- function(args) {
   }
   form <- value("form")
   if (!form %in% c(names(FORMS), "both")) fail("--form must be walk, delta or both, not ", form)
+  if (!dir.exists(dirname(value("out")))) fail("--out must be a file in an existing directory, not ", value("out"))
   list(
     config = config, form = form, E = dates[1], F = dates[2], out = value("out"), n = count("n", "30"),
     n_off = count("n-off", "15"), n_off_given = "n-off" %in% name, stan = value("stan", "Stan/forecast_v2.stan"),
@@ -319,7 +342,7 @@ main <- function(args) {
   cfg <- read_v2_config(file.path(project_root(), a$config))
   if (a$reverse) cfg$order <- "reversed"
   forms <- if (a$form == "both") unname(FORMS) else FORMS[[a$form]]
-  if (!identical(forms, "walk_form")) fail("only the walk form's map is built: --form=walk")
+  if (!identical(forms, "walk_form")) fail("only the walk form's map is built: --form=walk (the delta map needs the plan's Task 13)")
   off <- forms[vapply(forms, \(f) !identical(as.integer(cfg[[f]]), 1L), logical(1))]
   if (length(off)) fail("the config's ", paste(off, collapse = " and "), " is 0: both sides would be the same model")
   stan <- if (startsWith(a$stan, "/")) a$stan else file.path(project_root(), a$stan)
@@ -332,12 +355,17 @@ main <- function(args) {
   if (a$n < MIN_KEPT) fail("--n must be at least ", MIN_KEPT)
   if (!prior_only && n_off < MIN_KEPT) fail("--n-off must be at least ", MIN_KEPT)
   if (!prior_only && a$n + n_off > 4L * POINTS_FIT$iter_sampling) fail("--n plus --n-off exceeds the fit's ", 4L * POINTS_FIT$iter_sampling, " draws")
+  stan_sha256 <- digest::digest(file = stan, algo = "sha256")
+  write_equivalence_row(a$out, provisional_row(format(a$E), format(a$F), cfg$order, a$form, a$config, stan_sha256))
   ref_cfg <- cfg
   ref_cfg[forms] <- 0L
 
   info <- info_set(a$E, a$F, read_inputs())
-  d_ref <- v2_stan_data(info, ref_cfg, root = root)$data
-  d_new <- v2_stan_data(info, cfg, root = root)$data
+  b_ref <- v2_stan_data(info, ref_cfg, root = root)
+  b_new <- v2_stan_data(info, cfg, root = root)
+  if (!identical(b_ref$meta$coordinate_party, b_new$meta$coordinate_party)) fail("the two sides' coordinate parties differ")
+  d_ref <- b_ref$data
+  d_new <- b_new$data
   if (prior_only && !(d_ref$draw_forecast == 0L && d_new$draw_forecast == 0L)) fail("a 2017 cell's data must have draw_forecast = 0")
   P <- d_new$P
   G <- d_new$G
@@ -346,6 +374,7 @@ main <- function(args) {
     "cell %s, %s, order %s, form %s: P = %d, G = %d, %d anchors (absent coordinates per anchor: %s)\n",
     format(a$E), format(a$F), cfg$order, a$form, P, G, length(lay$anchors), paste(lengths(lay$absent), collapse = ", ")
   ))
+  cat(sprintf("coordinate party: %s\n", b_new$meta$coordinate_party))
 
   m_ref <- v2_methods(stan, d_ref)
   m_new <- v2_methods(stan, d_new)
@@ -455,31 +484,41 @@ main <- function(args) {
   control_verdict <- ifelse(is.na(controls), "not exercised", ifelse(controls > tol, "fails", "PASSES"))
   cat(sprintf(
     "negative control without_%s: %s\n", JACOBIAN_TERMS,
-    ifelse(is.na(controls), "the term is constant over these points, so it is not exercised",
+    ifelse(is.na(controls), "the term is constant over these points, so it is not exercised, which fails the check",
       sprintf("constant range %.3g (%s)", controls, ifelse(controls > tol, "fails, as it must", "PASSES: the check cannot see this term"))
     )
   ), sep = "")
 
   main_kind <- if (prior_only) "prior" else "posterior"
   gq_idx <- which(kept_kind == main_kind)
-  gq_ref <- gq_rows(stan, d_ref, do.call(rbind, lapply(kept[gq_idx], \(r) r$row_ref)))
-  gq_new <- gq_rows(stan, d_new, do.call(rbind, lapply(kept[gq_idx], \(r) r$row_new)))
-  forecast_cols <- function(x) grep(paste0("^(", paste(FORECAST_GQ, collapse = "|"), ")(\\[|$)"), colnames(x), value = TRUE)
-  if (prior_only && length(c(forecast_cols(gq_ref), forecast_cols(gq_new)))) {
-    fail("a 2017 cell's generated quantities hold a forecast variable; stopped before comparing them")
+  # WHY: with too few kept points of the main kind the check fails on MIN_KEPT; comparing nothing would only stop it.
+  gq_ran <- length(gq_idx) >= MIN_KEPT
+  gq_max_rel <- NA_real_
+  if (gq_ran) {
+    gq_ref <- gq_rows(stan, d_ref, do.call(rbind, lapply(kept[gq_idx], \(r) r$row_ref)))
+    gq_new <- gq_rows(stan, d_new, do.call(rbind, lapply(kept[gq_idx], \(r) r$row_new)))
+    forecast_cols <- function(x) grep(paste0("^(", paste(FORECAST_GQ, collapse = "|"), ")(\\[|$)"), colnames(x), value = TRUE)
+    if (prior_only && length(c(forecast_cols(gq_ref), forecast_cols(gq_new)))) {
+      fail("a 2017 cell's generated quantities hold a forecast variable; stopped before comparing them")
+    }
+    gq_same_cols <- identical(colnames(gq_ref), colnames(gq_new))
+    gq_max_rel <- if (gq_same_cols) max(abs(gq_new - gq_ref) / pmax(1, abs(gq_ref))) else Inf
+    cat(sprintf(
+      "generated quantities at %d %s points: %d columns on each side%s, max relative difference %.2e\n",
+      length(gq_idx), main_kind, ncol(gq_ref), if (gq_same_cols) "" else " (the two sides' columns differ)", gq_max_rel
+    ))
+  } else {
+    cat(sprintf("generated quantities not compared: %d kept %s points, fewer than %d\n", length(gq_idx), main_kind, MIN_KEPT))
   }
-  gq_same_cols <- identical(colnames(gq_ref), colnames(gq_new))
-  gq_max_rel <- if (gq_same_cols) max(abs(gq_new - gq_ref) / pmax(1, abs(gq_ref))) else Inf
-  cat(sprintf(
-    "generated quantities at %d %s points: %d columns on each side%s, max relative difference %.2e\n",
-    length(gq_idx), main_kind, ncol(gq_ref), if (gq_same_cols) "" else " (the two sides' columns differ)", gq_max_rel
-  ))
 
   kept_n <- vapply(c("posterior", "off-posterior", "prior"), \(k) sum(kept_kind == k), 0L)
   reasons <- c(
     if (!(spread(const) < tol)) sprintf("constant range %.3g is not below tol %.3g", spread(const), tol),
     if (any(control_verdict == "PASSES")) paste("a negative control passes:", paste(JACOBIAN_TERMS[control_verdict == "PASSES"], collapse = ", ")),
-    if (!(gq_max_rel < GQ_TOL)) sprintf("generated quantities differ by %.3g relative", gq_max_rel),
+    if (a$form == "walk" && any(control_verdict == "not exercised")) {
+      paste("a negative control is not exercised:", paste(JACOBIAN_TERMS[control_verdict == "not exercised"], collapse = ", "))
+    },
+    if (gq_ran && !(gq_max_rel < GQ_TOL)) sprintf("generated quantities differ by %.3g relative", gq_max_rel),
     if (!(path_err < PATH_TOL)) sprintf("path error %.3g", path_err),
     if (one_sided > 0) sprintf("%d points finite on one side only", one_sided),
     if (any(rejected & kind == "posterior")) "a posterior point was dropped",
@@ -489,7 +528,7 @@ main <- function(args) {
   verdict <- if (pass) "PASS" else "FAIL"
   write_equivalence_row(a$out, list(
     E = format(a$E), F = format(a$F), order = cfg$order, verdict = verdict, form = a$form, config = a$config,
-    stan_sha256 = digest::digest(file = stan, algo = "sha256"), n_posterior = kept_n[["posterior"]],
+    stan_sha256 = stan_sha256, n_posterior = kept_n[["posterior"]],
     n_off = kept_n[["off-posterior"]], n_prior = kept_n[["prior"]], n_rejected = sum(rejected), n_outside = sum(outside),
     n_one_sided = one_sided, const_range = signif(spread(const), 4), tol = signif(tol, 4), path_err = signif(path_err, 4),
     gq_points = length(gq_idx), gq_max_rel = signif(gq_max_rel, 4),

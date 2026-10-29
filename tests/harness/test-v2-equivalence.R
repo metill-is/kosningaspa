@@ -4,7 +4,8 @@
 # subprocess, into a temporary CSV, never the committed one: slow, and named by the step whose
 # form it checks.
 box::use(
-  R / harness / v2_equivalence[EQUIVALENCE_SUMMARY, write_equivalence_row]
+  R / harness / constants[POLL_PARTIES],
+  R / harness / v2_equivalence[EQUIVALENCE_SUMMARY, provisional_row, write_equivalence_row]
 )
 
 P1_CONFIG <- "harness/configs/steps/v2s-p1.json"
@@ -18,6 +19,17 @@ run_equivalence <- function(args) {
 }
 
 shown <- function(out) paste(out, collapse = "\n")
+
+# Points CMDSTAN at an empty directory for the caller's frame, after checking that cmdstanr
+# then finds no CmdStan: the script then stops at its first CmdStan call, before any compile.
+local_no_cmdstan <- function(env = parent.frame()) {
+  withr::local_envvar(CMDSTAN = withr::local_tempdir(.local_envir = env), .local_envir = env)
+  probe <- withr::with_dir(root(), suppressWarnings(system2(
+    file.path(R.home("bin"), "Rscript"), c("-e", shQuote("cmdstanr::cmdstan_version()")),
+    stdout = TRUE, stderr = TRUE, env = "LC_ALL=en_US.UTF-8"
+  )))
+  if (is.null(attr(probe, "status"))) stop("cmdstanr finds CmdStan with CMDSTAN set to an empty directory: not running the script")
+}
 
 # A summary row with every EQUIVALENCE_SUMMARY column, these values set.
 summary_row <- function(...) {
@@ -53,8 +65,28 @@ test_that("the CSV writer keeps the file's columns first and fills a column a ro
   expect_error(write_equivalence_row(path, list(E = "2024-11-30", verdict = "PASS")), "E, F, order and verdict")
 })
 
+test_that("a provisional row replaces an earlier verdict of its cell and order, and the check's own row replaces it", {
+  path <- withr::local_tempfile(fileext = ".csv")
+  write_equivalence_row(path, summary_row(E = "2024-11-30", F = "2024-11-29", order = "default", verdict = "PASS"))
+  write_equivalence_row(path, summary_row(E = "2021-09-25", F = "2021-03-29", order = "default", verdict = "PASS"))
+  write_equivalence_row(path, provisional_row("2024-11-30", "2024-11-29", "default", "walk", P1_CONFIG, "sha"))
+  x <- utils::read.csv(path, colClasses = "character")
+  expect_identical(names(x), EQUIVALENCE_SUMMARY)
+  expect_identical(x$verdict, c("FAIL", "PASS"))
+  expect_identical(x$reasons, c("incomplete", "x"))
+  expect_identical(x$stan_sha256, c("sha", "x"))
+  expect_identical(x$n_posterior, c("", "x"))
+  write_equivalence_row(path, summary_row(E = "2024-11-30", F = "2024-11-29", order = "default", verdict = "PASS", reasons = ""))
+  x <- utils::read.csv(path, colClasses = "character")
+  expect_identical(x$E, c("2024-11-30", "2021-09-25"))
+  expect_identical(x$verdict, c("PASS", "PASS"))
+  expect_identical(x$reasons, c("", "x"))
+})
+
 test_that("the script refuses a bad command line before it compiles anything, and writes no CSV", {
+  local_no_cmdstan()
   out <- withr::local_tempfile(fileext = ".csv")
+  missing_dir <- file.path(withr::local_tempdir(), "no-such-dir", "out.csv")
   cell <- "--cell=2024-11-30,2024-11-29"
   cases <- list(
     list(c(paste0("--config=", P1_CONFIG), "--form=walk", cell), "--out is required"),
@@ -63,7 +95,9 @@ test_that("the script refuses a bad command line before it compiles anything, an
     list(c("--config=configs/v2s-p1.json", "--form=walk", cell, paste0("--out=", out)), "--config must be a file under harness/configs/"),
     list(c(paste0("--config=", P1_CONFIG), "--form=walk", "--cell=2024-11-30", paste0("--out=", out)), "--cell must be <E>,<F>"),
     list(c(paste0("--config=", P1_CONFIG), "--form=centred", cell, paste0("--out=", out)), "--form must be walk, delta or both"),
-    list(c(paste0("--config=", P1_CONFIG), "--form=delta", cell, paste0("--out=", out)), "only the walk form's map is built"),
+    list(c(paste0("--config=", P1_CONFIG), "--form=walk", cell, paste0("--out=", missing_dir)), "--out must be a file in an existing directory"),
+    list(c(paste0("--config=", P1_CONFIG), "--form=delta", cell, paste0("--out=", out)), "only the walk form's map is built: --form=walk (the delta map needs the plan's Task 13)"),
+    list(c(paste0("--config=", P1_CONFIG), "--form=both", cell, paste0("--out=", out)), "only the walk form's map is built: --form=walk (the delta map needs the plan's Task 13)"),
     list(c("--config=harness/configs/steps/v2s-m0.json", "--form=walk", cell, paste0("--out=", out)), "the config's walk_form is 0"),
     list(c(paste0("--config=", P1_CONFIG), "--form=walk", "--cell=2017-10-28,2017-10-27", paste0("--out=", out), "--n-off=5"), "a 2017 cell takes prior points only")
   )
@@ -71,9 +105,26 @@ test_that("the script refuses a bad command line before it compiles anything, an
     res <- run_equivalence(case[[1]])
     expect_identical(attr(res, "status"), 1L, label = shown(case[[1]]))
     expect_match(shown(res), paste0("v2_equivalence: ", case[[2]]), fixed = TRUE)
-    expect_false(any(grepl("Compiling|Running MCMC", res)), label = shown(res))
   }
   expect_false(file.exists(out))
+  expect_false(file.exists(missing_dir))
+})
+
+test_that("a check that stops after its command line is accepted leaves a provisional FAIL row, not an earlier verdict", {
+  skip_without_snapshot()
+  local_no_cmdstan()
+  out <- withr::local_tempfile(fileext = ".csv")
+  write_equivalence_row(out, summary_row(E = "2024-11-30", F = "2024-11-29", order = "default", verdict = "PASS"))
+  write_equivalence_row(out, summary_row(E = "2021-09-25", F = "2021-03-29", order = "default", verdict = "PASS"))
+  # WHY: with no CmdStan the check stops at its first CmdStan call, the compile, after the provisional row and before any point.
+  res <- run_equivalence(c(paste0("--config=", P1_CONFIG), "--form=walk", "--cell=2024-11-30,2024-11-29", paste0("--out=", out)))
+  expect_identical(attr(res, "status"), 1L)
+  expect_false(any(grepl("^EQUIV ", res)), label = shown(res))
+  x <- utils::read.csv(out, colClasses = "character")
+  expect_identical(x$E, c("2024-11-30", "2021-09-25"))
+  expect_identical(x$verdict, c("FAIL", "PASS"))
+  expect_identical(x$reasons, c("incomplete", "x"))
+  expect_identical(x$stan_sha256[1], digest::digest(file = root("Stan", "forecast_v2.stan"), algo = "sha256"))
 })
 
 test_that("v2s-p1: the anchored walk is the reference walk on 2021 f180", {
@@ -113,7 +164,12 @@ test_that("v2s-p1: the check fails when the bridge's conditional scale is the st
   ))
   expect_identical(attr(res, "status"), 1L, label = shown(res))
   expect_match(res, "^EQUIV FAIL", all = FALSE)
-  expect_identical(utils::read.csv(out, colClasses = "character")$verdict, "FAIL")
+  x <- utils::read.csv(out, colClasses = "character")
+  expect_identical(x$verdict, "FAIL")
+  # WHY: the FAIL must come from the density check alone: the path, the generated quantities and the points are as asked.
+  expect_match(x$reasons, "^constant range [^;]* is not below tol [^;]*$")
+  expect_lt(as.numeric(x$path_err), 1e-8)
+  expect_identical(unlist(x[1, c("n_posterior", "n_off", "n_rejected", "n_outside", "n_one_sided")], use.names = FALSE), c("10", "5", "0", "0", "0"))
 })
 
 test_that("v2s-p1: the anchored walk is the reference walk on 2024 eve under the reversed orders", {
@@ -127,8 +183,10 @@ test_that("v2s-p1: the anchored walk is the reference walk on 2024 eve under the
   ))
   expect_null(attr(res, "status"), label = shown(res))
   expect_match(res, "^EQUIV PASS", all = FALSE)
-  # WHY: under the reversed orders Annad is the coordinate party, so every present and absent set changes.
+  # WHY: under the reversed orders the last poll party (Annad) is the coordinate party, not the first, so every present and absent set changes.
   expect_match(res, "order reversed", all = FALSE)
+  expect_true(paste("coordinate party:", POLL_PARTIES[length(POLL_PARTIES)]) %in% res, label = shown(res))
+  expect_false(paste("coordinate party:", POLL_PARTIES[1]) %in% res)
   x <- utils::read.csv(out, colClasses = "character")
   expect_identical(unlist(x[1, c("E", "F", "order", "verdict")], use.names = FALSE), c("2024-11-30", "2024-11-29", "reversed", "PASS"))
 })

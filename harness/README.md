@@ -33,8 +33,11 @@ in `tests/harness/test-v2-stan.R` are slow and named by the V2 step they test (`
 runs them all. The slow tests of the equivalence check in
 `tests/harness/test-v2-equivalence.R` are named and gated the same way (`v2s-p1: …`): each
 runs `R/harness/v2_equivalence.R` in a subprocess into a temporary CSV, one of them on a
-copy of the Stan file with a planted fault, which must fail; its fast tests check the CSV
-writer and the command lines the script refuses before it compiles anything. The model
+copy of the Stan file with a planted fault, which must fail for the constant's range alone. Its
+fast tests check the CSV writer, its provisional rows, and the command lines the script
+refuses before it compiles anything: they run it with `CMDSTAN` naming an empty directory,
+after checking that cmdstanr then finds no CmdStan, so a refusal that regressed past the
+first CmdStan call fails its message check. The model
 methods these tests use (`v2_model()`, `v2_methods()`, `short_fit_draws()`, …) are the
 module `R/harness/v2_methods.R`, which `tests/harness/helper-v2.R` imports, so the
 equivalence script runs the same heap-safe code. The fast test of the cell runner's 2017 refusal reads this repository's real
@@ -452,16 +455,21 @@ a forecast variable. Each point maps to the other side through θ, every other p
 copied, and (lp_new − J_new) − (lp_ref − J_ref) must be one constant within
 1e-12 × max(1, |lp_new|), lp being `log_prob(jacobian = TRUE)` and J each side's
 log-Jacobian from its standard normals to θ (the script's header lists the terms). Each term
-left out alone, a negative control, must break it; a term constant over the points is reported
-as not exercised. Both sides' generated quantities at the posterior (or prior) points, by
+left out alone, a negative control, must break it; a term constant over the points cannot be
+tested so, and fails the check as not exercised. Both sides' generated quantities at the posterior (or prior) points, by
 standalone `generate_quantities` at seed 1 and `sig_figs = 18`, must agree within 1e-9
 relative, and θ within 1e-8. A point with a bounded log concentration at its cap is excluded
 and counted; one whose log density is not finite on both sides is dropped and counted, and a
 dropped posterior point fails the check, as does one finite on one side only; each kind needs
-at least 5 kept points. It prints each point's constant and path error, the controls and the
-generated quantities' largest relative difference, never a forecast value, then `EQUIV PASS`
-or `EQUIV FAIL` (exit 1). Only the walk form's map is built: `--form=delta` and `--form=both`
-stop. A check of 10 + 5 points on 2021 f180 took 5 min 6 s (`time`, 29 Oct 2026); 2024 eve's
+at least 5 kept points; with fewer of the main kind no generated quantities are compared and
+the check fails on that count. It prints the coordinate party (`coordinate party: <label>`),
+each point's constant and path error, the controls and the generated quantities' largest
+relative difference, never a forecast value, then `EQUIV PASS` or `EQUIV FAIL` (exit 1).
+`--out` must be a file in an existing directory. Once the command line is accepted, the
+script first writes a provisional `FAIL` row for its cell and order (reasons `incomplete`,
+the current `stan_sha256`), which its own row replaces at the end, so a check that stops
+leaves no earlier verdict standing. Only the walk form's map is built: `--form=delta` and
+`--form=both` stop until the plan's Task 13 builds the delta map. A check of 10 + 5 points on 2021 f180 took 5 min 6 s (`time`, 29 Oct 2026); 2024 eve's
 grid has 274 dates to 2021 f180's 160.
 
 `R/harness/compare_runs.R` is a plain script with three subcommands, whose definitions also

@@ -287,6 +287,17 @@ test_that("v2s-p1: transformed data refuses an anchored walk it cannot build, na
     "forecast_v2: walk_form = 1 needs the coordinate party (index 1) to have national votes at every closed election, but it has none at closed election 1",
     fixed = TRUE
   )
+  # WHY: party 1 missing from the result's parties while its votes stay is the other half of the condition.
+  d1 <- d
+  rest <- setdiff(as.integer(d$idx_res[1, seq_len(d$n_rep_res[1])]), 1L)
+  expect_gte(length(rest), 2L)
+  d1$idx_res[1, ] <- c(rest, rep(0L, d$P - length(rest)))
+  d1$n_rep_res[1] <- length(rest)
+  expect_error(
+    v2_methods(V2_STAN, d1),
+    "forecast_v2: walk_form = 1 needs the coordinate party (index 1) to have national votes at every closed election, but it has none at closed election 1",
+    fixed = TRUE
+  )
 })
 
 test_that("v2s-p1: the anchored walk's parameters have v2_par_dims()' sizes and the reference walk's free size", {
