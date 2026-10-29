@@ -3,14 +3,17 @@
 # any V2 fit. A plain script whose definitions also load as a box module, so that its test can
 # import ROWS and the band logic; the script part runs only when box::name() is NULL. Run from
 # the project root:
-#   LC_ALL=en_US.UTF-8 Rscript R/harness/v2_prior_predictive.R <config> [n_draws=1000]
+#   LC_ALL=en_US.UTF-8 Rscript R/harness/v2_prior_predictive.R <config> [n_draws=1000] [out]
+# where out defaults to harness/v2/prior_predictive.md.
 #
 # It builds the config's Stan data on the 2024-eve and 2021-f180 cells (v2_stan_data(); stage 1
 # is never fitted, since μ_f is a likelihood term's data and no prior draw reads it; no 2017
-# cell is ever built), and on each takes n_draws prior points with
+# cell is ever built), sets its walk and δ forms to the reference forms (reference_forms()),
+# and on each takes n_draws prior points with
 # v2_simulate(data, seed = SEED + i, observe = FALSE): parameters only, no counts, no fit and
-# no forecast. Each row of ROWS reads one summary off every draw, in pp, and is checked on the
-# 5% and 95% quantiles over the draws (pooled over houses or kjördæmi where said below):
+# no forecast. Each row of ROWS reads one summary off every draw, in pp, and is checked
+# against its band (by default on the 5% and 95% quantiles over the draws, pooled over houses
+# or kjördæmi where said below):
 #   - a config row runs on the config's data;
 #   - a comparison row runs on the same data with its `set` fields changed and nothing else,
 #     and the same seeds (common random numbers). A comparison whose values the config
@@ -42,20 +45,27 @@
 #     180 days off the campaign (s = 1). The campaign multiplier τ_camp has a prior of its own,
 #     which this row leaves out. The change is signed, so its band reads the upper tail.
 #
-# Verdicts and lines, one per row and cell:
-#   PRIOR PASS <summary>               the quantiles are in the band
-#   PRIOR FAIL <summary> <q05> <q95>   they are not
-#   PRIOR WIDE <summary> <q05> <q95>   they are not, on a config row of a bias whose prior the
-#                                      config holds at §6.10's value (the row's `held`)
-# <summary> is <summary>/<cell>/<kind>, a comparison's kind followed by its fields. A
-# comparison row prints PASS or FAIL and never stops the script. The script writes
-# harness/v2/prior_predictive.md, prints the lines, and then stops with an error if a config
-# row FAILs. A band catches a broken prior (a wrong scale, unit or sign), not a mistuned one,
-# and is no tuning target.
+# The bands, each built by its constructor and checked by in_band():
+#   band_inside(lo, hi)                      the 5% quantile at least lo, the 95% at most hi
+#   band_q95(lo, hi)                         the 95% quantile in [lo, hi]
+#   band_median_ratio(target, lo = 0.5, hi = 2)   the median in [lo target, hi target]
+#   band_exact(value, tol)                   every draw within tol of value
+#   band_report()                            no band: the row is reported, never judged
 #
-# Later steps append their rows to ROWS (keyed by summary and step; a row with a switch runs
-# only when the config turns it on), their summaries to SUMMARY_FUNS and any new band type to
-# in_band().
+# Verdicts and lines, one per row and cell:
+#   PRIOR PASS <summary>                       the row is in its band
+#   PRIOR FAIL <summary> <q05> <q95>           it is not
+#   PRIOR WIDE <summary> <q05> <q95>           it is not, on a config row of a bias whose prior
+#                                              the config holds at §6.10's value (`held`)
+#   PRIOR REPORT <summary> <q05> <q50> <q95>   a band_report() row
+# <summary> is <summary>/<cell>/<kind>, a comparison's kind followed by its fields. A
+# comparison row prints PASS or FAIL, and a report row REPORT; neither ever stops the script.
+# The script writes its report (out), prints the lines, and then stops with an error if a
+# config row FAILs. A band catches a broken prior (a wrong scale, unit or sign), not a
+# mistuned one, and is no tuning target.
+#
+# Later steps append their rows to ROWS (keyed by summary and step; a row with a switch, one
+# of V2_SWITCHES, runs only when the config turns it on) and their summaries to SUMMARY_FUNS.
 if (is.null(box::name())) {
   if (!isTRUE(l10n_info()[["UTF-8"]])) {
     stop("v2_prior_predictive.R needs a UTF-8 locale: run under LC_ALL=en_US.UTF-8", call. = FALSE)
@@ -67,7 +77,7 @@ if (is.null(box::name())) {
 box::use(
   R / harness / constants[harness_path, project_root, TARGETS],
   R / harness / info_set[info_set, read_inputs],
-  R / harness / v2[read_v2_config, stage1_placeholder, v2_stan_data],
+  R / harness / v2[read_v2_config, stage1_placeholder, V2_SWITCHES, v2_stan_data],
   R / harness / v2_reference[v2_simulate]
 )
 
@@ -132,39 +142,138 @@ SUMMARY_FUNS <- list(
   }
 )
 
+#' `x` to 6 significant digits.
+num <- function(x) trimws(formatC(x, digits = 6, format = "g"))
+
+#' A set of data fields as "k=v,k=v", or "" for none.
+set_text <- function(set) if (length(set)) paste(names(set), num(unlist(set)), sep = "=", collapse = ",") else ""
+
+#' A band: the check a row's values must pass, built by one of these constructors and checked
+#' by `in_band()`. `band_inside(lo, hi)`: the 5% quantile at least `lo` and the 95% at most
+#' `hi`. `band_q95(lo, hi)`: the 95% quantile in [lo, hi]. `band_median_ratio(target, lo, hi)`:
+#' the median in [lo target, hi target], `target` positive. `band_exact(value, tol)`: every
+#' draw within `tol` of `value`. `band_report()`: no band; the row is reported, never judged.
+#' @return a list with its `type` and parameters
+#' @export
+band_inside <- function(lo, hi) band_of("inside", lo = lo, hi = hi)
+
+#' @rdname band_inside
+#' @export
+band_q95 <- function(lo, hi) band_of("q95", lo = lo, hi = hi)
+
+#' @rdname band_inside
+#' @export
+band_median_ratio <- function(target, lo = 0.5, hi = 2) {
+  if (!(is.numeric(target) && length(target) == 1 && target > 0)) stop("prior predictive: a median_ratio target must be positive", call. = FALSE)
+  band_of("median_ratio", target = target, lo = lo, hi = hi)
+}
+
+#' @rdname band_inside
+#' @export
+band_exact <- function(value, tol) {
+  if (!(is.numeric(tol) && length(tol) == 1 && tol >= 0)) stop("prior predictive: an exact band's tol must be at least 0", call. = FALSE)
+  band_of("exact", value = value, tol = tol)
+}
+
+#' @rdname band_inside
+#' @export
+band_report <- function() list(type = "report")
+
+#' A band of `type` with the numbers `...`, each one finite number, `lo` at most `hi`.
+band_of <- function(type, ...) {
+  b <- list(...)
+  ok <- vapply(b, \(x) is.numeric(x) && length(x) == 1 && is.finite(x), logical(1))
+  if (!all(ok)) stop("prior predictive: a ", type, " band takes one finite number per parameter", call. = FALSE)
+  if (!is.null(b$lo) && b$lo > b$hi) stop("prior predictive: a ", type, " band has lo above hi", call. = FALSE)
+  c(list(type = type), b)
+}
+
+#' Whether a row's `values` pass its band.
+#' @param band a band (`band_inside()` and the other constructors)
+#' @param q the quantiles of `values`, named q05, q50, q95
+#' @param values every draw's values
+#' @return TRUE or FALSE; NA for `band_report()`; an error for an unknown band type
+#' @export
+in_band <- function(band, q, values) {
+  switch(band$type,
+    inside = q[["q05"]] >= band$lo && q[["q95"]] <= band$hi,
+    q95 = q[["q95"]] >= band$lo && q[["q95"]] <= band$hi,
+    median_ratio = q[["q50"]] >= band$lo * band$target && q[["q50"]] <= band$hi * band$target,
+    exact = all(abs(values - band$value) <= band$tol),
+    report = NA,
+    stop("prior predictive: unknown band type ", band$type, call. = FALSE)
+  )
+}
+
+#' A band as the report prints it.
+band_text <- function(band) {
+  switch(band$type,
+    inside = sprintf("[5%%, 95%%] inside [%s, %s]", num(band$lo), num(band$hi)),
+    q95 = sprintf("95%% quantile in [%s, %s]", num(band$lo), num(band$hi)),
+    median_ratio = sprintf("median in [%s, %s] \u00d7 %s", num(band$lo), num(band$hi), num(band$target)),
+    exact = sprintf("every draw within %s of %s", num(band$tol), num(band$value)),
+    report = "none (reported)"
+  )
+}
+
 #' The rows of one summary: its config row, then one comparison row per entry of `compare`.
 #' @param summary its name in SUMMARY_FUNS
 #' @param step the step that adds it
-#' @param switch NA, or the data switch its component needs
+#' @param switch NA, or the data switch (one of `V2_SWITCHES`) its component needs
 #' @param label what it is, for the report
 #' @param keys the data's prior fields its prior reads, for the report
-#' @param band "interval" (the 5% quantile at least `lo`, the 95% at most `hi`) or "q95" (the
-#'   95% quantile in [lo, hi])
+#' @param band its band (`band_inside()` and the other constructors)
 #' @param held NULL, or for a bias row its prior field at §6.10's value, a named number: a
 #'   config row whose data hold it prints WIDE out of its band
 #' @param compare a list of comparison rows, each `list(set, source)`: the data fields it
 #'   changes (a named list) and where their values come from
-#' @return a tibble: summary, step, switch, label, keys, kind, set, source, held, band, lo, hi
-summary_rows <- function(summary, step, switch, label, keys, band, lo, hi, held = NULL, compare = list()) {
+#' @return a tibble: summary, step, switch, label, keys, kind, set, source, held, band
+summary_rows <- function(summary, step, switch, label, keys, band, held = NULL, compare = list()) {
   tibble::tibble(
     summary = summary, step = step, switch = switch, label = label, keys = list(keys),
     kind = c("config", rep("comparison", length(compare))),
     set = c(list(NULL), lapply(compare, `[[`, "set")),
     source = c("config", vapply(compare, `[[`, "", "source")),
     held = c(list(held), rep(list(NULL), length(compare))),
-    band = band, lo = lo, hi = hi
+    band = list(band)
   )
+}
+
+#' `rows` after checking the table: every switch NA or one of `V2_SWITCHES`, every summary
+#' in SUMMARY_FUNS, every band of a known type (`in_band()`), one config row per (summary,
+#' step), every comparison row with fields to change and none repeated within its
+#' (summary, step), and `held` only on config rows.
+#' @param rows a table of `summary_rows()`
+#' @return `rows`; an error naming the first fault
+#' @export
+check_rows <- function(rows) {
+  bad <- function(...) stop("prior predictive: ROWS: ", ..., call. = FALSE)
+  sw <- rows$switch[!is.na(rows$switch)]
+  if (!all(sw %in% V2_SWITCHES)) bad("switch not in V2_SWITCHES: ", paste(setdiff(sw, V2_SWITCHES), collapse = ", "))
+  if (!all(rows$summary %in% names(SUMMARY_FUNS))) bad("summary not in SUMMARY_FUNS: ", paste(setdiff(rows$summary, names(SUMMARY_FUNS)), collapse = ", "))
+  types <- vapply(rows$band, \(b) if (is.list(b) && is.character(b$type)) b$type else "", "")
+  known <- c("inside", "q95", "median_ratio", "exact", "report")
+  if (!all(types %in% known)) bad("unknown band type: ", paste(setdiff(types, known), collapse = ", "))
+  config <- rows$kind == "config"
+  if (!all(rows$kind %in% c("config", "comparison"))) bad("kind not config or comparison")
+  if (anyDuplicated(paste(rows$summary, rows$step)[config])) bad("two config rows for one (summary, step)")
+  if (!all(paste(rows$summary, rows$step)[!config] %in% paste(rows$summary, rows$step)[config])) bad("a comparison row with no config row")
+  if (any(lengths(rows$set[!config]) == 0)) bad("a comparison row with no fields to change")
+  if (any(lengths(rows$held[!config]) > 0)) bad("held on a comparison row")
+  key <- paste(rows$summary, rows$step, rows$kind, vapply(rows$set, set_text, ""))
+  if (anyDuplicated(key)) bad("a repeated comparison: ", key[duplicated(key)][1])
+  rows
 }
 
 #' Every row of the check, keyed by summary and step. The core's (step v2s-m0): the bands
 #' were written before any V2 fit; the first three rows each have the other values of the
 #' plan's Decision 1 as comparisons (§6.10's, and proposals 1 and 4).
 #' @export
-ROWS <- dplyr::bind_rows(
+ROWS <- check_rows(dplyr::bind_rows(
   summary_rows(
     "house_d", "v2s-m0", NA_character_,
     "A house's deviation d from the industry, on a 20% party (d_h = \u03c3_\u03b3 C \u03b5_h, \u03c3_\u03b3 ~ exponential(`prior_rate_sigma_gamma`))",
-    "prior_rate_sigma_gamma", "interval", -10, 10,
+    "prior_rate_sigma_gamma", band_inside(-10, 10),
     held = c(prior_rate_sigma_gamma = 1),
     compare = list(
       list(set = list(prior_rate_sigma_gamma = 1), source = "\u00a76.10"),
@@ -174,7 +283,7 @@ ROWS <- dplyr::bind_rows(
   summary_rows(
     "industry_mu1", "v2s-m0", NA_character_,
     "Industry bias \u03bc_1 on a 20% party (\u03bc_1 sum-to-zero, normal(0, `prior_sd_mu1`) on every element)",
-    "prior_sd_mu1", "interval", -12, 12,
+    "prior_sd_mu1", band_inside(-12, 12),
     held = c(prior_sd_mu1 = 1),
     compare = list(
       list(set = list(prior_sd_mu1 = 1), source = "\u00a76.10"),
@@ -184,7 +293,7 @@ ROWS <- dplyr::bind_rows(
   summary_rows(
     "poll_sd", "v2s-m0", NA_character_,
     "A poll's sd around its mean, n = 1,000, 20% party, at the prior \u03c6_h (\u03bc_\u03c6 ~ N(`prior_mu_phi`, 1))",
-    "prior_mu_phi", "interval", 0.8, 6,
+    "prior_mu_phi", band_inside(0.8, 6),
     compare = list(
       list(set = list(prior_mu_phi = 0), source = "\u00a76.10"),
       list(set = list(prior_mu_phi = log(1000)), source = "proposal 1")
@@ -193,26 +302,14 @@ ROWS <- dplyr::bind_rows(
   summary_rows(
     "kd_delta", "v2s-m0", NA_character_,
     "A party's kj\u00f6rd\u00e6mi deviation from its national share, 20% party (static \u03b4, log s_\u03b40 = \u03bc_sd + \u03c4_sd r)",
-    character(0), "interval", -25, 25
+    character(0), band_inside(-25, 25)
   ),
   summary_rows(
     "walk_180", "v2s-m0", NA_character_,
     "A 20% party's 180-day walk change, off the campaign (covariance 180 C\u03a3C\u1d40)",
-    character(0), "q95", 2, 30
+    character(0), band_q95(2, 30)
   )
-)
-
-#' Whether the quantiles `q` (named q05, q50, q95) lie in a band.
-#' @param band "interval": q05 at least `lo` and q95 at most `hi`; "q95": q95 in [lo, hi]
-#' @return TRUE or FALSE; an error for another band type
-#' @export
-in_band <- function(q, band, lo, hi) {
-  switch(band,
-    interval = q[["q05"]] >= lo && q[["q95"]] <= hi,
-    q95 = q[["q95"]] >= lo && q[["q95"]] <= hi,
-    stop("prior predictive: unknown band type ", band, call. = FALSE)
-  )
-}
+))
 
 #' Whether `data` hold every field of `set` at its value, to a relative 1e-12 (a config
 #' file's decimal for log 1000 included).
@@ -230,33 +327,42 @@ same_as <- function(set, data) {
 held_at <- function(held, data) length(held) > 0 && same_as(as.list(held), data)
 
 #' A row's verdict on one cell.
-#' @param ok whether its quantiles are in its band (`in_band()`)
+#' @param ok whether it passes its band (`in_band()`): TRUE, FALSE, or NA for a report row
 #' @param kind "config" or "comparison"
 #' @param held whether it is a bias row held at §6.10's value (`held_at()`)
-#' @return `list(verdict, stops)`: "PASS" in band; out of band "WIDE" for a held config row,
-#'   else "FAIL"; `stops` is TRUE for a config row's FAIL only
+#' @return `list(verdict, stops)`: "REPORT" for a report row; "PASS" in band; out of band
+#'   "WIDE" for a held config row, else "FAIL"; `stops` is TRUE for a config row's FAIL only
 #' @export
 row_verdict <- function(ok, kind, held) {
   if (!kind %in% c("config", "comparison")) stop("prior predictive: unknown row kind ", kind, call. = FALSE)
-  verdict <- if (ok) "PASS" else if (kind == "config" && held) "WIDE" else "FAIL"
+  verdict <- if (is.na(ok)) "REPORT" else if (ok) "PASS" else if (kind == "config" && held) "WIDE" else "FAIL"
   list(verdict = verdict, stops = kind == "config" && verdict == "FAIL")
 }
 
-#' The printed line of a verdict: "PRIOR PASS <id>", or "PRIOR <verdict> <id> <q05> <q95>"
-#' with the quantiles to 2 decimals.
+#' The printed line of a verdict: "PRIOR PASS <id>", "PRIOR REPORT <id> <q05> <q50> <q95>",
+#' or "PRIOR <verdict> <id> <q05> <q95>", the quantiles to 2 decimals.
 #' @export
 verdict_line <- function(verdict, id, q) {
   if (verdict == "PASS") {
     return(paste("PRIOR PASS", id))
   }
+  if (verdict == "REPORT") {
+    return(sprintf("PRIOR REPORT %s %.2f %.2f %.2f", id, q[["q05"]], q[["q50"]], q[["q95"]]))
+  }
   sprintf("PRIOR %s %s %.2f %.2f", verdict, id, q[["q05"]], q[["q95"]])
 }
 
-#' `x` to 6 significant digits.
-num <- function(x) trimws(formatC(x, digits = 6, format = "g"))
-
-#' A set of data fields as "k=v,k=v", or "" for none.
-set_text <- function(set) if (length(set)) paste(names(set), num(unlist(set)), sep = "=", collapse = ",") else ""
+#' `data` with `walk_form` and `delta_form` at 0, the reference forms, and every other field
+#' as it was.
+#' @param data a `v2_stan_data()` data list
+#' @return the data list; an error if it lacks either field
+#' @export
+reference_forms <- function(data) {
+  if (!all(c("walk_form", "delta_form") %in% names(data))) stop("prior predictive: the data have no walk_form or delta_form", call. = FALSE)
+  data$walk_form <- 0L
+  data$delta_form <- 0L
+  data
+}
 
 #' `path` relative to the project root when it lies under it, else its base name: a
 #' committed report names no absolute path.
@@ -297,23 +403,16 @@ prior_text <- function(keys, data) {
   paste(sprintf("`%s` = %s", keys, num(unlist(data[keys]))), collapse = ", ")
 }
 
-#' A band as the report prints it.
-band_text <- function(band, lo, hi) {
-  switch(band,
-    interval = sprintf("[5%%, 95%%] inside [%s, %s]", num(lo), num(hi)),
-    q95 = sprintf("95%% quantile in [%s, %s]", num(lo), num(hi))
-  )
-}
-
 #' One markdown table row.
 table_row <- function(cells) paste0("| ", paste(gsub("|", "\\|", cells, fixed = TRUE), collapse = " | "), " |")
 
-#' The script: the check of `args` = c(config, [n_draws]).
+#' The script: the check of `args` = c(config, [n_draws], [out]).
 main <- function(args) {
-  if (!length(args) %in% 1:2) {
-    stop("usage: Rscript R/harness/v2_prior_predictive.R <config> [n_draws=1000]", call. = FALSE)
+  if (!length(args) %in% 1:3) {
+    stop("usage: Rscript R/harness/v2_prior_predictive.R <config> [n_draws=1000] [out]", call. = FALSE)
   }
-  n_draws <- if (length(args) == 2) suppressWarnings(as.numeric(args[2])) else 1000
+  n_draws <- if (length(args) >= 2) suppressWarnings(as.numeric(args[2])) else 1000
+  out <- if (length(args) == 3) args[3] else harness_path("v2", "prior_predictive.md")
   if (!(isTRUE(is.finite(n_draws)) && n_draws == round(n_draws) && n_draws >= MIN_DRAWS)) {
     stop("n_draws must be a whole number, at least ", MIN_DRAWS, call. = FALSE)
   }
@@ -333,7 +432,8 @@ main <- function(args) {
   designs <- character(0)
   for (ci in seq_len(nrow(cells))) {
     cell <- cells$cell[ci]
-    data <- v2_stan_data(info_set(cells$E[ci], cells$F[ci], inputs), cfg, stage1 = no_stage1)$data
+    # WHY: a P-step form (walk_form, delta_form) reparameterises the same model, so the prior draws do not depend on it, and v2_simulate() takes the reference forms only.
+    data <- reference_forms(v2_stan_data(info_set(cells$E[ci], cells$F[ci], inputs), cfg, stage1 = no_stage1)$data)
     if (c(data$entry_epoch)[1] != 0L) {
       stop(cell, ": the coordinate party enters after the window's start, so it cannot be the 20% party", call. = FALSE)
     }
@@ -352,7 +452,7 @@ main <- function(args) {
       if (!length(v) || !all(is.finite(v))) stop(run$summary[j], " on ", cell, ": a value is not finite", call. = FALSE)
       q <- stats::setNames(stats::quantile(v, c(0.05, 0.5, 0.95), names = FALSE), c("q05", "q50", "q95"))
       comparison <- run$kind[j] == "comparison"
-      vd <- row_verdict(in_band(q, run$band[j], run$lo[j], run$hi[j]), run$kind[j], !comparison && held_at(run$held[[j]], data))
+      vd <- row_verdict(in_band(run$band[[j]], q, v), run$kind[j], !comparison && held_at(run$held[[j]], data))
       id <- paste(run$summary[j], cell, if (comparison) paste0("comparison:", set_text(run$set[[j]])) else "config", sep = "/")
       prior <- if (comparison) {
         sprintf("%s (%s)", prior_text(names(run$set[[j]]), run$set[[j]]), run$source[j])
@@ -362,7 +462,7 @@ main <- function(args) {
       results[[length(results) + 1]] <- tibble::tibble(
         summary = run$summary[j], step = run$step[j], kind = run$kind[j], prior = prior, cell = cell,
         n = length(v), q05 = q[["q05"]], q50 = q[["q50"]], q95 = q[["q95"]],
-        band = band_text(run$band[j], run$lo[j], run$hi[j]), verdict = vd$verdict, stops = vd$stops,
+        band = band_text(run$band[[j]]), verdict = vd$verdict, stops = vd$stops,
         line = verdict_line(vd$verdict, id, q)
       )
     }
@@ -370,7 +470,7 @@ main <- function(args) {
   res <- dplyr::bind_rows(results)
   res <- res[order(match(res$summary, ROWS$summary), match(res$kind, c("config", "comparison")), res$prior, match(res$cell, cells$cell)), ]
 
-  labels <- unique(rows[c("summary", "step", "switch", "label", "band", "lo", "hi")])
+  labels <- rows[rows$kind == "config", ]
   shown_verdict <- ifelse(res$stops, "FAIL (stops)", ifelse(res$kind == "comparison" & res$verdict == "FAIL", "FAIL (comparison)", res$verdict))
   report <- c(
     "# V2 prior predictive check",
@@ -397,7 +497,7 @@ main <- function(args) {
     sprintf(
       "- **%s** (step %s%s): %s. Band: %s.", labels$summary, labels$step,
       ifelse(is.na(labels$switch), "", paste0(", switch `", labels$switch, "`")), labels$label,
-      mapply(band_text, labels$band, labels$lo, labels$hi)
+      vapply(labels$band, band_text, "")
     ),
     "",
     "## Results",
@@ -427,12 +527,12 @@ main <- function(args) {
     ),
     "- **FAIL (stops)**: a config row out of its band. The script stops after writing this report.",
     "- **FAIL (comparison)**: a comparison row out of its band, reported as information; it never stops the script.",
+    if (any(res$verdict == "REPORT")) "- **REPORT**: a row with no band, reported as information; it never stops the script.",
     paste(
       "- A band catches a broken prior (a wrong scale, unit or sign), not a mistuned one. It is wide on purpose,",
       "and no band is a tuning target: the quantiles themselves are the result."
     )
   )
-  out <- harness_path("v2", "prior_predictive.md")
   dir.create(dirname(out), recursive = TRUE, showWarnings = FALSE)
   writeLines(report, out)
   cat(sprintf("wrote %s (%d rows)\n", shown_path(out), nrow(res)))

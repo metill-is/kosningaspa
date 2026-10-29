@@ -463,6 +463,10 @@ or `snapshot_manifest.csv`.
   the house table and the coalition events. `harness/configs/` holds each arm's settings
   (`r0.json`), `harness/runs/` the queue's run lists (`tier0.txt`), and `harness/tier0/` the
   Tier 0 reports, which `tier0_report.R` writes from local runs (no offline rebuild).
+  `harness/v2/prior_predictive.md` is V2's prior predictive check, from prior draws on the
+  snapshot with no fit, which
+  `LC_ALL=en_US.UTF-8 Rscript R/harness/v2_prior_predictive.R harness/configs/steps/<step>.json`
+  rewrites deterministically.
 - Generated and gitignored: `harness/snapshot/` and `harness/selftest/`.
 
 ## Target rows: the economy and the carried columns
