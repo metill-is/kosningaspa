@@ -120,9 +120,14 @@ data {
 }
 
 transformed data {
-  if (epoch_bias || newcomer_pool || shock || delta_walk || fundamentals || walk_form || delta_form) {
-    reject("forecast_v2: only the core in the reference forms is built; every switch must be 0");
-  }
+  // Only the core in the reference forms is built: each other switch is refused by name.
+  if (epoch_bias) reject("forecast_v2: switch epoch_bias = ", epoch_bias, " is not built yet");
+  if (newcomer_pool) reject("forecast_v2: switch newcomer_pool = ", newcomer_pool, " is not built yet");
+  if (shock) reject("forecast_v2: switch shock = ", shock, " is not built yet");
+  if (delta_walk) reject("forecast_v2: switch delta_walk = ", delta_walk, " is not built yet");
+  if (fundamentals) reject("forecast_v2: switch fundamentals = ", fundamentals, " is not built yet");
+  if (walk_form) reject("forecast_v2: switch walk_form = ", walk_form, " is not built yet");
+  if (delta_form) reject("forecast_v2: switch delta_form = ", delta_form, " is not built yet");
 
   // Decision 4: log c = cap - (cap - init) exp(u), so u = 0 is the init and c stays below the cap.
   real phi_cap = 20;
@@ -189,7 +194,8 @@ transformed data {
 }
 
 parameters {
-  // Ruling T3a: the names, types and order of V2_CORE_PARS in R/harness/v2_reference.R.
+  // The names, types and order of V2_CORE_PARS in R/harness/v2_reference.R, so the tests can
+  // move a point between the reference and Stan without renaming or reordering.
   sum_to_zero_vector[P] theta1;                       // the state at the first grid date
   matrix[P - 1, G - 1] z_walk;                        // the walk's innovations in coordinates 2:P
   vector<lower=0>[P] sigma;                           // per sqrt(day), log-ratio

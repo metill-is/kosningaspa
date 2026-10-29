@@ -26,9 +26,10 @@ test_that("v2s-m0: Stan's log density matches the reference up to a constant", {
     }
     weakest <- if (length(ratios)) names(which.min(ratios)) else "none"
     unexercised <- setdiff(v2_mutants(cell$data), names(ratios))
+    by_kind <- paste(vapply(names(ok$kind), \(k) sprintf("%s %.3g", k, ok$kind[[k]][["range"]] / ok$kind[[k]][["tol"]]), ""), collapse = ", ")
     message(sprintf(
-      "v2s-m0 %s: %d points, lp constant range %.3g (tol %.3g, ratio %.3g); weakest exercised mutant %s; range / (100 tol): %s; not exercised: %s",
-      name, length(pts), ok$range, ok$tol, ok$range / ok$tol, weakest,
+      "v2s-m0 %s: %d points, lp constant range %.3g (tol %.3g, ratio %.3g; ratio by kind: %s); weakest exercised mutant %s; range / (100 tol): %s; not exercised: %s",
+      name, length(pts), ok$range, ok$tol, ok$range / ok$tol, by_kind, weakest,
       paste(sprintf("%s %.3g", names(ratios), ratios), collapse = ", "),
       if (length(unexercised)) paste(unexercised, collapse = ", ") else "none"
     ))
@@ -57,8 +58,8 @@ test_that("v2s-m0: Stan's log density is permutation-invariant up to the L_Omega
     p <- permute_v2(s$pars, d, rp, rk)
     lp <- m$log_prob(m$unconstrain_variables(s$pars), jacobian = FALSE)
     lp_p <- m_p$log_prob(m_p$unconstrain_variables(p$pars), jacobian = FALSE)
-    # WHY: Ruling T3b. The identity is exact algebra; each lp (about -3e5) is a double that
-    # Stan sums without compensation, so the floor is a rounding of lp, not of the Jacobian.
+    # WHY: the identity is exact algebra, so only rounding separates the two sides; each lp
+    # (about -3e5) is a double that Stan sums without compensation, so the floor scales with lp.
     err <- abs((lp_p - lp) - attr(p, "ljac_L_Omega"))
     tol <- 1e-9 + 64 * .Machine$double.eps * abs(lp)
     expect_lt(err, tol)
@@ -86,9 +87,59 @@ test_that("v2s-m0: v2_methods attaches methods to a 2017 cell without drawing a 
   m <- v2_methods(V2_STAN, v2_test_cells(cfg_m0())$eve2017$data)
   expect_false(any(c("votes_kd", "pi_nat_eday", "pi_latent_E") %in% m$metadata()$stan_variables))
 })
+test_that("v2s-m0: v2_methods stops on each unbuilt switch with CmdStan's text naming it", {
+  skip_unless_slow()
+  skip_unless_step("v2s-m0")
+  d <- v2_test_cells(cfg_m0())$eve2024$data
+  for (sw in c("epoch_bias", "newcomer_pool", "shock", "delta_walk", "fundamentals", "walk_form", "delta_form")) {
+    d1 <- d
+    d1[[sw]] <- 1L
+    expect_error(v2_methods(V2_STAN, d1), paste0("forecast_v2: switch ", sw, " = 1 is not built yet"), fixed = TRUE)
+  }
+})
+test_that("v2s-m0: votes_kd is Dirichlet-multinomial with concentration phi_K at a prior point", {
+  skip_unless_slow()
+  skip_unless_step("v2s-m0")
+  # WHY: the point is a prior draw, so no poll enters it, and nothing below prints a draw: each
+  # check is a scalar compared inside isTRUE().
+  ref <- environment(v2_lp_ref)
+  d <- v2_test_cells(cfg_m0())$eve2024$data
+  expect_identical(as.integer(d$draw_forecast), 1L)
+  pars <- v2_simulate(d, seed = 1, observe = FALSE)$pars
+  # log phi_K = cap - (cap - init) exp(u), cap 20 and init log(1000): u sets phi_K to 30
+  pars$log_phi_K_u <- log((20 - log(30)) / (20 - log(1000)))
+  nat <- v2_natural(pars, d)
+  phi_K <- nat$phi_K
+  expect_equal(phi_K, 30, tolerance = 1e-10)
+  # WHY: the inflation (N + phi) / (1 + phi) is nearly N / phi, so a house's phi (or 1) in place
+  # of phi_K moves it by their ratio; at least 10 here, far outside the 10% tolerance below.
+  expect_true(isTRUE(min(abs(log(nat$phi / phi_K))) > log(10)))
+  n <- 4000
+  v <- gq_draws(V2_STAN, d, pars, "votes_kd", n)
+  expect_identical(dim(v), as.integer(c(n, d$K, d$P)))
+  A <- which(d$exists[d$G, ] == 1L)
+  e <- d$grid_epoch[d$G]
+  N <- c(d$N_open)
+  s <- r <- inflation <- z <- matrix(NA_real_, d$K, length(A))
+  for (k in seq_len(d$K)) {
+    s[k, ] <- ref$softmax(nat$theta[A, d$G] + nat$delta[e, k, A])
+    for (j in seq_along(A)) {
+      x <- v[, k, A[j]]
+      r[k, j] <- stats::var(x) / (N[k] * s[k, j] * (1 - s[k, j]))
+      inflation[k, j] <- (N[k] + phi_K) / (1 + phi_K)
+      z[k, j] <- (mean(x) / N[k] - s[k, j]) / (stats::sd(x) / N[k] / sqrt(n))
+    }
+  }
+  # WHY: a share near 0 makes the variance of its count, and so r, noisy in 4000 draws.
+  big <- s > 0.02
+  expect_true(isTRUE(sum(big) > d$K))
+  expect_true(isTRUE(abs(stats::median(r[big]) / stats::median(inflation[big]) - 1) < 0.1))
+  expect_true(isTRUE(max(abs(z[big])) < 5))
+})
 
-# The tests below go beyond the brief's: they pin the declarations against Ruling T3a, the
-# shapes cmdstanr gives the methods, and the transformed parameters the extractor reads.
+# The tests below pin what the lp comparison cannot see: the declarations against
+# V2_CORE_PARS, the shapes cmdstanr gives the methods, the transformed parameters the
+# extractor reads, and the generated quantities.
 
 test_that("v2s-m0: the parameters are V2_CORE_PARS, in its order, with its dims and free sizes", {
   skip_unless_slow()
@@ -128,7 +179,10 @@ test_that("v2s-m0: the transformed parameters are the reference's natural quanti
       tp <- m$constrain_variables(u, transformed_parameters = TRUE, generated_quantities = FALSE)
       ref <- v2_natural(stan_pars(m, u), d)
       for (n in c("theta", "mu", "gamma", "delta", "s_delta0", "log_phi")) {
-        expect_equal(array(tp[[n]], dim(as.array(ref[[n]]))), as.array(ref[[n]]), tolerance = 1e-10, label = n)
+        dims <- dim(as.array(ref[[n]]))
+        # WHY: array() recycles or truncates a vector of the wrong length without a word.
+        expect_identical(length(tp[[n]]), as.integer(prod(dims)), label = paste("length of", n))
+        expect_equal(array(tp[[n]], dims), as.array(ref[[n]]), tolerance = 1e-10, label = n)
       }
       expect_equal(tp$log_phi_K, ref$log_phi_K, tolerance = 1e-12)
       expect_equal(tp$log_kappa, ref$log_kappa, tolerance = 1e-12)
@@ -141,10 +195,20 @@ test_that("v2s-m0: the generated quantities are the reference's at a prior point
   # WHY: the reference's likelihood rows are internal to its module; they are the oracle here.
   ref <- environment(v2_lp_ref)
   cells <- v2_test_cells(cfg_m0())
+  # WHY: the forecast branch below runs only where draw_forecast is 1, so a builder that
+  # stopped setting it would skip the branch without a failure.
+  expect_identical(
+    vapply(cells, \(cell) as.integer(cell$data$draw_forecast), integer(1)),
+    c(eve2024 = 1L, f180_2021 = 1L, eve2017 = 0L)
+  )
   for (name in names(cells)) {
     d <- cells[[name]]$data
-    # The 2017 cell keeps its draw_forecast = 0; latent_path = 1 writes pi_latent everywhere.
-    r <- gq_at(V2_STAN, utils::modifyList(d, list(latent_path = 1L)), v2_simulate(d, seed = 2, observe = FALSE)$pars)
+    expect_identical(as.integer(d$latent_path), 0L)
+    # The 2017 cell keeps the data's switches (draw_forecast = 0, latent_path = 0); on the
+    # others latent_path = 1 writes pi_latent on the whole grid.
+    latent <- name != "eve2017"
+    if (latent) d$latent_path <- 1L
+    r <- gq_at(V2_STAN, d, v2_simulate(d, seed = 2, observe = FALSE)$pars)
     p <- ref$core_pars(r$pars, d)
     nat <- ref$natural(p, d)
     rows <- ref$dm_rows(p, nat, d)
@@ -152,15 +216,22 @@ test_that("v2s-m0: the generated quantities are the reference's at a prior point
     rep <- r$gq$y_rep_res
     expect_equal(apply(rep, 1:2, sum), apply(d$y_res, 1:2, sum) + 0)
     for (e in seq_len(d$n_closed)) expect_true(all(rep[e, , -d$idx_res[e, seq_len(d$n_rep_res[e])]] == 0))
-    # WHY: no forecast quantity is printed, even on failure, so these compare by isTRUE(all.equal()).
-    pi <- vapply(seq_len(d$G), \(t) {
-      e <- d$grid_epoch[t]
-      A <- which(d$exists[t, ] == 1L)
-      out <- numeric(d$P)
-      for (k in seq_len(d$K)) out[A] <- out[A] + d$w[e, k] * ref$softmax(nat$theta[A, t] + nat$delta[e, k, A])
-      out
-    }, numeric(d$P))
-    expect_true(isTRUE(all.equal(r$gq$pi_latent, pi, tolerance = 1e-10)))
+    # WHY: no forecast quantity is printed, even on failure, so these compare by isTRUE(all.equal());
+    # on the 2017 cell no latent share is computed at all.
+    pi <- if (latent || d$draw_forecast == 1L) {
+      vapply(seq_len(d$G), \(t) {
+        e <- d$grid_epoch[t]
+        A <- which(d$exists[t, ] == 1L)
+        out <- numeric(d$P)
+        for (k in seq_len(d$K)) out[A] <- out[A] + d$w[e, k] * ref$softmax(nat$theta[A, t] + nat$delta[e, k, A])
+        out
+      }, numeric(d$P))
+    }
+    if (latent) {
+      expect_true(isTRUE(all.equal(r$gq$pi_latent, pi, tolerance = 1e-10)))
+    } else {
+      expect_false("pi_latent" %in% names(r$gq))
+    }
     if (d$draw_forecast == 1L) {
       v <- r$gq$votes_kd
       expect_true(isTRUE(all.equal(rowSums(v), c(d$N_open))))

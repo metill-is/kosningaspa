@@ -96,9 +96,10 @@ random_sigma <- function(P) {
 # The compiled models of v2_methods(), one per Stan file's sha256 in this R session.
 methods_models <- new.env(parent = emptyenv())
 
-# The model of `stan_file` compiled with its methods. Ruling P1: compiled from a copy of the
-# file in a fresh temporary directory, never in place and never with force_recompile, once
-# per R session per file sha256. A relative `stan_file` is read from the project root.
+# The model of `stan_file` compiled with its methods: compiled from a copy of the file in a
+# fresh temporary directory, never in place and never with force_recompile (which overwrites
+# an executable that running chains may be using), once per R session per file sha256. A
+# relative `stan_file` is read from the project root.
 v2_model <- function(stan_file) {
   if (!startsWith(stan_file, "/")) stan_file <- file.path(project_root(), stan_file)
   sha <- digest::digest(file = stan_file, algo = "sha256")
@@ -120,23 +121,62 @@ model_of <- function(m) {
   stop("no v2_model() in this session ran this fit")
 }
 
+# A fixed_param run of the executable of `stan_file` (v2_model()) on `data`: one chain of
+# `iter` iterations from `init` (0, or a parameter list such as a v2_simulate() draw), seed
+# 1, output in `dir`. The executable runs alone, without the model methods, so nothing of
+# the model runs in this R process. A run that fails stops with CmdStan's exception text.
+fixed_param_run <- function(stan_file, data, dir, init = 0, iter = 1, sig_figs = NULL) {
+  plain <- cmdstanr::cmdstan_model(exe_file = v2_model(stan_file)$exe_file())
+  if (is.list(init)) {
+    # WHY: CmdStan's init reader refuses a zero-size parameter (nu with J = 0) written as [], and
+    # there is nothing to initialise in it; cmdstanr would note that it was left out.
+    withr::local_options(cmdstanr_warn_inits = FALSE)
+    init <- list(init[lengths(init) > 0])
+  }
+  fit <- withCallingHandlers(
+    plain$sample(
+      data = data_json(data, dir), fixed_param = TRUE, chains = 1, iter_warmup = 0, iter_sampling = iter,
+      adapt_engaged = FALSE, seed = 1, init = init, sig_figs = sig_figs, output_dir = dir, refresh = 0,
+      show_messages = FALSE, show_exceptions = FALSE
+    ),
+    # WHY: cmdstanr's warning names no reason; the stop below gives CmdStan's.
+    warning = function(w) {
+      if (grepl("No chains finished successfully", conditionMessage(w), fixed = TRUE)) invokeRestart("muffleWarning")
+    }
+  )
+  if (!all(fit$return_codes() == 0)) {
+    out <- fit$runset$procs$proc_output(1)
+    said <- grep("Exception|Error", out, value = TRUE)
+    if (!length(said)) said <- utils::tail(out, 10)
+    stop("the fixed_param run failed; CmdStan said:\n", paste(said, collapse = "\n"), call. = FALSE)
+  }
+  fit
+}
+
 # A one-iteration fit that carries the model methods (log_prob, unconstrain_variables, ...)
 # of `stan_file` (v2_model()) on `data`. `data$draw_forecast` is set to 0 if the field
 # exists. The methods are attached by a fixed_param run in a temporary directory, deleted
-# unread; a run that fails stops before the methods are attached.
+# unread. The data are first run by the executable alone (fixed_param_run()), so a reject
+# stops with CmdStan's text before anything of the model runs in this R process.
 v2_methods <- function(stan_file, data) {
   model <- v2_model(stan_file)
   if (!is.null(data$draw_forecast)) data$draw_forecast <- 0L
   run <- tempfile("v2-methods-run-")
   dir.create(run)
   on.exit(unlink(run, recursive = TRUE), add = TRUE)
+  # WHY: a fit of a model compiled with its methods builds the model on its data in this R
+  # process as soon as cmdstanr creates the fit, before any return code can be read. The
+  # methods are built with g++-16 against a clang-built R, so a C++ exception there (a reject
+  # in transformed data) corrupts R's heap even when caught; nothing here catches it. The
+  # executable alone meets any reject first, in CmdStan's own process.
+  check <- file.path(run, "check")
+  dir.create(check)
+  fixed_param_run(stan_file, data, check)
   fit <- model$sample(
     data = data_json(data, run), fixed_param = TRUE, chains = 1, iter_warmup = 0, iter_sampling = 1, adapt_engaged = FALSE,
     seed = 1, init = 0, output_dir = run, refresh = 0, show_messages = FALSE, show_exceptions = FALSE
   )
-  # WHY: init_model_methods() builds the model on `data` in this R session, where a C++ exception
-  # (a reject in transformed data) corrupts the heap (Ruling P1); CmdStan's own run meets it first.
-  stopifnot("the fixed_param run failed" = all(fit$return_codes() == 0))
+  stopifnot("the fixed_param run with the model methods failed" = all(fit$return_codes() == 0))
   # WHY: the model pointer reads the data file, which on.exit deletes.
   fit$init_model_methods()
   fit
@@ -196,8 +236,8 @@ stage1_eta_E_ref <- function(d, p) {
   e <- stage1_predictor(d, p, "_E")
   e - mean(e)
 }
-# Ruling P3: skip unless the env var V2_STEPS is unset or empty, or its comma-separated list
-# names `step`, so that one step's tests of test-v2-stan.R run on their own.
+# Skip unless the env var V2_STEPS is unset or empty, or its comma-separated list names
+# `step`, so that one step's tests of test-v2-stan.R run on their own.
 skip_unless_step <- function(step) {
   steps <- trimws(strsplit(Sys.getenv("V2_STEPS"), ",", fixed = TRUE)[[1]])
   steps <- steps[nzchar(steps)]
@@ -256,9 +296,10 @@ draw_pars <- function(x, dims, scalar) {
   out
 }
 
-# A point read back from a CmdStan CSV, made safe for unconstrain_variables() (Ruling P1):
-# every sum-to-zero group (theta1, mu1, each nu[j]) projected to zero sum, and every
-# lower-bounded parameter checked strictly positive.
+# A point read back from a CmdStan CSV, made safe for unconstrain_variables(), which throws a
+# C++ exception (corrupting R's heap, since it is built with g++-16) on a sum-to-zero vector
+# off by the CSV's rounding or a bound violated: every sum-to-zero group (theta1, mu1, each
+# nu[j]) projected to zero sum, and every lower-bounded parameter checked strictly positive.
 project_point <- function(p) {
   p$theta1 <- p$theta1 - mean(p$theta1)
   p$mu1 <- p$mu1 - mean(p$mu1)
@@ -293,12 +334,14 @@ data_json <- function(data, dir) {
 
 # The parameter draws of a 4 x (50 + 20) fit of `m`'s model on `data` at max_treedepth 8,
 # init 0 and `seed`, read at sig_figs = 18 and projected (project_point()): a list of 80
-# parameter lists. The fit's output is in a temporary directory, deleted on return; only the
-# parameters are read. Every transition reaching depth 8 is expected, so the sampler's
-# diagnostic warnings are off.
+# parameter lists. The fit draws no forecast (draw_forecast = 0, as in v2_methods()): the
+# points need only the parameters. Its output is in a temporary directory, deleted on
+# return; only the parameters are read. Every transition reaching depth 8 is expected, so
+# the sampler's diagnostic warnings are off.
 short_fit_draws <- function(m, data, seed) {
   box::use(R / harness / v2_reference[v2_par_dims])
   model <- model_of(m)
+  if (!is.null(data$draw_forecast)) data$draw_forecast <- 0L
   run <- withr::local_tempdir("v2-points-")
   fit <- model$sample(
     data = data_json(data, run), chains = 4, parallel_chains = 4, iter_warmup = 50, iter_sampling = 20,
@@ -317,19 +360,21 @@ gq_at <- function(stan_file, data, pars) {
   box::use(R / harness / v2_reference[v2_par_dims])
   model <- v2_model(stan_file)
   run <- withr::local_tempdir("v2-gq-")
-  # WHY: CmdStan's init reader refuses a zero-size parameter (nu with J = 0) written as [], and
-  # there is nothing to initialise in it; cmdstanr would note that it was left out.
-  withr::local_options(cmdstanr_warn_inits = FALSE)
-  fit <- model$sample(
-    data = data_json(data, run), fixed_param = TRUE, chains = 1, iter_warmup = 0, iter_sampling = 1,
-    adapt_engaged = FALSE, seed = 1, init = list(pars[lengths(pars) > 0]), sig_figs = 18, output_dir = run,
-    refresh = 0, show_messages = FALSE, show_exceptions = FALSE
-  )
-  stopifnot("the fixed_param run failed" = all(fit$return_codes() == 0))
+  fit <- fixed_param_run(stan_file, data, run, init = pars, sig_figs = 18)
   sizes <- fit$metadata()$stan_variable_sizes
   gq <- intersect(names(model$variables()$generated_quantities), names(sizes))
   gq <- gq[vapply(sizes[gq], prod, numeric(1)) > 0]
   list(pars = fit_values(fit, model, v2_par_dims(data))[[1]], gq = fit_values(fit, model, sizes[gq])[[1]])
+}
+
+# The draws of the generated quantity `variable` of `stan_file` on `data` in an
+# `iter`-iteration fixed_param run (fixed_param_run()) at `pars` (a v2_simulate() draw), as
+# an array [iter, dims of `variable`]: the draws are independent given the point. Read at
+# CmdStan's default 6 significant figures, which is exact for a count below 1e6.
+gq_draws <- function(stan_file, data, pars, variable, iter) {
+  run <- withr::local_tempdir("v2-gq-draws-")
+  fit <- fixed_param_run(stan_file, data, run, init = pars, iter = iter)
+  posterior::draws_of(posterior::as_draws_rvars(fit$draws(variables = variable))[[variable]])
 }
 
 # The points of the Stan lp tests on `data`, for the v2_methods() fit `m`: a list of
@@ -369,23 +414,35 @@ lp_points <- function(m, data, n_post = 20, n_off = 10, n_prior = 10, seed = 510
 # at a point where Stan's is finite differs from it without bound).
 lp_range <- function(x) if (all(is.finite(x))) diff(range(x)) else Inf
 
+# The tolerance of the constant over points whose true reference log densities are `ref`.
+lp_tol <- function(ref) 1e-9 * max(1, abs(ref))
+
 # Stan's log density (log_prob, jacobian = FALSE) minus the reference's (`mutant`) at each
-# point, and the tolerance 1e-9 * max(1, |lp_ref|) of the true reference.
+# point, the true reference's log density `ref`, each point's `kind`, and the tolerance
+# lp_tol(ref) over all points.
 lp_gap <- function(m, data, points, mutant = "none") {
   box::use(R / harness / v2_reference[v2_lp_ref])
   stan <- vapply(points, \(p) m$log_prob(p$u, jacobian = FALSE), numeric(1))
   ref <- vapply(points, \(p) v2_lp_ref(p$pars, data), numeric(1))
   mut <- if (mutant == "none") ref else vapply(points, \(p) v2_lp_ref(p$pars, data, mutant), numeric(1))
-  list(gap = stan - mut, tol = 1e-9 * max(1, abs(ref)))
+  list(gap = stan - mut, ref = ref, kind = vapply(points, \(p) p$kind, character(1)), tol = lp_tol(ref))
 }
 
-# Expect Stan's log density minus the reference's to be constant over `points`: its range
-# below 1e-9 * max(1, |lp_ref|). Returns list(range, tol) invisibly.
+# Expect Stan's log density minus the reference's to be constant over `points`: within each
+# kind of point (post, off, prior) its range below that kind's lp_tol(), and over all points
+# its range below lp_tol() of all (one constant, not one per kind). Returns invisibly
+# list(range, tol, kind), `kind` a list of c(range, tol) per kind of point.
 expect_lp_matches <- function(m, data, points) {
   g <- lp_gap(m, data, points)
+  kind <- list()
+  for (k in unique(g$kind)) {
+    i <- g$kind == k
+    kind[[k]] <- c(range = lp_range(g$gap[i]), tol = lp_tol(g$ref[i]))
+    expect_lt(kind[[k]][["range"]], kind[[k]][["tol"]], label = paste0("range of lp_stan - lp_ref over the ", k, " points"))
+  }
   r <- lp_range(g$gap)
-  expect_lt(r, g$tol, label = "range of lp_stan - lp_ref")
-  invisible(list(range = r, tol = g$tol))
+  expect_lt(r, g$tol, label = "range of lp_stan - lp_ref over all points")
+  invisible(list(range = r, tol = g$tol, kind = kind))
 }
 
 # Expect the same range against the `mutant` reference to exceed 100 times the tolerance.
