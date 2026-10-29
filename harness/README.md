@@ -31,7 +31,10 @@ run only with `HARNESS_SLOW=1` in the environment:
 in `tests/harness/test-v2-stan.R` are slow and named by the V2 step they test (`v2s-m0: …`);
 `V2_STEPS=<step>[,<step>…]` runs only those steps' tests (`skip_unless_step()`), and unset it
 runs them all. The fast test of the cell runner's 2017 refusal reads this repository's real
-freeze state, under a temporary `HARNESS_RESULTS`, and skips once the freeze is sealed.
+freeze state, under a temporary `HARNESS_RESULTS`, and skips once the freeze is sealed. It
+runs the runner with `CMDSTAN` naming an empty directory, after checking that cmdstanr then
+finds no CmdStan, so a regressed refusal stops at its first cmdstanr call and can neither
+compile nor sample a 2017 cell.
 
 The R code in `R/harness/` and `R/election_utils.R` writes every non-ASCII character as a
 `\uXXXX` escape and gives a non-ASCII name with `stats::setNames()`, never as a name tag;
@@ -203,7 +206,8 @@ extraction changes, so that every finished run is refitted.
 
 **Diagnostics.** `summarise_diagnostics(params, scored, sampler)` takes the draws of every
 `parameters`-block variable, the draws of the scored quantities, and the sampler's
-per-chain divergences, treedepth hits, E-BFMI, deepest tree and post-warmup leapfrog steps.
+per-chain divergences, treedepth hits, E-BFMI, deepest tree and post-warmup leapfrog steps
+(the last two from `chain_sampler()` of `fit$sampler_diagnostics()`).
 It reports the max R-hat
 and the min bulk and tail ESS over parameters and scored quantities together (the plan's
 Decision 3) and over the scored quantities alone, the divergences and treedepth hits
@@ -253,7 +257,10 @@ one of `ARM_ROLES`:
 
 `score_cell()` refuses a `check` or `dev` arm before the freeze guard, and a run whose
 `meta.json` records a role other than its arm's; a `meta.json` without `role`, as R0's
-Phase 1 runs have, takes its arm's. Plan 4 may add roles for the arms it scores. Every arm
+Phase 1 runs have, takes its arm's. The role is not a sha-skip key (`expected_meta()`), so
+those runs still SKIP. If an arm's role changes in `ARMS`, its finished runs still SKIP,
+and `score_cell()` refuses each with "run role <old> differs from arm <arm>'s role <new>";
+retire such a run (`retire_run()`) and refit it. Plan 4 may add roles for the arms it scores. Every arm
 but `r0` runs `Stan/forecast_v2.stan` with its own config, an entry `v2_arm(config, role)`
 builds. `ARMS` holds `r0` and `v2s-m0`; each other V2 arm is registered as its config lands.
 
@@ -314,7 +321,8 @@ A non-finite number in `meta.json` is written as a string (`"Inf"`, `"NA"`), so 
 R-hat stays distinct from a missing one; the gate fails on either. A NULL, such as V2's
 `stage1_sha256` with no stage 1, is written as `null` in both `meta.json` and `inputs.json`,
 and reads back as NULL. It prints the DIAG line
-and `DONE <dir>`, then deletes the CmdStan CSVs.
+and `DONE <dir>`, then deletes the CmdStan CSVs, unless `HARNESS_KEEP_CMDSTAN` is `1`: the
+slow V2 test keeps them to check `n_leapfrog` against their `n_leapfrog__` column.
 
 **The queue.** From the project root:
 

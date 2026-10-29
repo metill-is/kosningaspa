@@ -336,11 +336,18 @@ test_that("fit_cell.R refuses a 2017 cell before the freeze, before it builds or
   # WHY: this reads the repository's real freeze state; Plan 4 replaces the test once the freeze is sealed.
   skip_if(is_frozen(), "the freeze is sealed")
   results <- withr::local_tempdir()
-  withr::local_envvar(HARNESS_RESULTS = results)
+  # WHY: with CMDSTAN naming an empty directory cmdstanr finds no CmdStan, so a regressed refusal stops at the first cmdstanr call, before any compile or sample.
+  withr::local_envvar(HARNESS_RESULTS = results, CMDSTAN = withr::local_tempdir())
+  probe <- withr::with_dir(root(), suppressWarnings(system2(
+    file.path(R.home("bin"), "Rscript"), c("-e", shQuote("cmdstanr::cmdstan_version()")),
+    stdout = TRUE, stderr = TRUE, env = "LC_ALL=en_US.UTF-8"
+  )))
+  if (is.null(attr(probe, "status"))) stop("cmdstanr finds CmdStan with CMDSTAN set to an empty directory: not running fit_cell.R on 2017")
   out <- fit_cell(c("v2s-m0", "2017-10-28", "2017-10-27", "1", "10", "10"))
   expect_identical(attr(out, "status"), 1L)
   expect_match(out, REFUSED_2017, fixed = TRUE, all = FALSE)
   expect_false(any(grepl("^(DIAG|DONE|SKIP|STALE)", out)))
+  expect_false(any(grepl("Compiling Stan program|Running MCMC", out)))
   expect_length(list.files(results, recursive = TRUE, all.files = TRUE, include.dirs = TRUE, no.. = TRUE), 0)
   expect_false(dir.exists(root("results", "harness", "v2s-m0_2017-10-28_2017-10-27_s1")))
 })
@@ -349,7 +356,7 @@ test_that("fit_cell.R fits v2s-m0 on 2024 eve: the five parquets, the role, n_le
   skip_unless_slow()
   skip_without_snapshot()
   results <- withr::local_tempdir()
-  withr::local_envvar(HARNESS_RESULTS = results)
+  withr::local_envvar(HARNESS_RESULTS = results, HARNESS_KEEP_CMDSTAN = "1")
   E <- "2024-11-30"
   F <- "2024-11-29"
   id <- run_id("v2s-m0", E, F, 1)
@@ -371,6 +378,14 @@ test_that("fit_cell.R fits v2s-m0 on 2024 eve: the five parquets, the role, n_le
   expect_identical(meta$role, "dev")
   leapfrog <- meta$diagnostics$n_leapfrog
   expect_true(is.numeric(leapfrog) && length(leapfrog) == 1 && leapfrog >= 40 && leapfrog == round(leapfrog))
+  # WHY: only the sampler's n_leapfrog__ column is read from the kept CSVs (variables = ""), no forecast value.
+  csvs <- list.files(file.path(dir, "cmdstan"), pattern = "\\.csv$", full.names = TRUE)
+  expect_length(csvs, 4)
+  steps <- cmdstanr::read_cmdstan_csv(csvs, variables = "", sampler_diagnostics = "n_leapfrog__")
+  per_chain <- apply(unclass(steps$post_warmup_sampler_diagnostics), 2, sum)
+  expect_length(per_chain, 4)
+  expect_equal(leapfrog, sum(per_chain))
+  expect_true(leapfrog > max(per_chain))
   # WHY: v2s-m0 has no stage 1, so its stage1_sha256 is NULL, which must read back as a null, not as {}.
   expect_true("stage1_sha256" %in% names(meta))
   expect_null(meta$stage1_sha256)

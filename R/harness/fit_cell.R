@@ -21,7 +21,7 @@
 #      gate;
 #   8. writes meta.json last (with the arm's role), read-only with the other outputs, so that
 #      its presence means the run is complete; prints the DIAG line and "DONE <dir>"; deletes
-#      the CmdStan CSVs.
+#      the CmdStan CSVs, unless HARNESS_KEEP_CMDSTAN is 1 (for a test that reads them back).
 if (!isTRUE(l10n_info()[["UTF-8"]])) stop("fit_cell.R needs a UTF-8 locale: run under LC_ALL=en_US.UTF-8", call. = FALSE)
 # WHY: the box path below is the working directory, so check it is the project root first.
 stopifnot("run from the project root (no R/harness/constants.R here)" = file.exists("R/harness/constants.R"))
@@ -33,7 +33,7 @@ box::use(
   R / harness / info_set[info_set, validate_inputs],
   R / harness / runs[
     SAMPLER, run_id, run_dir, sha256_file, stan_data_sha, write_frozen_inputs, expected_meta, meta_mismatch,
-    retire_run, summarise_diagnostics, diagnostics_gate, diag_line
+    retire_run, chain_sampler, summarise_diagnostics, diagnostics_gate, diag_line
   ],
   R / harness / scores[kd_to_nat]
 )
@@ -152,11 +152,9 @@ scored <- scored_draws(arrow::read_parquet(paths[["eday_kjordaemi"]]))
 # WHY: a zero-size parameter (V2's with its switch off) has no column in the CSVs, and fit$draws() refuses it.
 params <- fit$draws(variables = intersect(names(model$variables()$parameters), fit$metadata()$stan_variables))
 sampler <- fit$diagnostic_summary(quiet = TRUE)
-by_chain <- unclass(fit$sampler_diagnostics())
-d <- summarise_diagnostics(params, scored, list(
-  num_divergent = sampler$num_divergent, num_max_treedepth = sampler$num_max_treedepth,
-  ebfmi = sampler$ebfmi, max_depth = apply(by_chain[, , "treedepth__", drop = FALSE], 2, max),
-  n_leapfrog = apply(by_chain[, , "n_leapfrog__", drop = FALSE], 2, sum)
+d <- summarise_diagnostics(params, scored, c(
+  list(num_divergent = sampler$num_divergent, num_max_treedepth = sampler$num_max_treedepth, ebfmi = sampler$ebfmi),
+  chain_sampler(fit$sampler_diagnostics())
 ))
 key <- rbind(measure(scored), measure(posterior::as_draws_df(arrow::read_parquet(paths[["param_draws"]]))))
 key_path <- file.path(dir, "key_diagnostics.csv")
@@ -178,4 +176,4 @@ if (!file.rename(tmp, meta_path)) stop("could not move ", tmp, " to ", meta_path
 cat(diag_line(id, minutes, d, gate), "\n", sep = "")
 if (!gate$pass) cat(sprintf("gate: %s\n", paste(gate$reasons, collapse = "; ")))
 cat(sprintf("DONE %s\n", dir))
-unlink(cmdstan_dir, recursive = TRUE)
+if (!identical(Sys.getenv("HARNESS_KEEP_CMDSTAN"), "1")) unlink(cmdstan_dir, recursive = TRUE)

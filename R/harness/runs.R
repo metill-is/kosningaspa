@@ -186,13 +186,31 @@ extreme <- function(f, x) {
   if (length(x)) f(x) else NA_real_
 }
 
+#' Each chain's deepest tree and leapfrog steps.
+#' @param diagnostics a fit's post-warmup sampler diagnostics (`fit$sampler_diagnostics()`),
+#'   a posterior draws object holding `treedepth__` and `n_leapfrog__`
+#' @return `list(max_depth, n_leapfrog)`, one value per chain, as `summarise_diagnostics()`
+#'   takes them: the chain's deepest `treedepth__` and the sum of its `n_leapfrog__` over
+#'   its draws
+#' @export
+chain_sampler <- function(diagnostics) {
+  x <- unclass(posterior::as_draws_array(diagnostics))
+  lacks <- setdiff(c("treedepth__", "n_leapfrog__"), dimnames(x)[[3]])
+  if (length(lacks)) stop("sampler diagnostics lack: ", paste(lacks, collapse = ", "))
+  list(
+    max_depth = apply(x[, , "treedepth__", drop = FALSE], 2, max),
+    n_leapfrog = apply(x[, , "n_leapfrog__", drop = FALSE], 2, sum)
+  )
+}
+
 #' The diagnostics of a fit.
 #' @param params the draws of every `parameters`-block variable, a posterior draws object
 #' @param scored the draws of the scored quantities, with the same chains
 #' @param sampler `list(num_divergent, num_max_treedepth, ebfmi, max_depth, n_leapfrog)`, one
 #'   value per chain: the first three from `fit$diagnostic_summary()`, `max_depth` the
 #'   deepest `treedepth__` of the chain in `fit$sampler_diagnostics()` and `n_leapfrog` the
-#'   sum of its post-warmup `n_leapfrog__` there (whole numbers)
+#'   sum of its post-warmup `n_leapfrog__` there (whole numbers), the last two as
+#'   `chain_sampler()` returns them
 #' @return a list: `max_rhat`, `min_ess_bulk` and `min_ess_tail` over `params` and
 #'   `scored` together (Decision 3); `max_rhat_scored`, `min_ess_bulk_scored` and
 #'   `min_ess_tail_scored` over `scored`; `na_scored`, the number of scored quantities

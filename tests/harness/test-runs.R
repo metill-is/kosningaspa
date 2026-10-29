@@ -1,7 +1,7 @@
 box::use(
   R / harness / runs[
     EXTRACT_VERSION, SAMPLER, results_root, run_id, run_dir, sha256_file, stan_data_sha, write_frozen_inputs,
-    expected_meta, meta_mismatch, retire_run, summarise_diagnostics, diagnostics_gate, diag_line
+    expected_meta, meta_mismatch, retire_run, chain_sampler, summarise_diagnostics, diagnostics_gate, diag_line
   ]
 )
 
@@ -253,6 +253,24 @@ test_that("summarise_diagnostics() sums divergences and treedepth hits and keeps
     summarise_diagnostics(normal_draws("a"), normal_draws("s"), utils::modifyList(sampler, list(n_leapfrog = c(1, 2, 3.5, 4)))),
     "n_leapfrog"
   )
+})
+
+test_that("n_leapfrog is the sum over chains of each chain's post-warmup leapfrog steps, not their max or mean", {
+  withr::local_seed(1)
+  steps <- cbind(c(3, 5, 7), c(31, 31, 31), c(1, 1, 1), c(127, 63, 15))
+  depth <- cbind(c(2, 3, 3), c(5, 5, 5), c(1, 1, 1), c(7, 6, 4))
+  x <- array(c(depth, steps), dim = c(3, 4, 2), dimnames = list(NULL, NULL, c("treedepth__", "n_leapfrog__")))
+  by_chain <- chain_sampler(posterior::as_draws_array(x))
+  expect_named(by_chain, c("max_depth", "n_leapfrog"))
+  expect_equal(unname(by_chain$max_depth), c(3, 5, 1, 7))
+  expect_equal(unname(by_chain$n_leapfrog), c(15, 93, 3, 205))
+  sampler <- c(list(num_divergent = rep(0L, 4), num_max_treedepth = rep(0L, 4), ebfmi = rep(1, 4)), by_chain)
+  d <- summarise_diagnostics(normal_draws("a"), normal_draws("s"), sampler)
+  expect_identical(d$n_leapfrog, 316)
+  expect_identical(d$max_depth, 7L)
+  # WHY: a per-chain max or mean, of the draws or of the chain sums, would pass a range check; none equals the sum.
+  expect_false(any(d$n_leapfrog == c(max(steps), mean(steps), max(colSums(steps)), mean(colSums(steps)))))
+  expect_error(chain_sampler(posterior::as_draws_array(x[, , "treedepth__", drop = FALSE])), "lack: n_leapfrog__")
 })
 
 NA_REASON <- "scored quantities with NA R-hat or ESS: "

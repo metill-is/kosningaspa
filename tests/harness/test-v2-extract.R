@@ -31,17 +31,18 @@ elements <- function(v) {
 }
 columns_of <- function(vars) unlist(lapply(vars, elements))
 
-# A draws_df of 4 chains x 4 iterations: votes_kd[k,p] = 1000k + p and y_rep_res[e,k,p] =
-# 100000 draw + 10000e + 100k + p; pi_nat_eday and pi_latent_E; and each element of `params`,
-# each varying by draw. The columns come shuffled, so a label taken by position is wrong.
-synthetic_draws <- function(params = CORE, drop = character(0), change = list()) {
+# A draws_df of 4 chains x 4 iterations over `n_k` kjordaemi, `n_p` parties and `n_e` closed
+# elections: votes_kd[k,p] = 1000k + p and y_rep_res[e,k,p] = 100000 draw + 10000e + 100k + p;
+# pi_nat_eday and pi_latent_E; and each element of `params`, each varying by draw. The columns
+# come shuffled, so a label taken by position is wrong.
+synthetic_draws <- function(params = CORE, drop = character(0), change = list(), n_k = K, n_p = P, n_e = N_CLOSED) {
   cols <- list()
-  for (p in seq_len(P)) for (k in seq_len(K)) cols[[sprintf("votes_kd[%d,%d]", k, p)]] <- rep(1000 * k + p, 16)
-  for (p in seq_len(P)) cols[[sprintf("pi_nat_eday[%d]", p)]] <- (DRAW + p) / 100
-  for (p in seq_len(P)) cols[[sprintf("pi_latent_E[%d]", p)]] <- (DRAW + 10 * p) / 1000
-  for (p in seq_len(P)) {
-    for (k in seq_len(K)) {
-      for (e in seq_len(N_CLOSED)) cols[[sprintf("y_rep_res[%d,%d,%d]", e, k, p)]] <- 100000 * DRAW + 10000 * e + 100 * k + p
+  for (p in seq_len(n_p)) for (k in seq_len(n_k)) cols[[sprintf("votes_kd[%d,%d]", k, p)]] <- rep(1000 * k + p, 16)
+  for (p in seq_len(n_p)) cols[[sprintf("pi_nat_eday[%d]", p)]] <- (DRAW + p) / 100
+  for (p in seq_len(n_p)) cols[[sprintf("pi_latent_E[%d]", p)]] <- (DRAW + 10 * p) / 1000
+  for (p in seq_len(n_p)) {
+    for (k in seq_len(n_k)) {
+      for (e in seq_len(n_e)) cols[[sprintf("y_rep_res[%d,%d,%d]", e, k, p)]] <- 100000 * DRAW + 10000 * e + 100 * k + p
     }
   }
   pc <- columns_of(params)
@@ -67,7 +68,7 @@ extracted <- function(draws = synthetic_draws(), meta = META, env = parent.frame
 
 classes <- function(df) vapply(df, \(x) class(x)[1], character(1))
 
-test_that("V2_PARAM_VARIABLES is the brief's list, and each switch adds its own parameters", {
+test_that("V2_PARAM_VARIABLES lists the core's and the switched parameters in declaration order, and each switch adds its own", {
   expect_identical(V2_PARAM_VARIABLES, c(
     "sigma", "L_Omega", "tau_camp", "mu_phi", "sigma_phi", "log_phi", "log_phi_K", "log_kappa", "sigma_gamma", "mu",
     "tau_mu", "tau_mu_A", "tau_house", "m_new", "s_new", "s_bar_E", "mu_sd", "tau_sd", "s_delta0", "s_bar_zeta", "s_zeta",
@@ -92,6 +93,33 @@ test_that("v2_extract labels kjordaemi and parties by the Stan indices, never by
   expect_false(anyNA(k) || anyNA(p))
   expect_identical(kd$votes, as.integer(1000 * k + p))
   expect_identical(nrow(dplyr::distinct(kd, .draw, kjordaemi, flokkur)), nrow(kd))
+})
+
+test_that("with 10 kjordaemi and 11 parties, the labels follow the indices' numeric order, not their names' sort order", {
+  # WHY: a sort of the element names puts votes_kd[10,1] between votes_kd[1,1] and votes_kd[2,1], so it would mislabel here.
+  wide <- utils::modifyList(META, list(
+    party_order = c("D", "B", "S", "V", "C", "P", "M", "F", "J", "O", "A"),
+    kjordaemi_levels = sprintf("K%02d", c(5, 3, 9, 1, 10, 2, 8, 4, 7, 6))
+  ))
+  x <- extracted(synthetic_draws(n_k = 10L, n_p = 11L), wide)
+  kd <- x$read$eday_kjordaemi
+  expect_equal(nrow(kd), 16 * 10 * 11)
+  k <- match(kd$kjordaemi, wide$kjordaemi_levels)
+  p <- match(kd$flokkur, wide$party_order)
+  expect_false(anyNA(k) || anyNA(p))
+  expect_identical(kd$votes, as.integer(1000 * k + p))
+  expect_true(all(kd$votes[kd$kjordaemi == "K06" & kd$flokkur == "A"] == 10011L))
+  nat <- x$read$eday_national
+  expect_identical(nat$share, (nat$.draw + match(nat$flokkur, wide$party_order)) / 100)
+  lat <- x$read$latent_national
+  expect_identical(lat$share, (lat$.draw + 10 * match(lat$flokkur, wide$party_order)) / 1000)
+  ppc <- x$read$ppc_results
+  expect_equal(nrow(ppc), 16 * N_CLOSED * 10 * 11)
+  e <- match(format(ppc$election), CLOSED)
+  expect_identical(
+    ppc$votes,
+    as.integer(100000 * ppc$.draw + 10000 * e + 100 * match(ppc$kjordaemi, wide$kjordaemi_levels) + match(ppc$flokkur, wide$party_order))
+  )
 })
 
 test_that("the five parquets have exactly the listed columns and types, and .draw runs 1..16", {
