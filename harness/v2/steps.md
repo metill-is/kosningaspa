@@ -258,8 +258,8 @@ two lines below). It reproduces the recorded sha only on a tree whose `R/harness
 either it prints another sha, which is not a provenance failure:
 
 ```
-LC_ALL=en_US.UTF-8 Rscript -e 'x <- commandArgs(TRUE); options(box.path = getwd()); box::use(R/harness/arms[arm], R/harness/info_set[info_set], R/harness/runs[stan_data_sha]); a <- arm("v2s-m1"); cat(stan_data_sha(a$build(info_set(as.Date(x[1]), as.Date(x[2])), a$read_config(a$config))$data), "\n")' 2024-11-30 2024-11-29
-LC_ALL=en_US.UTF-8 Rscript -e 'x <- commandArgs(TRUE); options(box.path = getwd()); box::use(R/harness/arms[arm], R/harness/info_set[info_set], R/harness/runs[stan_data_sha]); a <- arm("v2s-m1"); cat(stan_data_sha(a$build(info_set(as.Date(x[1]), as.Date(x[2])), a$read_config(a$config))$data), "\n")' 2021-09-25 2021-03-29
+LC_ALL=en_US.UTF-8 Rscript -e 'x <- commandArgs(TRUE); options(box.path = getwd()); box::use(R/harness/arms[arm], R/harness/info_set[info_set], R/harness/runs[stan_data_sha]); a <- arm("v2s-m1"); cat(stan_data_sha(a$build(info_set(as.Date(x[1]), as.Date(x[2])), a$read_config(a$config))$data), "\n", sep = "")' 2024-11-30 2024-11-29
+LC_ALL=en_US.UTF-8 Rscript -e 'x <- commandArgs(TRUE); options(box.path = getwd()); box::use(R/harness/arms[arm], R/harness/info_set[info_set], R/harness/runs[stan_data_sha]); a <- arm("v2s-m1"); cat(stan_data_sha(a$build(info_set(as.Date(x[1]), as.Date(x[2])), a$read_config(a$config))$data), "\n", sep = "")' 2021-09-25 2021-03-29
 ```
 
 **Stop rule.** `LC_ALL=en_US.UTF-8 Rscript R/harness/compare_runs.R stop v2s-m1` (exit 0):
@@ -317,8 +317,11 @@ Two mutants plant the carried drift: `no_mu_restart` and `no_house_restart`.
 
 **What the lp test covers.** `HARNESS_SLOW=1 V2_STEPS=v2s-m1 LC_ALL=en_US.UTF-8 Rscript
 tests/run.R v2-stan` (at 3b9503a, `[ FAIL 0 | WARN 0 | SKIP 13 | PASS 110 ]`). On each cell,
-Stan's log density minus the reference's (`v2_lp_ref()`) is constant within tol =
-1e-9 · max(1, |lp_ref|):
+Stan's log density minus the reference's (`v2_lp_ref()`) is constant over the cell's points
+within one tolerance per cell, tol = 1e-9 · max(1, |lp_ref|) with |lp_ref| the
+largest over the cell's points (`lp_tol()`, `tests/harness/helper-v2.R`), and the points of
+each kind (posterior, off-posterior, prior) are also checked against their own `lp_tol()`
+(`expect_lp_matches()`):
 - on 2024 eve and 2021 f180, over 20 posterior and 10 off-posterior points of a short fit and
   10 prior points;
 - on 2017 eve, over 10 prior points only (no fit, no forecast).
@@ -408,8 +411,8 @@ two lines below). It reproduces the recorded sha only on a tree whose `R/harness
 either it prints another sha, which is not a provenance failure:
 
 ```
-LC_ALL=en_US.UTF-8 Rscript -e 'x <- commandArgs(TRUE); options(box.path = getwd()); box::use(R/harness/arms[arm], R/harness/info_set[info_set], R/harness/runs[stan_data_sha]); a <- arm("v2s-m2"); cat(stan_data_sha(a$build(info_set(as.Date(x[1]), as.Date(x[2])), a$read_config(a$config))$data), "\n")' 2024-11-30 2024-11-29
-LC_ALL=en_US.UTF-8 Rscript -e 'x <- commandArgs(TRUE); options(box.path = getwd()); box::use(R/harness/arms[arm], R/harness/info_set[info_set], R/harness/runs[stan_data_sha]); a <- arm("v2s-m2"); cat(stan_data_sha(a$build(info_set(as.Date(x[1]), as.Date(x[2])), a$read_config(a$config))$data), "\n")' 2021-09-25 2021-03-29
+LC_ALL=en_US.UTF-8 Rscript -e 'x <- commandArgs(TRUE); options(box.path = getwd()); box::use(R/harness/arms[arm], R/harness/info_set[info_set], R/harness/runs[stan_data_sha]); a <- arm("v2s-m2"); cat(stan_data_sha(a$build(info_set(as.Date(x[1]), as.Date(x[2])), a$read_config(a$config))$data), "\n", sep = "")' 2024-11-30 2024-11-29
+LC_ALL=en_US.UTF-8 Rscript -e 'x <- commandArgs(TRUE); options(box.path = getwd()); box::use(R/harness/arms[arm], R/harness/info_set[info_set], R/harness/runs[stan_data_sha]); a <- arm("v2s-m2"); cat(stan_data_sha(a$build(info_set(as.Date(x[1]), as.Date(x[2])), a$read_config(a$config))$data), "\n", sep = "")' 2021-09-25 2021-03-29
 ```
 
 **Stop rule.** `LC_ALL=en_US.UTF-8 Rscript R/harness/compare_runs.R stop v2s-m2` (exit 0):
@@ -451,7 +454,11 @@ Minutes, treedepth hits and ESS per 1,000 gradients are recorded, never a stop.
     (14:39 to 14:42 and 14:42 to 14:45, one after the other), single-file fast tests and short
     scratch R scripts (14:41 to 14:46), the whole fast suite (14:46 to 14:51), then five
     single-file fast test runs (14:51 to 14:53);
-  - a read-only re-review's fast probes, from about 14:55 to 15:02.
+  - a Monte Carlo check of M3's prior rows, one R process of about 4 seconds, from 14:36:08 to
+    14:36:12;
+  - a read-only re-review's fast probes, from about 14:55 to 15:02;
+  - possibly, a session outside this step on the same machine: it was running pilot
+    simulations when the queue started (13:52), and its load during the fits is unknown.
 
   2021 f180 finished at 15:02:45. No other work of this step is known to have run beside
   2024 eve after that, until it finished at 15:27:18. No slow test ran beside either fit:
@@ -460,8 +467,11 @@ Minutes, treedepth hits and ESS per 1,000 gradients are recorded, never a stop.
 
 **What the lp test covers.** `HARNESS_SLOW=1 V2_STEPS=v2s-m2 LC_ALL=en_US.UTF-8 Rscript
 tests/run.R v2-stan` (at f390638, after `QUEUE FINISHED`, `[ FAIL 0 | WARN 0 | SKIP 19 | PASS 106 ]`).
-On each cell, Stan's log density minus the reference's (`v2_lp_ref()`) is constant within
-tol = 1e-9 · max(1, |lp_ref|):
+On each cell, Stan's log density minus the reference's (`v2_lp_ref()`) is constant over the
+cell's points within one tolerance per cell, tol = 1e-9 · max(1, |lp_ref|) with |lp_ref| the
+largest over the cell's points (`lp_tol()`, `tests/harness/helper-v2.R`), and the points of
+each kind (posterior, off-posterior, prior) are also checked against their own `lp_tol()`
+(`expect_lp_matches()`):
 - on 2024 eve and 2021 f180, over 20 posterior and 10 off-posterior points of a short fit and
   10 prior points;
 - on 2017 eve, over 10 prior points only (no fit, no forecast).

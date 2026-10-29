@@ -300,13 +300,16 @@ bounded_at <- function(m, data, u) {
 }
 
 # The declarations of block `block` ("parameters", say) of the Stan program `lines`: a data
-# frame of `type` and `name`, one row per non-empty line between the line `<block> {` and the
-# next line `}`, in the file's order. It strips `//` comments only, and splits each line at
-# its last name before a final `;`, so a line holding two declarations parses as one row with
-# a garbled type rather than erroring; a garbled row still fails an exact comparison of names
-# and types. An error if the line `<block> {` is not found exactly once, if no line `}`
-# follows it, or if a line does not end in a name and `;` (a trailing `/* */` comment
-# included); an empty block errors too, naming its closing `}`.
+# frame of `type` and `name`, in the file's order. The block runs from the line exactly
+# `<block> {` to the next line exactly `}`. Each line between has its `//` comment dropped and
+# is trimmed; an empty line is skipped, and any other must be `<type> <name>;`: text ending in
+# a non-space, then whitespace, then a name directly followed by the line's final `;`. So
+# `vector[P]x;`, `real x ;` and a line ending in a `/* */` comment error, naming the line,
+# while a line holding two declarations matches as one row with a garbled type. A block of
+# only blank or `//` lines gives 0 rows, with no error, but a `}` straight after `<block> {`
+# errors, naming the `}`. An error too if `<block> {` is not found exactly once, or no `}`
+# follows it. A garbled or empty result still fails the declaration test's exact comparison
+# with V2_CORE_PARS' 27 names and types.
 stan_block_decls <- function(lines, block) {
   start <- which(lines == paste(block, "{"))
   if (length(start) != 1) stop("stan_block_decls: block ", block, " found ", length(start), " times", call. = FALSE)
