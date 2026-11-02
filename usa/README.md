@@ -17,6 +17,7 @@ is used by the Icelandic forecast or Fylgisvakt, and nothing outside `usa/` was 
 | `stan/us_midterm_v6.stan` | v5 with two switches in the data: `bias_walk` (1 = v5's industry bias that random-walks across epochs, 0 = stationary around a mean) and `phi_info` (the information per poll in log phi's centring weight; 0 = non-centred, which sparse final-weeks polls need). The header has the case for each |
 | `stan/us_midterm_v8.stan` | v6 for two parties (P = 2): a scalar branch of the Kalman filter, every bias and race deviation a zero-sum pair. On P = 3 data it is v6 exactly. Other is dropped because races cannot share one isotropic scale across D–R (residual SD 0.20) and the major parties against Other (0.86); v7, which gave Other its own scale, went with it |
 | `stan/us_midterm_v9.stan` | v8 with a polling error shared by each race's polls (`sigma_race_poll`, data; 0 = v8), integrated out: the model samples what the polls see, and generated quantities draws election day's race deviation from its conditional |
+| `stan/us_midterm_v10.stan` | v9 with `bias_walk = 2`: the industry bias AR(1) around its long-run mean, so a cycle's bias can lean towards the last one's (coefficient estimated, prior centred on v9's stationary bias). With `bias_walk` 0 or 1 it is v9 |
 | `R/simulate_us.R` | Simulates US-scale data in that model's format; the national fields also run `polling_watch_v5_epoch.stan` unchanged. Options in its header |
 | `R/build_generic_ballot.R` | Real data for `polling_watch_v5_epoch.stan`, and for v1–v9: the generic congressional ballot polls of the 2018–2026 cycles, anchored at the national House popular vote of 2018–2024. `target=` builds an out-of-sample backtest of an earlier election, `races=senate` adds that year's Senate races, `two_party=1` drops Other; the header lists every option |
 | `R/senate_races.R` | The Senate race layer `build_generic_ballot.R races=senate` sources: each race's D and R slots, covariates (presidential lean, incumbency, an independent in the D slot), its polls, the past results the race regression learns from, the seats not up, and the race polling error `race_poll_sd=auto` reads |
@@ -114,7 +115,12 @@ Errors are in points of two-party margin. Both miss 2008 and 2018 (the polls und
 the Democrats). Two-party (v8, `two_party=1`), the same 13 elections give the same answer:
 mean absolute error 2.46 for the walk against 2.09 stationary, CRPS 1.93 against 1.64, 10 of
 13 intervals covering for each; the stationary fits of the smallest years (1998–2004) had
-6–15 divergent transitions of 4,000. The Senate and presidential fits use the stationary bias.
+6–15 divergent transitions of 4,000. v10's AR(1) bias (`bias_walk=2`), which lets each
+cycle's bias lean towards the last one's, falls between them: mean absolute error 2.18, CRPS
+1.68, 10 of 13 covering, with up to 17 divergent transitions in the small fits. Its
+coefficient stays close to its prior (median +0.04 to +0.42 across the 12 fits that have
+one; every 90% interval covers −0.25 to +0.67), and carrying 2018's accurate polls forward made
+its 2020 forecast worse. The Senate and presidential fits use the stationary bias.
 
 ```bash
 LC_ALL=en_US.UTF-8 Rscript usa/R/build_generic_history.R raw=<raw>/gb-538-github/raw_polls.csv tables=<tables> out=<bt>/data_eve_2010 target=2010-11-02 anchor_n=2e5 grid=week tau_scale=0.05 bias_walk=0

@@ -55,15 +55,16 @@ smart_init <- function(data_file) {
   H <- d$H
   E <- d$E
   tau <- if (d$estimate_tau == 1) array(0.02, 1) else numeric(0)
+  v <- suppressWarnings(as.integer(sub(".*us_midterm_v([0-9]+)\\.stan$", "\\1", opt$stan)))
   # WHY: CmdStan reads an empty matrix as a 1-D [] and rejects it for a declared [0, P]
   # parameter; leaving zero-size parameters out of the init is equivalent
   function(chain_id) {
     init <- list(
       L_Omega = diag(P), L_corr = diag(P - 1), anchor_w = matrix(0, m, P - 1), z_walk = matrix(0, P - 1, d$D - m),
-      log_sigma = log(0.004) + rnorm(if (grepl("us_midterm_v[2-9]", opt$stan)) P - 1 else P, 0, 0.1), log_phi_u = rep(0, H - 1), log_phi = rep(7, H - 1),
+      log_sigma = log(0.004) + rnorm(if (isTRUE(v >= 2)) P - 1 else P, 0, 0.1), log_phi_u = rep(0, H - 1), log_phi = rep(7, H - 1),
       mu_phi = 7 + rnorm(1, 0, 0.3), sigma_phi = 0.5, mu_gamma0 = rep(0, P), mu_bar = rep(0, P),
       gamma_free = matrix(0, H - 1, P), sigma_gamma = 0.05,
-      z_mu = matrix(0, if (grepl("us_midterm_v[6-9]", opt$stan)) E else E - 1, P),
+      z_mu = matrix(0, if (isTRUE(v >= 6)) E else E - 1, P),
       z_house = array(0, c(E - 1, H - 1, P)), tau_mu_est = tau, tau_house_est = tau,
       z_elec = rep(0, P - 1), theta = matrix(0, max(d$Q, 1), P), sigma_race = 0.1,
       z_race = matrix(0, max(d$R, 0), P), lambda_bar = matrix(0, 2, P), lambda = array(0, c(E, 2, P))

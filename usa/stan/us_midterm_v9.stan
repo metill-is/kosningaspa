@@ -3,7 +3,7 @@
 // v8's race polls see the race's election-day deviation delta[r] itself, so twenty polls
 // of a race pin it to about a point of margin. Polls of a Senate race miss its result
 // together, beyond their sampling noise and the industry bias the race shares with the
-// national polls: in FiveThirtyEight's pollster-ratings raw_polls.csv (final 21 days,
+// national polls: in FiveThirtyEight's pollster-ratings raw_polls.csv (final 60 days,
 // 1998-2022 cycles, races decided by less than 20 points) a race's average poll misses
 // by an SD of 0.09 in log(D / R) around its cycle's mean miss, after the sampling noise
 // is taken out. v9 lets a race's polls see delta_poll[r] = delta[r] + kappa[r], with

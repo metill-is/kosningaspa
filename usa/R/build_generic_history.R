@@ -1,4 +1,4 @@
-# Builds out-of-sample Stan data for usa/stan/us_midterm_v4.stan (and v5, v6) from the
+# Builds out-of-sample Stan data for usa/stan/us_midterm_v4.stan (and v5-v10) from the
 # generic-ballot polls in FiveThirtyEight's pollster-ratings raw_polls.csv: the polls of the
 # final 60 days before each House election of 1998-2022, anchored at the national House
 # popular vote of each election since 1996 (usa/README.md has where the files come from).
@@ -17,6 +17,8 @@
 # offsets fall back on their priors. Parties, counts, grid=, anchor_n= and the race fields
 # are those of usa/R/build_generic_ballot.R. bias_walk and phi_info are v6's switches
 # (usa/stan/us_midterm_v6.stan, header): these polls need phi_info = 0, the default.
+# bias_walk=2 is v10's industry bias, AR(1) across epochs. sigma_race_poll is 0 (no races),
+# so v9 and v10 read the data too.
 # two_party=1 drops Other, as in usa/R/build_generic_ballot.R.
 # Writes <out>/stan_data.json and <out>/meta.rds.
 
@@ -104,7 +106,7 @@ stan_data <- list(
   date_r = integer(0), epoch_r = integer(0), race_r = integer(0), n_parties_r = integer(0),
   party_index_r = matrix(0L, 0, P), is_senate = integer(0), senate_holdover_d = 0L,
   pop_n = rep(0L, nrow(y_n)), pop_r = integer(0),
-  bias_walk = as.integer(opt$bias_walk), phi_info = as.numeric(opt$phi_info)
+  bias_walk = as.integer(opt$bias_walk), phi_info = as.numeric(opt$phi_info), sigma_race_poll = 0
 )
 write_stan_json(stan_data, file.path(opt$out, "stan_data.json"))
 saveRDS(
