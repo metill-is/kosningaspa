@@ -4,7 +4,9 @@
 #
 #   LC_ALL=en_US.UTF-8 Rscript usa/R/score_backtest.R dir=<backtest dir> tables=<dir>
 #
-# Reads every <dir>/fit_<name> with a fit.rds and its data from <dir>/data_<name>. Margins
+# Reads every <dir>/fit_<name> with a fit.rds and its data from <dir>/data_<name>, skipping
+# fits whose target election has no result in the table yet (a 2026 fit). Fits of
+# usa/stan/us_midterm_v5.stan score the same way; their bias is that of likely-voter polls. Margins
 # are two-party, in points: 100 * (D - R) / (D + R). Two point baselines use the same polls
 # as the fit: the mean margin of the polls that end in the 28 days before asof, and that
 # mean minus the same average's miss at the previous election (none when the data hold no
@@ -37,8 +39,11 @@ fits <- list.files(opt$dir, "^fit_", full.names = TRUE)
 fits <- fits[file.exists(file.path(fits, "fit.rds"))]
 rows <- lapply(fits, function(f) {
   name <- sub("^fit_", "", basename(f))
-  fit <- readRDS(file.path(f, "fit.rds"))
   meta <- readRDS(file.path(opt$dir, paste0("data_", name), "meta.rds"))
+  if (!as.integer(format(meta$target, "%Y")) %in% pv$year) {
+    return(NULL)
+  }
+  fit <- readRDS(file.path(f, "fit.rds"))
   diag <- jsonlite::read_json(file.path(f, "results.json"))
   set.seed(1)
 

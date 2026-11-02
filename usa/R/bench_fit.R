@@ -46,7 +46,8 @@ if (is.null(opt$csv)) {
 }
 max_td <- as.integer(opt$max_treedepth)
 # Walk volatility 0.004 a day, log phi 7, small bias and race scales, everything else 0.
-# Fields a model does not declare are ignored by CmdStan, so this serves v5, v0 and v1.
+# Fields a model does not declare are ignored by CmdStan, so this serves v5, v0 and v1;
+# z_mu has E rows from us_midterm_v6 on (one shock per epoch) and E - 1 before.
 smart_init <- function(data_file) {
   d <- jsonlite::read_json(data_file, simplifyVector = TRUE)
   m <- length(unique(d$date_n[d$house_n == 1]))
@@ -60,11 +61,12 @@ smart_init <- function(data_file) {
     init <- list(
       L_Omega = diag(P), L_corr = diag(P - 1), anchor_w = matrix(0, m, P - 1), z_walk = matrix(0, P - 1, d$D - m),
       log_sigma = log(0.004) + rnorm(if (grepl("us_midterm_v[2-9]", opt$stan)) P - 1 else P, 0, 0.1), log_phi_u = rep(0, H - 1), log_phi = rep(7, H - 1),
-      mu_phi = 7 + rnorm(1, 0, 0.3), sigma_phi = 0.5, mu_gamma0 = rep(0, P),
-      gamma_free = matrix(0, H - 1, P), sigma_gamma = 0.05, z_mu = matrix(0, E - 1, P),
+      mu_phi = 7 + rnorm(1, 0, 0.3), sigma_phi = 0.5, mu_gamma0 = rep(0, P), mu_bar = rep(0, P),
+      gamma_free = matrix(0, H - 1, P), sigma_gamma = 0.05,
+      z_mu = matrix(0, if (grepl("us_midterm_v[6-9]", opt$stan)) E else E - 1, P),
       z_house = array(0, c(E - 1, H - 1, P)), tau_mu_est = tau, tau_house_est = tau,
       z_elec = rep(0, P - 1), theta = matrix(0, max(d$Q, 1), P), sigma_race = 0.1,
-      z_race = matrix(0, max(d$R, 0), P)
+      z_race = matrix(0, max(d$R, 0), P), lambda_bar = matrix(0, 2, P), lambda = array(0, c(E, 2, P))
     )
     init[vapply(init, length, integer(1)) > 0]
   }
