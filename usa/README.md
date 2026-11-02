@@ -19,6 +19,7 @@ is used by the Icelandic forecast or Fylgisvakt, and nothing outside `usa/` was 
 | `R/summarise_generic.R` | Election-day forecast, industry bias per epoch and the walk's margin by date, from a generic-ballot fit of v3 or v4 |
 | `R/score_backtest.R` | Scores backtest fits against the popular vote of their target election, beside two poll baselines |
 | `us-midterms-feasibility.html` | The write-up: data, model changes, run times, out-of-sample backtests of 2018–2024 and the 2026 national forecast |
+| `us-midterms-improvement-plan.html` | Next steps (2 November 2026): the national-layer fixes, the race-layer data and model, the decisions they wait on, and the data held and missing |
 | `data_freeze_2026-11-02.sha256` | sha256 of every poll table and raw file gathered on 2 November 2026, committed before the election, so a later 2026 fit can show it used pre-election data only |
 | `R/bench_fit.R` | Fits a Stan file on a saved data JSON, times it and prints one `DIAG` line (wall time, ms per gradient, tree depth, divergences, R-hat, ESS) |
 
