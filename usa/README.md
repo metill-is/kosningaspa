@@ -280,6 +280,56 @@ divergent on every draw (R-hat 1.54) and was refitted with `seed=4101` (no diver
 fit is the one scored). The history 2018 fit with `mu_bar` = 0 had 98 divergent transitions
 (R-hat 1.016); a clean refit with `seed=4101` agreed within 0.13 points of margin.
 
+### Election-window volatility
+
+Step 3 of `us-model-review.html` lets the national walk move more on both sides of each
+election, so that support can shift without the industry bias absorbing the shift
+(`us_midterm_v12.stan`, the builders' `election_vol=1 vol_days=<L>`). Each step's variance
+becomes v + a_pre·K_pre + a_post·K_post, in units of the walk's daily variance: K_pre sums
+e^(−d/L) over the step's days with d the days to the next election, K_post the same with d the
+days since the last result, and a_pre, a_post ~ half-normal(0, 2). The bias is constant
+within an epoch, so poll movement inside the windows identifies both; the history and
+presidential data hold only each cycle's final 60 days, so they see a_pre alone. The arms
+reuse the baselines' data with the switch added; fits in the study folder's `volatility/`.
+
+| Backtests | Measure | No windows | Windows, L = 30 | Windows, L = 60 |
+|---|---|---|---|---|
+| History 1998–2022 (13) | CRPS | 1.64 | 1.62 | – |
+| | Mean absolute error | 2.09 | 2.05 | – |
+| | 90% intervals covering | 10 | 10 | – |
+| Presidential national 2008–2024 (5) | CRPS | 1.80 | 1.75 | – |
+| | Mean absolute error | 2.72 | 2.67 | – |
+| Senate 2018–2024 (8 fits) | Error, polled races | 4.53 | 4.52 | 4.53 |
+| | 90% intervals covering, of 34 | 29.4 | 30.1 | 30.0 |
+| | Brier | 0.045 | 0.045 | 0.046 |
+| | National margin, 90% intervals covering | 5 of 8 | 7 of 8 | 7 of 8 |
+| | 2020 eve national PIT | 0.001 | 0.006 | 0.004 |
+| | 2020 eve forecast-cycle bias, z of the realised miss | +5.1 | +4.7 | +4.7 |
+
+The windows pass neither half of the review's test (forecast-cycle z-scores within about ±2
+and the 2020 eve interval covering), and the data do not ask for them. Across the nine Senate
+fits a_post's posterior median runs 0.82–1.36 and a_pre's 0.52–1.49, against a prior median of
+1.35, and their 95th percentiles 2.2–4.1 against the prior's 3.9: where the polls say
+anything, they pull the windows down (the 2020 eve fit: 0.52 and 0.85). The history and
+presidential fits leave a_post at its prior and move a_pre's median by at most 0.21. With L =
+60 (Senate fits only) every median falls below the prior's (a_pre 0.44–1.05, a_post
+0.45–1.18); a 60-day window holds twice the kernel mass, so the extra variance is about what L
+= 30 gave, and so are the scores. The extra spread therefore comes from the prior and lands on
+the walk, not on the bias: the 2020 eve fit's forecast-cycle bias SD goes from 1.0 to 1.1
+points, and the two extra national covers (2018 eve, 2022 four weeks out) come from intervals
+1.5 points wider on average. On the history the paired per-cycle CRPS difference is −0.02 (SE
+0.03), better in 7 of 13 cycles. The 2026 Senate forecast barely moves: P(Democrats 51 or
+more) 0.720 against 0.719, median 52 seats, House margin D+7.8 (90% D+4.9 to D+10.8, against
+D+5.2 to D+10.4).
+
+Why the windows cannot reach the 2020 miss: the walk is pinned at the 2018 result (D+8.7),
+and the 2020 cycle's final-60-day generic-ballot polls averaged about D+8.4 (the D+3.1
+result plus the +5.3 miss). Polls that end near the last result pin the cycle's bias near
+zero, and nothing in the cycle's own polls shows the miss; it shows only at the next result.
+Covering it takes a term the polls cannot pin: a zero-centred forecast-cycle term whose spread
+comes from past cycles, or a within-cycle drift whose spread the closed epochs teach. The
+windows stay switched off by default (`election_vol=0`).
+
 ## Forecast recorded before the 2026 election
 
 Recorded on 2 November 2026 from `us_midterm_v4.stan` fitted to the generic ballot alone
