@@ -111,7 +111,10 @@ polls of its final 60 days only. On those, v6 with a stationary industry bias
 | Mean of the final-60-day polls | 3.14 | | |
 
 Errors are in points of two-party margin. Both miss 2008 and 2018 (the polls understated
-the Democrats). The Senate fits below use the stationary bias.
+the Democrats). Two-party (v8, `two_party=1`), the same 13 elections give the same answer:
+mean absolute error 2.46 for the walk against 2.09 stationary, CRPS 1.93 against 1.64, 10 of
+13 intervals covering for each; the stationary fits of the smallest years (1998–2004) had
+6–15 divergent transitions of 4,000. The Senate and presidential fits use the stationary bias.
 
 ```bash
 LC_ALL=en_US.UTF-8 Rscript usa/R/build_generic_history.R raw=<raw>/gb-538-github/raw_polls.csv tables=<tables> out=<bt>/data_eve_2010 target=2010-11-02 anchor_n=2e5 grid=week tau_scale=0.05 bias_walk=0
