@@ -131,6 +131,60 @@ LC_ALL=en_US.UTF-8 Rscript usa/R/bench_fit.R stan=usa/stan/us_midterm_v9.stan da
 LC_ALL=en_US.UTF-8 Rscript usa/R/score_races.R dir=<bt>
 ```
 
+On the eve of each election (`eve`) and four weeks before it (`w4`, `asof=`), v9's error on
+the races with polls was below that of the mean of each race's polls of the final 28 days in
+all eight fits (two-party margin points):
+
+| Fit | Error, polled races | Polls' error | Winners right | 90% intervals covering | Expected / actual D seats |
+|---|---|---|---|---|---|
+| eve 2018 | 3.55 | 3.63 | 32 of 34 | 31 | 21.7 / 23 |
+| w4 2018 | 3.95 | 5.98 | 32 of 34 | 32 | 23.1 / 23 |
+| eve 2020 | 6.81 | 7.34 | 31 of 35 | 24 | 16.3 / 15 |
+| w4 2020 | 6.67 | 7.63 | 31 of 35 | 29 | 16.6 / 15 |
+| eve 2022 | 4.44 | 5.01 | 35 of 35 | 29 | 14.4 / 15 |
+| w4 2022 | 5.99 | 6.06 | 35 of 35 | 28 | 16.1 / 15 |
+| eve 2024 | 2.81 | 4.88 | 32 of 34 | 32 | 18.0 / 19 |
+| w4 2024 | 3.04 | 5.22 | 33 of 34 | 33 | 19.2 / 19 |
+
+2020, when the polls overstated the Democrats almost everywhere, is the one cycle whose
+intervals cover too rarely: each race's polling error is independent of the others', so the
+model has no error shared by a region or by all races beyond the national vote's.
+
+### Presidential backtests, 2008–2024
+
+`build_president.R` makes each state and DC a race on the national popular vote, so the state
+calls can be set beside the published forecasts' (their final state forecasts, gathered with
+their sources in the study folder's `raw/benchmarks/`). Margins are two-party; 538's and Silver
+Bulletin's electoral votes include the Maine and Nebraska districts, v9's give each state's
+votes to its statewide winner. 538 is Silver's model to 2020 (polls-only in 2016) and Morris's
+in 2024.
+
+| Year | Forecast | States called | Brier | State error | P(D wins) | D electoral votes (actual) |
+|---|---|---|---|---|---|---|
+| 2008 | v9 | 49 (IN, MO missed) | 0.026 | 3.46 | 0.96 | 367 (365) |
+| | 538 | 50 (IN) | | | 0.99 | 349 mean |
+| 2012 | v9 | 51 | 0.013 | 3.48 | 0.85 | 318 (332) |
+| | 538 | 51 | 0.009 | 3.27 | 0.91 | 313 mean |
+| 2016 | v9 | 45 (FL, MI, NC, OH, PA, WI) | 0.082 | 5.76 | 0.91 | 323 (232) |
+| | 538 | 46 (FL, MI, NC, PA, WI) | 0.067 | 6.08 | 0.71 | 302 mean |
+| 2020 | v9 | 49 (FL, NC) | 0.039 | 5.46 | 0.97 | 356 (306) |
+| | 538 | 49 (FL, NC) | 0.036 | 4.69 | 0.89 | 348 mean |
+| | Economist | 49 (FL, NC) | 0.037 | 4.44 | 0.97 | 356 |
+| 2024 | v9 | 49 (MI, WI) | 0.026 | 2.66 | 0.41 | 258 (226) |
+| | 538 | 47 (MI, NV, PA, WI) | 0.034 | 2.85 | 0.50 | 270 |
+| | Silver Bulletin | 49 (MI, WI) | 0.034 | | 0.50 | 271 mean |
+| | Economist | 47 (MI, NV, PA, WI) | 0.037 | 3.39 | 0.56 | 276 |
+
+v9's electoral votes are posterior medians. Its 90% intervals covered 47, 48, 32, 32 and 50
+of the 51 states: like the Senate, it has no error shared by a region, which 2016 and 2020
+needed.
+
+```bash
+LC_ALL=en_US.UTF-8 Rscript usa/R/build_president.R raw=<raw> out=<bt>/data_eve_2016 target=2016-11-08
+LC_ALL=en_US.UTF-8 Rscript usa/R/bench_fit.R stan=usa/stan/us_midterm_v9.stan data=<bt>/data_eve_2016/stan_data.json out=<bt>/fit_eve_2016 init=smart init_buffer=15 window=25
+LC_ALL=en_US.UTF-8 Rscript usa/R/score_president.R dir=<bt> ev=<raw>/president/derived/ev_by_state.csv
+```
+
 ## Forecast recorded before the 2026 election
 
 Recorded on 2 November 2026 from `us_midterm_v4.stan` fitted to the generic ballot alone
@@ -149,3 +203,31 @@ built with `anchor_n=2e5 grid=week tau_scale=0.05` (`stan_data.json` sha256
 3,998 of the 4,000 draws give the Democrats more of the two-party vote. Polls of the final four weeks
 average D+8.7 two-party; the model subtracts an industry bias it carries over from the
 2018–2024 cycles.
+
+### Senate, v9
+
+Recorded on 2 November 2026 from `us_midterm_v9.stan` on the generic ballot and the 35
+Senate races (the regular class 2 seats and the Ohio and Florida specials), two-party, with
+595 race polls ending by 1 November, built with the Senate backtests' options and
+`target=2026-11-03` (`stan_data.json` sha256
+`62e8f38adbedbaca321247d2d6b4206496bad3a3b02412d253d3b61c725dd151`). 4 chains × 1,000
+draws, no divergences, max R-hat 1.004. 34 Democratic seats are not up.
+
+| Quantity | Median | 90% interval |
+|---|---|---|
+| Two-party Democratic margin, House vote | D+7.8 | D+5.2 to D+10.4 |
+| Democratic seats (an independent in the Democratic slot counted as one) | 52 | 48–55 |
+| P(Democrats 51 or more) | 0.72 | 0.69 with no independent counted |
+
+| Race | NYT/Siena, 1 November | Polls of the final 28 days | v9 margin | 90% interval | P(D) |
+|---|---|---|---|---|---|
+| Michigan | D+11.6 | D+4.5 (18) | D+2.8 | R+4.7 to D+10.5 | 0.74 |
+| Maine | D+6.3 | D+4.4 (12) | D+2.2 | R+5.2 to D+9.7 | 0.69 |
+| Texas | D+7.5 | D+3.3 (30) | D+1.9 | R+5.8 to D+9.0 | 0.66 |
+| Ohio (special) | D+5.4 | D+3.0 (18) | D+1.3 | R+6.3 to D+8.9 | 0.62 |
+| Alaska | D+2.1 | D+2.7 (6) | D+0.7 | R+6.9 to D+8.5 | 0.56 |
+| Iowa | D+1.1 | D+0.0 (12) | even | R+7.6 to D+7.5 | 0.50 |
+| Kansas | D+5.4 | D+2.8 (8) | R+1.0 | R+8.3 to D+6.5 | 0.42 |
+
+Every race's file is `senate/forecast_2026_races.csv` in the study folder. The industry bias
+the model takes off the 2024–26 polls is D+2.0 (90% interval R+0.3 to D+4.3).
