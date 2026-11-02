@@ -32,7 +32,7 @@
 # Other: P = 2, results of the Democratic and Republican votes alone (usa/stan/us_midterm_v8.stan).
 # race_poll_sd=, when given, adds v9's sigma_race_poll (usa/stan/us_midterm_v9.stan): a
 # number, or auto for the race polling error of the cycles before the target
-# (usa/R/senate_races.R, senate_poll_error_sd).
+# (usa/R/senate_races.R, race_poll_error_sd).
 # The data also carry the fields of usa/stan/us_midterm_v1.stan to v4 with no races and a
 # flat fundamentals factor (sd_fund 10), so they fit the national walk alone. Writes
 # <out>/stan_data.json and <out>/meta.rds (dates, houses, epochs).
@@ -189,7 +189,7 @@ if (nzchar(opt$bias_walk)) stan_data$bias_walk <- as.integer(opt$bias_walk)
 if (nzchar(opt$phi_info)) stan_data$phi_info <- as.numeric(opt$phi_info)
 if (nzchar(opt$race_poll_sd)) {
   stan_data$sigma_race_poll <- if (opt$race_poll_sd == "auto") {
-    senate_poll_error_sd(file.path(opt$raw, "gb-538-github", "raw_polls.csv"), as.integer(format(target, "%Y")))
+    race_poll_error_sd(file.path(opt$raw, "gb-538-github", "raw_polls.csv"), as.integer(format(target, "%Y")))
   } else {
     as.numeric(opt$race_poll_sd)
   }

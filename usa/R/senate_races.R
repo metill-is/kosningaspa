@@ -37,14 +37,19 @@ library(readr)
 clr <- function(x) log(x) - mean(log(x))
 dem_caucus_independents <- c("SANDERS", "KING")
 
-presidential_lean <- function(medsl_president) {
-  pres <- read_csv(medsl_president, show_col_types = FALSE) |>
-    filter(!writein) |>
+# WHY: MEDSL flags Biden's and Trump's 2020 rows in DC as write-ins, so the flag is not
+# filtered on; the other flagged major-party rows are real write-ins of the nominees.
+presidential_votes <- function(medsl_president) {
+  read_csv(medsl_president, show_col_types = FALSE) |>
     group_by(year, state_po) |>
     summarise(
-      d = sum(candidatevotes[party_simplified == "DEMOCRAT"]),
-      r = sum(candidatevotes[party_simplified == "REPUBLICAN"]), .groups = "drop"
+      d = sum(candidatevotes[party_simplified %in% "DEMOCRAT"], na.rm = TRUE),
+      r = sum(candidatevotes[party_simplified %in% "REPUBLICAN"], na.rm = TRUE), .groups = "drop"
     )
+}
+
+presidential_lean <- function(medsl_president) {
+  pres <- presidential_votes(medsl_president)
   nat <- pres |>
     group_by(year) |>
     summarise(nat = log(sum(d) / sum(r)))
@@ -124,17 +129,18 @@ national_clr <- function(pv, years, P) {
 
 race_covariates <- function(lean, inc, indep_d) cbind(1, lean, inc, as.numeric(indep_d))
 
-#' The SD per direction of the polling error a Senate race's polls share (sigma_race_poll of
+#' The SD per direction of the polling error a race's polls share (sigma_race_poll of
 #' usa/stan/us_midterm_v9.stan), from FiveThirtyEight's pollster-ratings raw_polls.csv
-#' (CC BY 4.0): the Democrat-against-Republican polls of the final 21 days in the even
-#' cycles before the target, races decided by less than max_margin points. Each race's
+#' (CC BY 4.0): the Democrat-against-Republican polls of type (Sen-G: Senate; Pres-G: a
+#' state's presidential vote) in the final 60 days of the even cycles before the target,
+#' races decided by less than max_margin points. Each race's
 #' mean poll miss in log(D / R), less its cycle's mean (the industry bias the national
 #' polls carry), has its sampling variance taken out; a zero-sum pair's SD per direction
 #' is that of log(D / R) over sqrt(2).
-senate_poll_error_sd <- function(raw_polls, ty, max_margin = 20) {
+race_poll_error_sd <- function(raw_polls, ty, type = "Sen-G", max_margin = 20) {
   race <- read_csv(raw_polls, show_col_types = FALSE) |>
     filter(
-      type_simple == "Sen-G", cycle %% 2 == 0, cycle < ty, samplesize > 0,
+      type_simple == type, location != "US", cycle %% 2 == 0, cycle < ty, samplesize > 0,
       paste(cand1_party, cand2_party) %in% c("DEM REP", "REP DEM")
     ) |>
     mutate(

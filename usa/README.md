@@ -25,6 +25,8 @@ is used by the Icelandic forecast or Fylgisvakt, and nothing outside `usa/` was 
 | `R/summarise_generic.R` | Election-day forecast, industry bias per epoch and the walk's margin by date, from a generic-ballot fit of v3 or v4 |
 | `R/score_backtest.R` | Scores backtest fits against the popular vote of their target election, beside two poll baselines |
 | `R/score_races.R` | Scores the races of Senate backtest fits against their results: margin error, 90% coverage, Brier score, winners called, expected against actual Democratic seats, beside the mean of each race's polls of the final 28 days |
+| `R/build_president.R` | v9 data for a presidential election of 2004–2024: the national and state polls of each cycle's final 60 days, anchored at the national popular vote since 1996, each state and DC a race with a regression prior on its leans at the two elections before |
+| `R/score_president.R` | Scores presidential backtest fits: national margin, each state's margin, 90% coverage, Brier score and winner, and the electoral votes (each state's to its statewide winner), beside the mean of each state's polls of the final 28 days |
 | `us-midterms-feasibility.html` | The write-up: data, model changes, run times, out-of-sample backtests of 2018–2024 and the 2026 national forecast |
 | `us-midterms-improvement-plan.html` | Next steps (2 November 2026): the national-layer fixes, the race-layer data and model, the decisions they wait on, and the data held and missing |
 | `data_freeze_2026-11-02.sha256` | sha256 of every poll table and raw file gathered on 2 November 2026, committed before the election, so a later 2026 fit can show it used pre-election data only |
@@ -45,9 +47,14 @@ decision D4), under that folder's `raw/`:
 | House, Senate and governor results 2006–2024, with incumbency | Cha, Kuriwaki and Snyder, Candidates in American General Elections, Harvard Dataverse doi:10.7910/DVN/DGDRDT (`dataverse-DGDRDT/`) | CC0 |
 | State presidential vote 1976–2024 | MIT Election Data and Science Lab, doi:10.7910/DVN/42MVDX (`medsl/president.csv`) | CC0 |
 | Senate, House and governor polls of the 2018–2024 cycles | FiveThirtyEight `polls` repository, `*_polls_historical.csv` (`538-polls-historical/`) | CC BY 4.0 |
-| Final-21-day polls with results, 1998–2022 | FiveThirtyEight pollster ratings, `raw_polls.csv` (`gb-538-github/`) | CC BY 4.0 |
+| Final-60-day polls with results, 1998–2022 | FiveThirtyEight pollster ratings, `raw_polls.csv` (`gb-538-github/`) | CC BY 4.0 |
 | Sitting senators and their classes | unitedstates/congress-legislators (`congress-legislators/`) | CC0 |
 | 2026 Senate races and polls | Wikipedia (`tables/senate_*`) | CC BY-SA 4.0 |
+| 2024 presidential polls | FiveThirtyEight `president_polls.csv`, Wayback copy of 5 November 2024 (`president/538-president-polls-20241105/`) | CC BY 4.0 |
+| Electoral votes by state, 2008–2024 | National Archives (`president/archives-gov-ev/`, `president/derived/ev_by_state.csv`) | Public domain |
+
+MEDSL flags Biden's and Trump's 2020 votes in DC as write-ins, so `presidential_votes()` in
+`R/senate_races.R` sums the major-party rows without filtering on that flag.
 
 No open source has full-cycle generic-ballot polls before the 2018 cycle (HuffPost
 Pollster's 2012–2016 archive is CC BY-NC-SA).
