@@ -87,7 +87,7 @@
 <p class="sub">Feasibility study · 2 November 2026, the day before the 2026 midterms · branch <code>claude/usa-midterms-model-feasibility-0897e9</code></p>
 
 <div class="tldr">
-<p><strong>Yes: the kosningaspá model can be adapted to the US midterms and run on a laptop.</strong> There are enough data for the national vote and the Senate. The poll core carries over, but at US poll density two changes are needed before it samples well: the walk integrated out by a Kalman filter, and each pollster's overdispersion partly centred. Races, fundamentals and seat counts are new. With those changes the national model fits in 12 minutes and a 2026-sized simulated race layer in 24. Refitted with only the data available on the eve of each election from 2018 to 2024, it missed the national House margin by 2.7 points on average, as the polls did, and by 2.4 against their 3.4 once it had an earlier result to learn poll bias from. Six of its eight 90% intervals, on the eve and four weeks out, covered the result. Both misses came in cycles whose poll error grew after the first months, which a bias held fixed per cycle cannot see. The remaining work is mostly data (the race pipeline, fundamentals), plus correlated errors between races and a poll bias that can move within a cycle.</p>
+<p><strong>Yes: the kosningaspá model can be adapted to the US midterms and run on a laptop.</strong> There are enough data for the national vote and the Senate. The poll core carries over, but at US poll density two changes are needed before it samples well: the walk integrated out by a Kalman filter, and each pollster's overdispersion partly centred. Races, fundamentals and seat counts are new. With those changes the national model fits in 12 minutes and a 2026-sized simulated race layer in 24. Refitted with only the data available on the eve of each election from 2018 to 2024, it missed the national House margin by 2.7 points on average, as the polls did, and by 2.4 against their 3.4 once it had an earlier result to learn poll bias from. Six of its eight 90% intervals, on the eve and four weeks out, covered the result. Both misses came in cycles whose poll error grew after the first months, which a bias held fixed per cycle cannot see. A two-party version with Senate and state layers (v9, section 5) beat the race polls in all eight Senate backtests and called presidential states from 2008 to 2024 about as well as Silver's forecasts, 243 of 255 against 245, but its intervals were too narrow in 2016 and 2020, when the polls missed together. The remaining work is mostly data (the House race pipeline, fundamentals), plus correlated errors between races and a poll bias that can move within a cycle.</p>
 </div>
 
 <table class="verdicts">
@@ -95,6 +95,7 @@
   <tr><td>2 · Changes</td><td><strong>The poll core carries over; the rest is new.</strong> v5's walk and epoch-varying biases stay, but at US poll density the walk has to be integrated out by a Kalman filter (v3) and pollster overdispersion partly centred (v4). The race layer (about 100 lines of Stan), fundamentals and seat counts are additions, and the data pipeline is the largest single piece.</td></tr>
   <tr><td>3 · Runtime</td><td><strong>Yes, with v4.</strong> The real generic ballot fits in 12 minutes, and a 2026-sized simulated race layer (470 races, 210 pollsters) in 24 minutes, both on a laptop with no divergences. v5's own parameterisation projects to 4–5 hours per chain.</td></tr>
   <tr><td>4 · Backtests</td><td><strong>It runs out of sample and matches a corrected poll average; its intervals miss new poll errors.</strong> Refitted on each eve from 2018 to 2024 it missed by 2.7 points on average, as the raw poll mean did, and by 2.4 against 3.4 for 2020–2024. Six of eight 90% intervals, on the eve and four weeks out, covered the result. Both misses came in cycles whose poll error grew after the first months.</td></tr>
+  <tr><td>5 · Races</td><td><strong>Yes for the Senate and presidential states; the intervals are too narrow when polls miss together.</strong> The Senate model beat the race polls in all eight backtests, and its presidential version called 243 of 255 states from 2008 to 2024, against 245 for Silver's forecasts. In 2016 and 2020 only 32 of 51 state intervals covered the result.</td></tr>
 </table>
 
 <h2>1 · Can we get enough data?</h2>
@@ -365,6 +366,59 @@
 <h3>Limits</h3>
 <p>Four elections make a small test. Six covered intervals out of eight cannot tell a well-calibrated 90% interval from an 80% one, and the comparisons with the baselines rest on three or four elections each. The backtests forecast the national vote alone, without fundamentals or races, where most of a full model's value would lie. The priors were set during this study, with these results in the data; none is centred on a Democratic poll bias, but the backtests are not blind to every choice. The 2018 design, with the 2016 result, was settled after the first 2018 fit refused data without any result, before any 2018 forecast existed.</p>
 
+<h2>5 · Can it forecast races?</h2>
+<p>The race models are two-party (v8): Other is dropped, since races cannot share one scale across Democrat against Republican and the major parties against Other. Each race is a deviation from the national vote with a regression prior learnt from past results, and v9 adds a polling error that all of a race's polls share, its size set from the cycles before the target. Each fit takes 4–16 minutes, with at most 3 divergent transitions in 4,000.</p>
+
+<h3>Senate, 2018–2024</h3>
+<div class="tbl">
+<table class="data compact">
+  <thead><tr><th>Election, cutoff</th><th>Error, polled races</th><th>Final four weeks' poll mean, error</th><th>Winners right</th><th>90% intervals covering</th><th>Expected / actual D seats</th></tr></thead>
+  <tbody>
+    <tr><td>2018<br><span class="cut">Eve</span></td><td class="n">3.55</td><td class="n">3.63</td><td class="n">32 of 34</td><td class="n">31</td><td class="n">21.7 / 23</td></tr>
+    <tr><td>2018<br><span class="cut">4 weeks</span></td><td class="n">3.95</td><td class="n">5.98</td><td class="n">32 of 34</td><td class="n">32</td><td class="n">23.1 / 23</td></tr>
+    <tr><td>2020<br><span class="cut">Eve</span></td><td class="n">6.81</td><td class="n">7.34</td><td class="n">31 of 35</td><td class="n"><strong>24</strong></td><td class="n">16.3 / 15</td></tr>
+    <tr><td>2020<br><span class="cut">4 weeks</span></td><td class="n">6.67</td><td class="n">7.63</td><td class="n">31 of 35</td><td class="n">29</td><td class="n">16.6 / 15</td></tr>
+    <tr><td>2022<br><span class="cut">Eve</span></td><td class="n">4.44</td><td class="n">5.01</td><td class="n">35 of 35</td><td class="n">29</td><td class="n">14.4 / 15</td></tr>
+    <tr><td>2022<br><span class="cut">4 weeks</span></td><td class="n">5.99</td><td class="n">6.06</td><td class="n">35 of 35</td><td class="n">28</td><td class="n">16.1 / 15</td></tr>
+    <tr><td>2024<br><span class="cut">Eve</span></td><td class="n">2.81</td><td class="n">4.88</td><td class="n">32 of 34</td><td class="n">32</td><td class="n">18.0 / 19</td></tr>
+    <tr><td>2024<br><span class="cut">4 weeks</span></td><td class="n">3.04</td><td class="n">5.22</td><td class="n">33 of 34</td><td class="n">33</td><td class="n">19.2 / 19</td></tr>
+  </tbody>
+</table>
+</div>
+<p class="note">Mean absolute error of the two-party margin in points, over the races with polls in the final four weeks (22–28 per fit). Covariates: the state's presidential lean, incumbency and an independent in the Democratic slot. Results from Candidates in American General Elections (CC0), polls from FiveThirtyEight's poll archive (CC BY 4.0).</p>
+
+<h3>Presidential states, 2008–2024, against the published models</h3>
+<p>Each state and DC is a race on the national popular vote, with a prior on its leans at the two elections before. The polls are those of each cycle's final 60 days in FiveThirtyEight's pollster-ratings file, and for 2024 its final poll file. The published forecasts are each forecaster's final state probabilities, scored here against the same results.</p>
+<div class="tbl">
+<table class="data compact">
+  <thead><tr><th>Year</th><th>Forecast</th><th>States called (missed)</th><th>Brier</th><th>State error</th><th>P(D wins)</th><th>D electoral votes (actual)</th></tr></thead>
+  <tbody>
+    <tr><td>2008</td><td>v9</td><td>49 (IN, MO)</td><td class="n">0.026</td><td class="n">3.46</td><td class="n">0.96</td><td class="n">367 (365)</td></tr>
+    <tr><td></td><td>538</td><td>50 (IN)</td><td class="n">–</td><td class="n">–</td><td class="n">0.99</td><td class="n">349</td></tr>
+    <tr><td>2012</td><td>v9</td><td>51</td><td class="n">0.013</td><td class="n">3.48</td><td class="n">0.85</td><td class="n">318 (332)</td></tr>
+    <tr><td></td><td>538</td><td>51</td><td class="n">0.009</td><td class="n">3.27</td><td class="n">0.91</td><td class="n">313</td></tr>
+    <tr class="hl"><td>2016</td><td>v9</td><td>45 (FL, MI, NC, OH, PA, WI)</td><td class="n">0.082</td><td class="n">5.76</td><td class="n">0.91</td><td class="n">323 (232)</td></tr>
+    <tr class="hl"><td></td><td>538</td><td>46 (FL, MI, NC, PA, WI)</td><td class="n">0.067</td><td class="n">6.08</td><td class="n">0.71</td><td class="n">302</td></tr>
+    <tr><td>2020</td><td>v9</td><td>49 (FL, NC)</td><td class="n">0.039</td><td class="n">5.46</td><td class="n">0.97</td><td class="n">356 (306)</td></tr>
+    <tr><td></td><td>538</td><td>49 (FL, NC)</td><td class="n">0.036</td><td class="n">4.69</td><td class="n">0.89</td><td class="n">348</td></tr>
+    <tr><td></td><td>Economist</td><td>49 (FL, NC)</td><td class="n">0.037</td><td class="n">4.44</td><td class="n">0.97</td><td class="n">356</td></tr>
+    <tr><td>2024</td><td>v9</td><td>49 (MI, WI)</td><td class="n">0.026</td><td class="n">2.66</td><td class="n">0.41</td><td class="n">258 (226)</td></tr>
+    <tr><td></td><td>538</td><td>47 (MI, NV, PA, WI)</td><td class="n">0.034</td><td class="n">2.85</td><td class="n">0.50</td><td class="n">270</td></tr>
+    <tr><td></td><td>Silver Bulletin</td><td>49 (MI, WI)</td><td class="n">0.034</td><td class="n">–</td><td class="n">0.50</td><td class="n">271</td></tr>
+    <tr><td></td><td>Economist</td><td>47 (MI, NV, PA, WI)</td><td class="n">0.037</td><td class="n">3.39</td><td class="n">0.56</td><td class="n">276</td></tr>
+  </tbody>
+</table>
+</div>
+<p class="note">51 jurisdictions (50 states and DC). State error is the mean absolute error of the two-party margin in points; 538 publishes shares of the total vote, which are converted to two-party here. 538 is Nate Silver's model to 2020 (polls-only in 2016) and G. Elliott Morris's in 2024; the Economist's was built with Andrew Gelman. v9's electoral votes are medians and give each state's votes to its statewide winner; the others' are medians or means and count the Maine and Nebraska districts. 538's 2008 probabilities survive only as images, and Silver Bulletin's 2024 margins are paywalled.</p>
+
+<h3>What they show</h3>
+<ul>
+  <li><strong>Senate: ahead of the polls in every fit.</strong> In all eight Senate backtests the model's error on the polled races was below that of the mean of each race's polls of the final four weeks. It called 260 of 276 winners and put the expected Democratic seats within 1.7 of the count.</li>
+  <li><strong>Presidential states: about level with Silver.</strong> It called 243 of 255 states, against 245 for 538 and Silver Bulletin, with a mean Brier score over 2012–2024 of 0.040 against 0.037. It was the best of the four forecasts in 2024 and the worst in 2016 and 2020.</li>
+  <li><strong>Intervals fail when the polls miss together.</strong> In 2016 and 2020 only 32 of 51 state intervals covered the result, and in the 2020 Senate 24 of 35; in the other years 47–50 of 51 and 28–33 of 34–35. Each race's polling error is independent of the others', so a miss across the Midwest, or across every race at once, can only reach the races through the national vote. 538 and the Economist both draw such shared errors: in 2016 538 called almost the same states, but gave Clinton 71% where v9 gave 91%.</li>
+  <li><strong>Not a clean test.</strong> The stationary industry bias was chosen on the 13 history backtests, which include 2016–2022. The size of each race's polling error uses only the cycles before the target.</li>
+</ul>
+
 <h2>What v4 says about 2026</h2>
 <p>The real-data fit uses no race data and no fundamentals (a flat election-day factor), so it forecasts only the national House vote. It is a check that the model does something sensible with real polls, not a forecast to publish.</p>
 <p><strong>Two-party Democratic margin on 3 November: D+6.5, 90% interval D+3.7 to D+9.6</strong>, which is 53.2% of the two-party vote. Polls in the last four weeks average D+8.7 two-party. Five poll averages on Wikipedia, updated 1 November, average D+8.7 on all respondents, D+9.2 two-party.</p>
@@ -399,6 +453,26 @@
   </div>
 </details>
 
+<h2>What v9 says about the 2026 Senate</h2>
+<p>Fitted on the generic ballot and the 35 Senate races (the regular seats and the Ohio and Florida specials), with 595 race polls ending by 1 November, and recorded before polls open (the data's sha256 is in <code>usa/README.md</code>). 4 chains of 1,000 draws, no divergent transitions, R̂ at most 1.004.</p>
+<p><strong>Democrats win 51 or more seats, which control needs while the Vice President is a Republican, in 72% of draws</strong>: median 52 seats, 90% interval 48–55. Not counting an independent in the Democratic slot (Nebraska's Osborn is the only one with a real chance), it is 69%. The national House vote comes out at D+7.8 two-party (D+5.2 to D+10.4).</p>
+<div class="tbl">
+<table class="data">
+  <thead><tr><th>Race</th><th>NYT/Siena, 1 November</th><th>Final four weeks' polls</th><th>v9 (90% interval)</th><th>P(D)</th></tr></thead>
+  <tbody>
+    <tr><td>Michigan</td><td class="n">D+11.6</td><td class="n">D+4.5 (18)</td><td class="n">D+2.8 (R+4.7 to D+10.5)</td><td class="n">0.74</td></tr>
+    <tr><td>Maine</td><td class="n">D+6.3</td><td class="n">D+4.4 (12)</td><td class="n">D+2.2 (R+5.2 to D+9.7)</td><td class="n">0.69</td></tr>
+    <tr><td>Texas</td><td class="n">D+7.5</td><td class="n">D+3.3 (30)</td><td class="n">D+1.9 (R+5.8 to D+9.0)</td><td class="n">0.66</td></tr>
+    <tr><td>Ohio (special)</td><td class="n">D+5.4</td><td class="n">D+3.0 (18)</td><td class="n">D+1.3 (R+6.3 to D+8.9)</td><td class="n">0.62</td></tr>
+    <tr><td>Alaska</td><td class="n">D+2.1</td><td class="n">D+2.7 (6)</td><td class="n">D+0.7 (R+6.9 to D+8.5)</td><td class="n">0.56</td></tr>
+    <tr><td>Iowa</td><td class="n">D+1.1</td><td class="n">even (12)</td><td class="n">even (R+7.6 to D+7.5)</td><td class="n">0.50</td></tr>
+    <tr><td>Kansas</td><td class="n">D+5.4</td><td class="n">D+2.8 (8)</td><td class="n">R+1.0 (R+8.3 to D+6.5)</td><td class="n">0.42</td></tr>
+  </tbody>
+</table>
+</div>
+<p class="note">Two-party margins; the NYT/Siena polls (23 October to 1 November) are in the fitted data, and the brackets count each race's polls of the final four weeks. These are the seven races the Times named as likeliest to decide the Senate.</p>
+<p>The model sits 1–3 points to the Republican side of the polls. Most of that is pollster bias: the polls in these races carry an estimated D+1.1 to D+1.8, nearly all of it the industry bias of the 2024–26 cycle (D+2.0, 90% interval R+0.3 to D+4.3). The fundamentals prior, which in Kansas, Alaska and Ohio says R+10 to R+14, gets a weight of only 0.10 against the polls. Given the backtests, the seat interval is probably too narrow, and 72% too far from even.</p>
+
 <h2>What a full model would still need</h2>
 <ol>
   <li><strong>The race data pipeline</strong>, the bulk of the work. It needs:
@@ -408,9 +482,9 @@
       <li>candidates and incumbency, and uncontested seats;</li>
       <li>the special cases: Georgia runoffs, Louisiana's December general election, Alaska's ranked-choice voting, Maine, and the top-two primaries of California and Washington.</li>
     </ul>
-    The race layer is tested on simulated data only.</li>
+    The Senate and presidential-state layers now run on real data (section 5); the House layer is tested on simulated data only.</li>
   <li><strong>Fundamentals.</strong> Presidential approval, real income growth and the midterm penalty, fitted on the 40 House elections since 1946, to replace the flat election-day factor.</li>
-  <li><strong>Correlated race errors.</strong> Races are now independent given the national walk. FiveThirtyEight attributes about a quarter of district uncertainty to regional, demographic and incumbency errors that move many races together. Without such a factor, seat intervals come out too narrow.</li>
+  <li><strong>Correlated race errors.</strong> Races are now independent given the national walk. The race backtests show the cost: in 2016 and 2020 only 32 of 51 state intervals covered the result (section 5). FiveThirtyEight attributes about a quarter of district uncertainty to regional, demographic and incumbency errors that move many races together. Without such a factor, seat intervals come out too narrow.</li>
   <li><strong>A poll bias that can move within a cycle.</strong> Both interval misses in the backtests came in cycles whose poll error grew after the first months, which a bias held fixed per cycle cannot see (section 4). A drift on the industry bias within each cycle, or an election-day spread taken from past cycle-to-cycle misses, would widen the forecast where it needs widening.</li>
   <li><strong>A separate state-poll industry bias.</strong> Of about 135 Senate pollsters in 2026, 34 also polled the generic ballot.</li>
   <li><strong>Real anchor sizes.</strong> The fits scale each election to 2×10<sup>5</sup> votes, a concession to v2's sampler. Under the Kalman filter the walk is no longer sampled, so the true ~10<sup>8</sup> should cost no sampler time; that is untested.</li>
