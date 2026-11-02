@@ -153,7 +153,7 @@
 <dt>Fix</dt>
 <dd><ol>
 <li><strong>Ablate <code>mu_bar</code>.</strong> Run two arms: <code>mu_bar</code> = 0 with Gaussian shocks, and <code>mu_bar</code> = 0 with heavy-tailed shocks. If a mean survives, estimate it only from cycles before the fit's window, and give it a predictive SD, not the standard error of the mean. Cycles inside the window are already in the likelihood, so using them again counts the data twice.</li>
-<li><strong>Add variance where the model cannot see.</strong> Either add extra variance at the first step after each result, or make the step variance decay with days since the last anchor, v(1 + a·e<sup>−s/60</sup>). The closed epochs identify <em>a</em>. A within-cycle linear drift, ξ<sub>e</sub>·u added to each poll's offset, is the alternative. Closed epochs pin ξ from both ends, so the forecast cycle's ξ inherits a learnt spread.</li>
+<li><strong>Let the walk move more on both sides of each election.</strong> Give each step the variance v<sub>t</sub> + a<sub>pre</sub>K<sub>pre,t</sub> + a<sub>post</sub>K<sub>post,t</sub>, where K sums e<sup>−d/L</sup> over the step's days and d counts the days to the next election or since the last (L about 30 days, 60 as a check). The industry bias is constant within an epoch, so poll movement inside the windows identifies a<sub>pre</sub> and a<sub>post</sub> without drawing on it. a<sub>post</sub> lets opinion move in the gap between a result and the first polls after it, which the bias now absorbs; a<sub>pre</sub> widens the run to election day and loosens each closed epoch's end. The window fits identify both, the history fits (final 60 days only) only a<sub>pre</sub>. The current fits cannot settle it: their smoothed walk moves 1.30, 1.23 and 1.25 points a month before, after and away from elections, which a constant-volatility walk would show either way. Two confounds push the same way: a late switch to likely-voter samples and herding would inflate a<sub>pre</sub>, and post-election changes in who answers polls would inflate a<sub>post</sub>, so both err toward wider intervals. On the bias side, a within-cycle linear drift, ξ<sub>e</sub>·u added to each poll's offset, is the alternative: closed epochs pin ξ from both ends, so the forecast cycle's ξ inherits a learnt spread.</li>
 <li><strong>Add a zero-centred, heavy-tailed common term</strong> on the forecast cycle; Morris uses t<sub>5</sub>. Put the t on the scalar log(D/R) coordinate and map it to the zero-sum pair. An elementwise <code>student_t</code> on a <code>sum_to_zero_vector</code> gives roughly t<sub>11</sub> tails at two-thirds of the intended variance.</li>
 </ol></dd>
 <dt>Test</dt>
@@ -172,6 +172,8 @@
 <dd>Senate 90% coverage: eve 2020 24 of 35, 4 weeks out 2020 29 of 35, eve 2022 29 of 35. The size of this missing term is open. Against the generic ballot the 2020 gap was small (6.0 against a 5.3 miss), so 2020's under-coverage is mostly the previous finding.</dd>
 <dt>Fix</dt>
 <dd>Measure the term first: no fit is needed. Per cycle in raw_polls, take the mean race miss minus that cycle's national miss. Then s<sub>η</sub> = √(max(var − mean sampling variance, 0) / 2). If s<sub>η</sub> exceeds about 1 margin point, add one cycle-level race-type error that race polls see and the election-day deviation does not. That is about 10 Stan lines, and the generated-quantities step subtracts it before the poll-weight formula. Expect a weak ridge with the mean of the per-race shocks.</dd>
+<dt>Measured</dt>
+<dd>s<sub>η</sub> = 3.1 margin points over the 13 cycles 1998–2022, and 2.0 over 2008–2022 (<code>race_type_error_sd</code> in <code>senate_races.R</code>), so the term is warranted. It also has a mean of −3.1: Senate polls missed further toward the Republicans than the same cycle's generic-ballot polls in 10 of 13 cycles. Most of that is the generic ballot's own Democratic miss in 1998–2006 (2.6 to 6.1 points, while Senate polls missed by −5.8 to +1.0); since 2008 the mean is −1.0. State presidential polls against national ones give s<sub>η</sub> = 0.5, so the presidential fits need no flat race-type term.</dd>
 <dt>Test</dt>
 <dd>Senate 2020 eve coverage should reach at least 30 of 35, with 2018 and 2024 eve staying at or above 31 of 34 and 32 of 34. Refuted if s<sub>η</sub> comes out under 1 point.</dd>
 </dl>
@@ -253,7 +255,7 @@ That is about 700 entries hand-coded from Wikipedia (CC BY-SA), within the open-
 <li><strong>For midterms, add one of two terms.</strong> Either a drift toward the out-party in the walk's predict step, or an election-day prior from a two-term House-vote regression (previous House margin plus the president's party, 1946 onward). Both encode the same penalty, so not both. Its 2026 direction is unknown until fitted: a prior built on 2024's House vote may pull toward the Republicans.</li>
 <li><strong>For presidential fits,</strong> an election-day prior of SD about 6, as the Economist and Morris use. A model on real disposable income alone misreads 2020's transfer-driven spike.</li>
 <li><strong>Adjust the anchor.</strong> Use an uncontested-adjusted House vote in the anchors, <code>d_hist</code> and scoring together.</li>
-<li><strong>A campaign-season factor</strong> on the step variance, identified by the window fits, not the history fits.</li>
+<li><strong>A campaign-season factor</strong> on the step variance: the election-window variance of the industry-bias fixes, whose pre-election half the history fits also identify.</li>
 <li><strong><code>anchor_n</code> = 2×10<sup>5</sup> is harmless:</strong> it adds about 0.2 points of uncertainty. Close D11 with one refit at the real vote count.</li>
 </ul></dd>
 <dt>Test</dt>
@@ -282,7 +284,7 @@ That is about 700 entries hand-coded from Wikipedia (CC BY-SA), within the open-
 <dt>Testing</dt>
 <dd><ul>
 <li>The stationary and AR(1) biases differ by 0.04 CRPS over 13 cycles. Report paired per-cycle differences with standard errors before calling a winner; keeping the nesting AR(1) costs little.</li>
-<li>Add year-level PIT checks, since state calls within a year are not independent events <a href="#r10">[10]</a>.</li>
+<li>Add year-level PIT checks, since state calls within a year are not independent events <a href="#r10">[10]</a>. Added as <code>score_year_pit.R</code> (2 November): the presidential forecasts are too moderate in lopsided states, so the unweighted state mean minus the national margin fell outside its narrow interval in 2012 and 2016 (PITs 0.014 and 0.000).</li>
 <li>Record the Stan file's git SHA and the builder options for the 2026 forecast now, and score 3 November 2026 as the first prospective test.</li>
 </ul></dd>
 </dl>
@@ -300,17 +302,20 @@ That is about 700 entries hand-coded from Wikipedia (CC BY-SA), within the open-
 <p>Cheapest and most diagnostic first. Steps 1–3 need no new data and only a few Stan lines. Each later step is judged against the backtests already built.</p>
 <ol class="plan">
 <li><strong>Fix the D-slot coding and measure s<sub>η</sub>.</strong> Recode Indiana 2006, Arkansas 2020 and Alaska 2022. Compute the race-type common error from raw_polls, and add year-level PIT scoring of the existing draws.
-<p class="meta">About 60 R lines; no Stan changes; refit Senate only if the coding changes the history set.</p></li>
+<p class="meta">About 60 R lines; no Stan changes; refit Senate only if the coding changes the history set.</p>
+<p class="meta"><strong>Done 2 November 2026.</strong> Seven miscoded races dropped (343 history races to 336; residual SD 14.0 to 12.1), and the eight Senate backtests and 2026 refitted: errors moved by under 0.1 point except Maine's unpolled King races, which moved 6–8 points toward the result; 2026 P(D ≥ 51) stays 0.72. s<sub>η</sub> = 3.1 (2.0 since 2008) for the Senate, 0.5 for presidential states. Year-level PITs: Senate seats calibrated, the national margin not (eve PITs 0.97, 0.001, 0.19, 0.94); presidential electoral votes at 0.03 in 2016. Details in <code>usa/README.md</code>.</p></li>
 <li><strong>Ablate <code>mu_bar</code>.</strong> Run <code>mu_bar</code> = 0 with Gaussian shocks, then with a scalar t<sub>5</sub> shock, on the history, Senate and presidential backtests.
 <p class="meta">A data switch and about 10 Stan lines; 26 refits per arm. Refuted if history CRPS rises by more than 0.1 without cutting the 2016 and 2020 presidential national errors.</p></li>
-<li><strong>Widen the forecast-cycle bias where it is blind.</strong> Add a post-anchor jump, or a decaying step variance, or a within-cycle drift.
-<p class="meta">About 10–20 Stan lines; judged on generic-ballot 2018–24 and Senate coverage and on the z-scores above.</p></li>
+<li><strong>Widen the forecast-cycle bias where it is blind.</strong> Add election-window volatility on both sides of each election (a<sub>pre</sub>, a<sub>post</sub>), or a within-cycle drift.
+<p class="meta">About 15 Stan lines (the Kalman call, the step to election day and the backward sampler) and 15 R lines; judged on generic-ballot 2018–24 and Senate coverage, on the z-scores above and on the year-level PITs.</p></li>
 <li><strong>Correlate race errors.</strong> Add the race-type common term (if s<sub>η</sub> &gt; 1), the lean loading, then the similarity matrix.
 <p class="meta">About 40 Stan lines and 40 R lines; judged on joint quantities: P(D), seat and electoral-vote coverage.</p></li>
 <li><strong>Strengthen the race prior.</strong> Add candidate experience and the seat's previous result, with a t likelihood on history.
 <p class="meta">About 700 hand-coded entries; no Stan changes beyond the t.</p></li>
 <li><strong>Add a midterm term.</strong> Either the drift or the election-day prior, not both.</li>
 <li><strong>Tidy the poll handling and the sampler.</strong> Paired likely- and registered-voter releases, sponsors, tracking overlap and poll age; centre the closed epochs.</li>
+<li><strong>Later: let the volatility evolve.</strong> A walk whose log step variance is itself a slow random walk, or a mixture of step scales, would let the data say when opinion moved fast; the election windows of step 3 are a fixed special case of it.
+<p class="meta">A research step, after step 3 shows whether the fixed windows help. The Kalman filter already takes a step-variance vector, so HMC can sample the log-volatilities and feed them in; the cost is one parameter per step and a harder posterior geometry.</p></li>
 </ol>
 
 <h2>Claims that did not survive</h2>

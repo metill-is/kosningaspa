@@ -20,12 +20,13 @@ is used by the Icelandic forecast or Fylgisvakt, and nothing outside `usa/` was 
 | `stan/us_midterm_v10.stan` | v9 with `bias_walk = 2`: the industry bias AR(1) around its long-run mean, so a cycle's bias can lean towards the last one's (coefficient estimated, prior centred on v9's stationary bias). With `bias_walk` 0 or 1 it is v9 |
 | `R/simulate_us.R` | Simulates US-scale data in that model's format; the national fields also run `polling_watch_v5_epoch.stan` unchanged. Options in its header |
 | `R/build_generic_ballot.R` | Real data for `polling_watch_v5_epoch.stan`, and for v1–v9: the generic congressional ballot polls of the 2018–2026 cycles, anchored at the national House popular vote of 2018–2024. `target=` builds an out-of-sample backtest of an earlier election, `races=senate` adds that year's Senate races, `two_party=1` drops Other; the header lists every option |
-| `R/senate_races.R` | The Senate race layer `build_generic_ballot.R races=senate` sources: each race's D and R slots, covariates (presidential lean, incumbency, an independent in the D slot), its polls, the past results the race regression learns from, the seats not up, and the race polling error `race_poll_sd=auto` reads |
+| `R/senate_races.R` | The Senate race layer `build_generic_ballot.R races=senate` sources: each race's D and R slots, covariates (presidential lean, incumbency, an independent in the D slot), its polls, the past results the race regression learns from, the seats not up, the race polling error `race_poll_sd=auto` reads, and `race_type_error_sd()`, the error all of a cycle's race polls share beyond the national polls' (s_eta). Its header says which candidate fills the D slot and which races are left out |
 | `R/build_generic_history.R` | Generic-ballot data for 1998–2022 from FiveThirtyEight's pollster-ratings `raw_polls.csv`: each election's polls of its final 60 days, anchored at the House popular vote since 1996, for backtests over 13 elections |
 | `R/check_recovery.R` | Compares a fit on simulated data with the values that generated it: race coefficients, election-day vote, seat counts, each with its 90% interval |
 | `R/summarise_generic.R` | Election-day forecast, industry bias per epoch and the walk's margin by date, from a generic-ballot fit of v3 or v4 |
 | `R/score_backtest.R` | Scores backtest fits against the popular vote of their target election, beside two poll baselines |
 | `R/score_races.R` | Scores the races of Senate backtest fits against their results: margin error, 90% coverage, Brier score, winners called, expected against actual Democratic seats, beside the mean of each race's polls of the final 28 days |
+| `R/score_year_pit.R` | Year-level calibration of Senate or presidential backtest fits: where the national margin, the mean race margin, their difference and the D seats or electoral votes fall in each fit's forecast distribution (mid-PIT), since a year's races share their errors |
 | `R/build_president.R` | v9 data for a presidential election of 2004–2024: the national and state polls of each cycle's final 60 days, anchored at the national popular vote since 1996, each state and DC a race with a regression prior on its leans at the two elections before |
 | `R/score_president.R` | Scores presidential backtest fits: national margin, each state's margin, 90% coverage, Brier score and winner, and the electoral votes (each state's to its statewide winner), beside the mean of each state's polls of the final 28 days |
 | `us-midterms-feasibility.html` | The write-up: data, model changes, run times, out-of-sample backtests of 2018–2024 and the 2026 national forecast |
@@ -141,24 +142,54 @@ LC_ALL=en_US.UTF-8 Rscript usa/R/bench_fit.R stan=usa/stan/us_midterm_v9.stan da
 LC_ALL=en_US.UTF-8 Rscript usa/R/score_races.R dir=<bt>
 ```
 
+The D slot holds the Democrat, or a Democratic-aligned independent who ran ahead of every
+Democrat; a race that is not a contest of the two slots is left out (`senate_races.R`,
+header). That rule, applied on 2 November 2026, dropped seven races the first fits had
+miscoded, among them Indiana 2006 (a Libertarian in the D slot), Arkansas 2020 (the same) and
+Alaska 2022 (Murkowski against Tshibaka): 336 history races where there were 343, and 34
+races in 2020 and in 2022. The race residual SD fell from 14.0 to 12.1 margin points.
+
 On the eve of each election (`eve`) and four weeks before it (`w4`, `asof=`), v9's error on
 the races with polls was below that of the mean of each race's polls of the final 28 days in
-all eight fits (two-party margin points):
+all eight fits (two-party margin points; fits in the study folder's `senate_dslot/`):
 
 | Fit | Error, polled races | Polls' error | Winners right | 90% intervals covering | Expected / actual D seats |
 |---|---|---|---|---|---|
-| eve 2018 | 3.55 | 3.63 | 32 of 34 | 31 | 21.7 / 23 |
-| w4 2018 | 3.95 | 5.98 | 32 of 34 | 32 | 23.1 / 23 |
-| eve 2020 | 6.81 | 7.34 | 31 of 35 | 24 | 16.3 / 15 |
-| w4 2020 | 6.67 | 7.63 | 31 of 35 | 29 | 16.6 / 15 |
-| eve 2022 | 4.44 | 5.01 | 35 of 35 | 29 | 14.4 / 15 |
-| w4 2022 | 5.99 | 6.06 | 35 of 35 | 28 | 16.1 / 15 |
-| eve 2024 | 2.81 | 4.88 | 32 of 34 | 32 | 18.0 / 19 |
-| w4 2024 | 3.04 | 5.22 | 33 of 34 | 33 | 19.2 / 19 |
+| eve 2018 | 3.52 | 3.63 | 32 of 34 | 31 | 21.8 / 23 |
+| w4 2018 | 4.01 | 5.98 | 32 of 34 | 32 | 23.2 / 23 |
+| eve 2020 | 6.79 | 7.34 | 30 of 34 | 23 | 16.1 / 15 |
+| w4 2020 | 6.64 | 7.63 | 30 of 34 | 28 | 16.5 / 15 |
+| eve 2022 | 4.01 | 4.76 | 34 of 34 | 30 | 14.4 / 15 |
+| w4 2022 | 5.55 | 5.84 | 34 of 34 | 28 | 16.0 / 15 |
+| eve 2024 | 2.80 | 4.88 | 33 of 34 | 31 | 18.1 / 19 |
+| w4 2024 | 2.95 | 5.22 | 32 of 34 | 32 | 19.3 / 19 |
+
+On the races both codings share, the fix moved the errors by less than 0.1 point and the
+coverage by one race either way. The exception is Maine, where King had no polls in the final
+28 days. The first coding had flagged the dropped races as Democratic-aligned independents,
+and their large negative residuals held the independent coefficient down; without them it
+roughly doubled (0.066 to 0.108 per direction in the 2026 fit), and King's forecast moved 6–8
+points toward his result. The intervals narrowed by 0.5–1 point.
 
 2020, when the polls overstated the Democrats almost everywhere, is the one cycle whose
 intervals cover too rarely: each race's polling error is independent of the others', so the
-model has no error shared by a region or by all races beyond the national vote's.
+model has no error shared by a region or by all races beyond the national vote's. That shared
+error is real. `race_type_error_sd()` puts the SD of a cycle's mean Senate poll miss, beyond
+the same cycle's generic-ballot miss, at 3.1 margin points over 1998–2022 and 2.0 since 2008.
+State presidential polls against national ones give 0.5.
+
+`score_year_pit.R` scores each fit as one forecast of its year:
+
+```bash
+LC_ALL=en_US.UTF-8 Rscript usa/R/score_year_pit.R dir=<bt> house=<tables>/house_popular_vote_1946_2024.csv
+LC_ALL=en_US.UTF-8 Rscript usa/R/score_year_pit.R dir=<presidential bt> ev=<raw>/president/derived/ev_by_state.csv
+```
+
+The Senate seat counts are calibrated (PITs 0.24–0.72), but the national House margin is
+not: eve PITs of 0.97, 0.001, 0.19 and 0.94 for 2018–2024, with 2020's mean race margin also
+at 0.001. That is the overconfident industry bias of `us-model-review.html`, theme 1. The
+mean race margin minus the national one sits at 0.025 (eve) and 0.010 (w4) in 2018 and in
+range since.
 
 ### Presidential backtests, 2008–2024
 
@@ -194,6 +225,13 @@ LC_ALL=en_US.UTF-8 Rscript usa/R/build_president.R raw=<raw> out=<bt>/data_eve_2
 LC_ALL=en_US.UTF-8 Rscript usa/R/bench_fit.R stan=usa/stan/us_midterm_v9.stan data=<bt>/data_eve_2016/stan_data.json out=<bt>/fit_eve_2016 init=smart init_buffer=15 window=25
 LC_ALL=en_US.UTF-8 Rscript usa/R/score_president.R dir=<bt> ev=<raw>/president/derived/ev_by_state.csv
 ```
+
+Year-level PITs (`score_year_pit.R`) put the electoral votes at 0.03 in 2016 and in range in
+the other four years. The unweighted mean state margin minus the national margin sits at 0.014
+in 2012 and 0.000 in 2016, against a 90% interval only about ±0.9 points wide: the forecasts
+are too moderate in lopsided states (the state error falls by 0.8–1.4 points per 10 points of
+forecast margin in 2008–2016, 0.1 in 2024), which moves that mean a lot and the electoral
+votes little.
 
 ## Forecast recorded before the 2026 election
 
@@ -241,3 +279,7 @@ draws, no divergences, max R-hat 1.004. 34 Democratic seats are not up.
 
 Every race's file is `senate/forecast_2026_races.csv` in the study folder. The industry bias
 the model takes off the 2024–26 polls is D+2.0 (90% interval R+0.3 to D+4.3).
+
+Refitted on 2 November 2026 after the D-slot fix (`senate_dslot/fit_2026` in the study
+folder; not the record above): median 52 seats (48–55), P(Democrats 51 or more) 0.72, 0.68
+with no independent counted, House margin D+7.7. No race's P(D) moved by more than 0.03.

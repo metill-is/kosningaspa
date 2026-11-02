@@ -4,11 +4,15 @@
 # usa/stan/us_midterm_v1.stan to v9).
 #
 # Each race is a contest between a D slot and an R slot; everything else is Other. The R
-# slot holds the Republican vote; the D slot holds the Democratic vote, or an independent's
-# where an independent ran ahead of every Democrat (Sanders, King, McMullin 2022, Osborn
-# 2024 and 2026), which the indep_d covariate marks. Races with no candidate in either
-# slot (California's Democrat-on-Democrat runoffs) are left out; so are odd-year specials,
-# which have no national House vote to deviate from.
+# slot holds the Republican vote; the D slot holds the Democratic vote, or, where one ran
+# ahead of every Democrat, a Democratic-aligned independent's (d_aligned_independents:
+# Sanders, King, Orman 2014, McMullin 2022, Osborn 2024 and 2026), which the indep_d
+# covariate marks. A race that is not a contest of the two slots is left out: any other
+# candidate ahead of every Democrat (Lieberman 2006, Osborn the Indiana Libertarian 2006,
+# Murkowski's 2010 write-in, Crist 2010, Miller 2016, Harrington 2020), a second Republican
+# ahead of the D slot (Alaska 2022), or no candidate in a slot (California's
+# Democrat-on-Democrat runoffs). So are odd-year specials, which have no national House vote
+# to deviate from.
 #
 # Sources (paths under raw= and tables=; usa/README.md has where they come from):
 #   results 2006-2024: Cha, Kuriwaki and Snyder, Candidates in American General Elections
@@ -36,6 +40,7 @@ library(readr)
 
 clr <- function(x) log(x) - mean(log(x))
 dem_caucus_independents <- c("SANDERS", "KING")
+d_aligned_independents <- c("VT SANDERS", "ME KING", "KS ORMAN", "UT MCMULLIN", "NE OSBORN")
 
 # WHY: MEDSL flags Biden's and Trump's 2020 rows in DC as write-ins, so the flag is not
 # filtered on; the other flagged major-party rows are real write-ins of the nominees.
@@ -95,15 +100,19 @@ senate_results <- function(cks_file) {
       ind_name = c(name_snyder[!is_d & !is_r][which.max(candidatevotes[!is_d & !is_r])], NA)[1],
       ind_inc = c(inc[!is_d & !is_r][which.max(candidatevotes[!is_d & !is_r])], FALSE)[1],
       d_inc = any(inc[is_d]), r_inc = any(inc[is_r]),
+      r_second = c(sort(candidatevotes[is_r], decreasing = TRUE), 0, 0)[2],
       total = sum(candidatevotes), .groups = "drop"
     ) |>
     mutate(
-      indep_d = ind_votes > d,
+      ind_last = sub(",.*$", "", ind_name),
+      ind_ahead = ind_votes > d,
+      indep_d = ind_ahead & paste(state, ind_last) %in% d_aligned_independents,
       d_slot = ifelse(indep_d, ind_votes, d),
       other = total - d_slot - r,
-      inc = ifelse(indep_d, ind_inc, d_inc) - r_inc,
-      ind_last = sub(",.*$", "", ind_name)
-    )
+      inc = ifelse(indep_d, ind_inc, d_inc) - r_inc
+    ) |>
+    filter(!ind_ahead | indep_d, r_second <= d_slot) |>
+    select(-ind_ahead, -r_second)
 }
 
 holdover_d <- function(cks_file, target, races) {
@@ -138,9 +147,34 @@ race_covariates <- function(lean, inc, indep_d) cbind(1, lean, inc, as.numeric(i
 #' polls carry), has its sampling variance taken out; a zero-sum pair's SD per direction
 #' is that of log(D / R) over sqrt(2).
 race_poll_error_sd <- function(raw_polls, ty, type = "Sen-G", max_margin = 20) {
-  race <- read_csv(raw_polls, show_col_types = FALSE) |>
+  race <- race_poll_misses(raw_polls, ty, type, national = FALSE, max_margin) |>
+    group_by(cycle) |>
+    mutate(dev = e - mean(e)) |>
+    ungroup()
+  sqrt(max(var(race$dev) - mean(race$sv), 0) / 2)
+}
+
+#' The SD per direction of the polling error every race poll of one type shares in a cycle
+#' beyond the national polls' miss, which race_poll_error_sd takes out and mu_gamma does not
+#' carry (the national polls pin it). Per cycle before the target: the mean of its races'
+#' mean poll misses in log(D / R) (races decided by less than max_margin points), less the
+#' national polls' mean miss (House-G-US for Senate races, the national Pres-G polls for
+#' states), with both means' sampling variance taken out. Returns the SD and the cycle table.
+race_type_error_sd <- function(raw_polls, ty, type = "Sen-G", national_type = "House-G-US", max_margin = 20) {
+  nat <- race_poll_misses(raw_polls, ty, national_type, national = TRUE) |>
+    transmute(cycle, g = e, g_sv = sv)
+  cycles <- race_poll_misses(raw_polls, ty, type, national = FALSE, max_margin) |>
+    group_by(cycle) |>
+    summarise(races = n(), m = mean(e), m_sv = var(e) / n(), .groups = "drop") |>
+    inner_join(nat, by = "cycle") |>
+    mutate(eta = m - g, eta_sv = m_sv + g_sv)
+  list(sd = sqrt(max(var(cycles$eta) - mean(cycles$eta_sv), 0) / 2), cycles = cycles)
+}
+
+race_poll_misses <- function(raw_polls, ty, type, national, max_margin = Inf) {
+  read_csv(raw_polls, show_col_types = FALSE) |>
     filter(
-      type_simple == type, location != "US", cycle %% 2 == 0, cycle < ty, samplesize > 0,
+      type_simple == type, (location == "US") == national, cycle %% 2 == 0, cycle < ty, samplesize > 0,
       paste(cand1_party, cand2_party) %in% c("DEM REP", "REP DEM")
     ) |>
     mutate(
@@ -152,11 +186,7 @@ race_poll_error_sd <- function(raw_polls, ty, type = "Sen-G", max_margin = 20) {
     ) |>
     filter(is.finite(err), abs(100 * (a_d - a_r) / (a_d + a_r)) < max_margin) |>
     group_by(cycle, race_id) |>
-    summarise(e = mean(err), sv = mean(v) / n(), .groups = "drop") |>
-    group_by(cycle) |>
-    mutate(dev = e - mean(e)) |>
-    ungroup()
-  sqrt(max(var(race$dev) - mean(race$sv), 0) / 2)
+    summarise(e = mean(err), sv = mean(v) / n(), .groups = "drop")
 }
 
 #' The Senate layer for one target election: a list of races (one row per target race,
