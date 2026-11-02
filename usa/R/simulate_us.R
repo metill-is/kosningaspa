@@ -5,18 +5,23 @@
 #
 #   LC_ALL=en_US.UTF-8 Rscript usa/R/simulate_us.R out=<dir> [seed=1] [first=2018]
 #     [polls=400,500,500,600] [houses=150] [state_houses=60] [senate_polls=400]
-#     [house_polls=250] [races=1] [anchor_n=]
+#     [house_polls=250] [races=1] [n_senate=35] [n_house=435] [anchor_n=] [grid=day|week]
+#     [tau_scale=0.1]
 #
 # polls: national generic-ballot polls per epoch, oldest first (one per election stretch
-# from `first`); races=0 leaves the race layer empty; anchor_n sets every national result's
-# total votes (default: the real House popular vote, about 10^8). Writes <out>/stan_data.json and
-# <out>/truth.rds (the generating values).
+# from `first`); races=0 leaves the race layer empty; n_senate and n_house set how many
+# 2026 races it holds (a small first fit can take a few states and no districts); anchor_n
+# sets every national result's total votes (default: the real House popular vote, about
+# 10^8); grid=week moves each poll to the Tuesday on or before its date (election days are
+# Tuesdays, so results stay put); tau_scale is the prior scale of the epoch shock SDs.
+# Writes <out>/stan_data.json and <out>/truth.rds (the generating values).
 
 library(cmdstanr)
 
 opt <- list(
   out = NULL, seed = "1", first = "2018", polls = "400,500,500,600", houses = "150",
-  state_houses = "60", senate_polls = "400", house_polls = "250", races = "1", anchor_n = ""
+  state_houses = "60", senate_polls = "400", house_polls = "250", races = "1", n_senate = "35",
+  n_house = "435", anchor_n = "", grid = "day", tau_scale = "0.1"
 )
 for (a in commandArgs(trailingOnly = TRUE)) {
   kv <- strsplit(a, "=", fixed = TRUE)[[1]]
@@ -93,7 +98,8 @@ ends <- c(elections[-1], last_day)
 for (e in 1:E) {
   span <- seq(elections[e] + 1, ends[e], by = "day")
   w_day <- exp(-as.numeric(ends[e] - span) / 250)
-  active <- c(rep(TRUE, 20), runif(H_nat - 20) < 0.6)
+  n_core <- min(20L, H_nat)
+  active <- c(rep(TRUE, n_core), runif(H_nat - n_core) < 0.6)
   for (i in seq_len(polls_per_epoch[e])) {
     d <- span[sample.int(length(span), 1, prob = w_day)]
     h <- 1L + sample.int(H_nat, 1, prob = nat_weight * active)
@@ -106,10 +112,10 @@ for (e in 1:E) {
   }
 }
 
-# Race layer: 35 Senate races and 435 House districts in 2026
+# Race layer: by default 35 Senate races and 435 House districts in 2026
 races <- as.integer(opt$races) == 1
-R_sen <- if (races) 35L else 0L
-R_house <- if (races) 435L else 0L
+R_sen <- if (races) as.integer(opt$n_senate) else 0L
+R_house <- if (races) as.integer(opt$n_house) else 0L
 R <- R_sen + R_house
 Q <- 4L # presidential lean, lagged own deviation, incumbency (+1 D, -1 R, 0 open), Senate
 theta_true <- rbind(
@@ -123,7 +129,7 @@ race_covariates <- function(n, senate) {
   lean <- rnorm(n, 0, if (senate) 0.3 else 0.45)
   lag <- 0.9 * lean + rnorm(n, 0, 0.1)
   inc <- ifelse(runif(n) < 0.15, 0, ifelse(runif(n) < plogis(3 * lean), 1, -1))
-  cbind(lean, lag, inc, as.numeric(senate))
+  cbind(lean, lag, inc, rep(as.numeric(senate), n))
 }
 race_deviation <- function(X) {
   X %*% theta_true + t(replicate(nrow(X), centre(rnorm(P, 0, sigma_race_true))))
@@ -146,13 +152,15 @@ if (races) {
   # from February 2026; 40% by national pollsters, the rest by state pollsters
   closeness <- abs(delta_true[, 1] - delta_true[, 2] + beta_true[day_index(election_day), 1] -
     beta_true[day_index(election_day), 2])
-  polled_sen <- order(closeness[1:R_sen])[1:25]
-  polled_house <- R_sen + order(closeness[(R_sen + 1):R])[1:80]
+  polled_sen <- order(closeness[seq_len(R_sen)])[seq_len(min(25L, R_sen))]
+  polled_house <- R_sen + order(closeness[R_sen + seq_len(R_house)])[seq_len(min(80L, R_house))]
   span <- seq(as.Date("2026-02-01"), last_day, by = "day")
   w_day <- exp(-as.numeric(last_day - span) / 60)
+  # WHY: index sampling, since sample(x) on a length-1 x draws from 1:x
+  pick <- function(x, k) if (length(x) && k > 0) x[sample.int(length(x), k, replace = TRUE)] else integer(0)
   race_polls <- c(
-    sample(polled_sen, as.integer(opt$senate_polls), replace = TRUE),
-    sample(polled_house, as.integer(opt$house_polls), replace = TRUE)
+    pick(polled_sen, as.integer(opt$senate_polls)),
+    pick(polled_house, as.integer(opt$house_polls))
   )
   for (r in race_polls) {
     d <- span[sample.int(length(span), 1, prob = w_day)]
@@ -164,6 +172,14 @@ if (races) {
     y[cols] <- rdirmult(n, phi_true[h - 1] * pi_p[cols] / sum(pi_p[cols]))
     add_row(d, h, E, y, r)
   }
+}
+
+tuesday_on_or_before <- function(d) d - (as.integer(format(d, "%u")) - 2L) %% 7L
+if (opt$grid == "week") {
+  rows <- lapply(rows, function(r) {
+    r$date <- tuesday_on_or_before(r$date)
+    r
+  })
 }
 
 # Date levels: every date with a poll or a result
@@ -188,7 +204,7 @@ stan_data <- list(
   party_index_n = mat(nat, function(r) party_index(r$y)),
   time_diff = as.numeric(diff(all_dates)),
   n_pred = 1000L,
-  estimate_tau = 1L, tau_mu_fixed = 0, tau_house_fixed = 0, tau_prior_scale = 0.1,
+  estimate_tau = 1L, tau_mu_fixed = 0, tau_house_fixed = 0, tau_prior_scale = as.numeric(opt$tau_scale),
   pred_days = as.integer(election_day - max(all_dates)),
   mu_fund = centre(beta_true[day_index(election_day), ] + centre(rnorm(P, 0, 0.08))),
   sd_fund = 0.1,
