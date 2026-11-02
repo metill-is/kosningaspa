@@ -18,6 +18,8 @@ is used by the Icelandic forecast or Fylgisvakt, and nothing outside `usa/` was 
 | `stan/us_midterm_v8.stan` | v6 for two parties (P = 2): a scalar branch of the Kalman filter, every bias and race deviation a zero-sum pair. On P = 3 data it is v6 exactly. Other is dropped because races cannot share one isotropic scale across D–R (residual SD 0.20) and the major parties against Other (0.86); v7, which gave Other its own scale, went with it |
 | `stan/us_midterm_v9.stan` | v8 with a polling error shared by each race's polls (`sigma_race_poll`, data; 0 = v8), integrated out: the model samples what the polls see, and generated quantities draws election day's race deviation from its conditional |
 | `stan/us_midterm_v10.stan` | v9 with `bias_walk = 2`: the industry bias AR(1) around its long-run mean, so a cycle's bias can lean towards the last one's (coefficient estimated, prior centred on v9's stationary bias). With `bias_walk` 0 or 1 it is v9 |
+| `stan/us_midterm_v11.stan` | v10 with two data switches on the industry bias, for the review's ablation: `fix_mu_bar` = 1 centres every epoch's bias on zero instead of a learnt long-run mean, and `bias_tail_nu` > 2 makes each epoch's shock multivariate t with that df and the same covariance. With both 0 it is v10: the same draws, bit for bit, on the 1998 history data |
+| `stan/us_midterm_v12.stan` | v11 with extra walk variance on both sides of each election (`election_vol`, `vol_scale_days` L): each step's variance gains a_pre and a_post times the sums of exp(−d/L) over its days, d the days to the next election or since the last, so the walk, not the industry bias, can take a move near an election. With `election_vol` = 0 it is v11, bit for bit on the 1998 history data |
 | `R/simulate_us.R` | Simulates US-scale data in that model's format; the national fields also run `polling_watch_v5_epoch.stan` unchanged. Options in its header |
 | `R/build_generic_ballot.R` | Real data for `polling_watch_v5_epoch.stan`, and for v1–v9: the generic congressional ballot polls of the 2018–2026 cycles, anchored at the national House popular vote of 2018–2024. `target=` builds an out-of-sample backtest of an earlier election, `races=senate` adds that year's Senate races, `two_party=1` drops Other; the header lists every option |
 | `R/senate_races.R` | The Senate race layer `build_generic_ballot.R races=senate` sources: each race's D and R slots, covariates (presidential lean, incumbency, an independent in the D slot), its polls, the past results the race regression learns from, the seats not up, the race polling error `race_poll_sd=auto` reads, and `race_type_error_sd()`, the error all of a cycle's race polls share beyond the national polls' (s_eta). Its header says which candidate fills the D slot and which races are left out |
@@ -232,6 +234,51 @@ in 2012 and 0.000 in 2016, against a 90% interval only about ±0.9 points wide: 
 are too moderate in lopsided states (the state error falls by 0.8–1.4 points per 10 points of
 forecast margin in 2008–2016, 0.1 in 2024), which moves that mean a lot and the electoral
 votes little.
+
+### Ablating the long-run industry bias
+
+Step 2 of `us-model-review.html` fixed the long-run industry bias `mu_bar` at zero
+(`us_midterm_v11.stan`, `fix_mu_bar=1`), with Gaussian shocks or multivariate t5 ones
+(`bias_tail_nu=5`), on the baselines' own data: the two-party history fits (stationary bias),
+the presidential fits and the Senate fits above. Each arm's data are the baseline's
+`stan_data.json` with the two switches added (the builders' `mu_bar=zero bias_tail=5`); fits
+in the study folder's `ablation/`.
+
+| Backtests | Measure | Learnt `mu_bar` | `mu_bar` = 0 | `mu_bar` = 0, t5 |
+|---|---|---|---|---|
+| History 1998–2022 (13) | CRPS | 1.64 | 1.81 | 1.82 |
+| | Mean absolute error | 2.09 | 2.47 | 2.52 |
+| | 90% intervals covering | 10 | 12 | 12 |
+| Presidential national 2008–2024 (5) | CRPS | 1.80 | 1.74 | 1.75 |
+| | Mean absolute error | 2.72 | 2.55 | 2.55 |
+| | Error 2016 / 2020 | 2.6 / 4.7 | 1.7 / 4.3 | 1.6 / 4.3 |
+| Senate 2018–2024 (8 fits) | Error, polled races | 4.53 | 4.58 | 4.59 |
+| | 90% intervals covering, of 34 | 29.4 | 29.3 | 29.8 |
+| | Brier | 0.045 | 0.045 | 0.045 |
+
+On the history the paired per-cycle CRPS difference is +0.16 (SE 0.38) for `mu_bar` = 0,
+better in 3 of 13 cycles; the wider intervals (12 points against 9.3) buy the two extra
+covers. The review's test called the ablation refuted if the history CRPS rose by more than
+0.1 without cutting the 2016 and 2020 presidential national errors; it rose by 0.16 and cut
+them by 0.9 and 0.4 points, so it is not refuted, but neither difference is clear of noise
+over 13 and 5 cycles. The learnt mean stays the default: the generic-ballot polls' lean
+towards the Democrats over 1998–2022 is a real mean that the history fits pay for losing,
+the presidential national polls have little of one, and the Senate fits' windows (2016 on)
+learn too little of it for the switch to matter. The t5 shocks changed nothing measurable,
+with either mean: with `mu_bar` learnt they moved the history CRPS by +0.01 (SE 0.01), the
+presidential national CRPS from 1.80 to 1.79 and the Senate polled-race error from 4.53 to 4.53.
+
+Neither arm touches the cycle the review flagged: the 2020 eve national PIT stays at 0.001 in
+every arm, and the 2026 forecast cycle's bias barely widens (D+2.0, 90% R+0.3 to D+4.3,
+with `mu_bar` learnt; D+1.2, R+1.4 to D+4.0, with zero). That bias is read off the polls
+after the last result, which is what the election-window volatility of the review's step 3
+targets. With `mu_bar` = 0 the 2026 Senate forecast would be P(Democrats 51 or more) 0.81
+(0.83 with t5), median 53 seats, House margin D+8.6.
+
+Two arm fits needed a second look. The presidential 2008 fit with `mu_bar` = 0 had one chain
+divergent on every draw (R-hat 1.54) and was refitted with `seed=4101` (no divergences; that
+fit is the one scored). The history 2018 fit with `mu_bar` = 0 had 98 divergent transitions
+(R-hat 1.016); a clean refit with `seed=4101` agreed within 0.13 points of margin.
 
 ## Forecast recorded before the 2026 election
 

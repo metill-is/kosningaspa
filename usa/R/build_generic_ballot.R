@@ -5,7 +5,8 @@
 #   LC_ALL=en_US.UTF-8 Rscript usa/R/build_generic_ballot.R tables=<dir> out=<dir> [anchor_n=]
 #     [grid=day|week] [tau_scale=0.1] [min_polls=1] [top_houses=] [target=2026-11-03] [asof=]
 #     [anchor_2016=0] [population=0] [bias_walk=] [phi_info=] [races=senate raw=<dir>] [two_party=0]
-#     [race_poll_sd=auto|<sd>]
+#     [race_poll_sd=auto|<sd>] [mu_bar=free|zero] [bias_tail=<nu>]
+#     [election_vol=0|1 vol_days=<L>]
 #
 # Parties: 1 Democratic, 2 Republican, 3 Other. A poll gives Democratic and Republican
 # counts (its sample size times each share; undecided and other answers are dropped, as
@@ -32,7 +33,10 @@
 # Other: P = 2, results of the Democratic and Republican votes alone (usa/stan/us_midterm_v8.stan).
 # race_poll_sd=, when given, adds v9's sigma_race_poll (usa/stan/us_midterm_v9.stan): a
 # number, or auto for the race polling error of the cycles before the target
-# (usa/R/senate_races.R, race_poll_error_sd).
+# (usa/R/senate_races.R, race_poll_error_sd). mu_bar= and bias_tail=, when given, add v11's
+# switches (usa/stan/us_midterm_v11.stan, header): fix_mu_bar (zero = 1) and bias_tail_nu.
+# election_vol= and vol_days=, when given, add v12's election-window walk variance
+# (usa/stan/us_midterm_v12.stan, header): election_vol and vol_scale_days.
 # The data also carry the fields of usa/stan/us_midterm_v1.stan to v4 with no races and a
 # flat fundamentals factor (sd_fund 10), so they fit the national walk alone. Writes
 # <out>/stan_data.json and <out>/meta.rds (dates, houses, epochs).
@@ -44,7 +48,7 @@ library(cmdstanr)
 opt <- list(
   tables = NULL, out = NULL, anchor_n = "", grid = "day", tau_scale = "0.1", min_polls = "1",
   top_houses = "", target = "2026-11-03", asof = "", anchor_2016 = "0", population = "0",
-  bias_walk = "", phi_info = "", races = "", raw = "", two_party = "0", race_poll_sd = ""
+  bias_walk = "", phi_info = "", races = "", raw = "", two_party = "0", race_poll_sd = "", mu_bar = "", bias_tail = "", election_vol = "", vol_days = "30"
 )
 for (a in commandArgs(trailingOnly = TRUE)) {
   kv <- strsplit(a, "=", fixed = TRUE)[[1]]
@@ -187,6 +191,12 @@ if (opt$races == "senate") {
 }
 if (nzchar(opt$bias_walk)) stan_data$bias_walk <- as.integer(opt$bias_walk)
 if (nzchar(opt$phi_info)) stan_data$phi_info <- as.numeric(opt$phi_info)
+if (nzchar(opt$mu_bar)) stan_data$fix_mu_bar <- as.integer(opt$mu_bar == "zero")
+if (nzchar(opt$bias_tail)) stan_data$bias_tail_nu <- as.numeric(opt$bias_tail)
+if (nzchar(opt$election_vol)) {
+  stan_data$election_vol <- as.integer(opt$election_vol)
+  stan_data$vol_scale_days <- as.numeric(opt$vol_days)
+}
 if (nzchar(opt$race_poll_sd)) {
   stan_data$sigma_race_poll <- if (opt$race_poll_sd == "auto") {
     race_poll_error_sd(file.path(opt$raw, "gb-538-github", "raw_polls.csv"), as.integer(format(target, "%Y")))

@@ -5,7 +5,8 @@
 #
 #   LC_ALL=en_US.UTF-8 Rscript usa/R/build_generic_history.R raw=<raw_polls.csv> tables=<dir>
 #     out=<dir> target=2014-11-04 [asof=] [anchor_n=] [grid=day|week] [tau_scale=0.1]
-#     [bias_walk=0] [phi_info=0] [two_party=0]
+#     [bias_walk=0] [phi_info=0] [two_party=0] [mu_bar=free] [bias_tail=0]
+#     [election_vol=0] [vol_days=30]
 #
 # The window opens at the 1996 result. target= is one of the elections of 1998-2022: the
 # data hold the polls that end before asof= (default: the target's election day) and the
@@ -20,6 +21,10 @@
 # bias_walk=2 is v10's industry bias, AR(1) across epochs. sigma_race_poll is 0 (no races),
 # so v9 and v10 read the data too.
 # two_party=1 drops Other, as in usa/R/build_generic_ballot.R.
+# mu_bar=zero and bias_tail=<nu> set v11's switches (usa/stan/us_midterm_v11.stan, header),
+# fix_mu_bar and bias_tail_nu, by default free (0) and Gaussian (0); older models ignore them.
+# election_vol=1 and vol_days=<L> set v12's election-window walk variance
+# (usa/stan/us_midterm_v12.stan, header), off by default.
 # Writes <out>/stan_data.json and <out>/meta.rds.
 
 library(dplyr)
@@ -28,7 +33,8 @@ library(cmdstanr)
 
 opt <- list(
   raw = NULL, tables = NULL, out = NULL, target = NULL, asof = "", anchor_n = "", grid = "day",
-  tau_scale = "0.1", bias_walk = "0", phi_info = "0", two_party = "0"
+  tau_scale = "0.1", bias_walk = "0", phi_info = "0", two_party = "0", mu_bar = "free", bias_tail = "0",
+  election_vol = "0", vol_days = "30"
 )
 for (a in commandArgs(trailingOnly = TRUE)) {
   kv <- strsplit(a, "=", fixed = TRUE)[[1]]
@@ -106,7 +112,9 @@ stan_data <- list(
   date_r = integer(0), epoch_r = integer(0), race_r = integer(0), n_parties_r = integer(0),
   party_index_r = matrix(0L, 0, P), is_senate = integer(0), senate_holdover_d = 0L,
   pop_n = rep(0L, nrow(y_n)), pop_r = integer(0),
-  bias_walk = as.integer(opt$bias_walk), phi_info = as.numeric(opt$phi_info), sigma_race_poll = 0
+  bias_walk = as.integer(opt$bias_walk), phi_info = as.numeric(opt$phi_info), sigma_race_poll = 0,
+  fix_mu_bar = as.integer(opt$mu_bar == "zero"), bias_tail_nu = as.numeric(opt$bias_tail),
+  election_vol = as.integer(opt$election_vol), vol_scale_days = as.numeric(opt$vol_days)
 )
 write_stan_json(stan_data, file.path(opt$out, "stan_data.json"))
 saveRDS(

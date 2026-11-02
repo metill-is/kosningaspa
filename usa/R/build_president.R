@@ -9,6 +9,7 @@
 #
 #   LC_ALL=en_US.UTF-8 Rscript usa/R/build_president.R raw=<dir> out=<dir> target=2016-11-08
 #     [asof=] [anchor_n=2e5] [grid=week] [tau_scale=0.05] [phi_info=0] [race_poll_sd=auto]
+#     [mu_bar=free] [bias_tail=0] [election_vol=0] [vol_days=30]
 #
 # target= is one of the elections of 2004-2024. 2024 adds the 2024 cycle's final 60 days
 # from FiveThirtyEight's president_polls.csv (CC BY 4.0; its Wayback copy of 5 November
@@ -24,7 +25,11 @@
 # polls are left out: each state is one race, all its electoral votes going to the
 # statewide winner (usa/R/score_president.R). race_poll_sd=auto sets sigma_race_poll from
 # the state polls of the cycles before the target (usa/R/senate_races.R,
-# race_poll_error_sd). Writes <out>/stan_data.json and <out>/meta.rds.
+# race_poll_error_sd). mu_bar=zero and bias_tail=<nu> set v11's switches
+# (usa/stan/us_midterm_v11.stan, header), fix_mu_bar and bias_tail_nu, by default free (0)
+# and Gaussian (0); older models ignore them. election_vol=1 and vol_days=<L> set v12's
+# election-window walk variance (usa/stan/us_midterm_v12.stan, header), off by default.
+# Writes <out>/stan_data.json and <out>/meta.rds.
 
 library(dplyr)
 library(readr)
@@ -33,7 +38,8 @@ source("usa/R/senate_races.R")
 
 opt <- list(
   raw = NULL, out = NULL, target = NULL, asof = "", anchor_n = "2e5", grid = "week",
-  tau_scale = "0.05", phi_info = "0", race_poll_sd = "auto"
+  tau_scale = "0.05", phi_info = "0", race_poll_sd = "auto", mu_bar = "free", bias_tail = "0",
+  election_vol = "0", vol_days = "30"
 )
 for (a in commandArgs(trailingOnly = TRUE)) {
   kv <- strsplit(a, "=", fixed = TRUE)[[1]]
@@ -164,7 +170,9 @@ stan_data <- list(
   is_senate = rep(1L, nrow(races)), senate_holdover_d = 0L,
   pop_n = rep(0L, nrow(y_n)), pop_r = rep(0L, nrow(race_polls)),
   bias_walk = 0L, phi_info = as.numeric(opt$phi_info),
-  sigma_race_poll = if (opt$race_poll_sd == "auto") race_poll_error_sd(raw_polls, ty, "Pres-G") else as.numeric(opt$race_poll_sd)
+  sigma_race_poll = if (opt$race_poll_sd == "auto") race_poll_error_sd(raw_polls, ty, "Pres-G") else as.numeric(opt$race_poll_sd),
+  fix_mu_bar = as.integer(opt$mu_bar == "zero"), bias_tail_nu = as.numeric(opt$bias_tail),
+  election_vol = as.integer(opt$election_vol), vol_scale_days = as.numeric(opt$vol_days)
 )
 write_stan_json(stan_data, file.path(opt$out, "stan_data.json"))
 saveRDS(
