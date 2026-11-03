@@ -10,7 +10,10 @@ from its original on first use; the originals, which the forecast recorded on
 2026-11-02 and is not already there: Senate rows are matched on state, race,
 pollster and end date, House rows on state, district, pollster and end date.
 merged_files.txt in the tables dir lists the files already folded in, so a
-file is read once. Prints what was added and skipped.
+file is read once. Rows listed in excluded_polls.csv (kind plus the key columns)
+are skipped like duplicates: the owner's rule of 3 November keeps out pollsters
+with no track record, whose house effect would be all prior. Prints what was
+added and skipped.
 """
 
 import csv
@@ -49,6 +52,10 @@ def main(tables: pathlib.Path, drops: pathlib.Path) -> None:
                 continue
             new = list(reader)
         seen = {tuple(r[k].strip().lower() for k in key) for r in have}
+        excl_path = tables / "excluded_polls.csv"
+        if excl_path.exists():
+            with excl_path.open(encoding="utf-8") as f:
+                seen |= {tuple(r[k].strip().lower() for k in key) for r in csv.DictReader(f) if r.get("kind") == kind}
         added, late, dup = [], 0, 0
         for r in new:
             k = tuple(r[c].strip().lower() for c in key)

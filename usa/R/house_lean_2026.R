@@ -6,7 +6,8 @@
 #
 # By source, in order of preference:
 #   own map       states whose map did not change after 2024: house_lean.R's 2024 lean on
-#                 the 2024 map (MEDSL precincts, CC0; Maine and Nebraska official);
+#                 the 2024 map (MEDSL precincts, CC0; Maine and Nebraska official), unless
+#                 the state's 2024 file misses its official presidential total by over 3%;
 #   new-map table Texas, Florida and Tennessee: the 2024 result on the new lines from their
 #                 redistricting articles (Wikipedia, CC BY-SA), which print Trump minus Harris;
 #   PVI           North Carolina, Ohio, Utah, California, Louisiana and Alabama, which publish
@@ -32,6 +33,13 @@ own <- fread(file.path(opt$dir, "house_lean.csv"))[map_year == 2024 & pres_year 
 table_new <- fread(file.path(wiki, "pres2024_newmap.csv"))[, .(state, district, margin = pres2024_margin_new)]
 
 unchanged <- maps[changed == 0 & map != "at-large", state]
+# WHY: a 2024 precinct file that does not add up to the state's official presidential vote
+# is corrupt somewhere (Indiana's double-counts St Joseph and lacks most of Monroe), so its
+# districts take the PVI line too.
+st24 <- fread(file.path(opt$dir, "house_lean_states.csv"))[pres_year == 2024 & map_year == 2024]
+bad24 <- st24[abs((linked + shared + unallocated) / official - 1) > 0.03, state]
+cat("2024 files off the official total by more than 3%:", bad24, "\n")
+unchanged <- setdiff(unchanged, bad24)
 calib <- merge(pvi[state %in% unchanged], own, by = c("state", "district"))
 fit <- lm(margin ~ pvi_2026, calib)
 cat(sprintf("PVI line: margin = %.2f + %.3f PVI (n %d, residual SD %.2f)\n", coef(fit)[1], coef(fit)[2], nrow(calib), sigma(fit)))
@@ -46,7 +54,7 @@ statewide <- pres[, .(margin = 100 * (sum(candidatevotes[party_simplified == "DE
   sum(candidatevotes)), by = .(state = state_po)]
 
 at_large <- maps[map == "at-large", state]
-by_pvi <- maps[changed == 1 & !state %in% table_new$state, state]
+by_pvi <- c(maps[changed == 1 & !state %in% table_new$state, state], intersect(bad24, maps[map != "at-large", state]))
 out <- rbind(
   own[state %in% unchanged][, source := "own map"],
   table_new[, source := "new-map table"],

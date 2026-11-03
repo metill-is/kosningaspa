@@ -12,8 +12,10 @@
 #
 # MEDSL's president rows carry no district, but its US House rows do, so a precinct's
 # presidential vote goes to the district its House rows name. For one map year:
-#   1. Each precinct's House votes, by district, give its weights (a precinct split between
-#      districts is shared by their House votes).
+#   1. Each precinct's House votes, by district, give its weights: a precinct split between
+#      districts, or a county-total row, sends its Democratic presidential votes by the
+#      districts' Democratic House votes and its Republican votes by the Republican ones.
+#      TOTAL rows that duplicate a precinct's per-mode rows are dropped first.
 #   2. Presidential votes are linked to those precincts: by the exact precinct key when the
 #      presidential year is the map year, and otherwise by county and a normalised precinct
 #      name (upper case, letters and digits only, leading zeros dropped).
@@ -61,7 +63,7 @@ read_year <- function(dir, year, offices = c("PRES", "HOUSE")) {
     if (year == 2016) {
       x <- fread(f, encoding = "Latin-1", select = c(
         "state_postal", "county_fips", "jurisdiction",
-        "precinct", "office", "district", "party", "votes", "candidate"
+        "precinct", "office", "district", "party", "votes", "candidate", "mode"
       ))
       setnames(x, c("state_postal", "jurisdiction"), c("state", "juris"))
       x[, jname := juris]
@@ -71,7 +73,7 @@ read_year <- function(dir, year, offices = c("PRES", "HOUSE")) {
     } else {
       x <- fread(f, select = c(
         "state_po", "county_fips", "jurisdiction_fips", "jurisdiction_name", "precinct", "office",
-        "district", "party_simplified", "party_detailed", "votes", "stage", "candidate"
+        "district", "party_simplified", "party_detailed", "votes", "stage", "candidate", "mode"
       ), colClasses = c(
         county_fips = "character",
         jurisdiction_fips = "character", district = "character", precinct = "character"
@@ -101,6 +103,11 @@ read_year <- function(dir, year, offices = c("PRES", "HOUSE")) {
     pad <- function(v) ifelse(grepl("^[0-9]+$", v), ifelse(nchar(v) <= 5, formatC(as.numeric(v), width = 5, flag = "0", format = "d"),
       formatC(as.numeric(v), width = 10, flag = "0", format = "d")), v)
     x[, `:=`(county = pad(county), juris = pad(juris))]
+    # WHY: some files (New York, New Jersey, Connecticut in 2024) carry a TOTAL row beside
+    # the per-mode rows of the same precinct and candidate; summing both counts them twice.
+    x[, mode := toupper(as.character(mode))]
+    x[, has_total := any(mode == "TOTAL") & any(mode != "TOTAL"), by = .(state, county, juris, precinct, office, district, candidate)]
+    x <- x[!has_total | mode == "TOTAL"]
     x[, .(state, county, juris, jname = as.character(jname), precinct, office, district = as.character(district), party, votes)]
   }))
 }
@@ -117,6 +124,21 @@ house_weights <- function(x) {
   h[, district := district_number(district)]
   h <- h[!is.na(district) & v > 0]
   h[, w := v / sum(v), by = .(state, county, juris, precinct)]
+  # WHY: a county-total "precinct" (King County, Washington, 2024) spans districts of very
+  # different partisanship; its Democratic votes follow the districts' Democratic House votes
+  # and its Republican votes the Republican ones: each district's House votes times its
+  # race's Democratic fraction, and times one minus it.
+  # A district whose race lacked one party (Washington's 9th in 2024, Democrat against
+  # Democrat) takes the precinct's average Democratic fraction over its contested districts.
+  h[, p := fifelse(vd > 0 & vr > 0, vd / (vd + vr), NA_real_)]
+  h[, p := {
+    ok <- !is.na(p)
+    fifelse(ok, p, if (any(ok)) sum((v * p)[ok]) / sum(v[ok]) else 0.5)
+  }, by = .(state, county, juris, precinct)]
+  h[, `:=`(wd = v * p / sum(v * p), wr = v * (1 - p) / sum(v * (1 - p))), by = .(state, county, juris, precinct)]
+  h[!is.finite(wd), wd := w]
+  h[!is.finite(wr), wr := w]
+  h[, p := NULL]
   h
 }
 
@@ -163,12 +185,12 @@ build_lean <- function(pres, hw, same_year, clean = FALSE) {
     pv <- precinct_variants(pres$jname, pres$precinct)
     hv <- precinct_variants(hw$jname, hw$precinct)
     hw_all <- rbindlist(lapply(seq_along(hv), function(k) {
-      hw[, .(key = paste(state, county, hv[[k]]), src = paste(juris, precinct), district, w)]
+      hw[, .(key = paste(state, county, hv[[k]]), src = paste(juris, precinct), district, w, wd, wr)]
     }))
     # WHY: a key that more than one House precinct produces is ambiguous, so it is not used.
     hw_all <- hw_all[, if (uniqueN(src) == 1) .SD, by = key]
-    hw_all <- hw_all[, .(w = sum(w)), by = .(key, district)]
-    hw_all[, w := w / sum(w), by = key]
+    hw_all <- hw_all[, .(w = sum(w), wd = sum(wd), wr = sum(wr)), by = .(key, district)]
+    hw_all[, `:=`(w = w / sum(w), wd = wd / sum(wd), wr = wr / sum(wr)), by = key]
     pres[, key := NA_character_]
     for (k in seq_along(pv)) {
       cand <- paste(pres$state, pres$county, pv[[k]])
@@ -179,8 +201,10 @@ build_lean <- function(pres, hw, same_year, clean = FALSE) {
     pres[is.na(key), key := paste("unmatched", .I)]
     hw <- hw_all
   }
-  linked <- merge(pres, hw[, .(key, district, w)], by = "key", allow.cartesian = TRUE)
-  linked <- linked[, .(d = sum(d * w), r = sum(r * w)), by = .(state, county, district)]
+  # In clean mode no party split from the map year's House votes enters, linked votes included.
+  if (clean) hw[, `:=`(wd = w, wr = w)]
+  linked <- merge(pres, hw[, .(key, district, wd, wr)], by = "key", allow.cartesian = TRUE)
+  linked <- linked[, .(d = sum(d * wd), r = sum(r * wr)), by = .(state, county, district)]
   un <- pres[!key %in% hw$key, .(d = sum(d), r = sum(r)), by = .(state, county)]
   spread <- merge(un, cshare[, .(state, county, district, sd, sr)], by = c("state", "county"), allow.cartesian = TRUE)
   spread <- spread[, .(state, county, district, d = d * sd, r = r * sr)]
@@ -272,8 +296,9 @@ if (!is.null(opt$csv)) {
 
 # The lean each House cycle uses: the latest presidential vote before it on the map in force
 # that cycle. Candidates are every lean built from that presidential year on that map, tried
-# district by district in order of `rank` (lower first), so a district missing from one build
-# (uncontested the year its precincts were read) takes the next. At-large states take the
+# district by district in order of `rank` (lower first), builds that cover every district of
+# the state on that map first, so a district missing from one build (uncontested the year its
+# precincts were read) takes the next and its neighbours are not inflated by its votes. At-large states take the
 # statewide margin.
 best_leans <- function(cands, maps, medsl, rank_fn) {
   rbindlist(lapply(c(2018, 2020, 2022, 2024), function(cy) {
@@ -282,7 +307,13 @@ best_leans <- function(cands, maps, medsl, rank_fn) {
     x <- merge(cands[pres_year == py], maps[, .(state, map_year = cycle, built_map = map)], by = c("state", "map_year"))
     x <- merge(x, m, by = "state")[built_map == map]
     x[, rk := rank_fn(cy, map_year, py, kind)]
-    x <- x[!is.na(rk)][order(state, district, rk)][, .SD[1], by = .(state, district)][, rk := NULL]
+    # WHY: a build missing a district (no House race on that year's ballot) has spilled its
+    # precincts' votes into the neighbours, so a build covering all of the state's districts
+    # on this map is preferred for the whole state.
+    x[, n_build := uniqueN(district), by = .(state, map_year, kind)]
+    x[, complete := n_build == max(n_build), by = state]
+    x[, rk := rk + (!complete) * 1e6]
+    x <- x[!is.na(rk)][order(state, district, rk)][, .SD[1], by = .(state, district)][, c("rk", "n_build", "complete") := NULL]
     x[, `:=`(cycle = cy, source = fifelse(map_year == pres_year, "own map", "across a map change"))]
     at <- merge(m[map == "at-large", .(state)], medsl[year == py & party_simplified %in% c("DEMOCRAT", "REPUBLICAN"),
       .(d = sum(candidatevotes[party_simplified == "DEMOCRAT"]), r = sum(candidatevotes[party_simplified == "REPUBLICAN"])), by = .(state = state_po)], by = "state")
