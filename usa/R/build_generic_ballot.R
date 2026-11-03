@@ -4,7 +4,7 @@
 #
 #   LC_ALL=en_US.UTF-8 Rscript usa/R/build_generic_ballot.R tables=<dir> out=<dir> [anchor_n=]
 #     [grid=day|week] [tau_scale=0.1] [min_polls=1] [top_houses=] [target=2026-11-03] [asof=]
-#     [anchor_2016=0] [population=0] [bias_walk=] [phi_info=] [races=senate raw=<dir>] [two_party=0]
+#     [anchor_2016=0] [population=0] [bias_walk=] [phi_info=] [races=senate|house raw=<dir> [house=<dir>]] [two_party=0]
 #     [race_poll_sd=auto|<sd>] [mu_bar=free|zero] [bias_tail=<nu>]
 #     [election_vol=0|1 vol_days=<L>]
 #
@@ -31,6 +31,9 @@
 # that teach the race regression, from the raw files under raw= (usa/R/senate_races.R);
 # their pollsters join the national ones, and their dates the walk's. two_party=1 drops
 # Other: P = 2, results of the Democratic and Republican votes alone (usa/stan/us_midterm_v8.stan).
+# races=house house=<dir> adds the target year's House districts instead (usa/R/house_layer.R;
+# house= holds house_lean_best.csv and house_lean_2026.csv), every race with is_senate = 0;
+# seat totals add meta$unopposed_d, the seats only a Democrat contests, to seats_house_d.
 # race_poll_sd=, when given, adds v9's sigma_race_poll (usa/stan/us_midterm_v9.stan): a
 # number, or auto for the race polling error of the cycles before the target
 # (usa/R/senate_races.R, race_poll_error_sd). mu_bar= and bias_tail=, when given, add v11's
@@ -48,7 +51,7 @@ library(cmdstanr)
 opt <- list(
   tables = NULL, out = NULL, anchor_n = "", grid = "day", tau_scale = "0.1", min_polls = "1",
   top_houses = "", target = "2026-11-03", asof = "", anchor_2016 = "0", population = "0",
-  bias_walk = "", phi_info = "", races = "", raw = "", two_party = "0", race_poll_sd = "", mu_bar = "", bias_tail = "", election_vol = "", vol_days = "30"
+  bias_walk = "", phi_info = "", races = "", raw = "", house = "", two_party = "0", race_poll_sd = "", mu_bar = "", bias_tail = "", election_vol = "", vol_days = "30"
 )
 for (a in commandArgs(trailingOnly = TRUE)) {
   kv <- strsplit(a, "=", fixed = TRUE)[[1]]
@@ -126,6 +129,13 @@ if (opt$races == "senate") {
   sen <- senate_layer(target, asof, window_start, opt$raw, opt$tables, pv_all, normalise_house, P)
   race_polls <- sen$polls |> mutate(date = to_grid(end_date))
 }
+if (opt$races == "house") {
+  source("usa/R/house_layer.R")
+  pv_all <- read_csv(file.path(opt$tables, "house_popular_vote_1946_2024.csv"), show_col_types = FALSE)
+  sen <- house_layer(target, asof, window_start, opt$raw, opt$tables, opt$house, pv_all, normalise_house, P)
+  sen$holdover <- 0L
+  race_polls <- sen$polls |> mutate(date = to_grid(end_date))
+}
 houses <- names(sort(table(c(polls$house, race_polls$house)), decreasing = TRUE))
 all_dates <- sort(unique(c(polls$date, anchors, race_polls$date)))
 epoch_of <- function(d) 1L + findInterval(as.numeric(d), as.numeric(elections), left.open = TRUE)
@@ -169,7 +179,7 @@ if (opt$population == "off") {
   stan_data$pop_n <- rep(0L, nrow(y_n))
   stan_data$pop_r <- integer(0)
 }
-if (opt$races == "senate") {
+if (opt$races %in% c("senate", "house")) {
   epoch_rp <- match(epoch_of(race_polls$end_date), used)
   stopifnot("a race poll falls in an epoch with no national polls" = !anyNA(epoch_rp))
   stan_data[c(
@@ -180,7 +190,7 @@ if (opt$races == "senate") {
     nrow(race_polls), cbind(race_polls$y_d, race_polls$y_r, 0L)[, seq_len(P), drop = FALSE],
     as.integer(1L + match(race_polls$house, houses)), match(race_polls$date, all_dates), as.integer(epoch_rp),
     as.integer(race_polls$race), rep(2L, nrow(race_polls)), cbind(rep(1L, nrow(race_polls)), 2L, 0L)[, seq_len(P), drop = FALSE],
-    rep(1L, nrow(sen$races)), as.integer(sen$holdover)
+    rep(as.integer(opt$races == "senate"), nrow(sen$races)), as.integer(sen$holdover)
   )
   if (opt$population == "1") {
     stan_data$pop_r <- match(race_polls$population, c("LV", "RV", "A"), nomatch = 1L) - 1L
@@ -199,7 +209,8 @@ if (nzchar(opt$election_vol)) {
 }
 if (nzchar(opt$race_poll_sd)) {
   stan_data$sigma_race_poll <- if (opt$race_poll_sd == "auto") {
-    race_poll_error_sd(file.path(opt$raw, "gb-538-github", "raw_polls.csv"), as.integer(format(target, "%Y")))
+    race_poll_error_sd(file.path(opt$raw, "gb-538-github", "raw_polls.csv"), as.integer(format(target, "%Y")),
+      type = if (opt$races == "house") "House-G" else "Sen-G")
   } else {
     as.numeric(opt$race_poll_sd)
   }
@@ -211,7 +222,8 @@ saveRDS(
       dates = all_dates, houses = houses, polls = polls, elections = anchors, results = results,
       target = target, asof = asof
     ),
-    if (opt$races == "senate") list(races = sen$races, race_polls = race_polls, holdover = sen$holdover)
+    if (opt$races == "senate") list(races = sen$races, race_polls = race_polls, holdover = sen$holdover),
+    if (opt$races == "house") list(races = sen$races, race_polls = race_polls, unopposed_d = sen$unopposed_d)
   ),
   file.path(opt$out, "meta.rds")
 )

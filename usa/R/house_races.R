@@ -24,11 +24,6 @@
 
 library(haven)
 
-opt <- list(raw = NULL, tables = NULL, out = NULL, maps = "usa/house_maps.csv")
-for (a in commandArgs(trailingOnly = TRUE)) {
-  kv <- strsplit(a, "=", fixed = TRUE)[[1]]
-  opt[[kv[1]]] <- kv[2]
-}
 
 # WHY: a runoff row and its first round share year, state and district; the runoff decides.
 final_round <- function(h) {
@@ -96,7 +91,16 @@ house_history <- function(cks, maps) {
   )]
 }
 
-if (!is.null(opt$raw)) {
+# WHY: sys.nframe() is 0 only when Rscript runs this file; usa/R/house_layer.R sources it
+# for house_history() while the builder's own raw= and out= are on the command line.
+if (sys.nframe() == 0L) {
+  opt <- list(raw = NULL, tables = NULL, out = NULL, maps = "usa/house_maps.csv")
+  for (a in commandArgs(trailingOnly = TRUE)) {
+    kv <- strsplit(a, "=", fixed = TRUE)[[1]]
+    opt[[kv[1]]] <- kv[2]
+  }
+}
+if (sys.nframe() == 0L && !is.null(opt$raw)) {
   options(width = 140)
   cks <- read_dta(file.path(opt$raw, "dataverse-DGDRDT", "candidates_2006-2024.dta"))
   maps <- read.csv(opt$maps)
