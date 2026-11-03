@@ -1,9 +1,10 @@
 # One-off correction of the 30 Kosning rows of a data/polling_data.csv written before
 # get_election_data() matched each election's valid votes by date. Until then the rows
 # took the totals 199730, 196259 and 189648 in turn, so a row's share is its n over the
-# total it was given, and its n should be that share times its own election's total.
-# Rewrites only those rows' n, in write_csv()'s number format, and leaves every other
-# byte alone; a row that already holds the right n is left as it is, so a second run
+# total it was given, and its n should be that share times its own election's total,
+# which must be get_election_data()'s n for the row to within 1e-6. Rewrites only those
+# rows' n, as get_election_data()'s n in write_csv()'s number format, and leaves every
+# other byte alone; a row that already holds the right n is left as it is, so a second run
 # changes nothing. Run from the project root:
 #   LC_ALL=en_US.UTF-8 Rscript R/correct_election_anchors.R [path]
 stopifnot("run under LC_ALL=en_US.UTF-8" = isTRUE(l10n_info()[["UTF-8"]]))
@@ -29,13 +30,14 @@ n_old <- as.numeric(vapply(fields, \(f) f[4], ""))
 i <- match(row_key, key)
 stopifnot("a Kosning row get_election_data() does not hold" = !anyNA(i), !anyDuplicated(i))
 
-n_new <- n_old / anchors$given[i] * anchors$total[i]
 done <- abs(n_old - anchors$n[i]) < 1e-6
-n_new[done] <- n_old[done]
-stopifnot("a Kosning row matches neither its old nor its corrected n" = abs(n_new - anchors$n[i]) < 1e-6)
+stopifnot(
+  "a Kosning row matches neither its old nor its corrected n" =
+    done | abs(n_old / anchors$given[i] * anchors$total[i] - anchors$n[i]) < 1e-6
+)
 
 change <- !done
-n_text <- sub("\n$", "", readr::format_csv(data.frame(n = n_new), col_names = FALSE, eol = "\n"))
+n_text <- sub("\n$", "", readr::format_csv(data.frame(n = anchors$n[i]), col_names = FALSE, eol = "\n"))
 n_text <- strsplit(n_text, "\n", fixed = TRUE)[[1]]
 lines[rows[change]] <- vapply(which(change), \(k) {
   f <- fields[[k]]

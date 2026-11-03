@@ -27,7 +27,11 @@ that builds offline is not a fresh build. Slow tests (the sweep of every forecas
 `tests/harness/test-sweep.R`, the self-test's kjördæmi and seat scores, the R0 Stan tests
 and the cell runner's test fit, which compile with CmdStan) call `skip_unless_slow()` and
 run only with `HARNESS_SLOW=1` in the environment:
-`HARNESS_SLOW=1 LC_ALL=en_US.UTF-8 Rscript tests/run.R`.
+`HARNESS_SLOW=1 LC_ALL=en_US.UTF-8 Rscript tests/run.R`. The one test that reads the live
+`data/` (the Kosning rows of `data/polling_data.csv`, in `tests/harness/test-election-data.R`)
+calls `skip_unless_live_data()` and runs only with `KOSNINGASPA_LIVE_DATA=1`, so the queue's
+preflight never depends on the live data:
+`KOSNINGASPA_LIVE_DATA=1 LC_ALL=en_US.UTF-8 Rscript tests/run.R election-data`.
 
 The R code in `R/harness/` and `R/election_utils.R` writes every non-ASCII character as a
 `\uXXXX` escape and gives a non-ASCII name with `stats::setNames()`, never as a name tag;

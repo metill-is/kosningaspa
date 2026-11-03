@@ -27,7 +27,7 @@ update_constituency_data()
 ```
 
 ### Testing
-The v2 harness has a testthat suite in `tests/harness/`. Run it from the project root with `LC_ALL=en_US.UTF-8 Rscript tests/run.R [filter]`; its real-data tests read `harness/snapshot/` and skip without it. `HARNESS_SLOW=1` runs the slow tests too, and they need CmdStan and the self-test inputs in `harness/selftest/` (`harness/README.md`, Tests). Model validation stays interactive: model diagnostics, posterior predictive checks, and comparing predictions against known results (`R/compare_error.R`, `R/post_analysis.R`).
+The v2 harness has a testthat suite in `tests/harness/`. Run it from the project root with `LC_ALL=en_US.UTF-8 Rscript tests/run.R [filter]`; its real-data tests read `harness/snapshot/` and skip without it. `HARNESS_SLOW=1` runs the slow tests too, and they need CmdStan and the self-test inputs in `harness/selftest/` (`harness/README.md`, Tests). `KOSNINGASPA_LIVE_DATA=1` also runs the one test that reads the live `data/` (the Kosning rows of `data/polling_data.csv`); without it that test skips, so the harness queue's preflight never reads the live data. Model validation stays interactive: model diagnostics, posterior predictive checks, and comparing predictions against known results (`R/compare_error.R`, `R/post_analysis.R`).
 
 ## Architecture
 
