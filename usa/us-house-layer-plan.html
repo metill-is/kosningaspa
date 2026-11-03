@@ -64,7 +64,7 @@
 <tr><td>2026 district polls</td><td><span class="md">Thin</span>: 43 polls, a handful of districts</td><td><code>tables/house_district_polls_2026.csv</code>, Wikipedia</td></tr>
 <tr><td>Final-weeks House polls with results, 1998–2022</td><td><span class="yes">Have</span>: for the race poll error (as for the Senate)</td><td>538 <code>raw_polls.csv</code>, CC BY 4.0</td></tr>
 <tr><td>Incumbents and retirements</td><td><span class="yes">Have</span></td><td><code>raw/congress-legislators/</code>, public domain</td></tr>
-<tr><td>District lean on each map</td><td><span class="hi">Missing</span>: 2016 and 2020 presidential vote on the 2012–2020 maps, 2020 on the 2022 maps, 2024 on the 2024 maps and on the mid-decade 2026 redraws</td><td>No open ready-made source. The Downballot publishes these numbers (licence unstated). Open route: precinct results (VEST, CC BY 4.0; ALARM, to verify) joined to district boundaries (Census TIGER, public domain; state releases for 2026)</td></tr>
+<tr><td>District lean on each map</td><td><span class="md">To build</span>: the presidential vote on the lines in force each cycle: 2016 on the 2018 maps, 2020 on the 2022 and 2024 maps, 2024 on the 2026 maps</td><td>MEDSL precinct returns (CC0; the GitHub copies need no guestbook): each precinct row carries its US House district, so the presidential vote sums to the district that year with no boundary files. Where a map changed between the presidential year and the cycle, precincts are matched by name across the two years; for the nine 2026 redraws, the states' own statistics for the enacted maps, until MEDSL publishes the 2026 precincts. VEST is <em>not</em> open (CC BY-NC-ND for 2016–2020, subscribers only for 2022–2024)</td></tr>
 </tbody></table></div>
 
 <h2>Model sketch</h2>
@@ -81,13 +81,13 @@
 
 <h2>Steps</h2>
 <ol class="plan">
-<li><strong>Pin down the maps and the lean sources.</strong> List each state's congressional map for every cycle from 2012 to 2026, including the 2024 redraws (Alabama, Georgia, Louisiana, New York, North Carolina) and the mid-decade 2026 ones (Texas, California, Missouri, North Carolina, Ohio, Utah as of mid-2026; others to check). Confirm the VEST and ALARM licences and where each 2026 map's boundary file comes from.
-<dl class="who"><dt>Claude</dt><dd>A table of state × cycle → map file, source and licence. No code beyond a fetch log.</dd><dt>Check</dt><dd>Every one of the 435 districts in each cycle maps to exactly one boundary.</dd></dl></li>
+<li><strong>Pin down the maps and the lean sources.</strong> List each state's congressional map for every cycle from 2016 to 2026, including the 2024 redraws (Alabama, Georgia, Louisiana, New York, North Carolina) and the nine mid-decade 2026 ones (Alabama, California, Florida, Louisiana, North Carolina, Ohio, Tennessee, Texas, Utah; Missouri's and Virginia's were blocked). Confirm the licence of each lean source.
+<dl class="who"><dt>Claude</dt><dd>A table of state × cycle → map file, source and licence. No code beyond a fetch log.</dd><dt>Check</dt><dd>Each state's district count per cycle matches the CKS results (2016–2024) and the 2026 candidate list, and a map changes only where the table says so.</dd></dl></li>
 
 <li><strong>Build the district results history.</strong> From the CKS file: the two-party margin by district and year, contested flags, incumbency, a same-map flag, and freshmen.
 <dl class="who"><dt>Claude</dt><dd><code>usa/R/house_races.R</code>, about 200 R lines, mirroring <code>senate_races.R</code>.</dd><dt>Check</dt><dd>District votes summed per year match the national House vote table within 0.1%; seat winners match each year's House composition.</dd></dl></li>
 
-<li><strong>Build district lean on each map.</strong> Join precinct presidential results to district boundaries (<code>sf</code>), splitting precincts that straddle a line by population. This is the bulk of the work and the main risk.
+<li><strong>Build district lean on each map.</strong> Sum MEDSL's precinct presidential votes by the US House district recorded on each precinct. Where the map changed after the presidential year, match precincts by name to the next year's file, which records the new district; precincts that do not match are counted and reported, not imputed. This is the bulk of the work and the main risk.
 <dl class="who"><dt>Claude</dt><dd>One script per map vintage; outputs kept in the study folder, never in git.</dd><dt>Check</dt><dd>On districts whose lines did not change, the built lean agrees with published figures (the Downballot, read only for checking) to within 0.5 points on average, and with the 2016 and 2020 presidential totals by state.</dd></dl></li>
 
 <li><strong>Add the House race type to the model (v13).</strong> Covariates as above, race-type terms per chamber, uncontested handling, and generated quantities for House seats, P(control) and P(both chambers).
@@ -100,7 +100,8 @@
 <dl class="who"><dt>You</dt><dd>Nothing, unless you decide 2026 should be held out entirely.</dd></dl></li>
 </ol>
 
-<h2>Decisions for you</h2>
+<h2>Decisions</h2>
+<p class="meta"><strong>All four accepted as recommended, 3 November 2026.</strong> Step 1 then found VEST is not open, so the open source for decision 1 is MEDSL's precinct returns (CC0).</p>
 <div class="decision">
 <p><strong>1. Where can district lean come from?</strong> Open-only means building it from precinct data (step 3), which is slow but publishable. The Downballot's tables would be a day's work but have no stated licence. My recommendation: build it openly and use the Downballot only to check our figures, never as an input.</p>
 </div>
@@ -116,7 +117,7 @@
 
 <h2>Risks</h2>
 <ul>
-<li><strong>Precinct splits.</strong> Precincts that straddle a district line need population weights, so the error grows in states that split many precincts. Step 3's check measures it.</li>
+<li><strong>Precinct matching.</strong> Precincts are renamed, split and merged between years, so the name match across a map change will miss some. The share of votes matched is reported per state, and a state below about 95% gets a wider lean error or falls back to the state's own statistics for the new map. Step 3's check measures it.</li>
 <li><strong>2026 maps still in court.</strong> If a map was blocked or replaced close to the election, the lean comes from the map that was actually used, and step 1 has to record which one that was.</li>
 <li><strong>Three test cycles.</strong> η<sub>House</sub> is learnt from very few years. Its prior should come from the House poll misses in 538's raw_polls, as s<sub>η</sub> did for the Senate.</li>
 <li><strong>Public repository.</strong> The precinct data and derived lean tables stay in the study folder, as the poll tables do. Only code and summary scores go into git.</li>
