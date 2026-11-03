@@ -21,7 +21,8 @@ box::use(
     update_constituency_data
   ],
   R / stan_data[
-    prepare_stan_data
+    prepare_stan_data,
+    n_pred_k_2024
   ]
 )
 
@@ -96,29 +97,7 @@ N_obs_k <- nrow(constituency_weights)
 obs_k <- rep(1:N_obs_k, each = ncol(constituency_weights))
 
 
-n_pred_thjodskra <- tibble(
-  kjordaemi = c("Norðvestur", "Norðaustur", "Suður", "Suðvestur", "Reykjavík Suður", "Reykjavík Norður"),
-  kjorsokn = c(82.0, 81.0,78.8, 81.2, 79.2, 78.8) / 100,
-  kjorskra = c(22348, 31039, 40994, 79052, 47503, 47486)
-) |>
-  slice(match(levels(constituency_data$kjordaemi), kjordaemi))
-
-stopifnot(
-  "n_pred_thjodskra must list constituency_data's kjordaemi levels, in order" =
-    identical(n_pred_thjodskra$kjordaemi, levels(constituency_data$kjordaemi))
-)
-
-n_pred_thjodskra <- n_pred_thjodskra |>
-  mutate(
-    n = kjorskra * kjorsokn,
-    p = n / sum(n),
-    n_2021 = stan_data$n_pred_k,
-    p_2021 = n_2021 / sum(n_2021)
-  ) |> 
-  pull(n) |> 
-  as.integer()
-
-stan_data$n_pred_k <- n_pred_thjodskra
+stan_data$n_pred_k <- n_pred_k_2024(levels(constituency_data$kjordaemi))
 
 stan_data$constituency_weights <- constituency_weights
 stan_data$constituency_weights_pred <- constituency_weights[1, ] |> as.numeric()

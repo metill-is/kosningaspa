@@ -267,6 +267,29 @@ prepare_polling_data <- function(polling_data, constituency_data, election_date)
 }
 
 
+#' Expected valid votes in each kjördæmi at the 2024 election (kjörskrá × expected
+#' turnout), the fit scripts' `stan_data$n_pred_k` for the election-day draws, matched to
+#' the kjördæmi factor's levels (which `constituency_k` indexes) by name.
+#'
+#' @param kjordaemi_levels the levels of the constituency data's `kjordaemi` factor.
+#' @return an integer vector, one value per level in their order; an error if a level is
+#'   not one of the six 2024 kjördæmi.
+#' @export
+n_pred_k_2024 <- function(kjordaemi_levels) {
+  votes <- data.frame(
+    kjordaemi = c("Nor\u00f0vestur", "Nor\u00f0austur", "Su\u00f0ur", "Su\u00f0vestur", "Reykjav\u00edk Su\u00f0ur", "Reykjav\u00edk Nor\u00f0ur"),
+    kjorsokn = c(82.0, 81.0, 78.8, 81.2, 79.2, 78.8) / 100,
+    kjorskra = c(22348, 31039, 40994, 79052, 47503, 47486)
+  )
+  votes <- votes[match(kjordaemi_levels, votes$kjordaemi), ]
+  stopifnot(
+    "the 2024 expected valid votes must list the kjordaemi levels, in order" =
+      identical(votes$kjordaemi, kjordaemi_levels)
+  )
+  as.integer(votes$kjorskra * votes$kjorsokn)
+}
+
+
 #' @export
 prepare_fundamentals_data <- function(fundamentals_data) {
   box::use(
