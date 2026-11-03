@@ -37,6 +37,11 @@ stopifnot(
 )
 
 change <- !done
+if (!any(change)) {
+  # WHY: leave the file in place; a rename would reset its mode and break a symlink
+  cat(sprintf("%s: corrected 0 of %d Kosning rows\n", path, length(rows)))
+  quit(save = "no")
+}
 n_text <- sub("\n$", "", readr::format_csv(data.frame(n = anchors$n[i]), col_names = FALSE, eol = "\n"))
 n_text <- strsplit(n_text, "\n", fixed = TRUE)[[1]]
 lines[rows[change]] <- vapply(which(change), \(k) {

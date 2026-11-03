@@ -67,10 +67,13 @@ write_old_csv <- function(path) {
 }
 
 run_correction <- function(path) {
-  withr::with_dir(root(), system2(
+  out <- withr::with_dir(root(), system2(
     file.path(R.home("bin"), "Rscript"), c("R/correct_election_anchors.R", shQuote(path)),
     stdout = TRUE, stderr = TRUE, env = "LC_ALL=en_US.UTF-8"
   ))
+  # WHY: report the script's own error, not a later assertion on its output
+  expect_null(attr(out, "status"), label = paste(out, collapse = "\n"))
+  out
 }
 
 test_that("correct_election_anchors.R gives each Kosning row its own total and leaves every other line alone", {
@@ -106,9 +109,12 @@ test_that("a second run of correct_election_anchors.R changes nothing", {
   write_old_csv(path)
   run_correction(path)
   once <- readBin(path, "raw", file.size(path))
+  inode <- fs::file_info(path)$inode
   out <- run_correction(path)
   expect_match(out, "corrected 0 of 30 Kosning rows", all = FALSE)
   expect_identical(readBin(path, "raw", file.size(path)), once)
+  # nothing to correct: the file is left in place, not replaced by a rename
+  expect_identical(fs::file_info(path)$inode, inode)
 })
 
 test_that("data/polling_data.csv's Kosning rows carry each election's own total", {

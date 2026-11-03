@@ -256,6 +256,8 @@ get_election_data <- function() {
       fyrirtaeki = "Kosning"
     ) |>
     select(-p)
+  stopifnot("an election date has no valid-votes total" = !anyNA(out$n))
+  out
 }
 
 #' @export
