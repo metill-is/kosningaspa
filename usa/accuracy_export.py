@@ -6,7 +6,7 @@ Reads the current model's combined backtest scores (<backtest dir>/scores.csv, f
 usa/R/score_combined.R) and the fixed comparisons in <accuracy dir> (house.csv: the national
 House vote 1998-2022 from the v8 history backtests; senate.csv: the v9 Senate backtests;
 pres.csv: v9's presidential states against FiveThirtyEight, the Economist and Silver
-Bulletin). Writes <out dir>/accuracy.json: each block names the model version it scores, so a
+Bulletin; pres_current.csv, when present, the same for a newer model version). Writes <out dir>/accuracy.json: each block names the model version it scores, so a
 refit with new backtests replaces the "current" block and the older blocks say what they are.
 Margins are D minus R as a share of the two-party vote, in points.
 """
@@ -66,13 +66,20 @@ def main(bt: pathlib.Path, acc: pathlib.Path, out: pathlib.Path) -> None:
         ],
     }
     senate = [{k: num(v) for k, v in r.items()} for r in rows(acc / "senate.csv")]
-    pres = [{"year": int(r["year"]), "who": r["who"], "brier": num(r["brier"]), "mae_polled_states": num(r["mae_polled"]),
-             "called": int(r["called"]), "states": int(r["n"])} for r in rows(acc / "pres.csv")]
+    def pres_rows(path):
+        return [{"year": int(r["year"]), "who": r["who"], "brier": num(r["brier"]), "mae_polled_states": num(r["mae_polled"]),
+                 "called": int(r["called"]), "states": int(r["n"])} for r in rows(path)]
+    pres = pres_rows(acc / "pres.csv")
+    # pres_current.csv, when present, scores a newer model version on the same elections.
+    cur_path = acc / "pres_current.csv"
+    pres_model = rows(cur_path)[0]["model"] if cur_path.exists() else "v9"
+    pres_cur = pres_rows(cur_path) if cur_path.exists() else pres
     doc = {
         "current": current,
         "house_vote_long_run": long_run,
         "senate_v9": {"model": "v9 (Senate only, before the combined model)", "cycles": senate},
-        "presidential_states": {"model": "v9", "what": "Presidential states 2008-2024 against published final forecasts; Brier on win probabilities (51 states), margin MAE on states with final-month polls.", "rows": pres},
+        "presidential_states": {"model": pres_model, "what": "Presidential states 2008-2024 against published final forecasts; Brier on win probabilities (51 states), margin MAE on states with final-month polls.", "rows": pres_cur},
+        "presidential_states_v9": {"model": "v9", "rows": pres},
         "notes": "Margins are two-party. FiveThirtyEight is Silver's model to 2020 (polls-only in 2016; its 2008 archive has no state probabilities) and Morris's in 2024.",
     }
     out.mkdir(parents=True, exist_ok=True)
