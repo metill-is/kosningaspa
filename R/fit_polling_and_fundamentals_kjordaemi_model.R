@@ -213,14 +213,6 @@ fit$draws(c("beta_vnv_f", "beta_growth_f")) |>
 
 fit$summary("tau_f")
 
-fit$summary("phi_inv") |>
-  mutate(
-    house = levels(polling_data$fyrirtaeki)
-  ) |>
-  select(
-    house, mean, q5, q95
-  )
-
 fit$summary("phi_f_inv")
 
 
@@ -557,13 +549,25 @@ p <- fit$summary("gamma") |>
   ) |>
   filter(h != 1) |>
   bind_rows(
-    fit$summary("mu_gamma") |>
+    # WHY: mu_gamma holds the first P - 2 parties; the last one's is minus their sum, as in gamma.
+    fit$draws("mu_gamma") |>
+      as_draws_df() |>
+      as_tibble() |>
+      pivot_longer(c(-.chain, -.iteration, -.draw)) |>
+      reframe(
+        p = c(parse_number(name), stan_data$P - 1),
+        value = c(value, -sum(value)),
+        .by = .draw
+      ) |>
+      summarise(
+        mean = mean(value),
+        q5 = quantile(value, 0.05),
+        q95 = quantile(value, 0.95),
+        .by = p
+      ) |>
       mutate(
-        flokkur = colnames(stan_data$y_n)[-1] |>
-          as_factor() |>
-          fct_reorder(mean),
-        fyrirtaeki = "Samtals",
-        .before = variable
+        flokkur = colnames(stan_data$y_n)[-1][p],
+        fyrirtaeki = "Samtals"
       )
   ) |>
   ggplot(aes(0, fyrirtaeki, col = fyrirtaeki)) +
