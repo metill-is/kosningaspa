@@ -128,7 +128,10 @@ house_polls_2026 <- function(tables, races, polls_file = "house_district_polls_2
   tibble(race = idx, pollster = p$pollster, end_date = as.Date(p$end_date), sample_size = p$sample_size,
     population = toupper(ifelse(is.na(p$population), "LV", p$population)), d = p$dem_share, r = p$rep_share,
     hypothetical = p$hypothetical) |>
-    filter(!is.na(race), !hypothetical, !is.na(d), !is.na(r), !is.na(sample_size)) |>
+    # WHY: where the two major parties share under 65% the race is not Democrat against
+    # Republican (Alaska at-large: an independent is the challenger and the Democrat polls
+    # at 5%), and its polls would mislead the district and its pollsters' house effects.
+    filter(!is.na(race), !hypothetical, !is.na(d), !is.na(r), !is.na(sample_size), d + r >= 65) |>
     select(-hypothetical)
 }
 
