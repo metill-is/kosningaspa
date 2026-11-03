@@ -6,7 +6,9 @@
 #   LC_ALL=en_US.UTF-8 Rscript usa/R/house_lean.R csv=<unzipped dir> raw=<raw dir> out=<dir> [clean=1]
 #
 # clean=1 writes *_clean.csv for backtests: unlinked votes are shared by total House votes
-# only, so the map year's party House votes (a backtest's outcome) do not enter.
+# only, so the map year's party House votes (a backtest's outcome) do not enter, and
+# house_lean_best_backtest.csv, which takes the regular lean where its map was built before
+# the cycle and the clean one where it was built in the cycle.
 #
 # MEDSL's president rows carry no district, but its US House rows do, so a precinct's
 # presidential vote goes to the district its House rows name. For one map year:
@@ -289,4 +291,13 @@ if (!is.null(opt$csv)) {
   }))
   fwrite(best[order(cycle, state, district)], file.path(opt$out, paste0("house_lean_best", sfx, ".csv")))
   cat("best leans:", paste(best[, .N, by = cycle][, paste0(cycle, " ", N)], collapse = ", "), "districts\n")
+  # For backtests: the regular lean where its map was built before the cycle (its county
+  # split uses an earlier year's House votes), the clean one where it was built that cycle.
+  reg <- file.path(opt$out, "house_lean_best.csv")
+  if (opt$clean == "1" && file.exists(reg)) {
+    r <- fread(reg)
+    bt <- rbind(r[map_year < cycle | source == "statewide" | map_year == pres_year], best[map_year == cycle & map_year != pres_year & source != "statewide"])
+    fwrite(bt[order(cycle, state, district)], file.path(opt$out, "house_lean_best_backtest.csv"))
+    cat("backtest leans:", paste(bt[, .N, by = cycle][, paste0(cycle, " ", N)], collapse = ", "), "districts\n")
+  }
 }
