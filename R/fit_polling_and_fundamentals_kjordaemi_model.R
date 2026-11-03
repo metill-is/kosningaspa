@@ -22,7 +22,9 @@ box::use(
   ],
   R / stan_data[
     prepare_stan_data,
-    n_pred_k_2024
+    n_pred_k_2024,
+    poll_dates,
+    kjordaemi_obs_k
   ]
 )
 
@@ -94,7 +96,7 @@ constituency_weights <- constituency_data |>
   column_to_rownames("date")
 
 N_obs_k <- nrow(constituency_weights)
-obs_k <- rep(1:N_obs_k, each = ncol(constituency_weights))
+obs_k <- kjordaemi_obs_k(stan_data, constituency_weights, polling_data, constituency_data)
 
 
 stan_data$n_pred_k <- n_pred_k_2024(levels(constituency_data$kjordaemi))
@@ -266,7 +268,7 @@ fit$summary("Omega") |>
 fit$summary("mu_gamma_pred")
 
 dates <- c(
-  unique(c(polling_data$date, constituency_data$date)),
+  poll_dates(polling_data, constituency_data),
   seq.Date(
     max(c(polling_data$date, constituency_data$date)) + 1,
     election_date,
