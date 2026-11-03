@@ -39,6 +39,7 @@ is used by the Icelandic forecast or Fylgisvakt, and nothing outside `usa/` was 
 | `R/house_races.R` | House district history 2006–2024 from the CKS file (CC0): each district's leading Democrat against its leading Republican, runoffs replacing first rounds, contested flag, margin, winner, incumbency, freshmen, and the previous margin where the map did not change (`LC_ALL=en_US.UTF-8 Rscript usa/R/house_races.R raw=<raw> tables=<tables> out=<csv>`) |
 | `data_freeze_2026-11-02.sha256` | sha256 of every poll table and raw file gathered on 2 November 2026, committed before the election, so a later 2026 fit can show it used pre-election data only |
 | `data_freeze_2026-11-02_open.sha256` | The same for the open-licence files gathered later that day (paths under the study folder's `raw/`; `shasum -a 256 -c` from that folder) |
+| `data_freeze_2026-11-03_medsl_precinct.sha256` | sha256 of the 107 MEDSL precinct-return zips downloaded on 3 November 2026 for the House layer's district lean (paths under the study folder's `raw/medsl-precinct/`) |
 | `R/bench_fit.R` | Fits a Stan file on a saved data JSON, times it and prints one `DIAG` line (wall time, ms per gradient, tree depth, divergences, R-hat, ESS) |
 
 The poll tables these scripts read were gathered on 2 November 2026 from Wikipedia, the
@@ -53,6 +54,7 @@ decision D4), under that folder's `raw/`:
 | Data | Source | Licence |
 |---|---|---|
 | House, Senate and governor results 2006–2024, with incumbency | Cha, Kuriwaki and Snyder, Candidates in American General Elections, Harvard Dataverse doi:10.7910/DVN/DGDRDT (`dataverse-DGDRDT/`) | CC0 |
+| Precinct returns 2016–2024: president and US House by precinct, with each precinct's House district | MIT Election Data and Science Lab: 2016 from github.com/MEDSL/official-precinct-returns (MIT licence); 2018 House and 2020 president and House from the last commits of github.com/MEDSL/2018-elections-official (738eaba) and 2020-elections-official (ad22f37) before the move to Dataverse, where the same data are CC0; 2022 and 2024 per-state files from github.com/MEDSL/2022- and 2024-elections-official (`medsl-precinct/`) | CC0 (MIT for 2016) |
 | State presidential vote 1976–2024 | MIT Election Data and Science Lab, doi:10.7910/DVN/42MVDX (`medsl/president.csv`) | CC0 |
 | Senate, House and governor polls of the 2018–2024 cycles | FiveThirtyEight `polls` repository, `*_polls_historical.csv` (`538-polls-historical/`) | CC BY 4.0 |
 | Final-60-day polls with results, 1998–2022 | FiveThirtyEight pollster ratings, `raw_polls.csv` (`gb-538-github/`) | CC BY 4.0 |
