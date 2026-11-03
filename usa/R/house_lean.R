@@ -13,19 +13,21 @@
 #      presidential year is the map year, and otherwise by county and a normalised precinct
 #      name (upper case, letters and digits only, leading zeros dropped).
 #   3. Votes that do not link (county-wide absentee rows, renamed precincts) are shared out
-#      within their county by the map year's House votes there, the Democratic presidential
-#      vote by the districts' Democratic House votes and the Republican by the Republican, so
-#      a county split between a city district and a rural one sends each party's votes
-#      where that party's voters are. A county with no House votes is left unallocated.
+#      within their county by the map year's House votes there: each district gets the
+#      county's Democratic presidential votes in proportion to its House votes times its
+#      House race's Democratic fraction, and the Republican ones likewise, so a county split
+#      between a city district and a rural one sends each party's votes where that party's
+#      voters are. A district without both parties on the ballot takes the county's average
+#      fraction. A county with no House votes is left unallocated.
 # The leans built are 2016 on the 2016 and 2018 maps, 2020 on the 2020, 2022 and 2024 maps,
-# and 2024 on the 2024 maps. Writes <out>/house_lean.csv (state, district, map_year,
+# and 2024 on the 2024 maps (2016 also on the 2020 maps, for North Carolina's). Writes <out>/house_lean.csv (state, district, map_year,
 # pres_year, d, r, margin = 100 (D - R) / (D + R)) and <out>/house_lean_states.csv (per
 # state: the D + R votes linked by precinct, shared within county, and unallocated, against
 # MEDSL's state totals).
 
 library(data.table)
 
-opt <- list(csv = NULL, raw = NULL, out = NULL)
+opt <- list(csv = NULL, raw = NULL, out = NULL, maps = "usa/house_maps.csv")
 for (a in commandArgs(trailingOnly = TRUE)) {
   kv <- strsplit(a, "=", fixed = TRUE)[[1]]
   opt[[kv[1]]] <- kv[2]
@@ -53,7 +55,7 @@ read_year <- function(dir, year, offices = c("PRES", "HOUSE")) {
     if (year == 2016) {
       x <- fread(f, encoding = "Latin-1", select = c(
         "state_postal", "county_fips", "jurisdiction",
-        "precinct", "office", "district", "party", "votes"
+        "precinct", "office", "district", "party", "votes", "candidate"
       ))
       setnames(x, c("state_postal", "jurisdiction"), c("state", "juris"))
       x[, jname := juris]
@@ -63,7 +65,7 @@ read_year <- function(dir, year, offices = c("PRES", "HOUSE")) {
     } else {
       x <- fread(f, select = c(
         "state_po", "county_fips", "jurisdiction_fips", "jurisdiction_name", "precinct", "office",
-        "district", "party_simplified", "party_detailed", "votes", "stage"
+        "district", "party_simplified", "party_detailed", "votes", "stage", "candidate"
       ), colClasses = c(
         county_fips = "character",
         jurisdiction_fips = "character", district = "character", precinct = "character"
@@ -85,6 +87,10 @@ read_year <- function(dir, year, offices = c("PRES", "HOUSE")) {
     )]
     x[is.na(votes), votes := 0]
     x[is.na(party), party := "O"]
+    # WHY: Oregon's 2024 file leaves the nominees' party blank in several counties.
+    cand <- toupper(x$candidate)
+    x[office == "PRES" & party == "O" & grepl("HARRIS|BIDEN|CLINTON|OBAMA", cand), party := "D"]
+    x[office == "PRES" & party == "O" & grepl("TRUMP|ROMNEY|MCCAIN", cand), party := "R"]
     # WHY: some files store FIPS codes as numbers, dropping the leading zero (6001 for 06001).
     pad <- function(v) ifelse(grepl("^[0-9]+$", v), ifelse(nchar(v) <= 5, formatC(as.numeric(v), width = 5, flag = "0", format = "d"),
       formatC(as.numeric(v), width = 10, flag = "0", format = "d")), v)
@@ -132,10 +138,15 @@ build_lean <- function(pres, hw, same_year) {
   # Each county's House votes by district on the target map, Democratic and Republican
   # apart, for sharing out the presidential votes that do not link to a precinct.
   cshare <- hw[, .(vd = sum(vd), vr = sum(vr), v = sum(v)), by = .(state, county, district)]
-  cshare[, `:=`(
-    sd = if (sum(vd) > 0) vd / sum(vd) else v / sum(v),
-    sr = if (sum(vr) > 0) vr / sum(vr) else v / sum(v)
-  ), by = .(state, county)]
+  # Each district's Democratic fraction in the county is that of its House race there; a
+  # district with no Democrat or no Republican on the ballot takes the county's average
+  # over its contested districts (0.5 if it has none).
+  cshare[, p := fifelse(vd > 0 & vr > 0, vd / (vd + vr), NA_real_)]
+  cshare[, p := {
+    ok <- !is.na(p)
+    fifelse(ok, p, if (any(ok)) sum((v * p)[ok]) / sum(v[ok]) else 0.5)
+  }, by = .(state, county)]
+  cshare[, `:=`(sd = v * p / sum(v * p), sr = v * (1 - p) / sum(v * (1 - p))), by = .(state, county)]
   if (same_year) {
     pres[, key := paste(state, county, juris, precinct)]
     hw[, key := paste(state, county, juris, precinct)]
@@ -180,22 +191,40 @@ build_lean <- function(pres, hw, same_year) {
 if (!is.null(opt$csv)) {
   options(width = 150)
   dir.create(opt$out, showWarnings = FALSE, recursive = TRUE)
-  combos <- data.table(pres_year = c(2016, 2016, 2020, 2020, 2020, 2024), map_year = c(2016, 2018, 2020, 2022, 2024, 2024))
+  combos <- data.table(pres_year = c(2016, 2016, 2016, 2020, 2020, 2020, 2024), map_year = c(2016, 2018, 2020, 2020, 2022, 2024, 2024))
   pres_cache <- list()
   house_cache <- list()
   get_pres <- function(y) {
     if (is.null(pres_cache[[as.character(y)]])) {
-      x <- read_year(opt$csv, y, "PRES")
-      pres_cache[[as.character(y)]] <<- pres_precincts(x)
+      x <- pres_precincts(read_year(opt$csv, y, "PRES"))
+      # WHY: MEDSL's 2020 files have no Indiana; its county results (Wikipedia, CC BY-SA)
+      # enter as county rows, which share out within the county like unlinked votes.
+      supp <- fread(file.path(opt$raw, "wiki-in-2020-county", "county_president.csv"), colClasses = c(county_fips = "character"))[year == y]
+      supp <- supp[!state %in% x$state]
+      if (nrow(supp)) {
+        x <- rbind(x, supp[, .(state, county = county_fips, juris = county_fips, jname = county, precinct = "county total", d, r)])
+      }
+      pres_cache[[as.character(y)]] <<- x
     }
     copy(pres_cache[[as.character(y)]])
   }
   get_house <- function(y) {
     if (is.null(house_cache[[as.character(y)]])) {
-      house_cache[[as.character(y)]] <<- house_weights(read_year(opt$csv, y, "HOUSE"))
+      h <- house_weights(read_year(opt$csv, y, "HOUSE"))
+      # WHY: Indiana's 2022 file covers 38 of its 92 counties; on the same map (2022 = 2024)
+      # the missing counties' House rows come from the 2024 file, which sets only how each
+      # such county divides between districts.
+      if (y == 2022) {
+        h24 <- house_weights(read_year(opt$csv, 2024, "HOUSE"))
+        same <- maps[cycle == 2024 & changed == 0, state]
+        fill <- h24[state == "IN" & state %in% same & !paste(state, county) %in% paste(h$state, h$county)]
+        h <- rbind(h, fill)
+      }
+      house_cache[[as.character(y)]] <<- h
     }
     copy(house_cache[[as.character(y)]])
   }
+  maps <- fread(opt$maps)
   medsl <- fread(file.path(opt$raw, "medsl", "president.csv"))
   state_tot <- medsl[party_simplified %in% c("DEMOCRAT", "REPUBLICAN"), .(official = sum(candidatevotes)), by = .(year, state = state_po)]
   leans <- list()
@@ -229,4 +258,28 @@ if (!is.null(opt$csv)) {
   setcolorder(lean, c("state", "district", "map_year", "pres_year", "d", "r", "margin"))
   fwrite(lean[order(map_year, pres_year, state, district)], file.path(opt$out, "house_lean.csv"))
   fwrite(rbindlist(diags), file.path(opt$out, "house_lean_states.csv"))
+
+  # The lean each House cycle uses: the latest presidential vote before it on the map in
+  # force that cycle, built on the presidential year's own map when the state's map has not
+  # changed since, else across the change. At-large states take the statewide margin.
+  best <- rbindlist(lapply(c(2018, 2020, 2022, 2024), function(cy) {
+    py <- if (cy <= 2020) 2016 else 2020
+    if (cy == 2024) py <- 2020
+    m <- maps[cycle == cy, .(state, map)]
+    # Every lean built from this presidential year, with the map it was built on; the one
+    # on the cycle's map is kept, preferring the presidential year's own map and then the
+    # earliest later build, whose precinct names are closest to the presidential year's.
+    built <- merge(unique(lean[pres_year == py, .(state, map_year)]), maps[, .(state, map_year = cycle, built_map = map)], by = c("state", "map_year"))
+    built <- merge(built, m, by = "state")[built_map == map]
+    built <- built[order(state, map_year != py, map_year)][, .SD[1], by = state]
+    x <- merge(lean[pres_year == py], built[, .(state, map_year, map)], by = c("state", "map_year"))
+    x[, `:=`(cycle = cy, source = fifelse(map_year == pres_year, "own map", "across a map change"))]
+    st <- state_tot[year == py, .(state)]
+    at <- merge(m[map == "at-large", .(state)], medsl[year == py & party_simplified %in% c("DEMOCRAT", "REPUBLICAN"),
+      .(d = sum(candidatevotes[party_simplified == "DEMOCRAT"]), r = sum(candidatevotes[party_simplified == "REPUBLICAN"])), by = .(state = state_po)], by = "state")
+    at[, `:=`(district = 1L, map_year = py, pres_year = py, margin = 100 * (d - r) / (d + r), map = "at-large", cycle = cy, source = "statewide")]
+    rbind(x[!state %in% at$state], at, fill = TRUE)[, .(cycle, state, district, map, pres_year, map_year, source, d, r, margin)]
+  }))
+  fwrite(best[order(cycle, state, district)], file.path(opt$out, "house_lean_best.csv"))
+  cat("best leans:", paste(best[, .N, by = cycle][, paste0(cycle, " ", N)], collapse = ", "), "districts\n")
 }
