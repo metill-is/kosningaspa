@@ -88,7 +88,7 @@ house_aliases <- c(
   "fabrizio" = "fabrizio ward", "mason.?dixon" = "mason dixon", "mitchell research" = "mitchell", "guidant" = "guidant",
   "american pulse" = "american pulse",
   "mclaughlin" = "mclaughlin", "\\bdccc\\b|democratic congressional campaign" = "dccc", "rutgers|eagleton" = "rutgers eagleton",
-  "upswing" = "upswing", "onmessage" = "onmessage"
+  "upswing" = "upswing", "onmessage" = "onmessage", "financial times|focaldata" = "focaldata"
 )
 normalise_house <- function(x) {
   low <- tolower(x)
