@@ -6,7 +6,7 @@
 # Each district is its leading Democrat against its leading Republican (usa/R/house_races.R).
 # A district without both on the ballot is no race: its seat goes to the party running, and
 # the Democratic ones are counted in `unopposed_d`, which seat totals add to the model's
-# seats_house_d. Covariates (Q = 4): intercept; the district's presidential lean, the logit
+# seats_house_d. Covariates (Q = 8, house_covariates()): intercept; the district's presidential lean, the logit
 # of its two-party Democratic share minus the nation's at the latest presidential election
 # before the race, on the map in force that cycle (usa/R/house_lean.R, house_lean_2026.R);
 # incumbency, +1 for a Democratic incumbent on the ballot, -1 Republican, 0 open; and
@@ -41,6 +41,15 @@ national_pres_margin <- function(medsl_president) {
 # district's presidential lean moved by the national House margin, the actual one for a past
 # result and the generic-ballot poll average before asof for the target.
 competitiveness <- function(m) exp(-(m / 10)^2)
+
+# The House covariates (Q = 8): intercept, lean, incumbency, competitiveness; has_prev,
+# lean x has_prev and y_prev x has_prev, the previous House result on an unchanged map
+# (its coefficient is a stable 0.51 across 2018-2024, and with it lean's slope halves, hence
+# the interaction); and the national House margin / 100, since contested districts run
+# against the national tide in every cycle (slope about -0.3; the improvement review).
+house_covariates <- function(lean, inc, comp, prev, nat) {
+  cbind(1, lean, inc, comp, prev$has, lean * prev$has, prev$y * prev$has, nat / 100)
+}
 
 # Margin (points of two-party) to the logit-scale lean the Senate layer uses.
 logit_lean <- function(margin, national) qlogis((1 + margin / 100) / 2) - qlogis((1 + national / 100) / 2)
@@ -130,16 +139,34 @@ house_layer <- function(target, asof, window_start, raw, tables, house_dir, pv, 
   maps <- read.csv("usa/house_maps.csv")
   hh <- house_history(haven::read_dta(file.path(raw, "dataverse-DGDRDT", "candidates_2006-2024.dta")), maps)
   best <- read_csv(file.path(house_dir, lean_file), show_col_types = FALSE)
+  # WHY: past rows read the regular leans; the clean 2022 leans are off by tens of points in
+  # places (AZ-3, FL-24, TN-9; the 3 November improvement review), and a past cycle's own
+  # House votes predate every target. The clean leans serve only a backtest's target.
+  hist_lean <- read_csv(file.path(house_dir, "house_lean_best.csv"), show_col_types = FALSE)
+  nat_house <- setNames(100 * (pv$dem_votes - pv$rep_votes) / (pv$dem_votes + pv$rep_votes), pv$year)
+  # The previous House result where the map did not change and the race was contested:
+  # its D-direction deviation from that year's national House vote, on d_hist's scale.
+  dev1 <- function(d, r, y) 0.5 * (log(d / (d + r)) - log(r / (d + r))) - national_clr(pv, y, P)[, 1]
+  prev_of <- function(state, dist, year, same_map) {
+    pr <- hh |> filter(contested, d_votes >= 0.05 * total, r_votes >= 0.05 * total) |>
+      transmute(state, dist, year = year + 2L, pd = d_votes, prr = r_votes)
+    x <- tibble(state, dist, year, same_map) |> left_join(pr, by = c("state", "dist", "year"))
+    has <- x$same_map & !is.na(x$pd)
+    list(has = as.numeric(has), y = ifelse(has, dev1(x$pd, x$prr, x$year - 2L), 0))
+  }
 
   past <- hh |>
     filter(year < ty, contested, d_votes >= 0.05 * total, r_votes >= 0.05 * total) |>
-    inner_join(best |> select(year = cycle, state, dist = district, lean_margin = margin, pres_year), by = c("year", "state", "dist"))
+    inner_join(hist_lean |> select(year = cycle, state, dist = district, lean_margin = margin, pres_year), by = c("year", "state", "dist"))
   shares <- cbind(past$d_votes, past$r_votes) / (past$d_votes + past$r_votes)
   d_hist <- t(apply(shares, 1, clr)) - national_clr(pv, past$year, P)
   lean_past <- logit_lean(past$lean_margin, nat_pres[as.character(past$pres_year)])
-  nat_house <- setNames(100 * (pv$dem_votes - pv$rep_votes) / (pv$dem_votes + pv$rep_votes), pv$year)
   comp_past <- competitiveness(past$lean_margin - nat_pres[as.character(past$pres_year)] + nat_house[as.character(past$year)])
-  hist <- list(X = cbind(1, lean_past, past$inc, comp_past), d = d_hist, n = nrow(past), year = past$year, state = past$state)
+  pp <- prev_of(past$state, past$dist, past$year, past$same_map)
+  hist <- list(
+    X = house_covariates(lean_past, past$inc, comp_past, pp, nat_house[as.character(past$year)]),
+    d = d_hist, n = nrow(past), year = past$year, state = past$state
+  )
 
   if (ty <= 2024) {
     all <- hh |> filter(year == ty)
@@ -159,7 +186,15 @@ house_layer <- function(target, asof, window_start, raw, tables, house_dir, pv, 
   races$lean <- logit_lean(races$lean_margin, nat_pres[as.character(races$pres_year)])
   stopifnot("the competitiveness term needs the national poll average" = is.finite(nat_now))
   races$comp <- competitiveness(races$lean_margin - nat_pres[as.character(races$pres_year)] + nat_now)
-  races$X <- cbind(1, races$lean, races$inc, races$comp)
+  if (ty <= 2024) {
+    same <- races$same_map
+  } else {
+    m26 <- maps[maps$cycle == 2026, ]
+    same <- m26$changed[match(races$state, m26$state)] == 0 & m26$map[match(races$state, m26$state)] != "at-large"
+  }
+  pt <- prev_of(races$state, races$dist, rep(ty, nrow(races)), same)
+  races$has_prev <- pt$has
+  races$X <- house_covariates(races$lean, races$inc, races$comp, pt, if (ty <= 2024) nat_now else nat_now)
 
   polls <- if (ty > 2024) house_polls_2026(tables, races, polls_file) else house_polls_538(file.path(raw, "538-polls-historical", "house_polls_historical.csv"), ty, races)
   polls <- polls |>

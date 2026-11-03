@@ -41,7 +41,9 @@
 # incumbency, indep_d), each past result's state-year and cycle, each race's state, and the
 # race polling error by type. senate_polls= names the 2026 Senate poll table (default
 # senate_polls_2026.csv), house_polls= the 2026 House district poll table (default
-# house_district_polls_2026.csv).
+# house_district_polls_2026.csv). generic_v2=1 reads generic_ballot_2026_v2.csv, the working
+# table of late generic-ballot polls, in place of generic_ballot_2026.csv. eve_sd= adds v14's
+# election-day national shock, SD in points of two-party margin (default 0).
 # race_poll_sd=, when given, adds v9's sigma_race_poll (usa/stan/us_midterm_v9.stan): a
 # number, or auto for the race polling error of the cycles before the target
 # (usa/R/senate_races.R, race_poll_error_sd). mu_bar= and bias_tail=, when given, add v11's
@@ -59,7 +61,7 @@ library(cmdstanr)
 opt <- list(
   tables = NULL, out = NULL, anchor_n = "", grid = "day", tau_scale = "0.1", min_polls = "1",
   top_houses = "", target = "2026-11-03", asof = "", anchor_2016 = "0", population = "0",
-  bias_walk = "", phi_info = "", races = "", raw = "", house = "", house_lean = "house_lean_best_backtest.csv", senate_polls = "senate_polls_2026.csv", house_polls = "house_district_polls_2026.csv", two_party = "0", race_poll_sd = "", mu_bar = "", bias_tail = "", election_vol = "", vol_days = "30"
+  bias_walk = "", phi_info = "", races = "", raw = "", house = "", house_lean = "house_lean_best_backtest.csv", senate_polls = "senate_polls_2026.csv", house_polls = "house_district_polls_2026.csv", generic_v2 = "0", eve_sd = "0", two_party = "0", race_poll_sd = "", mu_bar = "", bias_tail = "", election_vol = "", vol_days = "30"
 )
 for (a in commandArgs(trailingOnly = TRUE)) {
   kv <- strsplit(a, "=", fixed = TRUE)[[1]]
@@ -103,7 +105,10 @@ to_grid <- function(end_date) {
 }
 
 polls <- lapply(c(2018, 2020, 2022, 2024, 2026), function(y) {
-  read_csv(file.path(opt$tables, sprintf("generic_ballot_%d.csv", y)), show_col_types = FALSE) |>
+  gb_file <- file.path(opt$tables, sprintf("generic_ballot_%d.csv", y))
+  # WHY: late 2026 generic-ballot polls arrive through usa/merge_new_polls.py's working table.
+  if (y == 2026 && file.exists(file.path(opt$tables, "generic_ballot_2026_v2.csv")) && opt$generic_v2 == "1") gb_file <- file.path(opt$tables, "generic_ballot_2026_v2.csv")
+  read_csv(gb_file, show_col_types = FALSE) |>
     transmute(
       pollster,
       end_date = as.Date(end_date), sample_size = as.numeric(sample_size),
@@ -158,7 +163,8 @@ if (opt$races == "both") {
   s_lay <- senate_layer(target, asof, window_start, opt$raw, opt$tables, pv_all, normalise_house, P, opt$senate_polls)
   h_lay <- house_layer(target, asof, window_start, opt$raw, opt$tables, opt$house, pv_all, normalise_house, P, opt$house_lean, opt$house_polls, nat_now)
   Rs <- nrow(s_lay$races)
-  pad <- function(X) cbind(X, matrix(0, nrow(X), 4 - ncol(X)))
+  qmax <- max(ncol(s_lay$hist$X), ncol(h_lay$hist$X))
+  pad <- function(X) cbind(X, matrix(0, nrow(X), qmax - ncol(X)))
   both_states <- sort(unique(c(s_lay$races$state, h_lay$races$state)))
   hist_year <- c(s_lay$hist$year, h_lay$hist$year)
   hist_grp <- paste(c(s_lay$hist$state, h_lay$hist$state), hist_year)
@@ -239,6 +245,10 @@ if (opt$races %in% c("senate", "house", "both")) {
   if (opt$races == "both") {
     rp <- file.path(opt$raw, "gb-538-github", "raw_polls.csv")
     ty <- as.integer(format(target, "%Y"))
+    # v14: eve_sd= is the shock's SD in margin points. With P = 2 the shock moves the gap
+    # between the two directions by 2 s z, and the margin, 100 tanh of half the gap, by about
+    # 100 s z, so the per-direction SD is eve_sd / 100.
+    stan_data$s_eve <- as.numeric(opt$eve_sd) / 100
     stan_data[c("type_r", "type_hist", "S", "state_r", "G_hist", "grp_hist", "Y_hist", "year_hist", "sigma_race_poll2")] <- list(
       sen$races$type, sen$hist$type, length(unique(sen$races$state_idx)), sen$races$state_idx, max(sen$hist$grp), sen$hist$grp,
       max(sen$hist$year), sen$hist$year, c(race_poll_error_sd(rp, ty, type = "Sen-G"), race_poll_error_sd(rp, ty, type = "House-G"))

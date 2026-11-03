@@ -2,7 +2,7 @@
 
     python3 -I usa/merge_new_polls.py <tables dir> <new_polls dir>
 
-New files are <yyyymmdd-hhmm>_senate.csv or _house.csv in the columns of
+New files are <yyyymmdd-hhmm>_senate.csv, _house.csv or _generic.csv in the columns of
 senate_polls_2026.csv or house_district_polls_2026.csv. They are appended to
 senate_polls_2026_v2.csv and house_district_polls_2026_v2.csv (each created
 from its original on first use; the originals, which the forecast recorded on
@@ -25,6 +25,7 @@ LAST_END = "2026-11-02"
 KINDS = {
     "senate": ("senate_polls_2026.csv", "senate_polls_2026_v2.csv", ("state", "race", "pollster", "end_date")),
     "house": ("house_district_polls_2026.csv", "house_district_polls_2026_v2.csv", ("state", "district", "pollster", "end_date")),
+    "generic": ("generic_ballot_2026.csv", "generic_ballot_2026_v2.csv", ("pollster", "end_date", "population")),
 }
 
 
@@ -36,7 +37,7 @@ def main(tables: pathlib.Path, drops: pathlib.Path) -> None:
             continue
         kind = path.stem.rsplit("_", 1)[-1]
         if kind not in KINDS:
-            print(f"skip {path.name}: name does not end in _senate or _house")
+            print(f"skip {path.name}: name does not end in _senate, _house or _generic")
             continue
         orig, work, key = KINDS[kind]
         work_path = tables / work
