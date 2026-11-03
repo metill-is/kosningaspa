@@ -73,6 +73,18 @@ def main(bt: pathlib.Path, acc: pathlib.Path, out: pathlib.Path) -> None:
     }
     out.mkdir(parents=True, exist_ok=True)
     (out / "accuracy.json").write_text(json.dumps(doc, indent=1))
+    # run_info's backtest note is computed from the same scores, so it never goes stale.
+    ri = out / "run_info.json"
+    if ri.exists() and current["cycles"]:
+        parts = []
+        for c in current["cycles"]:
+            h, n, s = c["house_seats"], c["national"], c["senate"]
+            inside = h["q05"] <= h["actual"] <= h["q95"]
+            parts.append(f"{c['year']}: House {h['model']:.0f} D seats (90% {h['q05']:.0f}-{h['q95']:.0f}) vs {h['actual']} actual"
+                         f"{'' if inside else ' (outside)'}; national D{n['model']:+.1f} vs D{n['actual']:+.1f}; Senate {s['model_called']}/{s['races']} called")
+        info = json.loads(ri.read_text())
+        info["backtest_note"] = f"Election-eve backtests of model {current['model']}: " + " | ".join(parts) + "."
+        ri.write_text(json.dumps(info, indent=1))
     print(f"wrote {out / 'accuracy.json'}: current {current['model']} {len(current['cycles'])} cycles")
 
 
