@@ -239,6 +239,7 @@ get_election_data <- function() {
     date_build(2016, 10, 29), "Píratar", 0.145,
     date_build(2016, 10, 29), "Sósíalistaflokkurinn", 0
   )
+  valid_votes <- c("2021-09-25" = 199730, "2017-10-28" = 196259, "2016-10-29" = 189648)
 
   out <- d |>
     bind_rows(
@@ -250,7 +251,8 @@ get_election_data <- function() {
       )
     ) |>
     mutate(
-      n = p * c(199730, 196259, 189648),
+      # WHY: matched by date; a bare vector of the three totals recycles over all 30 rows.
+      n = p * unname(valid_votes[as.character(date)]),
       fyrirtaeki = "Kosning"
     ) |>
     select(-p)
