@@ -565,8 +565,10 @@ generated quantities {
 
   // Generate national-level predictions. Like the likelihood, build the full
   // sum-to-zero P-vector, then gather the parties active at date d by identity.
-  // Replications leave out mu_gamma_pred, the forecasts' hedge: the likelihood has no
-  // such term, and gamma already holds mu_gamma for houses > 1.
+  // Up to day D each draw is an election of size n_pred from beta alone, as the
+  // likelihood's election rows are (house 1, gamma = 0): no house effect, and not the
+  // forecasts' hedge mu_gamma_pred, which only the days after D add. So the series
+  // steps between day D and D + 1, as the fit script's y_rep_national trend plot shows.
   for (d in 1:D) {
     vector[P] eta_d;
     eta_d[2:P] = beta[, d];
@@ -607,7 +609,8 @@ generated quantities {
             constituency_weights[obs_k[n] , K];
     }
 
-    // As in the likelihood, without the forecasts' mu_gamma_pred
+    // As in the likelihood, without the forecasts' mu_gamma_pred: for houses > 1,
+    // gamma already holds mu_gamma
     eta_k[2:P] = beta[, date_k[n]] + gamma[, house_k[n]] +
       delta[, constituency_k[n]];
     eta_k[1] = -sum(eta_k[2:P]);

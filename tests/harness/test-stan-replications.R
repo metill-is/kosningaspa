@@ -23,7 +23,10 @@ test_that("replications use the likelihood's terms, without the forecast's hedge
   y_rep_k <- loop_drawing(loops, "y_rep_k[n,cols]=")
   expect_match(y_rep_k, "eta_k[2:P]=beta[,date_k[n]]+gamma[,house_k[n]]+delta[,constituency_k[n]];", fixed = TRUE)
   expect_no_match(y_rep_k, "mu_gamma_pred", fixed = TRUE)
-  expect_no_match(loop_drawing(loops, "y_rep_national[d,cols]="), "mu_gamma_pred", fixed = TRUE)
+  # WHY: up to D, y_rep_national draws an election (house 1, gamma 0) from beta alone.
+  y_rep_national <- loop_drawing(loops, "y_rep_national[d,cols]=")
+  expect_match(y_rep_national, "eta_d[2:P]=beta[,d];", fixed = TRUE)
+  expect_no_match(y_rep_national, "mu_gamma_pred", fixed = TRUE)
 })
 
 test_that("the forecasts keep the hedge", {
