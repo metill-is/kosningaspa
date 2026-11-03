@@ -25,7 +25,8 @@
 #      voters are. A district without both parties on the ballot takes the county's average
 #      fraction. A county with no House votes is left unallocated.
 # The leans built are 2016 on the 2016 and 2018 maps, 2020 on the 2020, 2022 and 2024 maps,
-# and 2024 on the 2024 maps (2016 also on the 2020 maps, for North Carolina's). Writes <out>/house_lean.csv (state, district, map_year,
+# and 2024 on the 2024 maps (2016 also on the 2020 maps, for North Carolina's). Without csv=, it
+# only rebuilds the best-lean tables from the lean files already in out=. Writes <out>/house_lean.csv (state, district, map_year,
 # pres_year, d, r, margin = 100 (D - R) / (D + R)) and <out>/house_lean_states.csv (per
 # state: the D + R votes linked by precinct, shared within county, and unallocated, against
 # MEDSL's state totals).
@@ -267,37 +268,50 @@ if (!is.null(opt$csv)) {
   sfx <- if (opt$clean == "1") "_clean" else ""
   fwrite(lean[order(map_year, pres_year, state, district)], file.path(opt$out, paste0("house_lean", sfx, ".csv")))
   fwrite(rbindlist(diags), file.path(opt$out, paste0("house_lean_states", sfx, ".csv")))
+}
 
-  # The lean each House cycle uses: the latest presidential vote before it on the map in
-  # force that cycle, built on the presidential year's own map when the state's map has not
-  # changed since, else across the change. At-large states take the statewide margin.
-  best <- rbindlist(lapply(c(2018, 2020, 2022, 2024), function(cy) {
+# The lean each House cycle uses: the latest presidential vote before it on the map in force
+# that cycle. Candidates are every lean built from that presidential year on that map, tried
+# district by district in order of `rank` (lower first), so a district missing from one build
+# (uncontested the year its precincts were read) takes the next. At-large states take the
+# statewide margin.
+best_leans <- function(cands, maps, medsl, rank_fn) {
+  rbindlist(lapply(c(2018, 2020, 2022, 2024), function(cy) {
     py <- if (cy <= 2020) 2016 else 2020
-    if (cy == 2024) py <- 2020
     m <- maps[cycle == cy, .(state, map)]
-    # Every lean built from this presidential year, with the map it was built on; the one
-    # on the cycle's map is kept, preferring the presidential year's own map and then the
-    # earliest later build, whose precinct names are closest to the presidential year's.
-    built <- merge(unique(lean[pres_year == py, .(state, map_year)]), maps[, .(state, map_year = cycle, built_map = map)], by = c("state", "map_year"))
-    built <- merge(built, m, by = "state")[built_map == map]
-    built <- built[order(state, map_year != py, map_year)][, .SD[1], by = state]
-    x <- merge(lean[pres_year == py], built[, .(state, map_year, map)], by = c("state", "map_year"))
+    x <- merge(cands[pres_year == py], maps[, .(state, map_year = cycle, built_map = map)], by = c("state", "map_year"))
+    x <- merge(x, m, by = "state")[built_map == map]
+    x[, rk := rank_fn(cy, map_year, py, kind)]
+    x <- x[!is.na(rk)][order(state, district, rk)][, .SD[1], by = .(state, district)][, rk := NULL]
     x[, `:=`(cycle = cy, source = fifelse(map_year == pres_year, "own map", "across a map change"))]
-    st <- state_tot[year == py, .(state)]
     at <- merge(m[map == "at-large", .(state)], medsl[year == py & party_simplified %in% c("DEMOCRAT", "REPUBLICAN"),
       .(d = sum(candidatevotes[party_simplified == "DEMOCRAT"]), r = sum(candidatevotes[party_simplified == "REPUBLICAN"])), by = .(state = state_po)], by = "state")
-    at[, `:=`(district = 1L, map_year = py, pres_year = py, margin = 100 * (d - r) / (d + r), map = "at-large", cycle = cy, source = "statewide")]
-    rbind(x[!state %in% at$state], at, fill = TRUE)[, .(cycle, state, district, map, pres_year, map_year, source, d, r, margin)]
+    at[, `:=`(district = 1L, map_year = py, pres_year = py, margin = 100 * (d - r) / (d + r), map = "at-large", cycle = cy, source = "statewide", kind = "regular")]
+    rbind(x[!state %in% at$state], at, fill = TRUE)[, .(cycle, state, district, map, pres_year, map_year, source, kind, d, r, margin)]
   }))
-  fwrite(best[order(cycle, state, district)], file.path(opt$out, paste0("house_lean_best", sfx, ".csv")))
+}
+# Forecast leans: the presidential year's own map first, then the earliest later build,
+# whose precinct names are closest to the presidential year's.
+rank_best <- function(cy, map_year, py, kind) (map_year != py) * 1e4 + map_year
+# Backtest leans: never a party split from the cycle's own House votes. The own map and the
+# regular builds before the cycle first, then the clean builds (total House votes only).
+rank_backtest <- function(cy, map_year, py, kind) {
+  ifelse(map_year == py & kind == "regular", 0, ifelse(kind == "regular" & map_year < cy, 1e4 + map_year,
+    ifelse(kind == "clean", 2e4 + map_year, NA)))
+}
+
+if (!is.null(opt$out) && file.exists(file.path(opt$out, "house_lean.csv"))) {
+  maps <- fread(opt$maps)
+  medsl <- fread(file.path(opt$raw, "medsl", "president.csv"))
+  reg <- fread(file.path(opt$out, "house_lean.csv"))[, kind := "regular"]
+  best <- best_leans(reg, maps, medsl, rank_best)
+  fwrite(best[order(cycle, state, district)][, kind := NULL], file.path(opt$out, "house_lean_best.csv"))
   cat("best leans:", paste(best[, .N, by = cycle][, paste0(cycle, " ", N)], collapse = ", "), "districts\n")
-  # For backtests: the regular lean where its map was built before the cycle (its county
-  # split uses an earlier year's House votes), the clean one where it was built that cycle.
-  reg <- file.path(opt$out, "house_lean_best.csv")
-  if (opt$clean == "1" && file.exists(reg)) {
-    r <- fread(reg)
-    bt <- rbind(r[map_year < cycle | source == "statewide" | map_year == pres_year], best[map_year == cycle & map_year != pres_year & source != "statewide"])
+  cf <- file.path(opt$out, "house_lean_clean.csv")
+  if (file.exists(cf)) {
+    cands <- rbind(reg, fread(cf)[, kind := "clean"])
+    bt <- best_leans(cands, maps, medsl, rank_backtest)
     fwrite(bt[order(cycle, state, district)], file.path(opt$out, "house_lean_best_backtest.csv"))
-    cat("backtest leans:", paste(bt[, .N, by = cycle][, paste0(cycle, " ", N)], collapse = ", "), "districts\n")
+    cat("backtest leans:", paste(bt[, .N, by = .(cycle, kind)][, paste0(cycle, " ", kind, " ", N)], collapse = ", "), "\n")
   }
 }
