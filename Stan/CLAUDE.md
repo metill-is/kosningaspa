@@ -40,7 +40,7 @@ Dirichlet-Multinomial state-space model with:
 | `alpha_f`, `beta_lag_f`, `beta_inc_years_f`, `beta_vnv_f`, `beta_growth_f` | Fundamentals regression coefficients (`beta_vnv_f`, `beta_growth_f`: CPI inflation and previous-year GDP growth for incumbents, `normal(0, 5)` priors) |
 | `delta_free`, `sigma_delta` | Constituency deviations from national trends, `delta_free ~ normal(0, sigma_delta[p])`, partially centred cell by cell (sampled as `delta_t`, weight `lambda_delta`): a party no kjördæmi row reports gets weight 0, non-centred, which removes the centred form's funnel |
 | `tau_f` | Fundamentals weight decay parameter |
-| `y_rep_national`, `y_rep_k` | Posterior predictive draws (national / constituency). Like the likelihood, they gather parties by identity from the full sum-to-zero vector: up to date D, `y_rep_national` draws the parties active at each date (`n_active_d`, `active_index_d`), and `y_rep_k` the parties each constituency poll reported (`party_index_k`); the other columns are 0 |
+| `y_rep_national`, `y_rep_k` | Posterior predictive draws (national / constituency). Like the likelihood, they gather parties by identity from the full sum-to-zero vector: up to date D, `y_rep_national` draws the parties active at each date (`n_active_d`, `active_index_d`), and `y_rep_k` the parties each constituency poll reported (`party_index_k`); the other columns are 0. Up to date D they also use only the likelihood's terms: the hedge `mu_gamma_pred` enters the forecasts alone (`y_rep_national` after D, `y_pred_constituency`) |
 
 ## Compilation
 

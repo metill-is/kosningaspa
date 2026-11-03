@@ -565,9 +565,11 @@ generated quantities {
 
   // Generate national-level predictions. Like the likelihood, build the full
   // sum-to-zero P-vector, then gather the parties active at date d by identity.
+  // Replications leave out mu_gamma_pred, the forecasts' hedge: the likelihood has no
+  // such term, and gamma already holds mu_gamma for houses > 1.
   for (d in 1:D) {
     vector[P] eta_d;
-    eta_d[2:P] = beta[, d] + mu_gamma_pred;
+    eta_d[2:P] = beta[, d];
     eta_d[1] = -sum(eta_d[2:P]);
     array[n_active_d[d]] int cols = active_index_d[d, 1:n_active_d[d]];
     y_rep_national[d, cols] = multinomial_logit_rng(eta_d[cols], n_pred);
@@ -605,8 +607,9 @@ generated quantities {
             constituency_weights[obs_k[n] , K];
     }
 
+    // As in the likelihood, without the forecasts' mu_gamma_pred
     eta_k[2:P] = beta[, date_k[n]] + gamma[, house_k[n]] +
-      delta[, constituency_k[n]] + mu_gamma_pred;
+      delta[, constituency_k[n]];
     eta_k[1] = -sum(eta_k[2:P]);
 
     // Gather the poll's reported parties by identity, as the likelihood does
