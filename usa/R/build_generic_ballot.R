@@ -82,7 +82,9 @@ if (opt$anchor_2016 == "1") anchors <- c(as.Date("2016-11-08"), anchors)
 house_aliases <- c(
   "yougov" = "yougov", "verasight" = "verasight", "siena" = "siena", "beacon.*shaw|fox news" = "fox news",
   "marist" = "marist", "anselm" = "saint anselm", "targoz" = "targoz", "emerson" = "emerson",
-  "quinnipiac" = "quinnipiac", "trafalgar" = "trafalgar", "atlas ?intel" = "atlasintel", "rasmussen" = "rasmussen", "co.?efficient" = "coefficient"
+  "quinnipiac" = "quinnipiac", "trafalgar" = "trafalgar", "atlas ?intel" = "atlasintel", "rasmussen" = "rasmussen", "co.?efficient" = "coefficient",
+  "fabrizio" = "fabrizio ward", "mason.?dixon" = "mason dixon", "mitchell research" = "mitchell", "guidant" = "guidant",
+  "american pulse" = "american pulse"
 )
 normalise_house <- function(x) {
   low <- tolower(x)
