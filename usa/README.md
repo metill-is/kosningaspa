@@ -43,10 +43,13 @@ is used by the Icelandic forecast or Fylgisvakt, and nothing outside `usa/` was 
 | `R/house_layer.R` | The House race layer `build_generic_ballot.R races=house house=<dir>` sources: each contested district (leading Democrat against leading Republican), covariates (presidential lean on the map in force, incumbency), its polls (2026: Wikipedia; 2018–2024: 538), the 2018–2024 district results the race regression learns from, and `unopposed_d`, the seats only a Democrat contests |
 | `R/house_forecast.R` | Seat distribution, P(Democrats win 218 or more), the national margin and every contested district from a `races=house` fit |
 | `R/score_house.R` | Scores House backtest fits: the seat count's 90% interval and mid-PIT, and over contested districts the margin error, 90% coverage and Brier score, against uniform swing from the presidential lean |
+| `R/combined_forecast.R` | Summarises a `races=both` v13 fit into the overview page's `user_model.json` (both chambers, their joint outcomes, the national margin, every race) and CSVs |
+| `merge_new_polls.py` | Folds new 2026 poll files (`<yyyymmdd-hhmm>_senate.csv` / `_house.csv`) into the working tables `senate_polls_2026_v2.csv` and `house_district_polls_2026_v2.csv`, keeping rows that ended by 2 November and are not already there; the 2 November originals are never changed |
 | `data_freeze_2026-11-02.sha256` | sha256 of every poll table and raw file gathered on 2 November 2026, committed before the election, so a later 2026 fit can show it used pre-election data only |
 | `data_freeze_2026-11-02_open.sha256` | The same for the open-licence files gathered later that day (paths under the study folder's `raw/`; `shasum -a 256 -c` from that folder) |
 | `data_freeze_2026-11-03_medsl_precinct.sha256` | sha256 of the 107 MEDSL precinct-return zips downloaded on 3 November 2026 for the House layer's district lean (paths under the study folder's `raw/medsl-precinct/`) |
 | `data_freeze_2026-11-03_wiki_2026_maps.sha256` | sha256 of the Wikipedia pages (fetched through metill-platform's polite client and the Action API, 3 November 2026) and the tables drawn from them for the 2026 district leans |
+| `data_freeze_2026-11-03_senate_resnap.sha256` | sha256 of the 36 Senate race pages re-fetched on 3 November 2026 (polite client, Action API), the poll tables parsed from them (693 rows against 642 on 2 November) and AtlasIntel's 2 November release |
 | `R/bench_fit.R` | Fits a Stan file on a saved data JSON, times it and prints one `DIAG` line (wall time, ms per gradient, tree depth, divergences, R-hat, ESS) |
 
 The poll tables these scripts read were gathered on 2 November 2026 from Wikipedia, the

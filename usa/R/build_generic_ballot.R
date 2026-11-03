@@ -39,7 +39,8 @@
 # one race layer for usa/stan/us_midterm_v13.stan: covariates padded to (intercept, lean,
 # incumbency, indep_d), each past result's state-year and cycle, each race's state, and the
 # race polling error by type. senate_polls= names the 2026 Senate poll table (default
-# senate_polls_2026.csv).
+# senate_polls_2026.csv), house_polls= the 2026 House district poll table (default
+# house_district_polls_2026.csv).
 # race_poll_sd=, when given, adds v9's sigma_race_poll (usa/stan/us_midterm_v9.stan): a
 # number, or auto for the race polling error of the cycles before the target
 # (usa/R/senate_races.R, race_poll_error_sd). mu_bar= and bias_tail=, when given, add v11's
@@ -57,7 +58,7 @@ library(cmdstanr)
 opt <- list(
   tables = NULL, out = NULL, anchor_n = "", grid = "day", tau_scale = "0.1", min_polls = "1",
   top_houses = "", target = "2026-11-03", asof = "", anchor_2016 = "0", population = "0",
-  bias_walk = "", phi_info = "", races = "", raw = "", house = "", house_lean = "house_lean_best.csv", senate_polls = "senate_polls_2026.csv", two_party = "0", race_poll_sd = "", mu_bar = "", bias_tail = "", election_vol = "", vol_days = "30"
+  bias_walk = "", phi_info = "", races = "", raw = "", house = "", house_lean = "house_lean_best.csv", senate_polls = "senate_polls_2026.csv", house_polls = "house_district_polls_2026.csv", two_party = "0", race_poll_sd = "", mu_bar = "", bias_tail = "", election_vol = "", vol_days = "30"
 )
 for (a in commandArgs(trailingOnly = TRUE)) {
   kv <- strsplit(a, "=", fixed = TRUE)[[1]]
@@ -140,7 +141,7 @@ if (opt$races == "both") {
   source("usa/R/house_layer.R")
   pv_all <- read_csv(file.path(opt$tables, "house_popular_vote_1946_2024.csv"), show_col_types = FALSE)
   s_lay <- senate_layer(target, asof, window_start, opt$raw, opt$tables, pv_all, normalise_house, P, opt$senate_polls)
-  h_lay <- house_layer(target, asof, window_start, opt$raw, opt$tables, opt$house, pv_all, normalise_house, P, opt$house_lean)
+  h_lay <- house_layer(target, asof, window_start, opt$raw, opt$tables, opt$house, pv_all, normalise_house, P, opt$house_lean, opt$house_polls)
   Rs <- nrow(s_lay$races)
   pad <- function(X) cbind(X, matrix(0, nrow(X), 4 - ncol(X)))
   both_states <- sort(unique(c(s_lay$races$state, h_lay$races$state)))
@@ -159,7 +160,7 @@ if (opt$races == "both") {
 if (opt$races == "house") {
   source("usa/R/house_layer.R")
   pv_all <- read_csv(file.path(opt$tables, "house_popular_vote_1946_2024.csv"), show_col_types = FALSE)
-  sen <- house_layer(target, asof, window_start, opt$raw, opt$tables, opt$house, pv_all, normalise_house, P, opt$house_lean)
+  sen <- house_layer(target, asof, window_start, opt$raw, opt$tables, opt$house, pv_all, normalise_house, P, opt$house_lean, opt$house_polls)
   sen$holdover <- 0L
   race_polls <- sen$polls |> mutate(date = to_grid(end_date))
 }

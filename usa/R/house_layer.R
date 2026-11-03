@@ -56,8 +56,8 @@ house_races_2026 <- function(tables, legislators) {
     d_share = NA_real_, r_share = NA_real_)
 }
 
-house_polls_2026 <- function(tables, races) {
-  p <- read_csv(file.path(tables, "house_district_polls_2026.csv"), show_col_types = FALSE)
+house_polls_2026 <- function(tables, races, polls_file = "house_district_polls_2026.csv") {
+  p <- read_csv(file.path(tables, polls_file), show_col_types = FALSE)
   st <- state.abb[match(p$state, state.name)]
   dist <- suppressWarnings(as.integer(sub("^District ", "", p$district)))
   dist[is.na(dist)] <- 1L
@@ -69,7 +69,7 @@ house_polls_2026 <- function(tables, races) {
     select(-hypothetical)
 }
 
-house_layer <- function(target, asof, window_start, raw, tables, house_dir, pv, normalise_house, P = 2L, lean_file = "house_lean_best.csv") {
+house_layer <- function(target, asof, window_start, raw, tables, house_dir, pv, normalise_house, P = 2L, lean_file = "house_lean_best.csv", polls_file = "house_district_polls_2026.csv") {
   stopifnot("the House layer is two-party" = P == 2L)
   ty <- as.integer(format(target, "%Y"))
   nat_pres <- national_pres_margin(file.path(raw, "medsl", "president.csv"))
@@ -103,7 +103,7 @@ house_layer <- function(target, asof, window_start, raw, tables, house_dir, pv, 
   races$lean <- logit_lean(races$lean_margin, nat_pres[as.character(races$pres_year)])
   races$X <- cbind(1, races$lean, races$inc)
 
-  polls <- if (ty > 2024) house_polls_2026(tables, races) else house_polls_538(file.path(raw, "538-polls-historical", "house_polls_historical.csv"), ty, races)
+  polls <- if (ty > 2024) house_polls_2026(tables, races, polls_file) else house_polls_538(file.path(raw, "538-polls-historical", "house_polls_historical.csv"), ty, races)
   polls <- polls |>
     filter(end_date >= window_start, end_date < asof, sample_size > 0, d > 0, r > 0) |>
     mutate(house = normalise_house(pollster), pop_rank = match(population, c("LV", "RV", "V", "A"), nomatch = 5L)) |>
