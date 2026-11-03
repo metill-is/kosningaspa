@@ -103,7 +103,7 @@ um <- list(
 )
 write_json(um, file.path(opt$out, "user_model.json"), auto_unbox = TRUE, pretty = TRUE, digits = NA)
 cat(sprintf(
-  "Senate P(D >= 51) %.3f, median %d (90%% %d-%d) | House P(D >= 218) %.3f, median %d (90%% %d-%d) | both D %.3f, both R %.3f | national D%+.1f (%+.1f to %+.1f)\n",
+  "Senate P(D >= 51) %.3f, median %.0f (90%% %.0f-%.0f) | House P(D >= 218) %.3f, median %.0f (90%% %.0f-%.0f) | both D %.3f, both R %.3f | national D%+.1f (%+.1f to %+.1f)\n",
   mean(ds), q(senate, 0.5), q(senate, 0.05), q(senate, 0.95), mean(dh), q(house, 0.5), q(house, 0.05), q(house, 0.95),
   mean(ds & dh), mean(!ds & !dh), median(national), q(national, 0.05), q(national, 0.95)
 ))
