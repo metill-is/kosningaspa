@@ -56,7 +56,10 @@ itself. After a refit writes `data/<YYYY-MM-DD>/polling_watch_draws.parquet`, ru
 `~/metill-platform`: it reads the newest dated folder here plus
 `data/post_election_polls.csv` and writes `data/fylgisvakt/{current,meta,timeseries}.json`
 there. Inspect the diff and ship it through a PR in that repo. The platform-side
-runbook and checks live in `~/metill-platform/.claude/rules/fylgisvakt.md`.
+runbook and checks live in `~/metill-platform/.claude/rules/fylgisvakt.md`. The first
+refit after `R/correct_election_anchors.R` corrects the live `data/polling_data.csv`
+(back the CSV up first) reads new 2016, 2017 and 2021 anchors, which move party shares
+by up to 0.36 points, so its diff holds a shift that no new poll explains (`R/CLAUDE.md`).
 
 ### Seat Allocation
 `R/election_utils.R` implements Iceland's electoral system:
