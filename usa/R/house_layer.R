@@ -13,7 +13,8 @@
 #
 # Sources (paths under raw=, tables= and house=; usa/README.md has where they come from):
 #   results 2018-2024: Cha, Kuriwaki and Snyder (CC0), via house_history();
-#   leans: house=<dir>/house_lean_best.csv (2018-2024) and house_lean_2026.csv;
+#   leans: house=<dir>/house_lean_best.csv (2018-2024; backtests pass house_lean_best_clean.csv)
+#     and house_lean_2026.csv;
 #   2026: tables/house_2026_candidates_major_party.csv and house_district_polls_2026.csv
 #     (Wikipedia, CC BY-SA); incumbents from unitedstates/congress-legislators
 #     legislators-current.csv (CC0), matched to a district's candidates by surname.
@@ -68,13 +69,13 @@ house_polls_2026 <- function(tables, races) {
     select(-hypothetical)
 }
 
-house_layer <- function(target, asof, window_start, raw, tables, house_dir, pv, normalise_house, P = 2L) {
+house_layer <- function(target, asof, window_start, raw, tables, house_dir, pv, normalise_house, P = 2L, lean_file = "house_lean_best.csv") {
   stopifnot("the House layer is two-party" = P == 2L)
   ty <- as.integer(format(target, "%Y"))
   nat_pres <- national_pres_margin(file.path(raw, "medsl", "president.csv"))
   maps <- read.csv("usa/house_maps.csv")
   hh <- house_history(haven::read_dta(file.path(raw, "dataverse-DGDRDT", "candidates_2006-2024.dta")), maps)
-  best <- read_csv(file.path(house_dir, "house_lean_best.csv"), show_col_types = FALSE)
+  best <- read_csv(file.path(house_dir, lean_file), show_col_types = FALSE)
 
   past <- hh |>
     filter(year < ty, contested, d_votes >= 0.05 * total, r_votes >= 0.05 * total) |>

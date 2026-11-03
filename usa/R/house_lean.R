@@ -3,7 +3,10 @@
 # returns (paths under raw/medsl-precinct/, unzipped into csv=; usa/README.md has where they
 # come from).
 #
-#   LC_ALL=en_US.UTF-8 Rscript usa/R/house_lean.R csv=<unzipped dir> raw=<raw dir> out=<dir>
+#   LC_ALL=en_US.UTF-8 Rscript usa/R/house_lean.R csv=<unzipped dir> raw=<raw dir> out=<dir> [clean=1]
+#
+# clean=1 writes *_clean.csv for backtests: unlinked votes are shared by total House votes
+# only, so the map year's party House votes (a backtest's outcome) do not enter.
 #
 # MEDSL's president rows carry no district, but its US House rows do, so a precinct's
 # presidential vote goes to the district its House rows name. For one map year:
@@ -27,7 +30,7 @@
 
 library(data.table)
 
-opt <- list(csv = NULL, raw = NULL, out = NULL, maps = "usa/house_maps.csv")
+opt <- list(csv = NULL, raw = NULL, out = NULL, maps = "usa/house_maps.csv", clean = "0")
 for (a in commandArgs(trailingOnly = TRUE)) {
   kv <- strsplit(a, "=", fixed = TRUE)[[1]]
   opt[[kv[1]]] <- kv[2]
@@ -134,7 +137,7 @@ precinct_variants <- function(jname, precinct) {
   )
 }
 
-build_lean <- function(pres, hw, same_year) {
+build_lean <- function(pres, hw, same_year, clean = FALSE) {
   # Each county's House votes by district on the target map, Democratic and Republican
   # apart, for sharing out the presidential votes that do not link to a precinct.
   cshare <- hw[, .(vd = sum(vd), vr = sum(vr), v = sum(v)), by = .(state, county, district)]
@@ -146,6 +149,9 @@ build_lean <- function(pres, hw, same_year) {
     ok <- !is.na(p)
     fifelse(ok, p, if (any(ok)) sum((v * p)[ok]) / sum(v[ok]) else 0.5)
   }, by = .(state, county)]
+  # WHY: in a backtest the map year's House votes are that cycle's outcome; clean = TRUE
+  # shares both parties by total House votes, so no party information from it enters.
+  if (clean) cshare[, p := 0.5]
   cshare[, `:=`(sd = v * p / sum(v * p), sr = v * (1 - p) / sum(v * (1 - p))), by = .(state, county)]
   if (same_year) {
     pres[, key := paste(state, county, juris, precinct)]
@@ -232,7 +238,7 @@ if (!is.null(opt$csv)) {
   for (i in seq_len(nrow(combos))) {
     py <- combos$pres_year[i]
     my <- combos$map_year[i]
-    b <- build_lean(get_pres(py), get_house(my), same_year = py == my)
+    b <- build_lean(get_pres(py), get_house(my), same_year = py == my, clean = opt$clean == "1")
     leans[[i]] <- b$lean[, `:=`(map_year = my, pres_year = py)]
     d <- merge(b$diag, state_tot[year == py, .(state, official)], by = "state", all.x = TRUE)
     diags[[i]] <- d[, `:=`(map_year = my, pres_year = py)]
@@ -256,8 +262,9 @@ if (!is.null(opt$csv)) {
   lean[!is.na(od), `:=`(d = od, r = or, margin = 100 * (od - or) / (od + or))]
   lean[, c("od", "or") := NULL]
   setcolorder(lean, c("state", "district", "map_year", "pres_year", "d", "r", "margin"))
-  fwrite(lean[order(map_year, pres_year, state, district)], file.path(opt$out, "house_lean.csv"))
-  fwrite(rbindlist(diags), file.path(opt$out, "house_lean_states.csv"))
+  sfx <- if (opt$clean == "1") "_clean" else ""
+  fwrite(lean[order(map_year, pres_year, state, district)], file.path(opt$out, paste0("house_lean", sfx, ".csv")))
+  fwrite(rbindlist(diags), file.path(opt$out, paste0("house_lean_states", sfx, ".csv")))
 
   # The lean each House cycle uses: the latest presidential vote before it on the map in
   # force that cycle, built on the presidential year's own map when the state's map has not
@@ -280,6 +287,6 @@ if (!is.null(opt$csv)) {
     at[, `:=`(district = 1L, map_year = py, pres_year = py, margin = 100 * (d - r) / (d + r), map = "at-large", cycle = cy, source = "statewide")]
     rbind(x[!state %in% at$state], at, fill = TRUE)[, .(cycle, state, district, map, pres_year, map_year, source, d, r, margin)]
   }))
-  fwrite(best[order(cycle, state, district)], file.path(opt$out, "house_lean_best.csv"))
+  fwrite(best[order(cycle, state, district)], file.path(opt$out, paste0("house_lean_best", sfx, ".csv")))
   cat("best leans:", paste(best[, .N, by = cycle][, paste0(cycle, " ", N)], collapse = ", "), "districts\n")
 }
