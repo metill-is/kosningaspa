@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>House Layer Plan</title>
+<style>
+  :root {
+    --bg: #ffffff; --fg: #1d2125; --muted: #5b6470; --rule: #dde1e6; --soft: #f3f5f7;
+    --accent: #0f6e6a; --good: #1f7a3a; --warn: #9a5b00; --bad: #a3302a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #15181b; --fg: #e6e8ea; --muted: #9aa3ad; --rule: #2c3238; --soft: #1d2226;
+      --accent: #4fb3ad; --good: #6cc68a; --warn: #e0a64b; --bad: #e57b74;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 17px/1.6 Charter, "Iowan Old Style", Georgia, serif; }
+  main { max-width: 74ch; margin: 0 auto; padding: 2.5rem 16px 4rem; }
+  h1 { font-size: 1.9rem; line-height: 1.25; margin: 0 0 0.4rem; }
+  h2 { font-size: 1.35rem; margin: 2.8rem 0 0.6rem; padding-top: 0.6rem; border-top: 1px solid var(--rule); }
+  h3 { font-size: 1.1rem; line-height: 1.35; margin: 1.6rem 0 0.2rem; }
+  p, li { margin: 0.5rem 0; }
+  .sub { color: var(--muted); margin: 0 0 1.6rem; }
+  .tldr { border-left: 3px solid var(--accent); padding: 0.2rem 0 0.2rem 1rem; margin: 1.4rem 0; }
+  .meta { font: 13px/1.5 -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; color: var(--muted); margin: 0.15rem 0 0; }
+  .yes { color: var(--good); font-weight: 600; }
+  .md { color: var(--warn); font-weight: 600; }
+  .hi { color: var(--bad); font-weight: 600; }
+  .tbl { overflow-x: auto; margin: 0.8rem 0 1rem; }
+  table.data { border-collapse: collapse; width: 100%; font: 14px/1.45 -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; font-variant-numeric: tabular-nums; }
+  table.data th, table.data td { padding: 0.4rem 0.55rem; border-bottom: 1px solid var(--rule); text-align: left; vertical-align: top; }
+  table.data th { color: var(--muted); font-weight: 600; }
+  table.data td.n { text-align: right; white-space: nowrap; }
+  table.data td:first-child { font-weight: 600; }
+  code { font: 0.86em/1.4 ui-monospace, Menlo, monospace; background: var(--soft); padding: 0.05em 0.3em; border-radius: 3px; overflow-wrap: anywhere; }
+  .eq { background: var(--soft); padding: 0.7rem 0.9rem; border-radius: 4px; font: 14px/1.7 ui-monospace, Menlo, monospace; overflow-x: auto; }
+  ol.plan > li { margin: 1.1rem 0; }
+  .who { display: grid; grid-template-columns: 11ch 1fr; gap: 0.2rem 0.8rem; margin: 0.4rem 0 0; font: 14px/1.5 -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
+  .who dt { color: var(--muted); font-weight: 600; }
+  .who dd { margin: 0; }
+  @media (max-width: 560px) { .who { grid-template-columns: 1fr; gap: 0; } .who dt { margin-top: 0.4rem; } }
+  .decision { border: 1px solid var(--rule); border-left: 3px solid var(--warn); padding: 0.4rem 0.9rem; margin: 0.9rem 0; }
+  .decision p { margin: 0.35rem 0; }
+  footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--rule); color: var(--muted); font-size: 0.9rem; overflow-wrap: anywhere; }
+</style>
+</head>
+<body>
+<main>
+<h1>Plan: a House district layer for the US model</h1>
+<p class="sub">3 November 2026 (election day). Branch <code>claude/usa-midterms-model-feasibility-0897e9</code>, kept local.</p>
+
+<div class="tldr">
+<p>Treat each of the 435 districts as a race in the existing race layer: national margin + district lean + incumbency + race error. Seat counts, P(Democrats control the House) and P(both chambers) then come out of the same draws as the Senate. The results history is already in hand (Cha–Kuriwaki–Snyder, CC0, every House race 2006–2024 with incumbency). The one hard input is <strong>district lean on each map</strong>, the presidential vote by congressional district, which has no open ready-made source and must be built from precinct results. The model is tested on 2018–2024. The 2026 House results arrive tonight, before the model exists, so 2026 can only be a reported check, never a clean test.</p>
+</div>
+
+<h2>What is in hand</h2>
+<div class="tbl"><table class="data">
+<thead><tr><th>Input</th><th>Status</th><th>Source, licence</th></tr></thead>
+<tbody>
+<tr><td>Results by district, 2006–2024</td><td><span class="yes">Have</span>: 435 districts a cycle, 358–407 contested by both parties, candidate votes and incumbency flags</td><td>Cha, Kuriwaki and Snyder, doi:10.7910/DVN/DGDRDT (study folder <code>raw/dataverse-DGDRDT/</code>), CC0</td></tr>
+<tr><td>2026 candidates</td><td><span class="yes">Have</span>: 416 districts with both parties, 18 with no Republican, 1 with no Democrat</td><td><code>tables/house_2026_candidates_major_party.csv</code>, from Wikipedia (CC BY-SA)</td></tr>
+<tr><td>2026 district polls</td><td><span class="md">Thin</span>: 43 polls, a handful of districts</td><td><code>tables/house_district_polls_2026.csv</code>, Wikipedia</td></tr>
+<tr><td>Final-weeks House polls with results, 1998–2022</td><td><span class="yes">Have</span>: for the race poll error (as for the Senate)</td><td>538 <code>raw_polls.csv</code>, CC BY 4.0</td></tr>
+<tr><td>Incumbents and retirements</td><td><span class="yes">Have</span></td><td><code>raw/congress-legislators/</code>, public domain</td></tr>
+<tr><td>District lean on each map</td><td><span class="hi">Missing</span>: 2016 and 2020 presidential vote on the 2012–2020 maps, 2020 on the 2022 maps, 2024 on the 2024 maps and on the mid-decade 2026 redraws</td><td>No open ready-made source. The Downballot publishes these numbers (licence unstated). Open route: precinct results (VEST, CC BY 4.0; ALARM, to verify) joined to district boundaries (Census TIGER, public domain; state releases for 2026)</td></tr>
+</tbody></table></div>
+
+<h2>Model sketch</h2>
+<p>The Senate race layer already gives each race a deviation from the national walk, a regression prior learnt from past results and a shared poll error per race. Districts slot into it with House-specific covariates and their own race-type terms:</p>
+<div class="eq">margin<sub>d</sub> = national + β<sub>lean</sub>·lean<sub>d</sub> + β<sub>inc</sub>·inc<sub>d</sub> + β<sub>prev</sub>·prev<sub>d</sub>·same_map<sub>d</sub> + η<sub>House</sub> + δ<sub>d</sub><br>poll<sub>d,i</sub> = margin<sub>d</sub> + bias<sub>pollster</sub> + κ<sub>d</sub> + noise</div>
+<ul>
+<li><strong>lean</strong>: the last presidential margin on the district's current lines, minus the national presidential margin.</li>
+<li><strong>inc</strong>: Democratic incumbent, open seat or Republican incumbent. Freshmen get their own level, since the sophomore surge is real.</li>
+<li><strong>prev</strong>: the last House margin, only where the lines did not change and the race was contested. Its weight is learnt.</li>
+<li><strong>η<sub>House</sub></strong>: an error shared by every House race in a year, the House counterpart of the Senate's s<sub>η</sub> (review step 4). Without it the 435 districts act as independent coin flips and the seat interval comes out far too narrow.</li>
+<li><strong>Uncontested seats</strong> go to the party running, outside the likelihood. California and Washington top-two races between two candidates of one party do the same.</li>
+<li><strong>Cost</strong>: δ is integrated out and drawn in generated quantities, as for the Senate, so 435 races add little sampling cost. The history adds about 3,800 contested results; a simulated 470-race layer fitted in 24 min earlier in the study.</li>
+</ul>
+
+<h2>Steps</h2>
+<ol class="plan">
+<li><strong>Pin down the maps and the lean sources.</strong> List each state's congressional map for every cycle from 2012 to 2026, including the 2024 redraws (Alabama, Georgia, Louisiana, New York, North Carolina) and the mid-decade 2026 ones (Texas, California, Missouri, North Carolina, Ohio, Utah as of mid-2026; others to check). Confirm the VEST and ALARM licences and where each 2026 map's boundary file comes from.
+<dl class="who"><dt>Claude</dt><dd>A table of state × cycle → map file, source and licence. No code beyond a fetch log.</dd><dt>Check</dt><dd>Every one of the 435 districts in each cycle maps to exactly one boundary.</dd></dl></li>
+
+<li><strong>Build the district results history.</strong> From the CKS file: the two-party margin by district and year, contested flags, incumbency, a same-map flag, and freshmen.
+<dl class="who"><dt>Claude</dt><dd><code>usa/R/house_races.R</code>, about 200 R lines, mirroring <code>senate_races.R</code>.</dd><dt>Check</dt><dd>District votes summed per year match the national House vote table within 0.1%; seat winners match each year's House composition.</dd></dl></li>
+
+<li><strong>Build district lean on each map.</strong> Join precinct presidential results to district boundaries (<code>sf</code>), splitting precincts that straddle a line by population. This is the bulk of the work and the main risk.
+<dl class="who"><dt>Claude</dt><dd>One script per map vintage; outputs kept in the study folder, never in git.</dd><dt>Check</dt><dd>On districts whose lines did not change, the built lean agrees with published figures (the Downballot, read only for checking) to within 0.5 points on average, and with the 2016 and 2020 presidential totals by state.</dd></dl></li>
+
+<li><strong>Add the House race type to the model (v13).</strong> Covariates as above, race-type terms per chamber, uncontested handling, and generated quantities for House seats, P(control) and P(both chambers).
+<dl class="who"><dt>Claude</dt><dd>About 60 Stan lines and a builder option <code>house=1</code>.</dd><dt>Check</dt><dd>With no House races, v13 reproduces v12 bitwise (same seed, MD5 of the draws); a recovery test on simulated districts returns β and η within their intervals.</dd></dl></li>
+
+<li><strong>Backtest 2018, 2022 and 2024.</strong> Eve and four-week fits, each using only data available at the time. The baseline is a uniform swing from the previous House results plus the model's own national forecast.
+<dl class="who"><dt>Claude</dt><dd>A <code>score_house.R</code> for seat-count PIT, district Brier score and calibration by P(D) band, plus a forest chart of the closest districts.</dd><dt>Check</dt><dd>The success bar is decided in advance (see the decisions below). The fix is refuted if the House seat interval misses 2 of the 3 cycles.</dd></dl></li>
+
+<li><strong>Score 2026 once certified (December).</strong> Fit with the 2 November data freeze and the committed v13, then score against the certified results. Report it as a check.
+<dl class="who"><dt>You</dt><dd>Nothing, unless you decide 2026 should be held out entirely.</dd></dl></li>
+</ol>
+
+<h2>Decisions for you</h2>
+<div class="decision">
+<p><strong>1. Where can district lean come from?</strong> Open-only means building it from precinct data (step 3), which is slow but publishable. The Downballot's tables would be a day's work but have no stated licence. My recommendation: build it openly and use the Downballot only to check our figures, never as an input.</p>
+</div>
+<div class="decision">
+<p><strong>2. What counts as the test?</strong> The 2026 results will be public before v13 exists, so they cannot test it cleanly. My recommendation: 2018–2024 is the test, 2026 is reported as a check, and nothing is tuned after the certified 2026 results are opened. Commit v13 before December so the order can be proved from git.</p>
+</div>
+<div class="decision">
+<p><strong>3. How far back?</strong> 2018–2024 needs four map vintages. Adding 2008–2016 would need the 2002 maps and more precinct data, giving more cycles for η<sub>House</sub> at roughly twice the data work. My recommendation: start with 2018–2024 and extend only if η<sub>House</sub> is poorly identified from three cycles.</p>
+</div>
+<div class="decision">
+<p><strong>4. What is the success bar?</strong> Proposal: across the three backtests, House seat intervals cover 3 of 3 results, the district Brier score beats uniform swing, and the 90% intervals for contested districts cover 85–95% of them.</p>
+</div>
+
+<h2>Risks</h2>
+<ul>
+<li><strong>Precinct splits.</strong> Precincts that straddle a district line need population weights, so the error grows in states that split many precincts. Step 3's check measures it.</li>
+<li><strong>2026 maps still in court.</strong> If a map was blocked or replaced close to the election, the lean comes from the map that was actually used, and step 1 has to record which one that was.</li>
+<li><strong>Three test cycles.</strong> η<sub>House</sub> is learnt from very few years. Its prior should come from the House poll misses in 538's raw_polls, as s<sub>η</sub> did for the Senate.</li>
+<li><strong>Public repository.</strong> The precinct data and derived lean tables stay in the study folder, as the poll tables do. Only code and summary scores go into git.</li>
+</ul>
+
+<footer>Model code: <code>usa/stan/us_midterm_v12.stan</code>; review order of work: <code>usa/us-model-review.html</code>; study folder: <code>/Users/brynjolfurjonsson/.claude-reviews/usa-midterms-feasibility-2026-11-02/</code>.</footer>
+</main>
+</body>
+</html>

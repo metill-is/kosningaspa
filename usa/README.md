@@ -34,6 +34,7 @@ is used by the Icelandic forecast or Fylgisvakt, and nothing outside `usa/` was 
 | `us-midterms-feasibility.html` | The write-up: data, model changes, run times, out-of-sample backtests of 2018–2024 and the 2026 national forecast |
 | `us-model-review.html` | A critique of v9/v10 (2 November 2026) against 538, Silver Bulletin, the Economist and the polling-error and midterm literature: seven themes ranked, with measured evidence (the forecast cycle's industry bias against the realised poll miss; the Senate race regression's residual SD), fixes, tests and a suggested order of work |
 | `us-midterms-improvement-plan.html` | Next steps (2 November 2026): the national-layer fixes, the race-layer data and model, the decisions they wait on, and the data held and missing |
+| `us-house-layer-plan.html` | Plan for a House district layer (3 November 2026): the data held (district results 2006–2024, CC0) and missing (district lean on each map), the model sketch, six steps with checks, and the decisions they wait on |
 | `data_freeze_2026-11-02.sha256` | sha256 of every poll table and raw file gathered on 2 November 2026, committed before the election, so a later 2026 fit can show it used pre-election data only |
 | `data_freeze_2026-11-02_open.sha256` | The same for the open-licence files gathered later that day (paths under the study folder's `raw/`; `shasum -a 256 -c` from that folder) |
 | `R/bench_fit.R` | Fits a Stan file on a saved data JSON, times it and prints one `DIAG` line (wall time, ms per gradient, tree depth, divergences, R-hat, ESS) |
