@@ -193,7 +193,7 @@ race_poll_misses <- function(raw_polls, ty, type, national, max_margin = Inf) {
 #' with its covariates and, for a past target, its result), hist (past results, d and X),
 #' polls (one row per race poll, with house, end_date, population, y_d, y_r and race index)
 #' and holdover.
-senate_layer <- function(target, asof, window_start, raw, tables, pv, normalise_house, P = 3L) {
+senate_layer <- function(target, asof, window_start, raw, tables, pv, normalise_house, P = 3L, polls_file = "senate_polls_2026.csv") {
   ty <- as.integer(format(target, "%Y"))
   cks <- file.path(raw, "dataverse-DGDRDT", "candidates_2006-2024.dta")
   lean <- presidential_lean(file.path(raw, "medsl", "president.csv"))
@@ -212,7 +212,7 @@ senate_layer <- function(target, asof, window_start, raw, tables, pv, normalise_
   d_hist <- t(apply(shares, 1, clr)) - national_clr(pv, past$year, P)
   hist <- list(
     X = race_covariates(lean_before(lean, past$year, past$state), past$inc, past$indep_d),
-    d = d_hist, n = nrow(past)
+    d = d_hist, n = nrow(past), year = past$year, state = past$state
   )
 
   if (ty <= 2024) {
@@ -222,7 +222,7 @@ senate_layer <- function(target, asof, window_start, raw, tables, pv, normalise_
     polls <- senate_polls_538(file.path(raw, "538-polls-historical", "senate_polls_historical.csv"), ty, races)
   } else {
     races <- senate_races_2026(tables, file.path(raw, "congress-legislators", "legislators-current.csv"))
-    polls <- senate_polls_2026(tables, races)
+    polls <- senate_polls_2026(tables, races, polls_file)
   }
   races$lean <- lean_before(lean, rep(ty, nrow(races)), races$state)
   races$X <- race_covariates(races$lean, races$inc, races$indep_d)
@@ -292,8 +292,8 @@ senate_races_2026 <- function(tables, legislators) {
     select(-running)
 }
 
-senate_polls_2026 <- function(tables, races) {
-  p <- read_csv(file.path(tables, "senate_polls_2026.csv"), show_col_types = FALSE)
+senate_polls_2026 <- function(tables, races, polls_file = "senate_polls_2026.csv") {
+  p <- read_csv(file.path(tables, polls_file), show_col_types = FALSE)
   slot <- function(party, share, indep) {
     ifelse(party == "Republican", NA, ifelse(indep, ifelse(party == "Independent", share, NA),
       ifelse(party %in% c("Democratic", "DFL"), share, NA)

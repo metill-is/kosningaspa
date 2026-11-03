@@ -83,7 +83,7 @@ house_layer <- function(target, asof, window_start, raw, tables, house_dir, pv, 
   shares <- cbind(past$d_votes, past$r_votes) / (past$d_votes + past$r_votes)
   d_hist <- t(apply(shares, 1, clr)) - national_clr(pv, past$year, P)
   lean_past <- logit_lean(past$lean_margin, nat_pres[as.character(past$pres_year)])
-  hist <- list(X = cbind(1, lean_past, past$inc), d = d_hist, n = nrow(past))
+  hist <- list(X = cbind(1, lean_past, past$inc), d = d_hist, n = nrow(past), year = past$year, state = past$state)
 
   if (ty <= 2024) {
     all <- hh |> filter(year == ty)
