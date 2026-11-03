@@ -346,6 +346,42 @@ Covering it takes a term the polls cannot pin: a zero-centred forecast-cycle ter
 comes from past cycles, or a within-cycle drift whose spread the closed epochs teach. The
 windows stay switched off by default (`election_vol=0`).
 
+## Election day, 3 November 2026: one model for both chambers
+
+On election day the separate Senate and House fits became one model,
+`us_midterm_v13.stan` and then `us_midterm_v14.stan` (`build_generic_ballot.R races=both`).
+Two read-only review workflows shaped it. The critical review confirmed 33 defects, fixed in
+6d46e89: duplicated TOTAL rows, county-total precincts, incumbency matching, uncontested-seat
+spill, Indiana's corrupt 2024 file and others. The improvement review led to the previous House
+result and the national margin as House covariates, the regular history leans and v14's
+election-day national shock. A poll-steward session added 296 poll rows, 283 of them House
+district polls that the parser had labelled primary, and pollsters with no track record were
+left out. The live page (metill.is, built by a separate session) reads `combined/latest/` in the
+study folder: `user_model.json`, `accuracy.json` and `run_info.json`, written by
+`scripts/refit_combined.sh` and `accuracy_export.py`.
+
+Last refit (r3, v14, 20:37 UTC): P(Democrats 51 or more Senate seats) 0.640, median 52 (47–56);
+P(218 or more House seats) 0.941, median 236 (216–260); both chambers 0.639; national House
+vote D+7.6 (D+3.4 to D+11.7). 4 divergent transitions of 4,000, maximum R-hat 1.004.
+
+Election-eve backtests (`score_combined.R`):
+
+| | 2020 | 2022 | 2024 |
+|---|---|---|---|
+| House seats, v14 (90%) | 245 (229–262) | 205 (180–227) | 199 (183–215) |
+| Actual | 222 | 213 | 215 |
+| National error, polls / v14 | 4.3 / 4.5 | 2.9 / 1.5 | 2.5 / 1.4 |
+| Senate race error, polls / v14 | 7.3 / 6.9 | 4.8 / 4.0 | 4.9 / 2.8 |
+| Senate winners called, v14 | 30/34 | 34/34 | 32/34 |
+| House district Brier, uniform swing / v14 | 0.052 / 0.037 | 0.080 / 0.035 | 0.058 / 0.028 |
+
+Against v13, v14 has the same point accuracy and better calibration: its House seat intervals
+cover 2022 and 2024, and the 2020 national result moves from the 0.2nd to the 4th
+percentile. Open: the 2024 House seat miss is non-uniform district swing, which no covariate
+here fixes. v14 does not converge on the presidential backtests (R-hat up to 1.66), because its
+state effect is not identified with one observation per state-year, so the presidential
+comparison stays on v9.
+
 ## Forecast recorded before the 2026 election
 
 Recorded on 2 November 2026 from `us_midterm_v4.stan` fitted to the generic ballot alone
