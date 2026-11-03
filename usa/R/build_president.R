@@ -39,7 +39,7 @@ source("usa/R/senate_races.R")
 opt <- list(
   raw = NULL, out = NULL, target = NULL, asof = "", anchor_n = "2e5", grid = "week",
   tau_scale = "0.05", phi_info = "0", race_poll_sd = "auto", mu_bar = "free", bias_tail = "0",
-  election_vol = "0", vol_days = "30"
+  election_vol = "0", vol_days = "30", eve_sd = "0"
 )
 for (a in commandArgs(trailingOnly = TRUE)) {
   kv <- strsplit(a, "=", fixed = TRUE)[[1]]
@@ -174,6 +174,20 @@ stan_data <- list(
   fix_mu_bar = as.integer(opt$mu_bar == "zero"), bias_tail_nu = as.numeric(opt$bias_tail),
   election_vol = as.integer(opt$election_vol), vol_scale_days = as.numeric(opt$vol_days)
 )
+# v13/v14 fields (ignored by v9-v12): every state is a race of type 1; each past result is
+# its own state-year, and its cycle carries the cycle-wide effect shared by all states (the
+# error shared across states that 2016 and 2020 needed); eve_sd= is v14's election-day
+# national shock in margin points.
+stan_data$type_r <- rep(1L, stan_data$R)
+stan_data$type_hist <- rep(1L, stan_data$N_hist)
+stan_data$S <- stan_data$R
+stan_data$state_r <- seq_len(stan_data$R)
+stan_data$G_hist <- stan_data$N_hist
+stan_data$grp_hist <- seq_len(stan_data$N_hist)
+stan_data$Y_hist <- length(unique(past$year))
+stan_data$year_hist <- match(past$year, sort(unique(past$year)))
+stan_data$sigma_race_poll2 <- c(stan_data$sigma_race_poll, stan_data$sigma_race_poll)
+stan_data$s_eve <- as.numeric(opt$eve_sd) / 100
 write_stan_json(stan_data, file.path(opt$out, "stan_data.json"))
 saveRDS(
   list(
