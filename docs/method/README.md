@@ -28,7 +28,10 @@ A chapter's body sits between `<!-- content:start -->` and `<!-- content:end -->
 python3 tools/build.py            # refresh every chapter's chrome and the contents page
 python3 tools/build.py --check    # report pages whose chrome is out of date; writes nothing
 python3 tools/build.py --insert 3.1 fragment.html   # put a new fragment in as chapter 3.1's body
+python3 tools/leak_check.py       # look for local-only folder names, absolute paths and out-of-scope terms
 ```
+
+Run the leak check before every commit. It reads the local-only folder names from this clone's git exclude file at run time, so the list itself is never committed. It cannot see figures derived from licensed survey waves, so a reviewer checks those.
 
 To add or reorder chapters, edit `site.json`, then run the build. A chapter listed there with no page yet shows as "planned" on the contents page.
 

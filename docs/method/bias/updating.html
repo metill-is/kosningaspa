@@ -17,7 +17,7 @@
   <div class="kicker">Kosningaspá · Method · Pollster bias</div>
   <h1><span class="chnum">3.1</span> How pollster bias is modelled and updated at and between elections</h1>
   <p class="sub">What “bias” means in the forecast model, Fylgisvakt v4 and v5, and v2&#x27;s M1; what tells each model the bias; what happens when a result arrives; the priors on the bias walk; and a worked example, D at the 2024 boundary.</p>
-  <div class="stamp"><b>Review state.</b> Not reviewed by the author. Drafted with Claude on 29 Oct 2026 from the code on master, the v2 branch and the project&#x27;s records; edited on 4 Nov 2026 to keep only what the public repository can cite, and again that day for the fixes merged in PR #15. <b>Snapshot.</b> Describes the code and records as they stood on 29 Oct 2026; the forecast model&#x27;s hedge and known issues as of 4 Nov 2026 (master a54f3fe): kosningaspa <code>master</code> unless a box names a branch. Live state: kosningaspa <code>master</code>.</div>
+  <div class="stamp"><b>Review state.</b> Not reviewed by the author. Drafted with Claude on 29 Oct 2026 from the code on master, the v2 branch and the project&#x27;s records; edited on 4 Nov 2026 to keep only what the public repository can cite, again that day for the fixes merged in PR #15, and again for the corrected live data file and the link to chapter 1.1. <b>Snapshot.</b> Describes the code and records as they stood on 29 Oct 2026; the forecast model&#x27;s hedge and known issues as of 4 Nov 2026 (master a54f3fe): kosningaspa <code>master</code> unless a box names a branch. Live state: kosningaspa <code>master</code>.</div>
 </header>
 
 <div class="layout">
@@ -46,7 +46,7 @@
 {"id": "3.1", "title": "How pollster bias is modelled and updated at and between elections",
  "sub": "What “bias” means in the forecast model, Fylgisvakt v4 and v5, and v2's M1; what tells each model the bias; what happens when a result arrives; the priors on the bias walk; and a worked example, D at the 2024 boundary.",
  "kicker": "Pollster bias",
- "review": "Not reviewed by the author. Drafted with Claude on 29 Oct 2026 from the code on master, the v2 branch and the project's records; edited on 4 Nov 2026 to keep only what the public repository can cite, and again that day for the fixes merged in PR #15.",
+ "review": "Not reviewed by the author. Drafted with Claude on 29 Oct 2026 from the code on master, the v2 branch and the project's records; edited on 4 Nov 2026 to keep only what the public repository can cite, again that day for the fixes merged in PR #15, and again for the corrected live data file and the link to chapter 1.1.",
  "snapshot": "29 Oct 2026; the forecast model's hedge and known issues as of 4 Nov 2026 (master a54f3fe)",
  "sources": [
   ["Stan/polling_and_fundamentals_kjordaemi.stan", "the forecast model, master (a54f3fe); the hedge entered git in 9381677"],
@@ -81,7 +81,7 @@
 </tbody></table></div>
 
 <div class="xref"><span class="lab">See also</span>
-<p>The walk the bias is read against: chapter 1.1 (planned). Fylgisvakt as a whole: 2.1 (planned). v2's other components: 4.2 (planned).</p>
+<p>The walk the bias is read against: <a href="../forecast/walk.html">chapter 1.1</a>. Fylgisvakt as a whole: 2.1 (planned). v2's other components: 4.2 (planned).</p>
 </div>
 </section>
 
@@ -180,7 +180,7 @@ mu_gamma_pred *= mu_gamma_weight;         // added to beta on the forecast days 
 <li><strong>Annað has no house effect.</strong> A bias in how the polls measure Annað against the other parties cannot be corrected, and J's bias is only implied. This bites when a sizeable party is folded into Annað.</li>
 <li><strong>The hedge breaks the zero sum.</strong> After the √3/√2 scaling, <code>mu_gamma_pred</code> no longer sums to zero, so Annað's predicted share moves too.</li>
 <li><strong>Master's divisors fit 2024 only.</strong> The /√3 and /√2 rows match only the 2024 party set. The harness's R0 arm instead passes <code>mu_gamma_scale</code> $= 1/\sqrt{n_e}$ as data, set to 0 when $n_e = 0$.</li>
-<li><strong>Old data files keep the wrong anchor totals.</strong> <code>get_election_data()</code> used to recycle three vote totals across its 30 rows, which moved anchor shares by up to 0.36 pp (M 2017). Since PR #15 it takes each election's valid votes by date. A <code>data/polling_data.csv</code> written before that keeps the recycled totals until <code>R/correct_election_anchors.R</code> rewrites them; on 4 Nov 2026 the live file still had them on 17 of its 30 Kosning rows (counted by running the script on a copy). The first refit after the correction moves the 2016, 2017 and 2021 anchors by up to that 0.36 pp.</li>
+<li><strong>Old data files keep the wrong anchor totals.</strong> <code>get_election_data()</code> used to recycle three vote totals across its 30 rows, which moved anchor shares by up to 0.36 pp (M 2017). Since PR #15 it takes each election's valid votes by date. A <code>data/polling_data.csv</code> written before that keeps the recycled totals until <code>R/correct_election_anchors.R</code> rewrites them; the live file had them on 17 of its 30 Kosning rows (counted by running the script on a copy) until the author ran the script on it on 4 Nov 2026. The first refit after that moves the 2016, 2017 and 2021 anchors by up to that 0.36 pp.</li>
 </ul>
 </div>
 </section>
