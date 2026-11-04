@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>1.1 The latent support walk and its election anchors · Kosningaspá method</title>
+<meta name="description" content="The forecast model&#x27;s latent state: centred log-ratio levels on the poll dates, a correlated random walk run backwards from election day, faster in the 47 days before an election, pinned by each past result with Brownian bridges between results; how parties that do not exist yet are handled; and how the walk is sampled.">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<link rel="stylesheet" href="../assets/method.css">
+</head>
+<body>
+<div class="wrap">
+
+<nav class="breadcrumb"><a href="../index.html">Kosningaspá method</a> <span class="sep">/</span> I · The forecast model <span class="sep">/</span> 1.1</nav>
+
+<header class="top">
+  <div class="kicker">Kosningaspá · Method · The forecast model</div>
+  <h1><span class="chnum">1.1</span> The latent support walk and its election anchors</h1>
+  <p class="sub">The forecast model&#x27;s latent state: centred log-ratio levels on the poll dates, a correlated random walk run backwards from election day, faster in the 47 days before an election, pinned by each past result with Brownian bridges between results; how parties that do not exist yet are handled; and how the walk is sampled.</p>
+  <div class="stamp"><b>Review state.</b> Not reviewed by the author. Drafted with Claude on 4 Nov 2026 from the code on master. <b>Snapshot.</b> Describes the code and records as they stood on master b67a29f, 4 Nov 2026; measured numbers from the 2024-eve Stan data built that day: kosningaspa <code>master</code> unless a box names a branch. Live state: kosningaspa <code>master</code>.</div>
+</header>
+
+<div class="layout">
+  <nav class="toc">
+    <div class="t">On this page</div>
+    <ol>
+      <li><a href="#picture">The plain picture</a></li>
+      <li><a href="#state">The state: centred log-ratios, on the poll dates</a></li>
+      <li><a href="#backward">A walk run backwards from election day</a></li>
+      <li><a href="#volatility">Volatility and correlation</a></li>
+      <li><a href="#collapse">Faster movement before an election</a></li>
+      <li><a href="#anchors">Results as anchors, and the bridges between them</a></li>
+      <li><a href="#entry">Parties before they enter the data</a></li>
+      <li><a href="#likelihood">What the polls and results say, in outline</a></li>
+      <li><a href="#sampling">How the walk is sampled</a></li>
+      <li><a href="#open">What is open</a></li>
+      <li><a href="#sources">Sources</a></li>
+    </ol>
+    <div class="book"><a href="../index.html">Contents</a></div>
+  </nav>
+
+  <main>
+<!-- content:start -->
+<!--meta
+{"id": "1.1", "title": "The latent support walk and its election anchors",
+ "sub": "The forecast model's latent state: centred log-ratio levels on the poll dates, a correlated random walk run backwards from election day, faster in the 47 days before an election, pinned by each past result with Brownian bridges between results; how parties that do not exist yet are handled; and how the walk is sampled.",
+ "kicker": "The forecast model",
+ "review": "Not reviewed by the author. Drafted with Claude on 4 Nov 2026 from the code on master.",
+ "snapshot": "master b67a29f, 4 Nov 2026; measured numbers from the 2024-eve Stan data built that day",
+ "sources": [
+  ["Stan/polling_and_fundamentals_kjordaemi.stan", "the forecast model, master (b67a29f): transformed data, parameters, transformed parameters and model blocks"],
+  ["R/stan_data.R prepare_polling_data(), poll_dates(); R/data.R get_election_data()", "the date grid, the pre-election window, the anchors, master"],
+  ["R/fit_polling_and_fundamentals_kjordaemi_model.R; R/sampler_check/fit_headless.R", "the 2024-eve data, built with --data-only (no fit)"],
+  ["R/sampler_check/RESULTS.md, 24 and 28 Oct 2026 sections; R/sampler_check/equivalence_anchored.R", "sampling records, master"],
+  ["commits 8146e76, 63fb201, 9c1ad37, ebb3e8d (PR #5), 5f09c5b (PR #8), aa2ac1a (PR #10), PR #15", "history"],
+  ["the author's private project notes: Kosningar/Forecast model/ (anchored-model record of 28 Oct, sampling-efficiency audit of 24 Oct, lineage and known issues)", "records, not public"],
+  ["docs/method/analysis/1.1-walk/", "the scripts behind this chapter's measured numbers, 4 Nov 2026"]
+ ]}
+-->
+
+<section id="picture"><h2>The plain picture</h2>
+<div class="picture">
+<p>The forecast model keeps one latent level per party per date, on the centred log-ratio (clr) scale: a party's log share minus the mean log share over all the lists. Everything else in the model, polls, results, house effects and constituency effects, is read against these levels.</p>
+<ul>
+<li><strong>A walk run backwards.</strong> The walk's end on election day is the fundamentals prior (chapter 1.2 (planned)). Each earlier date is the next one plus a random step whose variance grows with the days between them.</li>
+<li><strong>Correlated, party by party.</strong> Each party has its own volatility, and the steps are correlated across parties. In the 47 days before each election the steps are scaled up.</li>
+<li><strong>Pinned by results.</strong> Each past election result enters as a multinomial with the election's 190,000–200,000 valid votes, so the walk passes through it. Between two results the walk is a Brownian bridge. In the 2024 forecast the last stretch, from the 2021 result to election day, has a result only at its start: the polls and the fundamentals prior carry it.</li>
+<li><strong>Polls see the walk through two layers:</strong> each house's bias (chapter 3.1) and Dirichlet-multinomial noise (chapter 3.2 (planned)).</li>
+</ul>
+</div>
+
+<div class="tbl"><table>
+<thead><tr><th>Symbol</th><th>Stan</th><th>What it is</th><th>Prior</th></tr></thead>
+<tbody>
+<tr><td>$\beta_t$</td><td><code>beta[, t]</code></td><td>levels of parties 2..P at date $t$; Annað's level is $-\sum_p \beta_{t,p}$</td><td>the walk below</td></tr>
+<tr><td>$\beta_T$</td><td><code>beta0</code></td><td>the levels on election day</td><td>$N(\mu_{\text{pred}},\ \tau_f^2\,\operatorname{diag}\sigma^2)$, chapter 1.2</td></tr>
+<tr><td>$\sigma_p$</td><td><code>sigma</code></td><td>party $p$'s volatility, per $\sqrt{\text{day}}$</td><td>$\log\sigma_p \sim N(\mu_{\log\sigma}, \tau_{\log\sigma})$, $\mu_{\log\sigma}\sim N(-2,2)$, $\tau_{\log\sigma}\sim$ Exponential(1)</td></tr>
+<tr><td>$\Omega$</td><td><code>L_Omega</code></td><td>correlation of the steps over the $P-1$ coordinates</td><td>LKJ(10)</td></tr>
+<tr><td>$\tau_s$</td><td><code>tau_stjornarslit</code></td><td>extra step scale in the 47 days before an election</td><td>Exponential(1)</td></tr>
+</tbody>
+<caption><code>Stan/polling_and_fundamentals_kjordaemi.stan</code>, parameters, transformed parameters and model blocks (master).</caption>
+</table></div>
+
+<div class="xref"><span class="lab">See also</span>
+<p>The fundamentals prior at the walk's end: chapter 1.2 (planned). The bias of the polls read against the walk: 3.1. The polls' noise and why results carry no overdispersion: 3.2 (planned). Fylgisvakt's walk, which has no fundamentals end and treats all ten parties symmetrically: 2.1 (planned).</p>
+</div>
+</section>
+
+<section id="state"><h2>The state: centred log-ratios, on the poll dates</h2>
+<p>The 2024 forecast has $P = 10$ lists: Annað as party 1, then D, B, S, V, P, C, F, M and J. The state $\beta$ is a $(P-1) \times T$ matrix. For a national poll $n$ by house $h$ on date $t$, the linear predictor is</p>
+$$\eta_{n,2:P} \;=\; \beta_t + \gamma_h, \qquad \eta_{n,1} \;=\; -\sum_{p \ge 2} \eta_{n,p}, \qquad \theta_n = \operatorname{softmax}(\eta_n),$$
+<p>and a kjördæmi poll adds the constituency effect $\delta$ (chapter 1.3 (planned)). Here $\theta_n$ is the poll's expected shares, bias included; the latent support, as in chapter 3.1, is $\pi_t = \operatorname{softmax}$ of the walk's levels alone. Because $\eta_n$ sums to zero it is the centred log-ratio of $\theta_n$, $\eta_{n,p} = \log\theta_{n,p} - \tfrac1P \sum_q \log\theta_{n,q}$, and in the same way $\beta_t$, with Annað's level $-\sum_p \beta_{t,p}$, is the clr of $\pi_t$. So $\beta_{t,p}$ is not party $p$'s log-ratio against Annað; that is $\beta_{t,p} + \sum_q \beta_{t,q}$. The Stan file's comment on <code>w_off</code> says the same. Annað has no coordinate of its own.</p>
+<p>Which party lacks a coordinate is more than a choice of coordinates, in three places:</p>
+<ul>
+<li><strong>The walk's priors.</strong> $\sigma$ and $\Omega$ act on the $P-1$ free coordinates, and Annað's level is minus their sum. Its step variance is $v\,\mathbf 1^\top L L^\top \mathbf 1$, with $L = \operatorname{diag}(\sigma)\, L_\Omega$ and $v$ the step's variance-time (next sections), and its prior sd on election day is $\tau_f\,(\sum_{p\ge2}\sigma_p^2)^{1/2}$: three times a typical party's when the nine $\sigma_p$ are equal.</li>
+<li><strong>The house effects.</strong> Party 1 carries none, and the last party's, J's, is minus the others' (chapter 3.1).</li>
+<li><strong>The fundamentals prior</strong> closes on party 1 (chapter 1.2, planned).</li>
+</ul>
+<p>Fylgisvakt had the same drop-one form until its v4 replaced it with a symmetric sum-to-zero parameterisation, because the old form's answer depended on which party was party 1 (chapter 3.1). The repository records no such check for the forecast model.</p>
+
+<div class="def"><span class="lab">Time</span>
+<p>The walk's dates are the poll dates, national and kjördæmi together (<code>poll_dates()</code>), not calendar days. Each step's variance is the number of days it spans times $\sigma^2$, so $\sigma$ is per $\sqrt{\text{day}}$. Where the polls fall then changes how finely the path is resolved, not its prior, with one exception: the pre-election factor is set by the date each step leaves, so where the polls fall decides how much of each window is scaled (section <a href="#collapse">Faster movement</a>). After the last poll date the model adds one date per day up to election day: <code>pred_y_time_diff</code> dates, so <code>T = D + pred_y_time_diff</code>, where <code>D</code> is the number of poll dates.</p>
+</div>
+
+<div class="measured"><span class="lab">The 2024-eve grid</span>
+<p>The fit script's data for the eve of the 2024 election (polls from 1 Jan 2016; Gallup's after 10 Nov 2024 left out) has 288 national rows, 3 of them results, and 36 kjördæmi rows on 268 poll dates (<code>D</code>). The kjördæmi rows are the 2021 result by kjördæmi and five polls, six rows each. The 268 dates run from 16 Jan 2016 to 28 Nov 2024; two daily steps reach election day, so $T = 270$. The gaps between dates have a median of 9 days, a mean of 12.1 and a maximum of 37, and 19% are a single day. There are 7 houses: the result rows plus six polling houses. Built on 4 Nov 2026 by <code>docs/method/analysis/1.1-walk/d_grid.R</code> through <code>fit_headless.R --data-only</code>; the counts match <code>R/sampler_check/RESULTS.md</code> (24 Oct 2026).</p>
+</div>
+</section>
+
+<section id="backward"><h2>A walk run backwards from election day</h2>
+<p>The walk starts at the end. Election day's levels get the fundamentals prior, and each earlier date steps back from the date after it:</p>
+$$\beta_T = \mu_{\text{pred}} + \tau_f\, z_0 \odot \sigma, \qquad \beta_t = \beta_{t+1} + \sqrt{v_{t+1}}\; L\, z_t, \qquad L = \operatorname{diag}(\sigma)\, L_\Omega,$$
+<p>with $z_0, z_t \sim N(0, I)$ and $v_{t+1}$ the variance-time of the step from $t$ to $t+1$ (next section). $\mu_{\text{pred}}$ and $\tau_f$ belong to chapter 1.2. Two things matter here.</p>
+<ul>
+<li><strong>The end point's spread is in the walk's own units.</strong> Each of parties 2..P has prior sd $\tau_f\sigma_p$ on election day, the walk's volatility times $\tau_f$, so a volatile party gets a looser fundamentals prior. Annað's is wider (section <a href="#state">The state</a>).</li>
+<li><strong>The end point's coordinates are independent.</strong> $z_0$ is not correlated through $\Omega$, so the fundamentals prior treats the nine coordinates as independent, apart from what $\mu_{\text{pred}}$ shares. Annað's level, minus their sum, is negatively correlated with each.</li>
+</ul>
+<p>Running the walk backwards is how the model joins the two sources. The fundamentals set a proper prior on the one date the forecast is about, and the walk spreads that prior back over the past, where polls and results pull on it. The joint prior over the path is Gaussian. Write $C_t = \sum_{u \le t} v_u$ for the cumulative variance-time. Given $\sigma$, $\Omega$, $\tau_s$ and the fundamentals, any two dates $s$ and $t$ have</p>
+$$\operatorname{Cov}(\beta_s, \beta_t) \;=\; \tau_f^2 \operatorname{diag}\sigma^2 \;+\; \big(C_T - C_{\max(s,t)}\big)\, L L^\top,$$
+<p>the end point's spread plus the steps the two dates share. The model samples other coordinates (section <a href="#anchors">Anchors</a>); the prior they imply on $\beta$ is this one.</p>
+</section>
+
+<section id="volatility"><h2>Volatility and correlation</h2>
+<p>Each party's log volatility is drawn around a shared mean, $\log\sigma_p \sim N(\mu_{\log\sigma}, \tau_{\log\sigma})$, so parties with few polls borrow scale from the rest. The steps are correlated through $\Omega$, the correlation of the nine free coordinates, with $L_\Omega \sim$ LKJ(10).</p>
+
+<div class="measured"><span class="lab">What the priors allow</span>
+<ul>
+<li><strong>$\sigma$</strong> (prior predictive, one party): median 0.135 per $\sqrt{\text{day}}$, 5–95% 0.0027 to 6.7. Over a year that is a log-ratio sd of 2.6 at the median, with 0.05 to 128 at the ends, so the data set the volatility, not the prior.</li>
+<li><strong>$\Omega$:</strong> under LKJ(10) on nine dimensions each correlation is $2\,\text{Beta}(13.5, 13.5) - 1$, with sd 0.189 and 90% of its mass within ±0.31. LKJ(2) would give sd 0.289. The prior pulls the correlations towards zero noticeably.</li>
+</ul>
+<p>Computed on 4 Nov 2026 by <code>docs/method/analysis/1.1-walk/d_priors.R</code> (analytic for $\Omega$; one million prior draws for $\sigma$).</p>
+</div>
+
+<p>$\Omega$ is the correlation of the steps in the clr levels of parties 2..P. It is not the correlation of the parties' shares. What each entry measures does not depend on which party is party 1, but the LKJ prior acts on nine of the ten clr coordinates, so its pull does. Chapter 2.1 (planned) shows the identified scales for Fylgisvakt's walk. This chapter reports no posterior for $\sigma$ or $\Omega$: that needs a fit of master's model, which has not been run for these notes.</p>
+</section>
+
+<section id="collapse"><h2>Faster movement before an election</h2>
+<p>The variance-time of the step that ends at date $t+1$ is</p>
+$$v_{t+1} \;=\; (d_{t+1} - d_t)\,\big(1 + \tau_s\, m_t\big)^2,$$
+<p>where $d_t$ is date $t$ in days and $m_t$ is 1 when date $t$ falls at most 47 days before the next election, the election day itself included. For the forecast's daily steps after the last poll, the factor is $(1+\tau_s)^2$ in the last <code>days_between_stjornarslit_and_election</code> days before election day: 47, the days from the government's collapse on 14 Oct 2024 to the election.</p>
+<ul>
+<li><strong>Every election gets the window.</strong> The window is named after the 2024 collapse (<em>stjórnarslit</em>), but $m_t$ marks the 47 days before each election in the window, 2021 included, which followed a full term. On the 2024-eve grid, 66 of the 268 dates carry it: 17 up to and including the 2016 result, 19 for 2017, 15 for 2021 and 15 before 2024. The commit that introduced it (63fb201, 13 Nov 2024) says only that it lets support change more close to elections.</li>
+<li><strong>On the grid, the window is not exactly 47 days.</strong> A step is scaled by the indicator of the date it leaves, so scaling starts at the first poll date inside the window: 43, 40, 38 and 46 days before the four elections. And a result's own date has $m_t = 1$, so the step <em>leaving</em> each result is scaled too: the 13, 19 and 21 days after the 2016, 2017 and 2021 results. Over the 2024 forecast's four stretches that makes 43, 53, 57 and 67 scaled days.</li>
+<li><strong>The prior lets the data decide.</strong> $\tau_s \sim$ Exponential(1) puts the window's variance factor $(1+\tau_s)^2$ at a median of 2.87, with 5–95% from 1.11 to 16.0 (<code>d_priors.R</code>).</li>
+<li><strong>Some inputs go unread.</strong> <code>prepare_polling_data()</code> also builds <code>stjornarslit</code> and <code>post_stjornarslit</code> indicators and passes them in. The model declares them and never reads them.</li>
+</ul>
+</section>
+
+<section id="anchors"><h2>Results as anchors, and the bridges between them</h2>
+<p>A result is a row from house 1 (<code>Kosning</code>) with $\gamma = 0$ and a plain multinomial likelihood over the election's valid votes, with no overdispersion since 8146e76 (24 Nov 2024); chapter 3.2 (planned) has the history and what it does to the forecast's width. A multinomial with 190,000–200,000 votes measures a share to within a sampling sd of at most 0.115 pp, so the walk all but passes through each result. The 2021 votes enter twice, as the national row and as six kjördæmi rows; chapter 1.3 (planned) covers the kjördæmi side.</p>
+
+<div class="tbl"><table>
+<thead><tr><th>Result</th><th class="num">Votes as entered</th><th>Lists reported</th><th>Not yet running</th></tr></thead>
+<tbody>
+<tr><td>29 Oct 2016</td><td class="num">189,649</td><td>Annað, D, B, S, V, P, C, F</td><td>M, J</td></tr>
+<tr><td>28 Oct 2017</td><td class="num">196,258</td><td>the same, plus M</td><td>J</td></tr>
+<tr><td>25 Sep 2021</td><td class="num">199,730</td><td>all ten</td><td>none</td></tr>
+</tbody>
+<caption>The 2024 forecast's anchors, from the 2024-eve Stan data (<code>d_grid.R</code>, 4 Nov 2026). Each row is each list's share times the election's valid votes from <code>get_election_data()</code>, rounded, so a total can differ from the valid votes (189,648; 196,259; 199,730) by a vote. Since PR #15 each election uses its own total.</caption>
+</table></div>
+
+<figure>
+<svg viewBox="0 0 720 150" role="img" aria-label="The 2024 forecast's window: a backward walk before the 2016 result, Brownian bridges between the 2016, 2017 and 2021 results, and a bridge from the 2021 result to election day, with the 47-day windows before each election shaded" style="color:var(--ink)">
+  <g font-family="ui-sans-serif,system-ui,sans-serif" font-size="11" fill="currentColor">
+    <g fill="var(--accent-soft)" stroke="none">
+      <rect x="83.0" y="52" width="9.4" height="30"/><rect x="155.9" y="52" width="9.4" height="30"/>
+      <rect x="441.7" y="52" width="9.4" height="30"/><rect x="674.2" y="52" width="9.4" height="30"/>
+    </g>
+    <line x1="35.0" y1="67" x2="683.6" y2="67" stroke="var(--rule)" stroke-width="1"/>
+    <g stroke="var(--accent)" stroke-width="2" fill="none">
+      <path d="M35.0,67 L92.4,67" stroke-dasharray="4 3"/>
+      <path d="M92.4,67 Q128.9,58 165.3,67"/>
+      <path d="M165.3,67 Q308.2,46 451.1,67"/>
+      <path d="M451.1,67 Q567.4,48 683.6,67"/>
+    </g>
+    <g fill="currentColor"><circle cx="92.4" cy="67" r="4"/><circle cx="165.3" cy="67" r="4"/><circle cx="451.1" cy="67" r="4"/></g>
+    <circle cx="683.6" cy="67" r="4.5" fill="var(--bg, white)" stroke="currentColor" stroke-width="1.5"/>
+    <g text-anchor="middle">
+      <text x="92.4" y="100">2016</text><text x="165.3" y="100">2017</text><text x="451.1" y="100">2021</text><text x="683.6" y="100">30 Nov 2024</text>
+    </g>
+    <g fill="var(--muted)" font-size="10.5" text-anchor="middle">
+      <text x="63.7" y="40">backward</text>
+      <text x="128.9" y="40">bridge</text>
+      <text x="308.2" y="36">bridge, 1,428 days</text>
+      <text x="567.4" y="36">bridge to β_T, 1,162 days</text>
+      <text x="683.6" y="116">fundamentals prior</text>
+      <text x="35.0" y="116" text-anchor="start">first poll 16 Jan 2016</text>
+    </g>
+  </g>
+</svg>
+<figcaption>Figure 1. The 2024 forecast's window. Dots are results (anchors); the hollow mark is election day, where the walk ends at the fundamentals prior rather than a result. Shaded: the 47 days before each election, where steps are scaled by $(1+\tau_s)$; on the poll-date grid the scaling starts at the first poll inside them, and also covers the step that leaves each result. Before the first result the walk runs backwards from it with nothing to pin its start.</figcaption>
+</figure>
+
+<h3>The bridge</h3>
+<p>With $C_t$ the cumulative variance-time as above, given the levels at an anchor $a$ and at the next anchor $b$ (or at $T$), the walk between them is a Brownian bridge. The model builds it date by date, as the exact conditional of each step given both ends:</p>
+$$\beta_t \;=\; \beta_{t-1} + \frac{v_t}{R_t}\big(\beta_b - \beta_{t-1}\big) + \sqrt{\frac{v_t\,(C_b - C_t)}{R_t}}\; L\, z_t, \qquad R_t = C_b - C_{t-1}.$$
+<p>At variance-time $s$ into a stretch of length $R$, the bridge's conditional variance is $s(R-s)/R$ times $LL^\top$: zero at both results and largest, $R/4$, halfway. Without the pre-election factor, the stretches of the 2024 forecast give these sds at their midpoints, in units of $\sigma_p$:</p>
+<div class="tbl"><table>
+<thead><tr><th>Stretch</th><th class="num">Days</th><th class="num">Midpoint sd, given both ends</th></tr></thead>
+<tbody>
+<tr><td>first poll → 2016 result</td><td class="num">287</td><td class="num">— (a walk, not a bridge)</td></tr>
+<tr><td>2016 → 2017</td><td class="num">364</td><td class="num">9.5 $\sigma_p$</td></tr>
+<tr><td>2017 → 2021</td><td class="num">1,428</td><td class="num">18.9 $\sigma_p$</td></tr>
+<tr><td>2021 → election day 2024</td><td class="num">1,162</td><td class="num">17.0 $\sigma_p$, given $\beta_T$</td></tr>
+</tbody>
+<caption><code>d_priors.R</code>, without the pre-election factor. With it, at $\tau_s$'s prior median, the grid's scaled days add 80, 99, 106 and 125 days of variance-time to the four stretches (<code>d_grid.R</code>).</caption>
+</table></div>
+<p>Polls fill in the middle. The bridge says only how far the walk may wander between two results before a poll speaks.</p>
+
+<figure>
+<svg viewBox="0 0 720 180" role="img" aria-label="A Brownian bridge between two anchors: the conditional sd envelope is zero at both results and widest halfway" style="color:var(--ink)">
+  <g font-family="ui-sans-serif,system-ui,sans-serif" font-size="11" fill="currentColor">
+    <path d="M 90.0,110.0 L 103.5,99.1 L 117.0,94.7 L 130.5,91.6 L 144.0,89.0 L 157.5,86.8 L 171.0,85.0 L 184.5,83.4 L 198.0,82.0 L 211.5,80.8 L 225.0,79.7 L 238.5,78.7 L 252.0,77.9 L 265.5,77.2 L 279.0,76.6 L 292.5,76.1 L 306.0,75.7 L 319.5,75.4 L 333.0,75.2 L 346.5,75.0 L 360.0,75.0 L 373.5,75.0 L 387.0,75.2 L 400.5,75.4 L 414.0,75.7 L 427.5,76.1 L 441.0,76.6 L 454.5,77.2 L 468.0,77.9 L 481.5,78.7 L 495.0,79.7 L 508.5,80.8 L 522.0,82.0 L 535.5,83.4 L 549.0,85.0 L 562.5,86.8 L 576.0,89.0 L 589.5,91.6 L 603.0,94.7 L 616.5,99.1 L 630.0,110.0 L 616.5,120.9 L 603.0,125.3 L 589.5,128.4 L 576.0,131.0 L 562.5,133.2 L 549.0,135.0 L 535.5,136.6 L 522.0,138.0 L 508.5,139.2 L 495.0,140.3 L 481.5,141.3 L 468.0,142.1 L 454.5,142.8 L 441.0,143.4 L 427.5,143.9 L 414.0,144.3 L 400.5,144.6 L 387.0,144.8 L 373.5,145.0 L 360.0,145.0 L 346.5,145.0 L 333.0,144.8 L 319.5,144.6 L 306.0,144.3 L 292.5,143.9 L 279.0,143.4 L 265.5,142.8 L 252.0,142.1 L 238.5,141.3 L 225.0,140.3 L 211.5,139.2 L 198.0,138.0 L 184.5,136.6 L 171.0,135.0 L 157.5,133.2 L 144.0,131.0 L 130.5,128.4 L 117.0,125.3 L 103.5,120.9 Z" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1"/>
+    <line x1="90" y1="110" x2="630" y2="110" stroke="var(--accent)" stroke-width="1.5" stroke-dasharray="4 3"/>
+    <circle cx="90" cy="110" r="4.5" fill="currentColor"/><circle cx="630" cy="110" r="4.5" fill="currentColor"/>
+    <line x1="360" y1="75" x2="360" y2="145" stroke="var(--muted)" stroke-width="1"/>
+    <text x="368" y="72" fill="var(--muted)">±1 sd = √(R/4) σ halfway</text>
+    <g text-anchor="middle">
+      <text x="90" y="165">result at a</text><text x="630" y="165">result at b</text>
+      <text x="360" y="165" fill="var(--muted)">variance-time s from 0 to R</text>
+    </g>
+  </g>
+</svg>
+<figcaption>Figure 2. The prior band of a Brownian bridge between two results, ±1 sd of $\sqrt{s(R-s)/R}\,\sigma_p$ around the straight line between them (dashed). Polls inside the stretch narrow it further.</figcaption>
+</figure>
+
+<div class="decision"><span class="lab">Decision</span>
+<p>Until aa2ac1a (28 Oct 2026, merged in PR #10 as 4abc579), the model sampled the backward walk itself, non-centred: every date's step was a parameter. Each result then pinned a sum of all the steps after it, which the Stan file's own comment calls "a dense stiff direction". The anchored form samples the levels at each result directly, centred, and stored as offsets from the levels that reproduce the result exactly (its clr, <code>w_off</code>), so that an initial value of 0 starts each anchor at its result. The steps between results become the non-centred innovations of the bridges (<code>z_walk</code>). Before the first result the walk stays a backward non-centred walk. The prior this implies on $\beta$ is unchanged: <code>R/sampler_check/equivalence_anchored.R</code> checks the log density against the old model's, up to the Jacobian, at posterior and off-posterior points. Section <a href="#sampling">Sampling</a> has the gains.</p>
+</div>
+</section>
+
+<section id="entry"><h2>Parties before they enter the data</h2>
+<p>The window opens before some lists existed. On the 2024-eve data, the first national row that gives each list a count above 0 is Viðreisn (C) on 13 Mar 2016, Flokkur fólksins (F) on 13 Aug 2016, Miðflokkurinn (M) on 21 Sep 2017 and Sósíalistaflokkurinn (J) on 16 Oct 2018 (<code>d_grid.R</code>). The walk still has a level for every party on every date. Three pieces of code deal with the dates before a party enters.</p>
+<ul>
+<li><strong>At a result it did not run in</strong> (M in 2016; J in 2016 and 2017), the party's anchor level is non-centred: the next anchor's level plus a scaled step through the Cholesky factor of its block of the step covariance. The reported parties' levels are stored shifted by minus the absent parties' sum over $n_{\text{present}}+1$. That shift makes the result's likelihood independent of the absent parties, and since it is unit triangular it needs no Jacobian.</li>
+<li><strong>In a poll that does not report it,</strong> the likelihood gathers the reported parties by identity (<code>party_index_n</code>), so the absent party's own term is left out. Until 9c1ad37 (2 Jul 2026) the likelihood took the first $k$ columns of each poll instead. An interior drop then read the wrong parties: Gallup's kjördæmi polls of 15 Sep and 22 Oct 2024 left out Annað, the first in all six kjördæmi and the second in three, so the old code saw Annað at 0 and dropped Sósíalistaflokkurinn (that commit's message).</li>
+<li><strong>In the replications,</strong> since 5f09c5b (PR #8) <code>y_rep_national</code> draws, at each date, only the parties active then: <code>n_active_d</code> and <code>active_index_d</code>, from each party's first national poll.</li>
+</ul>
+<div class="def"><span class="lab">A flat direction</span>
+<p>Leaving the absent party out of a poll does not cut it out of the likelihood, because Annað's predictor is minus the sum over <em>all</em> parties, the absent one included. Take a date before M's entry, and let $k$ be the number of lists that at least one row on that date reports, Annað among them. Raise M's level by $x$ and lower each of the $k-1$ reported lists other than Annað by $x/k$. Annað's predictor then falls by $x/k$ too, so in every row on that date each reported $\eta$ moves by the same $-x/k$, and no row's softmax over its reported lists changes. So each date leaves one flat direction for each list that no row on that date reports: at least four on every date before Viðreisn's first count on 13 Mar 2016, and at least two until Miðflokkurinn's on 21 Sep 2017. A list's first count does not end them, since a later date on which no row reports it has one again. Only the walk's prior bounds them, through the dates around them. This is Claude's derivation from the likelihood code. <code>R/sampler_check/RESULTS.md</code> (The absent party) records the analogous ridge in $\delta$, for a party that no kjördæmi row reports.</p>
+</div>
+</section>
+
+<section id="likelihood"><h2>What the polls and results say, in outline</h2>
+<ul>
+<li><strong>Polls</strong> (house $h > 1$): the reported counts are Dirichlet-multinomial with mean $\operatorname{softmax}(\eta_n[\text{reported}])$, which is $\theta_n$ renormalised over the reported lists, and concentration $\varphi_h$. Chapter 3.1 covers $\gamma_h$ and chapter 3.2 (planned) covers $\varphi_h$.</li>
+<li><strong>Results</strong> (house 1): <code>multinomial_logit</code> on the same gathered $\eta$ with $\gamma = 0$ (section <a href="#anchors">Anchors</a>).</li>
+<li><strong>Kjördæmi rows</strong> add $\delta$ for the constituency (chapter 1.3 (planned)); the one kjördæmi result, 2021's, enters as a plain multinomial like the national ones.</li>
+</ul>
+</section>
+
+<section id="sampling"><h2>How the walk is sampled</h2>
+<p>NUTS does not sample $\beta$ itself. It samples coordinates from which <code>transformed parameters</code> builds $\beta$:</p>
+<ul>
+<li><strong>The walk:</strong> anchored levels <code>anchor_w</code> (centred) and bridge innovations <code>z_walk</code> (non-centred).</li>
+<li><strong>Each party's log volatility</strong> is partially centred, with weight $\lambda_p = \tau_{\log\sigma}^2 I_p / (1 + \tau_{\log\sigma}^2 I_p)$. The information proxy $I_p$ is data-only: 0.5 for each date with a national poll that reports party $p$.</li>
+<li><strong>The house effects</strong> stay non-centred.</li>
+<li><strong>$\log\varphi$</strong> is centred and bounded above at 20 (chapter 3.2 (planned)).</li>
+</ul>
+<p>The fit script runs 4 chains of 1,000 warmup and 1,000 sampling iterations with <code>max_treedepth = 12</code>.</p>
+
+<div class="measured"><span class="lab">Sampling records</span>
+<ul>
+<li><strong>24 Oct 2026, ebb3e8d (PR #5):</strong> centred $\delta$ and $\log\sigma$, and <code>max_treedepth</code> 12. On the 2024-eve data as built on 16 Oct 2026, before PR #15's anchor totals, the old model had all 4,000 transitions at the depth cap of 10 and max R-hat 1.046 on the key quantities; the new one had none at the cap and 1.007. Min bulk ESS per 1,000 gradients went from 0.034 to 0.136 (×4.0).</li>
+<li><strong>28 Oct 2026, aa2ac1a (PR #10):</strong> the anchored walk with partially centred $\delta$ and $\log\sigma$, on harness arm R0's frozen data for two cells (its 2024-eve cell has 287 national and 42 kjördæmi rows, not the data above). Tree depth fell from 11 to 8 on 2024 eve and from 11 to 9 on 2021 f180 (the 2021 target, 180 days out). Min bulk ESS per 1,000 gradients went from 0.130 to 0.567 (×4.4) and from 0.0177 to 0.141 (×8.0). The fits agree within Monte Carlo error: 1 of 50 election-day share quantiles differs by more than 2 combined MCSEs on 2024 eve, and 2 on 2021 f180; about 2.3 are expected by chance in each.</li>
+<li><strong>Divergences:</strong> up to 3 of 4,000 on 2021 f180, none on 2024 eve.</li>
+</ul>
+<p><code>R/sampler_check/RESULTS.md</code>, master, which gives the data, seeds and commands.</p>
+</div>
+</section>
+
+<section id="open"><h2>What is open</h2>
+<div class="open"><span class="lab">Open</span>
+<ul>
+<li><strong>No posterior here.</strong> This chapter reports no posterior for $\sigma$, $\Omega$ or $\tau_s$. Measuring them needs a fit of master's model, and none has been run for these notes.</li>
+<li><strong>Reference dependence.</strong> The walk's priors, the house effects and the fundamentals all treat Annað, party 1, differently from the other lists (and the house effects treat J, the last, differently too), and the repository records no check of how much the forecast depends on that choice. Fylgisvakt has used a symmetric parameterisation since v4 (chapter 2.1, planned).</li>
+<li><strong>Parties before entry.</strong> Each leaves a likelihood-flat direction at every date before its first count, and at any later date that no row reports it, bounded only by the walk's prior. No record measures how far the posterior spreads along them.</li>
+<li><strong>The pre-election window:</strong>
+  <ul>
+  <li>it applies before every election, though it is named after one collapse;</li>
+  <li>its length is 47 days for the past dates (a literal in <code>prepare_polling_data()</code>), but for the forecast's own days it is computed from a collapse date fixed at 14 Oct 2024;</li>
+  <li>a forecast of any other election would need that date changed;</li>
+  <li>a result's own date counts as inside the window, so the step leaving each result is scaled as if it were before an election; nothing records whether that is intended;</li>
+  <li>the same 47 is a literal in $\tau_f$'s calculation (chapter 1.2, planned);</li>
+  <li>the <code>stjornarslit</code> and <code>post_stjornarslit</code> inputs are unused.</li>
+  </ul></li>
+<li><strong>The correlation prior.</strong> No comment or record says why LKJ(10) was chosen. Fylgisvakt also uses LKJ(10), but on all ten parties' innovations before centring, which is not the same prior.</li>
+<li><strong>Exact anchors.</strong> Results pin the walk with no overdispersion. What that does to the width of the forecast is chapter 3.2's question.</li>
+</ul>
+</div>
+</section>
+
+<section id="sources"><h2>Sources</h2>
+<ul class="sources">
+<li><code>Stan/polling_and_fundamentals_kjordaemi.stan</code> (master b67a29f): <code>transformed data</code> (anchors, <code>w_off</code>, the information proxies), <code>parameters</code>, <code>transformed parameters</code> (<code>v</code>, <code>cv</code>, the anchors and bridges, <code>beta0</code>) and <code>model</code> (priors and likelihood).</li>
+<li><code>R/stan_data.R</code>: <code>prepare_polling_data()</code> (the date grid, <code>month_before_election</code>, the collapse date, <code>n_active_d</code>, <code>active_index_d</code>, <code>party_index_n</code>) and <code>poll_dates()</code>. <code>R/data.R</code> <code>get_election_data()</code>.</li>
+<li><code>R/fit_polling_and_fundamentals_kjordaemi_model.R</code> (the 2024-eve filters and sampler settings) and <code>R/sampler_check/fit_headless.R</code>, which rebuilds the same data.</li>
+<li><code>R/sampler_check/RESULTS.md</code> (28 Oct 2026, anchored walk; 24 Oct 2026, centred δ and log σ) and <code>R/sampler_check/equivalence_anchored.R</code>.</li>
+<li>Commits: 8146e76 (results as plain multinomials), 63fb201 (the pre-election window), 9c1ad37 (identity gather), ebb3e8d via PR #5 (merge 78d8caa), 5f09c5b via PR #8 (6e54601), aa2ac1a via PR #10 (4abc579), and PR #15 (9cd12cb, each election's own valid votes).</li>
+<li>The author's private project notes (Obsidian vault <code>Metill</code>, not public): <code>Kosningar/Forecast model/2026-10-28 — Anchored, partially centred kjördæmi model (record).md</code>, <code>2026-10-24 — Sampling efficiency and pre-entry parties.md</code> and <code>model-lineage-and-known-issues.md</code>.</li>
+<li>Numbers measured for this page: <code>docs/method/analysis/1.1-walk/d_grid.R</code> (the 2024-eve grid, anchors and party entry, from the live <code>data/</code> on 4 Nov 2026, after <code>R/correct_election_anchors.R</code> corrected the anchor totals) and <code>d_priors.R</code> (the priors' implications and the stretches' variance-time).</li>
+</ul>
+</section>
+<!-- content:end -->
+    <nav class="pager"><span></span><a class="next" href="../bias/updating.html"><span class="lbl">Next</span>3.1 How pollster bias is modelled and updated at and between elections</a></nav>
+  </main>
+</div>
+
+<footer>
+  Methodology notes · chapter 1.1 · drafted with Claude from kosningaspá's code and records ·
+  page chrome built by <code>tools/build.py</code> from <code>site.json</code> (edit the body between the content markers, then re-run it) ·
+  maths by KaTeX 0.16.9, code by highlight.js 11.9 (CDN; the page reads fine offline).
+</footer>
+</div>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
+<script defer src="../assets/method.js"></script>
+</body>
+</html>
