@@ -95,7 +95,7 @@ draws <- d |>
     CMS = C + M + S,
     CS = C + S,
     DFM = D + F + M,
-    DFS = D + M + S,
+    DFS = D + F + S,
     DS = D + S
   ) |> 
   select(-(L:C)) |> 
