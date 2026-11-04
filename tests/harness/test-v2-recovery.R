@@ -4,7 +4,7 @@
 # subprocess into a temporary results root, never the real one: slow.
 box::use(
   R / harness / recovery[
-    attempt_seed, redraw_reasons, rank_elements, group_checks, incomplete_reasons, recovery_verdict, replicate_state,
+    attempt_seed, redraw_reasons, real_rule_text, rank_elements, group_checks, incomplete_reasons, recovery_verdict, replicate_state,
     take_lock, GROUPS, DESIGNS, SCALAR_TRUTHS
   ],
   R / harness / freeze[is_frozen],
@@ -39,6 +39,13 @@ rule_data <- function() {
   )
 }
 
+# The same data with the closed election's result reporting party 3 as well.
+reported3 <- function(d) {
+  d$idx_res[1, ] <- 1:3
+  d$n_rep_res[1] <- 3L
+  d
+}
+
 test_that("each attempt of each replicate draws with its own seed, within R's integers", {
   expect_identical(attempt_seed(3001, 1), 300100001L)
   expect_identical(attempt_seed(3110, 99999), 311099999L)
@@ -49,16 +56,39 @@ test_that("each attempt of each replicate draws with its own seed, within R's in
   expect_lte(as.numeric(attempt_seed(21473, 99999)), .Machine$integer.max)
 })
 
-test_that("the redraw rule reads each closed election's kjordaemi result and each epoch's mean poll share of the reported parties", {
+test_that("the redraw rule reads each closed election's national result and each epoch's mean poll share of the reported parties", {
   d <- rule_data()
   expect_identical(redraw_reasons(d), character(0))
-  # A reported party at 0 votes in one kjordaemi is below 0.5%, though its row still reports it.
-  low <- d
-  low$y_res[1, 2, ] <- c(1000L, 0L, 0L)
-  expect_identical(redraw_reasons(low), "result 1 kjordaemi 2")
+  # Below 0.5% (here 0 votes) in one kjordaemi but 45% nationally: kept, since a single kjordaemi's share is not read.
+  kd_low <- d
+  kd_low$y_res[1, 1, ] <- c(100L, 900L, 0L)
+  kd_low$y_res[1, 2, ] <- c(1000L, 0L, 0L)
+  expect_identical(redraw_reasons(kd_low), character(0))
+  # Above 70% in one kjordaemi but 60% nationally: kept.
+  kd_high <- d
+  kd_high$y_res[1, 1, ] <- c(800L, 200L, 0L)
+  kd_high$y_res[1, 2, ] <- c(400L, 600L, 0L)
+  expect_identical(redraw_reasons(kd_high), character(0))
+  # The national share is the kjordaemi counts summed. With party 3 reported too, its 9 of 2,000 votes (0.45%)
+  # is below 0.5% though no other party leaves the range; 10 of 2,000 is at it.
+  low <- reported3(d)
+  low$y_res[1, 1, ] <- c(500L, 495L, 5L)
+  low$y_res[1, 2, ] <- c(600L, 396L, 4L)
+  expect_identical(redraw_reasons(low), "result 1")
+  low$y_res[1, 2, ] <- c(600L, 395L, 5L)
+  expect_identical(redraw_reasons(low), character(0))
+  # 1,400 of 2,000 is at 70%; 1,401 is above it.
   high <- d
-  high$y_res[1, 1, ] <- c(701L, 299L, 0L)
-  expect_identical(redraw_reasons(high), "result 1 kjordaemi 1")
+  high$y_res[1, 1, ] <- c(900L, 100L, 0L)
+  high$y_res[1, 2, ] <- c(500L, 500L, 0L)
+  expect_identical(redraw_reasons(high), character(0))
+  high$y_res[1, 1, ] <- c(901L, 99L, 0L)
+  expect_identical(redraw_reasons(high), "result 1")
+  # Both halves of the rule at once, results first.
+  both <- low
+  both$y_res[1, 2, ] <- c(600L, 396L, 4L)
+  both$y_nat[4, ] <- c(50L, 50L, 0L)
+  expect_identical(redraw_reasons(both), c("result 1", "national polls epoch 2"))
   # Party 3's mean over the one poll reporting it is 1%: kept. At 0 votes in that poll it is below the range.
   zero <- d
   zero$y_nat[4, ] <- c(50L, 50L, 0L)
@@ -73,6 +103,22 @@ test_that("the redraw rule reads each closed election's kjordaemi result and eac
   hidden <- d
   hidden$y_res[1, 1, ] <- c(499L, 499L, 2L)
   expect_identical(redraw_reasons(hidden), character(0))
+})
+
+test_that("the real cell's reasons give each failing result's election, party and national share", {
+  meta <- list(party_order = c("A", "B", "C"), closed_elections = "2021-09-25")
+  d <- reported3(rule_data())
+  d$y_res[1, 1, ] <- c(500L, 495L, 5L)
+  d$y_res[1, 2, ] <- c(600L, 395L, 5L)
+  expect_identical(real_rule_text(d, meta), character(0))
+  d$y_res[1, 2, ] <- c(600L, 396L, 4L)
+  d$y_nat[4, ] <- c(50L, 50L, 0L)
+  expect_identical(real_rule_text(d, meta), c("result 1 (2021-09-25): C 0.450%", "national polls epoch 2"))
+  # Every party outside the range is named: two reported parties at 99.55% and 0.45%.
+  two <- rule_data()
+  two$y_res[1, 1, ] <- c(995L, 5L, 0L)
+  two$y_res[1, 2, ] <- c(1000L, 4L, 0L)
+  expect_identical(real_rule_text(two, meta), "result 1 (2021-09-25): A 99.551%, B 0.449%")
 })
 
 test_that("a truth is inside the 90% interval for q in [0.05, 0.95] and the 50% for q in [0.25, 0.75]", {
@@ -216,15 +262,16 @@ test_that("a replicate's folder is reused when its meta.json matches, retired wh
 
 # A finished replicate folder under `base` with made-up outputs: its meta.json (the keys the
 # report and the stop rule read), ranks.csv from the rows of `ranks` whose replicate is `replicate`, a
-# key_diagnostics.csv with an lp__ row and a param_draws.parquet of 4 x 400 draws far from the caps.
-fake_replicate <- function(base, cell, seed, ranks, stan_sha = "s", replicate = paste0("r", seed)) {
+# key_diagnostics.csv with an lp__ row and a param_draws.parquet of 4 x 400 draws far from the caps;
+# `real` is the real cell's redraw reasons it records.
+fake_replicate <- function(base, cell, seed, ranks, stan_sha = "s", replicate = paste0("r", seed), real = character(0)) {
   id <- sprintf("recovery_%s_s%d", cell, seed)
   dir <- file.path(base, "recovery", cell, seed)
   dir.create(dir, recursive = TRUE)
   meta <- list(
     id = id, seed = seed, iter_warmup = 400L, iter_sampling = 400L, chains = 4L, minutes = 1.5, attempts = 3L,
     stan_sha256 = stan_sha, config_sha256 = "c", design_sha256 = paste0("d", cell), git_head = "abc", git_dirty = FALSE,
-    cmdstan_version = "2.37.0",
+    cmdstan_version = "2.37.0", real_cell_redraw = I(real),
     diagnostics = list(divergent = 0L, max_rhat = 1.001, treedepth_hits = 0L, min_ess_bulk = 500, n_leapfrog = 1e5)
   )
   jsonlite::write_json(meta, file.path(dir, "meta.json"), auto_unbox = TRUE, digits = NA)
@@ -251,7 +298,8 @@ test_that("the report gives Decision 7's set its verdict, counts a replicate tha
   seeds <- c(seq_len(20), 100 + seq_len(10))
   ranks$replicate <- sub("^r", "", ranks$replicate)
   ranks$replicate <- paste0("r", seeds[as.integer(ranks$replicate)])
-  for (i in 1:20) fake_replicate(results, DESIGNS$cell[1], seeds[i], ranks)
+  real <- "result 3 (2021-09-25): X 0.495%"
+  for (i in 1:20) fake_replicate(results, DESIGNS$cell[1], seeds[i], ranks, real = real)
   for (i in 21:30) fake_replicate(results, DESIGNS$cell[2], seeds[i], ranks)
   # Replicate 3's lp__ R-hat trips the stop rule; it stays in every count.
   tripped <- file.path(results, "recovery", DESIGNS$cell[1], "3", "key_diagnostics.csv")
@@ -265,7 +313,10 @@ test_that("the report gives Decision 7's set its verdict, counts a replicate tha
   expect_identical(utils::tail(md, 1), "RECOVERY PASS")
   expect_true(any(startsWith(md, "STOP recovery_2024-11-30_2024-11-29_s3 ")))
   expect_identical(sum(startsWith(md, "GO recovery_")), 29L)
-  expect_true("| 2024 eve | 20 | 1\u201320 | 400 + 400 | 60 | 40 | 0.6667 | 1.5, 1.5 | 1 |" %in% md, label = shown(md))
+  expect_true("| 2024 eve | 20 | 1\u201320 | 400 + 400 | 60 | 40 | 0.6667 | 1.5, 1.5 | 1 | redrawn: result 3 (2021-09-25): X 0.495% |" %in% md, label = shown(md))
+  expect_true("| 2021 f180 | 10 | 101\u2013110 | 400 + 400 | 30 | 20 | 0.6667 | 1.5, 1.5 | 0 | kept |" %in% md, label = shown(md))
+  expect_true("REAL 2024 eve under the redraw rule: redrawn: result 3 (2021-09-25): X 0.495%" %in% printed, label = shown(printed))
+  expect_true("REAL 2021 f180 under the redraw rule: kept" %in% printed, label = shown(printed))
   # Every table row is one physical line.
   expect_true(all(endsWith(md[startsWith(md, "|")], "|")))
 
@@ -318,6 +369,8 @@ test_that("one replicate at 20 + 20 on 2021 f180 runs end to end: its counts and
   expect_match(out, "^TRUTH recovery_2021-09-25_2021-03-29_s3101 seed 3101[0-9]{5} after [0-9]+ attempt", all = FALSE)
   expect_match(out, "^(GO|STOP) recovery_2021-09-25_2021-03-29_s3101 lp_rhat=", all = FALSE)
   expect_match(out, "^DONE ", all = FALSE)
+  # The real 2021-f180 data pass the rule: 2016's and 2017's national results and the polls.
+  expect_true("REAL 2021-09-25_2021-03-29 under the redraw rule: kept" %in% out, label = shown(out))
   rep <- file.path(results, "recovery", "2021-09-25_2021-03-29", "3101")
   for (f in c("meta.json", "truth.json", "ranks.csv", "key_diagnostics.csv", "param_draws.parquet", "inputs/stan_data.json")) {
     expect_true(file.exists(file.path(rep, f)), label = f)
@@ -378,6 +431,7 @@ test_that("one replicate at 20 + 20 on 2021 f180 runs end to end: its counts and
   expect_true("RECOVERY INCOMPLETE" %in% report, label = shown(report))
   text <- readLines(md, encoding = "UTF-8")
   expect_identical(utils::tail(text, 1), "RECOVERY INCOMPLETE")
-  expect_true(any(startsWith(text, "| 2021 f180 | 1 | 3101\u20133101 | 20 + 20 |")), label = shown(text))
+  expect_true(any(startsWith(text, "| 2021 f180 | 1 | 3101\u20133101 | 20 + 20 |") & endsWith(text, "| kept |")), label = shown(text))
+  expect_true("REAL 2021 f180 under the redraw rule: kept" %in% report, label = shown(report))
   expect_true(file.exists(file.path(results, "recovery", "logs", "lane-B.log")))
 })

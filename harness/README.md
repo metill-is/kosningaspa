@@ -647,9 +647,11 @@ design (arm `v2`'s config, `draw_forecast = 0`: no forecast is drawn) and replac
 (`y_nat`, `y_kd`, `y_res`) and μ_f with a draw from the model at one draw of V2's prior
 (`v2_simulate()`), so the grid, poll schedule, sample sizes, houses, entry and valid votes stay
 real and no real count survives. A replicate is redrawn, attempt a at seed
-100000 × seed + a, while a reported party's share of a closed election's result in a kjördæmi,
-or its mean share over an epoch's national polls, leaves [0.5%, 70%]; the rule reads the
-simulated data alone, so the ranks stay uniform. Before the fit, a one-iteration fixed_param run
+100000 × seed + a, while a reported party's share of a closed election's national result (its
+kjördæmi counts summed per party), or its mean share over an epoch's national polls, leaves
+[0.5%, 70%]; the rule reads the simulated data alone, so the ranks stay uniform. It reads
+national results, not each kjördæmi's: the 0.5% floor is a national-support notion, and a
+kjördæmi reading would also select on δ, a recovery target. Before the fit, a one-iteration fixed_param run
 at the truth must give each truth element (τ_μ, s̄_E, the open epoch's μ, δ at the closed and
 the open epochs) to 1e-8, so each truth is paired with the Stan quantity of its name. Each lane
 runs its seeds one after another, four chains each; from the project root, in a normal shell so
@@ -680,7 +682,10 @@ results/harness/recovery/
 
 `report` writes `harness/v2/recovery.md` (committed): the Stan file's and config's sha256 (it
 refuses replicates whose sha256 differs from the others', naming them), each design's
-replicates, draws, rejection rate and truth elements per group, each group's 50% and 90%
+replicates, draws, rejection rate, whether the real cell's own data pass the redraw rule (`kept`,
+or `redrawn:` and each failing result's date, party and national share, a public past result;
+each replicate records it in `meta.json` as `real_cell_redraw`) and truth elements per group,
+each group's 50% and 90%
 coverage against Decision 7's band (τ_μ and s̄_E: at least 22 of 30 truths inside the 90%
 interval and 8 to 22 inside the 50%; open-epoch μ, closed δ and open δ: the mean over replicates
 of each one's share covered within 3 standard errors of 0.9 and of 0.5), and the stop rule's

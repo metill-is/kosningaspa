@@ -16,10 +16,12 @@
 #      from the model given them, each row keeping its total and its reported parties, then mu_f
 #      from its pseudo-observation's normal. The grid, the poll schedule, sample sizes, houses,
 #      entry and valid votes stay the real cell's. An attempt is rejected, and the next drawn,
-#      when a reported party's share of a closed election's result in a kjordaemi, or its mean
-#      share over an epoch's national polls (the polls reporting it), leaves [0.5%, 70%]
-#      (redraw_reasons()). The rule reads the simulated data alone, so the posterior given the
-#      kept data is the model's and the ranks stay uniform;
+#      when a reported party's share of a closed election's national result (its kjordaemi
+#      counts summed per party), or its mean share over an epoch's national polls (the polls
+#      reporting it), leaves [0.5%, 70%] (redraw_reasons()). The rule reads the simulated data
+#      alone, so the posterior given the kept data is the model's and the ranks stay uniform. It
+#      reads national results, not each kjordaemi's: Decision 7's floor is a national-support
+#      notion, and a kjordaemi reading would also select on delta, a recovery target;
 #   3. a check that each truth element is the Stan model's quantity of that name: a
 #      one-iteration fixed_param run at the true parameters must give every one to 1e-8
 #      relative (truth_check());
@@ -45,7 +47,8 @@
 #   meta.json               the provenance (git_head, git_dirty, the Stan file's, the config's
 #                           and the real design's sha256, CmdStan's version), the seeds and
 #                           attempts, the sampler settings, the minutes, the truth check's
-#                           error, each group's element count and the diagnostics
+#                           error, each group's element count, the diagnostics and
+#                           real_cell_redraw (real_rule_text() of the real cell's own data)
 # A replicate's scored quantities, for summarise_diagnostics() and so for the stop rule's
 # gate-scope R-hat, are its truth elements. A replicate whose meta.json matches the run's
 # settings (expected_keys()) is skipped (SKIP); one whose meta.json does not, or that has none
@@ -60,7 +63,9 @@
 #
 # report reads every replicate under results_root()/recovery/ whose meta.json exists and writes
 # out (harness/v2/recovery.md by default): the provenance, each design's replicates, attempts,
-# rejection rate (rejected draws over all draws) and element counts, each group's 50% and 90%
+# rejection rate (rejected draws over all draws), whether the real cell's own data pass the
+# redraw rule (and its reasons if not; real past results are public, no forecast quantity) and
+# element counts, each group's 50% and 90%
 # coverage against Decision 7's band (a count of 30 truths for the scalar groups, the mean over
 # replicates of the share of the group's elements covered, within 3 standard errors, the sd
 # over replicates over sqrt(n), of 0.5 and 0.9 for the vector groups; group_checks()), the stop
@@ -100,10 +105,11 @@ USAGE <- paste(
 #' The arm whose recovery this is: its Stan file and config.
 RECOVERY_ARM <- "v2"
 
-#' The version of a replicate's outputs; a change makes every finished replicate stale.
-RECOVERY_VERSION <- 1L
+#' The version of a replicate's outputs; a change makes every finished replicate stale. 2: the
+#' redraw rule reads each closed election's national result, so a seed keeps other data than in 1.
+RECOVERY_VERSION <- 2L
 
-#' A present party's share, in a closed election's kjordaemi result or as its mean over an
+#' A present party's share, in a closed election's national result or as its mean over an
 #' epoch's national polls, must lie in this range, or the replicate is redrawn (Decision 7).
 SHARE_RANGE <- c(0.005, 0.70)
 
@@ -171,25 +177,31 @@ attempt_seed <- function(seed, attempt) {
   as.integer(SEED_STRIDE * seed + attempt)
 }
 
+#' A closed election's national result: its kjordaemi counts summed per party.
+#' @param data a `v2_stan_data()` data list
+#' @param e the closed election's index
+#' @return a numeric vector of P counts, in party order
+national_result <- function(data, e) colSums(matrix(data$y_res[e, , ], data$K, data$P))
+
 #' The redraw rule of Decision 7 on simulated data: the reasons to redraw, none to keep it. A
-#' present party is a reported party of the row (`idx_*`, the real cell's), whatever its
-#' simulated count, so a reported party drawing 0 votes is below the range.
+#' simulated result is a closed election's national result (`national_result()`), and its
+#' present parties are that election's reported parties (`idx_res`, the real cell's); a poll's
+#' present parties are its row's (`idx_nat`). Whatever their simulated counts, so a reported
+#' party drawing 0 votes is below the range. A party's share in a single kjordaemi is not read.
 #' @param data a `v2_stan_data()` data list (simulated)
 #' @param range the share range, SHARE_RANGE
-#' @return a character vector, one element per closed election and kjordaemi whose result gives
-#'   a present party a share outside `range` ("result <e> kjordaemi <k>") and per epoch where a
-#'   party's mean share over the national polls reporting it is outside `range` ("national
-#'   polls epoch <e>"); `character(0)` when the data are kept
+#' @return a character vector, one element per closed election whose national result gives a
+#'   present party a share outside `range` ("result <e>") and per epoch where a party's mean
+#'   share over the national polls reporting it is outside `range` ("national polls epoch
+#'   <e>"); `character(0)` when the data are kept
 #' @export
 redraw_reasons <- function(data, range = SHARE_RANGE) {
   out <- character(0)
   outside <- function(s) any(s < range[1] | s > range[2])
   for (e in seq_len(data$n_closed)) {
     S <- data$idx_res[e, seq_len(data$n_rep_res[e])]
-    for (k in seq_len(data$K)) {
-      y <- data$y_res[e, k, ]
-      if (outside(y[S] / sum(y))) out <- c(out, sprintf("result %d kjordaemi %d", e, k))
-    }
+    y <- national_result(data, e)
+    if (outside(y[S] / sum(y))) out <- c(out, sprintf("result %d", e))
   }
   epoch <- data$grid_epoch[data$grid_nat]
   for (e in sort(unique(epoch))) {
@@ -203,6 +215,28 @@ redraw_reasons <- function(data, range = SHARE_RANGE) {
     if (outside(mean_share)) out <- c(out, sprintf("national polls epoch %d", e))
   }
   out
+}
+
+#' The redraw rule on the real cell's own data, as the report prints it: `redraw_reasons()`,
+#' each "result <e>" given its election's date and the party and national share outside the
+#' range (a public past result; no forecast quantity is read).
+#' @param data the real cell's data (`v2_stan_data()`)
+#' @param meta its meta: `party_order` and `closed_elections` are read
+#' @param range the share range, SHARE_RANGE
+#' @return a character vector, `character(0)` when the real data pass the rule
+#' @export
+real_rule_text <- function(data, meta, range = SHARE_RANGE) {
+  vapply(redraw_reasons(data, range), \(r) {
+    if (!startsWith(r, "result ")) {
+      return(r)
+    }
+    e <- as.integer(sub("^result ", "", r))
+    y <- national_result(data, e)
+    S <- data$idx_res[e, seq_len(data$n_rep_res[e])]
+    share <- y[S] / sum(y)
+    off <- share < range[1] | share > range[2]
+    paste0(r, " (", meta$closed_elections[e], "): ", paste(sprintf("%s %.3f%%", meta$party_order[S][off], 100 * share[off]), collapse = ", "))
+  }, character(1), USE.NAMES = FALSE)
 }
 
 #' A replicate's truth and its data: v2_simulate() at attempt_seed(seed, a) for a = 1, 2, ...,
@@ -556,7 +590,7 @@ fit_replicate <- function(cell, seed, iters, expected, model, log) {
     list(
       data_sha256 = data_sha, sim_seed = sim$sim_seed, attempts = sim$attempts, rejected = sim$attempts - 1L,
       truth_check_error = check_err, elements = as.list(table(factor(elements$group, GROUPS$group))), minutes = minutes,
-      diagnostics = d
+      diagnostics = d, real_cell_redraw = I(cell$real_redraw)
     ),
     run_provenance()
   )
@@ -598,9 +632,10 @@ run_replicates <- function(E, F, first_seed, n, iter_warmup, iter_sampling, lane
   design_sha <- stan_data_sha(data)
   cell <- list(
     E = format(E), F = format(F), lane = lane, data = data, meta = built$meta, stan_file = stan_file,
-    param_variables = intersect(V2_PARAM_VARIABLES, a$variables(cfg))
+    param_variables = intersect(V2_PARAM_VARIABLES, a$variables(cfg)), real_redraw = real_rule_text(data, built$meta)
   )
   say(log, sprintf("LANE %s %s_%s seeds %d..%d at %d + %d (pid %d)", lane, cell$E, cell$F, first_seed, first_seed + n - 1, iter_warmup, iter_sampling, Sys.getpid()))
+  say(log, "REAL ", cell$E, "_", cell$F, " under the redraw rule: ", real_text(cell$real_redraw))
   model <- lane_model(lane_dir, stan_file)
   iters <- c(iter_warmup = iter_warmup, iter_sampling = iter_sampling)
   for (seed in seq(first_seed, length.out = n)) {
@@ -649,6 +684,12 @@ same_key <- function(reps, key, what) {
 }
 
 shown <- function(x, digits = 3) if (is.na(x)) "\u2013" else formatC(x, format = "f", digits = digits)
+
+#' `real_rule_text()`'s reasons as one cell of text: "kept", or "redrawn: " and the reasons.
+real_text <- function(reasons) {
+  reasons <- unlist(reasons)
+  if (length(reasons)) paste0("redrawn: ", paste(reasons, collapse = "; ")) else "kept"
+}
 table_row <- function(cells) paste0("| ", paste(cells, collapse = " | "), " |")
 
 #' Write the report (header) to `out`; returns the exit status.
@@ -681,6 +722,10 @@ run_report <- function(out) {
     if (is.na(i)) sub("_", " F ", cell) else DESIGNS$label[i]
   }
   cells <- c(intersect(DESIGNS$cell, table_of$cell), setdiff(unique(table_of$cell), DESIGNS$cell))
+  real <- vapply(cells, \(cell) {
+    first <- Filter(\(r) r$cell == cell, reps)[[1]]
+    if (is.null(first$meta$real_cell_redraw)) "not recorded" else real_text(first$meta$real_cell_redraw)
+  }, character(1))
   heads <- unique(unlist(lapply(reps, \(r) r$meta$git_head)))
   dirty <- sum(vapply(reps, \(r) isTRUE(r$meta$git_dirty), logical(1)))
   cmdstan <- unique(vapply(reps, \(r) as.character(r$meta$cmdstan_version), character(1)))
@@ -700,16 +745,20 @@ run_report <- function(out) {
     paste0("- Commit(s): ", paste0("`", heads, "`", collapse = ", "), "; replicates fitted from a tree with changes: ", dirty),
     paste0("- CmdStan ", paste(cmdstan, collapse = ", "), "; ", SAMPLER$chains, " chains, max_treedepth ", SAMPLER$max_treedepth, ", init ", SAMPLER$init),
     paste0(
-      "- Redraw rule: a replicate is redrawn when a reported party's share of a closed election's result in a kj\u00f6rd\u00e6mi, ",
-      "or its mean share over an epoch's national polls, leaves [", 100 * SHARE_RANGE[1], "%, ", 100 * SHARE_RANGE[2], "%]; ",
-      "the rejection rate is the rejected draws over all draws"
+      "- Redraw rule: a replicate is redrawn when a reported party's share of a closed election's national result ",
+      "(its kj\u00f6rd\u00e6mi counts summed), or its mean share over an epoch's national polls, leaves [",
+      100 * SHARE_RANGE[1], "%, ", 100 * SHARE_RANGE[2], "%]; the rejection rate is the rejected draws over all draws. ",
+      "\"Real cell\" says whether the real cell's own data pass the rule"
     ),
     paste0("- Folders without a meta.json (not counted): ", read$partial),
     "",
     "## Designs",
     "",
-    table_row(c("Design", "Replicates", "Seeds", "Iterations", "Draws", "Rejected", "Rejection rate", "Minutes (median, max)", "Stop rule tripped")),
-    table_row(rep("---", 9))
+    table_row(c(
+      "Design", "Replicates", "Seeds", "Iterations", "Draws", "Rejected", "Rejection rate", "Minutes (median, max)", "Stop rule tripped",
+      "Real cell"
+    )),
+    table_row(rep("---", 10))
   )
   for (cell in cells) {
     t <- table_of[table_of$cell == cell, ]
@@ -717,7 +766,7 @@ run_report <- function(out) {
     lines <- c(lines, table_row(c(
       label(cell), nrow(t), paste0(min(t$seed), "\u2013", max(t$seed)), paste(iters, collapse = ", "), sum(t$attempts),
       sum(t$attempts - 1L), shown(sum(t$attempts - 1L) / sum(t$attempts), 4),
-      paste0(shown(stats::median(t$minutes), 1), ", ", shown(max(t$minutes), 1)), sum(t$stop)
+      paste0(shown(stats::median(t$minutes), 1), ", ", shown(max(t$minutes), 1)), sum(t$stop), real[[cell]]
     )))
   }
   lines <- c(
@@ -791,6 +840,7 @@ run_report <- function(out) {
       if (r$kind == "scalar") r$lo else shown(r$lo), if (r$kind == "scalar") r$hi else shown(r$hi), mark(r$pass)
     ))
   }
+  for (cell in cells) cat("REAL ", label(cell), " under the redraw rule: ", real[[cell]], "\n", sep = "")
   if (length(incomplete)) cat("incomplete: ", paste(incomplete, collapse = "; "), "\n", sep = "")
   cat("RECOVERY ", verdict, "\n", sep = "")
   cat("wrote ", relative(normalizePath(out)), "\n", sep = "")
