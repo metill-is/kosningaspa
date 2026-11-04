@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>US Model Review</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #1d2125;
+    --muted: #5b6470;
+    --rule: #dde1e6;
+    --soft: #f3f5f7;
+    --accent: #0f6e6a;
+    --good: #1f7a3a;
+    --warn: #9a5b00;
+    --bad: #a3302a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #15181b;
+      --fg: #e6e8ea;
+      --muted: #9aa3ad;
+      --rule: #2c3238;
+      --soft: #1d2226;
+      --accent: #4fb3ad;
+      --good: #6cc68a;
+      --warn: #e0a64b;
+      --bad: #e57b74;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font: 17px/1.6 Charter, "Iowan Old Style", Georgia, serif;
+  }
+  main { max-width: 74ch; margin: 0 auto; padding: 2.5rem 16px 4rem; }
+  h1 { font-size: 1.9rem; line-height: 1.25; margin: 0 0 0.4rem; }
+  h2 { font-size: 1.35rem; margin: 2.8rem 0 0.6rem; padding-top: 0.6rem; border-top: 1px solid var(--rule); }
+  h3 { font-size: 1.1rem; line-height: 1.35; margin: 2rem 0 0.2rem; }
+  p, li { margin: 0.5rem 0; }
+  a { color: var(--accent); }
+  .sub { color: var(--muted); margin: 0 0 1.6rem; }
+  .tldr { border-left: 3px solid var(--accent); padding: 0.2rem 0 0.2rem 1rem; margin: 1.4rem 0; }
+  .meta { font: 13px/1.5 -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; color: var(--muted); margin: 0 0 0.6rem; }
+  .hi { color: var(--bad); font-weight: 600; }
+  .md { color: var(--warn); font-weight: 600; }
+  .lo { color: var(--muted); font-weight: 600; }
+  .yes { color: var(--good); font-weight: 600; }
+  dl.f { display: grid; grid-template-columns: 8.5ch 1fr; gap: 0.35rem 1rem; margin: 0.6rem 0 1rem; }
+  dl.f dt { font: 600 13px/1.9 -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; color: var(--muted); }
+  dl.f dd { margin: 0; }
+  dl.f dd p:first-child { margin-top: 0; }
+  dl.f dd ol, dl.f dd ul { margin: 0.2rem 0; padding-left: 1.2rem; }
+  @media (max-width: 560px) {
+    dl.f { grid-template-columns: 1fr; gap: 0.1rem; }
+    dl.f dt { margin-top: 0.6rem; }
+  }
+  .tbl { overflow-x: auto; margin: 0.8rem 0 1rem; }
+  table.data { border-collapse: collapse; width: 100%; font: 14px/1.45 -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; font-variant-numeric: tabular-nums; }
+  table.data th, table.data td { padding: 0.4rem 0.55rem; border-bottom: 1px solid var(--rule); text-align: left; vertical-align: top; }
+  table.data th { color: var(--muted); font-weight: 600; }
+  table.data td.n { text-align: right; white-space: nowrap; }
+  table.data tr.hl td { background: var(--soft); }
+  table.data td:first-child { font-weight: 600; }
+  table.cmp td:first-child { width: 17%; }
+  table.cmp td:nth-child(2) { width: 36%; }
+  code { font: 0.86em/1.4 ui-monospace, Menlo, monospace; background: var(--soft); padding: 0.05em 0.3em; border-radius: 3px; overflow-wrap: anywhere; }
+  .note { color: var(--muted); font-size: 0.92rem; }
+  ol.plan > li { margin: 0.9rem 0; }
+  ol.plan .meta { margin: 0.15rem 0 0; }
+  ol.refs { font-size: 0.92rem; padding-left: 1.4rem; }
+  ol.refs li { margin: 0.35rem 0; overflow-wrap: anywhere; }
+  footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--rule); color: var(--muted); font-size: 0.9rem; overflow-wrap: anywhere; }
+</style>
+</head>
+<body>
+<main>
+
+<h1>US model review: v9 and v10 against the field</h1>
+<p class="sub">Critique of the kosningaspá US election model against the benchmark forecasts and statistical and political-science theory · 2 November 2026 · branch <code>claude/usa-midterms-model-feasibility-0897e9</code></p>
+
+<div class="tldr">
+<p>The model's point forecasts hold up against the published forecasters. Its 2024 presidential state Brier score was 0.026, against 0.034–0.037 for 538, Silver Bulletin and the Economist. In all 8 Senate fits it beat the final-28-day poll mean.</p>
+<p>What it gets wrong is how sure it is about errors that hit many races at once. The review traces that overconfidence to three structural causes:</p>
+<ul>
+<li>It reads the coming cycle's industry-wide poll bias off the first polls after the last election, then treats it as known to within 1–2 points. On the eve of 2020 that bias stood at 0.0 ± 1.0 points; the generic-ballot polls then missed by +5.3.</li>
+<li>The error that all of a cycle's Senate polls share beyond the national miss is subtracted out when the race poll error is calibrated, and nothing else in the model carries it.</li>
+<li>Race poll errors are independent of each other, where every benchmark ties them together by partisan lean, region or incumbency.</li>
+</ul>
+<p>The cheapest first step is an ablation: fixing the learnt mean of the industry bias, which no benchmark estimates, at zero. The Senate race prior is a separate problem. It is weak because of real candidate effects and two coding errors, not because of lopsided races.</p>
+</div>
+
+<h2>How the review was run</h2>
+<p>The review ran as two workflows over a shared brief. The brief described the model as fitted, its backtest results and 17 known difficulties, D1–D17. In the first workflow, four research agents gathered 77 sourced notes on four topics:</p>
+<ul>
+<li>FiveThirtyEight and Silver Bulletin;</li>
+<li>the Economist, Gelman and Linzer;</li>
+<li>the science of polling error;</li>
+<li>midterm and Senate theory.</li>
+</ul>
+<p>In the second, four critics read the brief, the notes and the 800-line Stan file through one lens each: benchmark models, Bayesian statistics and computation, polling-error science, and political-science theory. Each lens had its own verifier, which checked every finding against the code and the notes and tried to refute it.</p>
+<p>Of 40 findings, 37 were confirmed and 3 refuted, and the verifiers corrected details in most of the confirmed ones. I then re-measured the numbers the main claims rest on. The re-measurement confirmed one claim more strongly than the critics stated it and refuted another. Below, the findings are merged into seven themes, most consequential first. The corrections are folded in, and the refuted claims are listed near the end.</p>
+
+<h2>Against the benchmarks</h2>
+<p>A component-by-component comparison, from the research notes. "This model" is v9, and v10 differs only in letting the industry bias follow an AR(1).</p>
+<div class="tbl">
+<table class="data cmp">
+<thead><tr><th>Component</th><th>This model</th><th>Benchmarks</th></tr></thead>
+<tbody>
+<tr><td>National trend</td><td>One forward random walk in log(D/R), integrated out by a Kalman filter; constant volatility, about 1.3 margin points a month</td><td>538 2020: drift grows with (days left)<sup>1/3</sup> times an eight-part uncertainty index <a href="#r3">[3]</a>. Morris 2024: the average state margin moves about 12 points over a campaign <a href="#r4">[4]</a>. Economist: walk runs backward from an election-day prior <a href="#r8">[8]</a></td></tr>
+<tr><td>Election-day prior</td><td>Flat (SD 10 on the log scale): no economy, approval or midterm term</td><td>Economist and Morris 2024 keep a fundamentals prior of about 6 margin points <a href="#r4">[4]</a> <a href="#r9">[9]</a>. 538 2020 fades its fundamentals weight from 26% at 100 days to 0% on Election Day <a href="#r3">[3]</a>. Linzer reverts to a historical forecast far from the election <a href="#r11">[11]</a></td></tr>
+<tr class="hl"><td>Industry-wide poll bias</td><td>A learnt mean (<code>mu_bar</code>) plus a per-cycle shock, identified by anchoring past cycles to results. For the forecast cycle the posterior SD is 0.7–1.7 points</td><td>None estimates a mean. 538 2018 and 2020 simulate a zero-centred national error <a href="#r1">[1]</a> <a href="#r3">[3]</a>. Morris 2024 draws a t<sub>5</sub> bias of about 3.8 margin points <a href="#r4">[4]</a>. The Economist uses a zero-mean bias vector with a hand-set scale <a href="#r9">[9]</a></td></tr>
+<tr><td>House effects</td><td>One lean per pollster, anchored to results, walking across cycles, shared by national and race polls</td><td>538: partly corrected relative to the average; partisan sponsors start about 4 points toward the sponsor (2018) <a href="#r1">[1]</a>. Silver Bulletin: about 1.7 for generic-ballot sponsors <a href="#r6">[6]</a>. Economist: current cycle only, plus mode and population effects <a href="#r8">[8]</a></td></tr>
+<tr><td>Likely and registered voters</td><td>Off: v5's offsets failed their test; each release keeps one population</td><td>538: shifts registered-voter polls using paired releases, about 1 point toward Trump in 2020 <a href="#r3">[3]</a>; a time-varying GAM offset in its 2023 averages <a href="#r5">[5]</a>. Economist: one offset per population <a href="#r8">[8]</a></td></tr>
+<tr><td>Repeated and tracking polls</td><td>De-duplicated by pollster and end date; overlapping waves count as independent samples</td><td>538 drops overlapping tracking dates. A firm's polls within 14 days share one poll's weight <a href="#r5">[5]</a>. Morris caps effective n at 1,500 <a href="#r4">[4]</a>. Silver Bulletin caps a firm's weight by voters contacted <a href="#r6">[6]</a></td></tr>
+<tr class="hl"><td>Correlated race error</td><td>Only through the national walk and the industry bias; each race's poll error (<code>kappa</code>) is independent</td><td>538 2018: regional and demographic, incumbency-status and national layers <a href="#r1">[1]</a>. 538 2020: permutations over 13 state variables <a href="#r3">[3]</a>. Economist: correlation from past results and demographics, negatives set to zero, blended with a constant <a href="#r9">[9]</a></td></tr>
+<tr><td>Tails</td><td>Gaussian throughout</td><td>538 and Morris: fat-tailed common terms <a href="#r3">[3]</a> <a href="#r4">[4]</a>. Gelman et al. argue for high correlation over independent fat tails <a href="#r10">[10]</a></td></tr>
+<tr><td>Race prior</td><td>Regression on presidential lean, incumbency (−1, 0, +1) and an independent flag; residual SD about 14 margin points; poll weight 0.90</td><td>538 2018: previous margin, generic ballot, fundraising, a 50/25/25 lean blend, scandals, challenger experience; Deluxe adds expert ratings <a href="#r1">[1]</a>. Hummel and Rothschild: experience dummies, the seat's previous result, a midterm term <a href="#r22">[22]</a></td></tr>
+</tbody>
+</table>
+</div>
+<p>One component goes the other way. Anchoring past cycles to their results gives this model absolute pollster leans and lets it learn its error scales from data, which Jackman showed is the only way to identify house effects <a href="#r16">[16]</a>. The benchmarks fix their scales by hand or estimate leans relative to the average. The question the review keeps returning to is whether the learnt <em>mean</em> bias, which this anchoring makes possible, helps.</p>
+
+<h2>Findings, most consequential first</h2>
+
+<h3>The forecast cycle's industry bias is far too certain</h3>
+<p class="meta"><span class="hi">High</span> · difficulties D2, D3, D13 · all four lenses</p>
+<dl class="f">
+<dt>Problem</dt>
+<dd><p>No result yet pins the bias of the cycle being forecast. The model infers it from polls taken soon after the last election, through a walk that moves about 1.3 points a month, and then assumes it holds unchanged for two years. Three things break that assumption:</p>
+<ul>
+<li><strong>A real post-election swing is booked as bias.</strong> In midterms the out-party almost always gains as the campaign goes on <a href="#r19">[19]</a> <a href="#r22">[22]</a>, and the model reads that swing as polls being wrong.</li>
+<li><strong>Bias drifts within a cycle.</strong> Shirani-Mehr et al. allow linear drift <a href="#r12">[12]</a>, and the Economist has a within-cycle AR(1) nonresponse term with ρ near 0.7 <a href="#r9">[9]</a>.</li>
+<li><strong>The likely-voter share rises late.</strong> It goes from 10–26% of polls early in a cycle to 39–81% in the final eight weeks.</li>
+</ul>
+<p>On top of this sits <code>mu_bar</code>, a mean bias learnt from 4–6 anchors that no benchmark estimates. AAPOR describes the direction of a year's poll miss as close to a coin flip <a href="#r14">[14]</a>. In the presidential fits the learnt correction pushed the 2016 and 2020 forecasts past the polls toward the Democrats, in the direction the polls were already wrong.</p></dd>
+<dt>Evidence</dt>
+<dd><p>Measured from the Senate fits' draws (post-warmup only). The table shows the industry bias of the forecast cycle in margin points, positive meaning polls overstate D, and compares it with how the generic-ballot polls actually missed.</p>
+<div class="tbl"><table class="data">
+<thead><tr><th>Fit</th><th>Bias posterior</th><th>90% interval</th><th>Realised miss</th><th>z</th></tr></thead>
+<tbody>
+<tr><td>Eve 2018</td><td class="n">+2.7 ± 1.7</td><td class="n">−0.1 to +5.5</td><td class="n">−0.6</td><td class="n">−1.9</td></tr>
+<tr class="hl"><td>Eve 2020</td><td class="n">0.0 ± 1.0</td><td class="n">−1.6 to +1.7</td><td class="n">+5.3</td><td class="n">+5.1</td></tr>
+<tr><td>Eve 2022</td><td class="n">+0.3 ± 1.6</td><td class="n">−2.4 to +2.8</td><td class="n">+2.3</td><td class="n">+1.2</td></tr>
+<tr><td>Eve 2024</td><td class="n">+4.1 ± 0.7</td><td class="n">+3.0 to +5.3</td><td class="n">–</td><td class="n">–</td></tr>
+<tr><td>2026</td><td class="n">+2.0 ± 1.4</td><td class="n">−0.3 to +4.3</td><td class="n">–</td><td class="n">–</td></tr>
+</tbody></table></div>
+<p>The realised miss is the final-60-day generic-ballot poll mean against the House vote, from 538's raw_polls. It therefore also carries that window's mix of pollsters, and there are only three cycles to compare, so the z-scores are approximate.</p>
+<p>From one cycle to the next, the same miss varies with an SD of 2.7 points over 1998–2022. The model's posterior SD for the coming cycle is 0.7–1.7. The 13-cycle history test, which chose the stationary bias over the walk and the AR(1), holds only the final 60 days of each cycle. Its forecast-cycle bias therefore comes from the prior, so that test never exercised this mechanism.</p></dd>
+<dt>Fix</dt>
+<dd><ol>
+<li><strong>Ablate <code>mu_bar</code>.</strong> Run two arms: <code>mu_bar</code> = 0 with Gaussian shocks, and <code>mu_bar</code> = 0 with heavy-tailed shocks. If a mean survives, estimate it only from cycles before the fit's window, and give it a predictive SD, not the standard error of the mean. Cycles inside the window are already in the likelihood, so using them again counts the data twice. <em>Run 2 November: the mean survives (step 2 of the order of work).</em></li>
+<li><strong>Let the walk move more on both sides of each election.</strong> Give each step the variance v<sub>t</sub> + a<sub>pre</sub>K<sub>pre,t</sub> + a<sub>post</sub>K<sub>post,t</sub>, where K sums e<sup>−d/L</sup> over the step's days and d counts the days to the next election or since the last (L about 30 days, 60 as a check). The industry bias is constant within an epoch, so poll movement inside the windows identifies a<sub>pre</sub> and a<sub>post</sub> without drawing on it. a<sub>post</sub> lets opinion move in the gap between a result and the first polls after it, which the bias now absorbs; a<sub>pre</sub> widens the run to election day and loosens each closed epoch's end. The window fits identify both, the history fits (final 60 days only) only a<sub>pre</sub>. The current fits cannot settle it: their smoothed walk moves 1.30, 1.23 and 1.25 points a month before, after and away from elections, which a constant-volatility walk would show either way. Two confounds push the same way: a late switch to likely-voter samples and herding would inflate a<sub>pre</sub>, and post-election changes in who answers polls would inflate a<sub>post</sub>, so both err toward wider intervals. On the bias side, a within-cycle linear drift, ξ<sub>e</sub>·u added to each poll's offset, is the alternative: closed epochs pin ξ from both ends, so the forecast cycle's ξ inherits a learnt spread. <em>Run 2 November with L = 30: the polls pull both windows toward zero where they say anything, and the windows widen the walk, not the bias (2020 eve bias SD 1.0 to 1.1, z +5.1 to +4.7), so they do not reach this miss (step 3 of the order of work).</em></li>
+<li><strong>Add a zero-centred, heavy-tailed common term</strong> on the forecast cycle; Morris uses t<sub>5</sub>. Put the t on the scalar log(D/R) coordinate and map it to the zero-sum pair. An elementwise <code>student_t</code> on a <code>sum_to_zero_vector</code> gives roughly t<sub>11</sub> tails at two-thirds of the intended variance.</li>
+</ol></dd>
+<dt>Test</dt>
+<dd>Test on the generic-ballot 2018–24 eve and 4-week fits (6 of 8 intervals cover now) and on the Senate 2018–24 fits. The history test cannot see this mechanism. Success means forecast-cycle z-scores within about ±2 and the 2020 eve interval covering. The fix is refuted if the jump or drift parameters sit at zero and coverage does not move.</dd>
+<dt>Caveats</dt>
+<dd>The 2024 fits read a +4.1 bias and scored well: Senate eve error was 2.81 against the poll mean's 4.88. A wider bias will give back some of that point accuracy. A midterm drift and an election-day midterm prior encode the same penalty, so use one or the other, not both.</dd>
+</dl>
+
+<h3>The error all of a cycle's race polls share is calibrated away</h3>
+<p class="meta"><span class="hi">High</span> · D1, D7, D9 · benchmark, statistics and polling lenses</p>
+<dl class="f">
+<dt>Problem</dt>
+<dd><p><code>sigma_race_poll</code> (4.5 margin points for the Senate, 3.0 for states) is computed from each past race's mean poll miss, minus its cycle's mean race miss (<code>senate_races.R:154–159</code>). Subtracting the cycle mean assumes the industry bias carries it. But the industry bias is pinned by <em>national</em> polls against national results, and past race polls are not in the fit. So any part of a cycle's race-poll miss beyond the national miss sits in neither term.</p>
+<p>In the forecast cycle that part shifts every race's polls together. The forecast keeps 90% of it, with no variance attached. AAPOR found 2020 Senate and governor polls overstated the Democrats by 6.0 points on the margin, against 3.9 for national presidential polls <a href="#r13">[13]</a>. Every benchmark has some term that moves all races at once.</p></dd>
+<dt>Evidence</dt>
+<dd>Senate 90% coverage: eve 2020 24 of 35, 4 weeks out 2020 29 of 35, eve 2022 29 of 35. The size of this missing term is open. Against the generic ballot the 2020 gap was small (6.0 against a 5.3 miss), so 2020's under-coverage is mostly the previous finding.</dd>
+<dt>Fix</dt>
+<dd>Measure the term first: no fit is needed. Per cycle in raw_polls, take the mean race miss minus that cycle's national miss. Then s<sub>η</sub> = √(max(var − mean sampling variance, 0) / 2). If s<sub>η</sub> exceeds about 1 margin point, add one cycle-level race-type error that race polls see and the election-day deviation does not. That is about 10 Stan lines, and the generated-quantities step subtracts it before the poll-weight formula. Expect a weak ridge with the mean of the per-race shocks.</dd>
+<dt>Measured</dt>
+<dd>s<sub>η</sub> = 3.1 margin points over the 13 cycles 1998–2022, and 2.0 over 2008–2022 (<code>race_type_error_sd</code> in <code>senate_races.R</code>), so the term is warranted. It also has a mean of −3.1: Senate polls missed further toward the Republicans than the same cycle's generic-ballot polls in 10 of 13 cycles. Most of that is the generic ballot's own Democratic miss in 1998–2006 (2.6 to 6.1 points, while Senate polls missed by −5.8 to +1.0); since 2008 the mean is −1.0. State presidential polls against national ones give s<sub>η</sub> = 0.5, so the presidential fits need no flat race-type term.</dd>
+<dt>Test</dt>
+<dd>Senate 2020 eve coverage should reach at least 30 of 35, with 2018 and 2024 eve staying at or above 31 of 34 and 32 of 34. Refuted if s<sub>η</sub> comes out under 1 point.</dd>
+</dl>
+
+<h3>Race errors are independent of each other</h3>
+<p class="meta"><span class="hi">High for seats, electoral votes and control probabilities</span> · D1, D9, D12 · all four lenses</p>
+<dl class="f">
+<dt>Problem</dt>
+<dd>Each race's poll error <code>kappa</code> is drawn on its own (<code>us_midterm_v10.stan:686–689</code>, <code>:782–783</code>). The literature finds three kinds of structure:
+<ul>
+<li>within a state, poll errors in different offices correlate at 0.39–0.50 <a href="#r12">[12]</a>;</li>
+<li>2020 state poll error loaded on partisan lean, at 5.3 points in states Trump won by more than 5 against 3.5 in Clinton's, and the gradient survived demographic controls <a href="#r13">[13]</a>;</li>
+<li>independent district noise gave Kastellec, Gelman and Chandler a seat SD of about 4 seats against an observed error of about 9 <a href="#r23">[23]</a>.</li>
+</ul></dd>
+<dt>Evidence</dt>
+<dd>Presidential state coverage was 32 of 51 in both 2016 and 2020. The model gave Clinton 0.91 where 538's polls-only model gave 0.71, with nearly the same state calls (45 against 46 correct). The 2026 Senate interval is 48–55 seats.</dd>
+<dt>Fix</dt>
+<dd><ol>
+<li><strong>A lean-loading factor.</strong> One scalar per cycle, κ<sub>r</sub> += s<sub>b</sub> z<sub>b</sub> lean<sub>r</sub>. This is the only piece that adds marginal variance.</li>
+<li><strong>A similarity correlation.</strong> Σ = σ<sub>rp</sub><sup>2</sup>(ρC + (1 − ρ)I), where C is the correlation of the states' past presidential-lean series with negatives set to zero: the Economist's recipe.</li>
+<li><strong>An incumbency-status loading,</strong> as in 538 2018. 538 describes it as polls underrating Republican incumbents, so a party-specific form fits that better than a symmetric one.</li>
+</ol>
+Keep the per-race terms Gaussian. The analytic integration survives: sample the polled deviations from an MVN with covariance σ<sub>race</sub><sup>2</sup>I + Σ, and draw the true deviations from their MVN conditional.</dd>
+<dt>Caveats</dt>
+<dd>Correlation alone leaves per-state coverage and Brier almost unchanged: it fixes the joint quantities (P(D), electoral votes, seats). The Economist had correlated errors and still gave 2020 P(D) 0.97.</dd>
+<dt>Test</dt>
+<dd>A year-level PIT of the mean signed race error and of seat and electoral-vote totals, over 9 years of existing draws with no refits. Then presidential P(D) for 2016 and 2020, and Senate seat-interval coverage.</dd>
+</dl>
+
+<h3>The race prior is weak because of candidates and coding, not lopsided races</h3>
+<p class="meta"><span class="md">Medium–high</span> · D6, D8 · political-science, benchmark and statistics lenses, plus my re-measurement</p>
+<dl class="f">
+<dt>Problem</dt>
+<dd>The regression's residual SD is about 14 margin points, so the forecast puts a weight of 0.90 on polls. Thinly polled races (Louisiana and Mississippi, one poll each in 2026) rest on this weak prior. Two critics blamed lopsided races and the missing year effects. I refitted the 343 history races by OLS; they match the fit's <code>d_hist</code> to 6×10<sup>−15</sup>. The data say otherwise:</dd>
+<dt>Evidence</dt>
+<dd><div class="tbl"><table class="data">
+<thead><tr><th>Variant</th><th>Races</th><th>Residual SD</th><th>Poll weight</th></tr></thead>
+<tbody>
+<tr><td>As fitted</td><td class="n">343</td><td class="n">14.0</td><td class="n">0.906</td></tr>
+<tr><td>Plus year effects</td><td class="n">343</td><td class="n">13.8</td><td class="n">–</td></tr>
+<tr><td>Races predicted within 15 points</td><td class="n">128</td><td class="n">15.4</td><td class="n">–</td></tr>
+<tr><td>All other races</td><td class="n">215</td><td class="n">13.1</td><td class="n">–</td></tr>
+<tr class="hl"><td>Without Indiana 2006 and Alaska 2022</td><td class="n">341</td><td class="n">12.3</td><td class="n">0.882</td></tr>
+<tr><td>Same, robust scale (1.4826 × MAD)</td><td class="n">341</td><td class="n">10.5</td><td class="n">0.845</td></tr>
+</tbody></table></div>
+<p>Residual SDs are on log(D/R) and converted to margin points near an even race. Year means of the residuals run from −4.3 (2018) to +2.5 (2012). Close races are noisier, not quieter. What inflates the SD is two coding errors:</p>
+<ul>
+<li><strong>Indiana 2006.</strong> Lugar had no Democratic opponent, so the Libertarian candidate fills the D slot as if he were an independent, with a residual of −86.5 points. Arkansas 2020 is the same case at −9.1.</li>
+<li><strong>Alaska 2022.</strong> Murkowski against Tshibaka was a Republican-on-Republican race, so the D slot holds the Democrat's small share, with a residual of −82.4.</li>
+</ul>
+<p>Removing those two drops kurtosis from 12.1 to 7.1. The tails that remain are real candidate effects: strong incumbents, weak challengers, Lieberman in 2006. Genuine independents (Sanders, King, Orman 2014, McMullin 2022, Osborn 2024) are coded as intended.</p></dd>
+<dt>Fix</dt>
+<dd><ol>
+<li><strong>Coding.</strong> When no Democrat runs, only a listed caucusing or Democrat-backed independent fills the D slot. Drop same-party contests, and exempt King's races from any third-party-share rule.</li>
+<li><strong>Candidate covariates</strong> in Hummel and Rothschild's form <a href="#r22">[22]</a>, the main lever:
+<ul>
+<li>the difference in the candidates' prior offices (a former governor gains about 10.8 vote-share points; an incumbent against an inexperienced challenger about 12.8 since 1984);</li>
+<li>the seat's previous result;</li>
+<li>appointed against elected incumbents.</li>
+</ul>
+That is about 700 entries hand-coded from Wikipedia (CC BY-SA), within the open-licence rule.</li>
+<li><strong>A Student-t likelihood on the history.</strong> Kurtosis is still 7 after the fixes. Use the t's implied SD as <code>sigma_race</code> in the Gaussian forecast layer: a t on the per-race shocks would break the integrated-kappa algebra.</li>
+</ol></dd>
+<dt>Test</dt>
+<dd>Leave-one-cycle-out error of the history regression; Hummel and Rothschild reach about 11 margin points MAE with no polls. Then Senate 2018–24 error in races where the poll mean and the regression differ by more than 10 points. Among the close 2026 races those are Ohio, Alaska and Kansas, whose regression margins are R+9.9, R+11.7 and R+13.7 against polls of D+2.7 to D+3.0.</dd>
+</dl>
+
+<h3>The national layer has no election-day prior and one volatility</h3>
+<p class="meta"><span class="md">Medium</span> · D6, D11, D16 · all four lenses</p>
+<dl class="f">
+<dt>Problem</dt>
+<dd><ul>
+<li><strong>The midterm penalty is missing.</strong> The election-day factor is flat, which drops the most regular fact in US midterms: the president's party's Senate candidates do about 2.8 vote-share points worse <a href="#r22">[22]</a>, and the out-party gains House vote share in nearly every midterm <a href="#r20">[20]</a>.</li>
+<li><strong>The anchor is a different quantity.</strong> It is the raw House popular vote, which differs from generic-ballot preference through uncontested seats. That gap is booked as poll bias, and it reaches the Senate deviations, because <code>d_hist</code> is measured against the same table.</li>
+<li><strong>Volatility is constant.</strong> The walk has one volatility for the whole cycle, where 538 lets drift grow with time left and an uncertainty index <a href="#r3">[3]</a>.</li>
+</ul></dd>
+<dt>Fix</dt>
+<dd><ul>
+<li><strong>For midterms, add one of two terms.</strong> Either a drift toward the out-party in the walk's predict step, or an election-day prior from a two-term House-vote regression (previous House margin plus the president's party, 1946 onward). Both encode the same penalty, so not both. Its 2026 direction is unknown until fitted: a prior built on 2024's House vote may pull toward the Republicans.</li>
+<li><strong>For presidential fits,</strong> an election-day prior of SD about 6, as the Economist and Morris use. A model on real disposable income alone misreads 2020's transfer-driven spike.</li>
+<li><strong>Adjust the anchor.</strong> Use an uncontested-adjusted House vote in the anchors, <code>d_hist</code> and scoring together.</li>
+<li><strong>A campaign-season factor</strong> on the step variance: the election-window variance of the industry-bias fixes, whose pre-election half the history fits also identify.</li>
+<li><strong><code>anchor_n</code> = 2×10<sup>5</sup> is harmless:</strong> it adds about 0.2 points of uncertainty. Close D11 with one refit at the real vote count.</li>
+</ul></dd>
+<dt>Test</dt>
+<dd>The generic-ballot 4-weeks-out arm (the 2022 interval missed) and an added 100-days-out arm. The eve history MAE should stay near 2.09.</dd>
+</dl>
+
+<h3>Poll handling: smaller, cheaper fixes</h3>
+<p class="meta"><span class="md">Medium</span> to <span class="lo">low</span> · D4, D5, D7, D15</p>
+<div class="tbl"><table class="data">
+<thead><tr><th>Issue</th><th>What is wrong</th><th>Fix</th></tr></thead>
+<tbody>
+<tr><td>Likely- and registered-voter pairs</td><td>The builders keep one population per pollster and date, discarding the paired releases from which 538 and Silver Bulletin estimate the offset</td><td>Keep the pairs and add a likelihood on their difference. Put the registered-voter row in the filter with its offset, or condition the difference on the likely-voter row, since the samples are nested. Then switch population back on</td></tr>
+<tr><td>Partisan sponsors</td><td><code>normalise_house</code> strips "(D)" and "(R)" from pollster names (<code>build_generic_ballot.R:68</code>). A new firm's lean prior in 2026 is about 4.3 points wide, so a sponsor's lean passes almost fully into one-poll races</td><td>A sponsor term of about 2 ± 1 margin points toward the sponsor, between Silver Bulletin's 1.7 and 538's 4</td></tr>
+<tr><td>Tracking polls</td><td>Overlapping waves enter as independent samples, and the weekly grid stacks them. The per-house dispersion may read too small because the walk absorbs the overlap (reasoned, not measured)</td><td>Drop overlapping waves, which needs start dates in the generic-ballot tables, or share weight within 14 days as 538 does</td></tr>
+<tr><td>Stale race polls</td><td>A race's deviation is fixed for the cycle, so a June poll counts as much as an October one</td><td>Add per-race poll-age variance ω²·age<sub>r</sub>, with ω estimated outside the fit from the 538 race-poll archive. Inside the fit it is not identified</td></tr>
+<tr><td>Pollster count</td><td>One <code>sigma_race_poll</code> for a race with one firm and a race with twelve</td><td>Per-race SD² = s<sub>η</sub>² + s<sub>ξ</sub>²/k<sub>r</sub>, fitted on raw_polls</td></tr>
+<tr><td>House-lean persistence</td><td>Leans walk with full persistence (fitted epoch-to-epoch correlation about 0.74); race polls and national polls share one lean</td><td>An AR(1) on house leans, with about 160 houses to identify it, and a race-type lean offset</td></tr>
+<tr><td>Dispersion by poll type</td><td>One overdispersion φ per pollster for national and race polls</td><td>A per-type multiplier on φ</td></tr>
+</tbody></table></div>
+
+<h3>Sampling and testing</h3>
+<p class="meta"><span class="md">Medium</span> · D10, D13, D14 · statistics lens</p>
+<dl class="f">
+<dt>Sampler</dt>
+<dd>Every industry shock is non-centred, while the anchors pin the closed epochs. That is the curved geometry the project's own partial-centring rule warns about. Centre the closed epochs and keep only the forecast cycle non-centred. This explains the divergences in the 2000–2004 history fits; the 1998 fit has no closed epoch with polls, so its divergences need another cause. The unused population offsets cost gradient time but do not distort the geometry.</dd>
+<dt>Testing</dt>
+<dd><ul>
+<li>The stationary and AR(1) biases differ by 0.04 CRPS over 13 cycles. Report paired per-cycle differences with standard errors before calling a winner; keeping the nesting AR(1) costs little.</li>
+<li>Add year-level PIT checks, since state calls within a year are not independent events <a href="#r10">[10]</a>. Added as <code>score_year_pit.R</code> (2 November): the presidential forecasts are too moderate in lopsided states, so the unweighted state mean minus the national margin fell outside its narrow interval in 2012 and 2016 (PITs 0.014 and 0.000).</li>
+<li>Record the Stan file's git SHA and the builder options for the 2026 forecast now, and score 3 November 2026 as the first prospective test.</li>
+</ul></dd>
+</dl>
+
+<h2>What the model does well</h2>
+<ul>
+<li><strong>The Kalman filter is exact and fast.</strong> The walk is integrated out by a Kalman filter with forward-filter backward-sample draws, exact under the Gaussian approximation and 4–16 minutes per fit. That is what made 13 history fits, 8 Senate fits and 5 presidential fits practical on a laptop.</li>
+<li><strong>Anchoring makes the error scales learnable.</strong> Result anchors identify each past cycle's industry bias, so pollster leans are tied to actual results and not only to each other. In 2022–24 Rasmussen sat 8.4 points to the Republican side of the industry and Morning Consult 2.6 to the Democratic side. The error scales are therefore learnt rather than hand-set.</li>
+<li><strong>The race layer separates two kinds of error.</strong> It splits a race's shared poll error from its true deviation, in the spirit of Shirani-Mehr et al.'s total-survey-error decomposition. The calibrated sizes, 4.5 and 3.0, match the race-level bias the paper implies, about 5 and 3 <a href="#r12">[12]</a>. The generated-quantities conditional recovers the prior exactly for an unpolled race.</li>
+<li><strong>The inputs do not leak.</strong> <code>sigma_race_poll</code> comes from earlier cycles, history races from earlier years, leans from earlier elections, and polls end before the forecast date.</li>
+<li><strong>Versions are tested, not argued.</strong> v5's walk, v6's stationary bias and v10's AR(1) were ranked on the same history, and a feature that failed its test (v5's population offsets) stays off.</li>
+</ul>
+
+<h2>Suggested order of work</h2>
+<p>Cheapest and most diagnostic first. Steps 1–3 need no new data and only a few Stan lines. Each later step is judged against the backtests already built.</p>
+<ol class="plan">
+<li><strong>Fix the D-slot coding and measure s<sub>η</sub>.</strong> Recode Indiana 2006, Arkansas 2020 and Alaska 2022. Compute the race-type common error from raw_polls, and add year-level PIT scoring of the existing draws.
+<p class="meta">About 60 R lines; no Stan changes; refit Senate only if the coding changes the history set.</p>
+<p class="meta"><strong>Done 2 November 2026.</strong> Seven miscoded races dropped (343 history races to 336; residual SD 14.0 to 12.1), and the eight Senate backtests and 2026 refitted: errors moved by under 0.1 point except Maine's unpolled King races, which moved 6–8 points toward the result; 2026 P(D ≥ 51) stays 0.72. s<sub>η</sub> = 3.1 (2.0 since 2008) for the Senate, 0.5 for presidential states. Year-level PITs: Senate seats calibrated, the national margin not (eve PITs 0.97, 0.001, 0.19, 0.94); presidential electoral votes at 0.03 in 2016. Details in <code>usa/README.md</code>.</p></li>
+<li><strong>Ablate <code>mu_bar</code>.</strong> Run <code>mu_bar</code> = 0 with Gaussian shocks, then with a scalar t<sub>5</sub> shock, on the history, Senate and presidential backtests.
+<p class="meta">A data switch and about 10 Stan lines; 26 refits per arm. Refuted if history CRPS rises by more than 0.1 without cutting the 2016 and 2020 presidential national errors.</p>
+<p class="meta"><strong>Done 2 November 2026</strong> (<code>us_midterm_v11.stan</code>). History CRPS rose from 1.64 to 1.81 (paired +0.16, SE 0.38); the 2016 and 2020 presidential national errors fell from 2.6 and 4.7 to 1.7 and 4.3; the Senate fits did not move; t<sub>5</sub> changed nothing measurable. Not refuted, but not worth it: the learnt mean stays the default. Neither arm touched the 2020 eve national PIT (0.001 in every arm), which points the overconfidence at how the forecast cycle's bias is read off the early polls, step 3's target. Details in <code>usa/README.md</code>.</p></li>
+<li><strong>Widen the forecast-cycle bias where it is blind.</strong> Add election-window volatility on both sides of each election (a<sub>pre</sub>, a<sub>post</sub>), or a within-cycle drift.
+<p class="meta">About 15 Stan lines (the Kalman call, the step to election day and the backward sampler) and 15 R lines; judged on generic-ballot 2018–24 and Senate coverage, on the z-scores above and on the year-level PITs.</p>
+<p class="meta"><strong>Done 2 November 2026</strong> (<code>us_midterm_v12.stan</code>, the windows half). The polls do not ask for the windows: in the Senate fits the posterior medians run 0.5–1.5 against the prior's 1.35, lower where the polls say anything. The prior's spread widens the walk, not the bias: Senate national coverage rises from 5 to 7 of 8, but the 2020 eve national PIT moves only from 0.001 to 0.006 and its bias z from +5.1 to +4.7; history CRPS −0.02 (SE 0.03); 2026 P(D ≥ 51) 0.720 against 0.719. Not a success and not refuted; the windows stay off. The 2020 cycle's polls sat at the last result (D+8.4 against D+8.7) and the miss showed only at the next one, so what is left is the drift, or the zero-centred forecast-cycle term of fix 3 above. Details in <code>usa/README.md</code>.</p></li>
+<li><strong>Correlate race errors.</strong> Add the race-type common term (if s<sub>η</sub> &gt; 1), the lean loading, then the similarity matrix.
+<p class="meta">About 40 Stan lines and 40 R lines; judged on joint quantities: P(D), seat and electoral-vote coverage.</p></li>
+<li><strong>Strengthen the race prior.</strong> Add candidate experience and the seat's previous result, with a t likelihood on history.
+<p class="meta">About 700 hand-coded entries; no Stan changes beyond the t.</p></li>
+<li><strong>Add a midterm term.</strong> Either the drift or the election-day prior, not both.</li>
+<li><strong>Tidy the poll handling and the sampler.</strong> Paired likely- and registered-voter releases, sponsors, tracking overlap and poll age; centre the closed epochs.</li>
+<li><strong>Later: let the volatility evolve.</strong> A walk whose log step variance is itself a slow random walk, or a mixture of step scales, would let the data say when opinion moved fast; the election windows of step 3 are a fixed special case of it.
+<p class="meta">A research step, after step 3 shows whether the fixed windows help. The Kalman filter already takes a step-variance vector, so HMC can sample the log-volatilities and feed them in; the cost is one parameter per step and a harder posterior geometry.</p>
+<p class="meta">Step 3 found no extra poll movement around elections for the windows to fit, and in 2020 the polls ended near the last result (D+8.4 against D+8.7) while the vote moved 5.6 points, so a volatility that adapts to large poll movements would have had none to adapt to; its case rests on shocks inside a cycle.</p></li>
+</ol>
+
+<h2>Claims that did not survive</h2>
+<ul>
+<li><strong>"Race-only pollsters' leans are prior-only."</strong> They are identified relative to the other pollsters of the same race, through its shared deviation. They fall back on the prior only in races polled by no pollster that also polls the generic ballot.</li>
+<li><strong>"A sponsored poll gets the industry prior of about 2.1 points."</strong> The new-firm prior is about 4.3 points wide in 2026, because the house walk runs from the first epoch. That makes the case for a sponsor term stronger.</li>
+<li><strong>"Every reference model anchors election day on a prior of about 6 points."</strong> Only the Economist and Morris 2024 do. 538 2020 fades its fundamentals to zero by Election Day, and Linzer's recommended prior implies an SD of at least about 11 points.</li>
+<li><strong>"Lopsided races and missing year effects inflate <code>sigma_race</code>."</strong> Refuted by the re-measurement above. Year effects take 0.2 points off the SD, and close races are noisier than lopsided ones.</li>
+<li><strong>Corrections to proposed code.</strong> Several proposals needed fixing before they would work:
+<ul>
+<li>an elementwise t on a zero-sum pair has the wrong tails and variance;</li>
+<li>an <code>inv_gamma(5/2, 5/2)</code> variance multiplier has mean 5/3 and would inflate the calibrated scale, so use <code>inv_gamma(5/2, 3/2)</code>;</li>
+<li>a <code>mu_bar</code> prior built from raw_polls cycles inside the fit's window counts them twice;</li>
+<li>a midterm drift together with a midterm prior counts the penalty twice.</li>
+</ul></li>
+</ul>
+
+<h2>Sources</h2>
+<p class="note">The 538 pages now redirect to ABC News, and some were read through mirrors of the original posts. Notes marked "recall" in the research file were not fetched and are not relied on here.</p>
+<ol class="refs">
+<li id="r1">Silver, N. (2018). How FiveThirtyEight's House and Senate models work. <a href="https://www.goodreads.com/author_blog_posts/17309492-how-fivethirtyeight-s-house-and-senate-models-work?tab=book">mirror</a></li>
+<li id="r2">Silver, N. (2018). How FiveThirtyEight's 2018 midterm forecasts did. <a href="https://www.goodreads.com/author_blog_posts/17660988-how-fivethirtyeight-s-2018-midterm-forecasts-did?tab=book">mirror</a></li>
+<li id="r3">Silver, N. (2020). How FiveThirtyEight's 2020 presidential forecast works. <a href="https://www.goodreads.com/author_blog_posts/20219709-how-fivethirtyeight-s-2020-presidential-forecast-works-and-what-s-diff">mirror</a></li>
+<li id="r4">Morris, G. E. (2024). How 538's 2024 presidential election forecast works. <a href="https://abcnews.com/538/538s-2024-presidential-election-forecast-works/story?id=110867585">ABC News / 538</a></li>
+<li id="r5">538 (2023). How our polling averages work. <a href="https://www.goodreads.com/author_blog_posts/23839809-how-our-polling-averages-work">mirror</a></li>
+<li id="r6">Silver Bulletin. How Silver Bulletin calculates our polling averages. <a href="https://www.natesilver.net/p/silver-bulletin-polling-average-methodology">natesilver.net</a></li>
+<li id="r7">Silver Bulletin (2024). Model methodology update. <a href="https://www.natesilver.net/p/model-methodology-2024">natesilver.net</a></li>
+<li id="r8">Heidemanns, M., Gelman, A. &amp; Morris, G. E. (2020). An updated dynamic Bayesian forecasting model for the US presidential election. Harvard Data Science Review 2(4). <a href="https://par.nsf.gov/servlets/purl/10392336">PDF</a></li>
+<li id="r9">The Economist. us-potus-model (Stan model and 2016 backtest scripts). <a href="https://github.com/TheEconomist/us-potus-model">GitHub</a></li>
+<li id="r10">Gelman, A., Hullman, J., Wlezien, C. &amp; Morris, G. E. (2020). Information, incentives, and goals in election forecasts. Judgment and Decision Making 15(5). <a href="https://mucollective.northwestern.edu/files/2020%20-%20Gelman,%20Information,%20Incentives%20and%20Goals%20in%20election%20forecasts.pdf">PDF</a></li>
+<li id="r11">Linzer, D. A. (2013). Dynamic Bayesian forecasting of presidential elections in the states. JASA 108, 124–134 (read as the 2012 preprint). <a href="https://ocf.berkeley.edu/~vsheu/Midterm%202%20Project%20Files/Linzer-prespoll-May12.pdf">PDF</a></li>
+<li id="r12">Shirani-Mehr, H., Rothschild, D., Goel, S. &amp; Gelman, A. (2018). Disentangling bias and variance in election polls. JASA 113, 607–614. <a href="https://5harad.com/papers/polling-errors.pdf">PDF</a></li>
+<li id="r13">AAPOR Task Force on 2020 Pre-Election Polling (2021). Report. <a href="https://aapor.org/wp-content/uploads/2022/11/AAPOR-Task-Force-on-2020-Pre-Election-Polling_Report-FNL.pdf">PDF</a></li>
+<li id="r14">AAPOR Ad Hoc Committee (2017). An evaluation of 2016 election polls in the US. <a href="https://aapor.org/wp-content/uploads/2023/01/AAPOR-2016-Election-Polling-Report.pdf">PDF</a></li>
+<li id="r15">Gelman, A., Goel, S., Rivers, D. &amp; Rothschild, D. (2016). The mythical swing voter. QJPS 11, 103–130. <a href="https://sites.stat.columbia.edu/gelman/research/published/swingers.pdf">PDF</a></li>
+<li id="r16">Jackman, S. (2005). Pooling the polls over an election campaign. Australian Journal of Political Science 40(4), 499–517. <a href="https://www.uh.edu/hobby/eitm/_docs/past-lectures/2015-lectures/harold-clarke/pooling-the-polls-over-an-election-campaign.pdf">PDF</a></li>
+<li id="r17">Walsh, E., Dolfin, S. &amp; DiNardo, J. (2009). Lies, damn lies, and pre-election polling. AER Papers &amp; Proceedings 99(2), 316–322. <a href="https://public.websites.umich.edu/~jdinardo/AEA-PP-Walsh-Dolfin-DiNardo.pdf">PDF</a></li>
+<li id="r18">Clinton, J., Lapinski, J. &amp; Trussler, M. (2022). Reluctant Republicans, eager Democrats? POQ 86(2), 247–269 (abstract only). <a href="https://academic.oup.com/poq/article/86/2/247/6593045">POQ</a></li>
+<li id="r19">Bafumi, J., Erikson, R. S. &amp; Wlezien, C. (2010). Balancing, generic polls and midterm congressional elections. Journal of Politics 72, 705–719 (abstract only). <a href="https://digitalcommons.dartmouth.edu/facoa/2359">abstract</a></li>
+<li id="r20">Erikson, R. S. (2018). On the 2018 midterms, Statistical Modeling blog (via a search summary). <a href="https://statmodeling.stat.columbia.edu/?p=40393">blog</a></li>
+<li id="r21">Abramowitz, A. I. (2025). Generic ballot model gives Democrats strong chance to take back House in 2026. <a href="https://www.rasmussenreports.com/public_content/political_commentary/commentary_by_alan_i_abramowitz/generic_ballot_model_gives_democrats_strong_chance_to_take_back_house_in_2026">article</a></li>
+<li id="r22">Hummel, P. &amp; Rothschild, D. (2014). Fundamental models for forecasting elections at the state level. Electoral Studies 35, 123–139 (read as the 2013 AEA draft). <a href="https://www.aeaweb.org/conference/2013/retrieve.php?pdfid=88">PDF</a></li>
+<li id="r23">Kastellec, J., Gelman, A. &amp; Chandler, J. (2008). Predicting and dissecting the seats-votes curve in the 2006 US House election. PS (read as the 2007 draft). <a href="https://ww2.amstat.org/mam/08/HouseElection.pdf">PDF</a></li>
+<li id="r24">Pew Research Center (2024). 2024 elections show more partisan splits between states' presidential and Senate votes. <a href="https://www.pewresearch.org/short-reads/2024/11/26/2024-elections-show-more-partisan-splits-between-states-presidential-and-senate-votes-than-in-recent-past/">Pew</a></li>
+</ol>
+
+<footer>
+<p>Review of <code>usa/stan/us_midterm_v10.stan</code> and its builders at commit <code>8872a5d</code>. It ran as two workflows: research (4 agents, run <code>wf_fc5e4bcb-8bc</code>) and critique with verification (8 agents, run <code>wf_5893dfdf-759</code>). The brief, the 77 research notes, the 40 findings with their verdicts, and the re-measurement script are kept outside the repository in <code>/Users/brynjolfurjonsson/.claude-reviews/usa-midterms-feasibility-2026-11-02/review/</code>. The bias z-scores come from the post-warmup draws of the Senate fits in the same folder's <code>senate/</code>.</p>
+</footer>
+
+</main>
+</body>
+</html>

@@ -114,8 +114,10 @@ With this ordering, ESS-per-leapfrog roughly doubles (~0.5 → ~1.3). Multi-seed
 gave treedepth {0.1%, 0.0%, 33%} and ESS/lf {1.3, 1.2, 1.0} — robust efficiency, with
 treedepth still seed-variable (a production fit saw 48%, 0 divergences, healthy ESS).
 
-**Production order:** `S, D, M, C, B, F, V, J, P, Annað` (set in `fit_polling_watch.R`
-with a `stopifnot` guard).
+**Production order:** `S, D, M, C, B, F, V, J, P, Annað` (set in `read_polling_watch_data()`
+in `R/data.R`, with a `stopifnot` guard). Under the anchored walk (§9) the order picks the
+reference party, the last party that every election result reports (Annað), not a pivot
+of the sampled coordinates.
 
 ---
 
@@ -156,10 +158,94 @@ computes marginal + precision-based partial correlations, clusters parties by co
 
 | file | role |
 |---|---|
-| `Stan/polling_watch_v4.stan` | **production** model |
+| `Stan/polling_watch_v5_epoch.stan` | **production** model since 28 October 2026: v4 with pollster bias per epoch between election results (§10) |
+| `Stan/polling_watch_v4.stan` | one pollster bias over the whole window; production until 28 October 2026, kept as v5's comparison |
 | `Stan/polling_watch_v2.stan`, `_v3.stan`, `_v3b.stan` | invariant alternatives (kept as documentation) |
 | `Stan/polling_watch_v4_sym.stan` | rejected (symmetric beta0); kept for the record |
 | `Stan/polling_watch_v4_gmrf.stan` | rejected (GMRF-state; reintroduced a scale funnel); kept for the record |
 | `Stan/polling_watch.stan` | original drop-one model (superseded; not invariant) |
-| `R/fit_polling_watch.R` | fits v4 with size-descending order + locale guard; writes `pi_smooth` + `Omega` parquets |
+| `R/fit_polling_watch.R` | fits v5 to `read_polling_watch_data()` from 1 January 2016, the election forecast's window (fixed party order + locale guard), with the epochs of `prepare_polling_watch_epochs()`; writes the `pi_smooth`, `Omega` and per-epoch house-effect parquets, the epoch table, the fit, `diagnostics.json` and the polls it saw |
+| `R/sampler_check/fit_polling_watch_headless.R`, `equivalence_polling_watch.R`, `compare_polling_watch.R` | the §9 and §10 checks: headless fits (optionally leave-future-out), the point-by-point equivalence check, old against new |
 | `R/make_correlation_plots.R` | renders the clustered marginal + partial (precision) correlation heatmap from `Omega` |
+
+---
+
+## 9. Anchored walk (28 October 2026)
+
+The forward walk from `beta0` could not sample a window with several election results. Each
+result (~200,000 votes) pins the sum of every innovation before it, a dense, stiff direction
+that a diagonal metric meets only with a small step: on the full series (2013–2026, four
+results) the step size fell to 0.002 and every transition reached the depth-11 cap, so the
+live fit started at the 2021 election.
+
+v4 now samples its walk as the election forecast does (`Stan/CLAUDE.md`, Parameterisation; the
+model's PARAMETERISATION note). The walk is written in the levels of the P − 1 parties other
+than the last party every result reports (Annað in the production order, §5). It is anchored
+at the election dates, which are centred and stored relative to each result's log-ratios, with
+non-centred Brownian bridges between them, a backward walk before the first and a forward walk
+after the last. log φ is bounded above at 20. The posterior is the old one conditioned on
+log φ < 20: `R/sampler_check/equivalence_polling_watch.R` passes on the full series and on the
+window from 2021, and no posterior draw of either fit reaches the bound.
+
+On the window from 2021, with the same data, the minimum bulk ESS per 1,000 gradients rises
+from 0.43 to 2.57 (×5.9) and a transition takes 127 leapfrog steps instead of 511. On the full
+series it rises from 0.029 to 0.615 (×20.9): the old model reached the depth-11 cap on every
+transition, the new one never reaches its cap of 12 and has no divergent transition
+(`R/sampler_check/RESULTS.md`, Fylgisvakt: anchored walk).
+
+## 10. Epoch-varying pollster bias in production (28 October 2026)
+
+Fylgisvakt is the election forecast's poll model without its fundamentals: a summary of where
+the polls stand between elections, which metill.is replaces with the forecast as an election
+nears. Since 28 October 2026 `R/fit_polling_watch.R` fits `polling_watch_v5_epoch.stan` on the
+forecast's window, the polls and results since 1 January 2016, instead of v4 from the 2021
+election.
+
+v4 corrects every poll with one industry bias and one effect per house, learnt from all the
+results in the window. v5 lets that bias move: each epoch, the stretch between two results,
+has its own industry bias and house effects, and these random-walk from one epoch to the next
+with the sampled scales `tau_mu` and `tau_house` (the model's header). The epoch since the
+last result has no result at its end, so its bias rests on the first polls after that result,
+read against it, and on the previous epoch's bias spread by the taus. Before §9, v5 kept the
+forward walk and could not sample several results; it now samples v4's anchored walk, at
+v4's cost (`R/sampler_check/RESULTS.md`, Fylgisvakt: epoch-varying pollster bias). On the
+production window `tau_mu` has posterior median 0.15 and `tau_house` 0.05, on the logit scale
+per epoch.
+
+Leave-future-out fits on the production window, each to the polls dated before an election,
+with the shares at the last poll date scored against the official national result
+(`R/sampler_check/score_polling_watch_backtest.R`; percentage points over the ten parties):
+
+The rows marked "live" fit v4 from the previous result, the window the live fit read until
+now (with the anchored v4, whose posterior is the forward walk's apart from the bound on log φ,
+§9).
+
+| Election | Model and window | MAE | RMSE | CRPS | 90% coverage | 90% width |
+|---|---|---|---|---|---|---|
+| 2024 | v4 from the 2021 result (live) | 1.08 | 1.34 | 0.770 | 5 of 10 | 2.73 |
+| 2024 | v4 from 2016 | 1.01 | 1.35 | 0.844 | 4 of 10 | 1.60 |
+| 2024 | v5 from 2016 | 0.73 | 0.85 | 0.542 | 7 of 10 | 2.86 |
+| 2021 | v4 from the 2017 result (live) | 1.78 | 2.19 | 1.293 | 7 of 10 | 6.45 |
+| 2021 | v4 from 2016 | 1.12 | 1.51 | 0.854 | 8 of 10 | 5.53 |
+| 2021 | v5 from 2016 | 1.29 | 1.50 | 0.865 | 10 of 10 | 6.33 |
+
+v5 scores better than the live configuration at both elections. On the same window, in 2024 v4's intervals were too narrow and its largest error was Samfylkingin's (−3.2 points
+against v5's −0.9): it applied to the 2021–2024 polls a correction learnt mostly from earlier
+epochs. In 2021 the window holds only the 2016 and 2017 results, the bias is poorly pinned in
+both models, and they tie on CRPS. Putting a fraction w of the industry bias back into the
+shares (softmax(log π + w·mu_gamma), the hedge of the forecast) helps v4 in 2024, at best to an
+MAE of 0.83 at w = 0.4, still worse than v5 without it, and hurts both models in 2021; v5 scores
+best at w = 0 in both. Two elections are thin evidence: on the same window v5 wins one clearly
+and ties the other, and it beats the live configuration at both. The case for it is that pollster bias does move between elections, which v4 cannot represent.
+
+The switch widens Samfylkingin's lead, mostly by lowering Sjálfstæðisflokkurinn. On the polls to
+27 September 2026 the live configuration, v4 from the 2021 election, puts Samfylkingin at 28.1%
+(90% interval 26.3–30.1) and Sjálfstæðisflokkurinn at 26.6% (24.8–28.4), Samfylkingin ahead
+with probability 0.80; v5 puts them at 27.5% (24.8–30.2) and 24.8% (22.6–27.2), Samfylkingin
+ahead with probability 0.86. The longer window alone would have reversed the order: v4 from
+2016 puts them at 25.8% (24.1–27.6) and 27.2% (25.5–28.9), Samfylkingin ahead with
+probability 0.22. v4's industry bias, learnt over 2016–2024, says the polls understate
+Sjálfstæðisflokkurinn by 0.19 on the logit scale and overstate Samfylkingin by 0.05; v5's bias
+for the epoch since the 2024 election says they understate both, Sjálfstæðisflokkurinn by 0.11
+and Samfylkingin by 0.04, so it lifts Sjálfstæðisflokkurinn less than v4 does and lifts
+Samfylkingin a little where v4 lowered it.

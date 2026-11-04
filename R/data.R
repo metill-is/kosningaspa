@@ -239,6 +239,7 @@ get_election_data <- function() {
     date_build(2016, 10, 29), "Píratar", 0.145,
     date_build(2016, 10, 29), "Sósíalistaflokkurinn", 0
   )
+  valid_votes <- c("2021-09-25" = 199730, "2017-10-28" = 196259, "2016-10-29" = 189648)
 
   out <- d |>
     bind_rows(
@@ -250,10 +251,13 @@ get_election_data <- function() {
       )
     ) |>
     mutate(
-      n = p * c(199730, 196259, 189648),
+      # WHY: matched by date; a bare vector of the three totals recycles over all 30 rows.
+      n = p * unname(valid_votes[as.character(date)]),
       fyrirtaeki = "Kosning"
     ) |>
     select(-p)
+  stopifnot("an election date has no valid-votes total" = !anyNA(out$n))
+  out
 }
 
 #' @export
@@ -351,6 +355,86 @@ read_polling_data <- function() {
       )
     ) |>
     arrange(date, fyrirtaeki, flokkur)
+}
+
+#' Polls and election results for the Fylgisvakt fit (`R/fit_polling_watch.R`):
+#' `data/polling_data.csv` (from January 2013, with the 2016, 2017 and 2021 results)
+#' and `data/post_election_polls.csv` (the 2024 result and the polls since), from
+#' `start` on, or all of them when `start` is NULL. The election house comes first and
+#' the parties in a fixed order, Annað last; a party outside the order (a new party) goes
+#' just before Annað, with a message. The order does not change the posterior; it is
+#' pinned so that the fit is the same under any locale.
+#' @export
+read_polling_watch_data <- function(start = NULL) {
+  box::use(
+    readr[read_csv],
+    here[here],
+    dplyr[select, filter, mutate, bind_rows, arrange, tibble, summarise, n_distinct],
+    forcats[fct_relevel, as_factor]
+  )
+  pre_election <- read_polling_data() |>
+    select(-lokadagur, -p)
+  post_election_path <- here("data", "post_election_polls.csv")
+  post_election <- if (file.exists(post_election_path)) {
+    read_csv(post_election_path, show_col_types = FALSE) |>
+      mutate(fyrirtaeki = factor(fyrirtaeki), flokkur = factor(flokkur)) |>
+      select(-lokadagur, -p)
+  } else {
+    tibble()
+  }
+  polling_data <- bind_rows(pre_election, post_election)
+  fixed_order <- c(
+    "Samfylkingin",
+    "Sjálfstæðisflokkurinn",
+    "Miðflokkurinn",
+    "Viðreisn",
+    "Framsóknarflokkurinn",
+    "Flokkur Fólksins",
+    "Vinstri Græn",
+    "Sósíalistaflokkurinn",
+    "Píratar"
+  )
+  if (!is.null(start)) {
+    polling_data <- filter(polling_data, date >= start)
+  }
+  polling_data <- polling_data |>
+    mutate(
+      fyrirtaeki = fct_relevel(as_factor(fyrirtaeki), "Kosning"),
+      flokkur = fct_relevel(as_factor(flokkur), fixed_order) |>
+        fct_relevel("Annað", after = Inf)
+    ) |>
+    arrange(date, fyrirtaeki, flokkur)
+  # WHY: a poll is keyed by date and house downstream, and MMR has two polls dated
+  # 2013-05-16. Same-day polls by one house are merged into one by summing their
+  # counts, which requires them to report the same parties.
+  dup <- polling_data |>
+    summarise(rows = n_distinct(n > 0), k = length(n), .by = c(date, fyrirtaeki, flokkur)) |>
+    filter(k > 1)
+  if (nrow(dup) > 0) {
+    stopifnot("same-day polls by one house report different parties" = all(dup$rows == 1))
+    message(
+      "read_polling_watch_data: merged same-day polls by one house: ",
+      paste(unique(paste(dup$date, dup$fyrirtaeki)), collapse = ", ")
+    )
+    polling_data <- polling_data |>
+      summarise(n = sum(n), .by = c(date, fyrirtaeki, flokkur)) |>
+      arrange(date, fyrirtaeki, flokkur)
+  }
+  # WHY: under a C locale fct_relevel() no-ops silently on the Icelandic names
+  levs <- levels(polling_data$flokkur)
+  stopifnot(
+    "party order not applied: fct_relevel no-opped (check the LC_ALL locale)" =
+      levs[1] == "Samfylkingin" && levs[length(levs)] == "Annað",
+    "the window holds no election result" = any(polling_data$fyrirtaeki == "Kosning")
+  )
+  unlisted <- setdiff(levs, c(fixed_order, "Annað"))
+  if (length(unlisted) > 0) {
+    message(
+      "read_polling_watch_data: parties outside the fixed order, placed before Annað: ",
+      paste(unlisted, collapse = ", ")
+    )
+  }
+  polling_data
 }
 
 #' @export

@@ -50,10 +50,13 @@ if (!file.exists(draws_path)) {
 }
 
 pi_draws <- read_parquet(draws_path)
+# The fit runs from 2016; the time-series plot keeps showing the stretch since the
+# 2021 election.
+plot_start <- clock::date_build(2021, 9, 25)
 
 # Load raw polling data for overlay (combine pre- and post-election)
 pre_election <- read_polling_data() |>
-  filter(date >= clock::date_build(2021, 9, 25))
+  filter(date >= plot_start)
 
 post_election_path <- here("data", "post_election_polls.csv")
 if (file.exists(post_election_path)) {
@@ -73,6 +76,7 @@ polling_data <- bind_rows(pre_election, post_election) |>
 #### Plot 1: Time Series ####
 
 plot_summary <- pi_draws |>
+  filter(dags >= plot_start) |>
   reframe(
     median = median(value),
     coverage = c(0.5, 0.8, 0.95),
@@ -143,7 +147,7 @@ p_timeseries <- plot_summary |>
     x = NULL,
     y = NULL,
     title = "Kannanavaktin",
-    subtitle = glue("Þróun fylgis frá {format_date(min(pi_draws$dags))} til {format_date(max(pi_draws$dags))}"),
+    subtitle = glue("Þróun fylgis frá {format_date(min(plot_summary$dags))} til {format_date(max(pi_draws$dags))}"),
     caption = caption
   )
 

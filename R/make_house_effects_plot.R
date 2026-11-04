@@ -1,4 +1,5 @@
-# House- and industry-bias plots from the newest polling_watch_v4 fit.
+# House- and industry-bias plots from the newest Fylgisvakt fit (polling_watch_v5_epoch),
+# for the bias epoch since the last election.
 # Three views of the same gamma / mu_gamma draws written by fit_polling_watch.R:
 #   1. logit scale (model-native)                -> Figures/polling_watch_house_effects.png
 #   2. pp vs 2024 election result (fixed p0)      -> Figures/polling_watch_house_effects_pp.png
@@ -33,7 +34,7 @@ industry_label <- "Sameiginleg skekkja (öll fyrirtæki)"
 
 caption <- str_c(
   "Mynd frá kannanavaktinni á www.metill.is", "\n",
-  "Húsáhrif (gamma) og sameiginleg skekkja (mu_gamma) úr polling_watch_v4 líkaninu"
+  "Húsáhrif (gamma) og sameiginleg skekkja (mu_gamma) úr polling_watch_v5_epoch líkaninu"
 )
 
 # Locate the most recent fit that persisted house-effect draws.
@@ -53,8 +54,11 @@ stopifnot(
 colors <- party_tibble() |>
   select(flokkur, litur)
 
-gamma_draws <- read_parquet(here("data", output_date, "polling_watch_gamma.parquet"))
-mu_draws <- read_parquet(here("data", output_date, "polling_watch_mu_gamma.parquet"))
+# WHY: v5 writes the bias per epoch; the plots show the epoch since the last election
+# (a v4 fit, with no epoch column, has one bias for its whole window)
+last_epoch <- function(draws) if ("epoch" %in% names(draws)) filter(draws, epoch == max(epoch)) else draws
+gamma_draws <- read_parquet(here("data", output_date, "polling_watch_gamma.parquet")) |> last_epoch()
+mu_draws <- read_parquet(here("data", output_date, "polling_watch_mu_gamma.parquet")) |> last_epoch()
 pi_draws <- read_parquet(here("data", output_date, "polling_watch_draws.parquet"))
 
 # --- Baselines for the percentage-point views ---
@@ -73,6 +77,15 @@ election_rows <- {
     filter(date == max(date))
 }
 election_date <- unique(election_rows$date)
+# WHY: an epoch exists only once it holds a poll, so a fit made before the first poll
+# after an election ends at the epoch before it, which the captions would misdate
+epochs_path <- here("data", output_date, "polling_watch_epochs.csv")
+if (file.exists(epochs_path)) {
+  last_epoch_start <- read_csv(epochs_path, show_col_types = FALSE) |>
+    filter(epoch == max(epoch)) |>
+    pull(first_poll)
+  stopifnot("the fit has no poll after the last election" = last_epoch_start > election_date)
+}
 baseline_election <- election_rows |>
   transmute(flokkur, p0 = n / sum(n))
 
@@ -101,8 +114,10 @@ pp_summary <- function(base, join_by) {
       mutate(num = p0 * exp(value)) |>
       mutate(p_biased = num / sum(num), .by = all_of(grp)) |>
       mutate(diff = p_biased - p0) |>
-      summarise(median = median(diff), q5 = quantile(diff, 0.05), q95 = quantile(diff, 0.95),
-                .by = all_of(setdiff(c(grp, "flokkur"), ".draw")))
+      summarise(
+        median = median(diff), q5 = quantile(diff, 0.05), q95 = quantile(diff, 0.95),
+        .by = all_of(setdiff(c(grp, "flokkur"), ".draw"))
+      )
   }
   list(
     gamma = softmax_diff(gamma_draws, c(".draw", "fyrirtaeki")),
@@ -115,7 +130,10 @@ pp_cur <- pp_summary(baseline_current_draws, c(".draw", "flokkur"))
 facet_levels <- c(industry_label, sort(setdiff(unique(gamma_sum$fyrirtaeki), industry_label)))
 
 party_order_of <- function(mu_tbl) {
-  mu_tbl |> filter(flokkur != "Annað") |> arrange(median) |> pull(flokkur)
+  mu_tbl |>
+    filter(flokkur != "Annað") |>
+    arrange(median) |>
+    pull(flokkur)
 }
 
 make_forest <- function(gamma_tbl, mu_tbl, party_order, x_scale, title, subtitle, xlab) {
@@ -148,20 +166,28 @@ make_forest <- function(gamma_tbl, mu_tbl, party_order, x_scale, title, subtitle
 n_rows <- ceiling(length(facet_levels) / 3)
 fig_h <- 1.8 + 1.9 * n_rows
 pp_scale <- function() {
-  scale_x_continuous(labels = scales::label_number(scale = 100, accuracy = 1),
-                     guide = ggh4x::guide_axis_truncated())
+  scale_x_continuous(
+    labels = scales::label_number(scale = 100, accuracy = 1),
+    guide = ggh4x::guide_axis_truncated()
+  )
 }
 save_fig <- function(p, file) {
   ggsave(p, filename = here("Figures", file), width = 12, height = fig_h, bg = "#fdfcfc")
 }
 
+# WHY: each bias vector sums to zero over all ten parties, so 0 on this scale is their
+# mean, not "no bias", and the sign does not say whether a house over- or understates a
+# party; the pp views do
 p_logit <- make_forest(
   gamma_sum, mu_sum, party_order_of(mu_sum),
   scale_x_continuous(guide = ggh4x::guide_axis_truncated()),
   "Skekkja kannanafyrirtækja eftir flokkum",
-  glue("Húsáhrif úr kannanavaktinni (polling_watch_v4), keyrt {format_date(as.Date(output_date))}.\n",
-       "Fyrsti reitur: sameiginleg skekkja allra fyrirtækja. Strik = 90% óvissubil."),
-  "Skekkja á logit-kvarða  (0 = engin kerfisbundin skekkja; jákvætt = ofmetur flokkinn)"
+  glue(
+    "Húsáhrif úr kannanavaktinni (polling_watch_v5_epoch) frá kosningunum {format_date(election_date)}, keyrt {format_date(as.Date(output_date))}.\n",
+    "Fyrsti reitur: sameiginleg skekkja allra fyrirtækja. Strik = 90% óvissubil.\n",
+    "Formerki gildanna segir ekki til um hvort fyrirtækið ofmeti eða vanmeti flokkinn; það sýna myndirnar í prósentustigum."
+  ),
+  "Skekkja á logit-kvarða (0 = meðaltal allra tíu flokka, „Annað“ meðtalið)"
 )
 save_fig(p_logit, "polling_watch_house_effects.png")
 
@@ -169,8 +195,10 @@ p_pp_elec <- make_forest(
   pp_elec$gamma, pp_elec$mu, party_order_of(pp_elec$mu),
   pp_scale(),
   "Skekkja kannanafyrirtækja í prósentustigum",
-  glue("Húsáhrifum beitt á kosningaúrslitin {format_date(election_date)} sem grunnlínu.\n",
-       "Frávik = skekkjuð könnun - raunúrslit (prósentustig). Strik = 90% óvissubil."),
+  glue(
+    "Húsáhrifum beitt á kosningaúrslitin {format_date(election_date)} sem grunnlínu.\n",
+    "Frávik = skekkjuð könnun - raunúrslit (prósentustig). Strik = 90% óvissubil."
+  ),
   "Frávik frá raunúrslitum (prósentustig); jákvætt = fyrirtækið ofmetur flokkinn"
 )
 save_fig(p_pp_elec, "polling_watch_house_effects_pp.png")
@@ -179,8 +207,10 @@ p_pp_cur <- make_forest(
   pp_cur$gamma, pp_cur$mu, party_order_of(pp_cur$mu),
   pp_scale(),
   "Skekkja kannanafyrirtækja í prósentustigum",
-  glue("Húsáhrifum beitt á fylgi fylgisvaktarinnar ({format_date(current_date)}) í hverjum pósteríordrætti.\n",
-       "Frávik = vænt könnun - rétt fylgi (prósentustig). Strik = 90% óvissubil."),
+  glue(
+    "Húsáhrifum beitt á fylgi fylgisvaktarinnar ({format_date(current_date)}) í hverjum pósteríordrætti.\n",
+    "Frávik = vænt könnun - rétt fylgi (prósentustig). Strik = 90% óvissubil."
+  ),
   "Frávik frá réttu fylgi (prósentustig); jákvætt = fyrirtækið ofmetur flokkinn"
 )
 save_fig(p_pp_cur, "polling_watch_house_effects_pp_current.png")

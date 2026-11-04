@@ -21,7 +21,10 @@ box::use(
     update_constituency_data
   ],
   R / stan_data[
-    prepare_stan_data
+    prepare_stan_data,
+    n_pred_k_2024,
+    poll_dates,
+    kjordaemi_obs_k
   ]
 )
 
@@ -93,25 +96,10 @@ constituency_weights <- constituency_data |>
   column_to_rownames("date")
 
 N_obs_k <- nrow(constituency_weights)
-obs_k <- rep(1:N_obs_k, each = ncol(constituency_weights))
+obs_k <- kjordaemi_obs_k(stan_data, constituency_weights, polling_data, constituency_data)
 
 
-n_pred_thjodskra <- tibble(
-  kjordaemi = c("Norðvestur", "Norðaustur", "Suður", "Suðvestur", "Reykjavík Suður", "Reykjavík Norður"),
-  kjorsokn = c(82.0, 81.0,78.8, 81.2, 79.2, 78.8) / 100,
-  kjorskra = c(22348, 31039, 40994, 79052, 47503, 47486)
-) |> 
-  slice(5, 6, 4, 1, 2, 3) |> 
-  mutate(
-    n = kjorskra * kjorsokn,
-    p = n / sum(n),
-    n_2021 = stan_data$n_pred_k,
-    p_2021 = n_2021 / sum(n_2021)
-  ) |> 
-  pull(n) |> 
-  as.integer()
-
-stan_data$n_pred_k <- n_pred_thjodskra
+stan_data$n_pred_k <- n_pred_k_2024(levels(constituency_data$kjordaemi))
 
 stan_data$constituency_weights <- constituency_weights
 stan_data$constituency_weights_pred <- constituency_weights[1, ] |> as.numeric()
@@ -225,14 +213,6 @@ fit$draws(c("beta_vnv_f", "beta_growth_f")) |>
 
 fit$summary("tau_f")
 
-fit$summary("phi_inv") |>
-  mutate(
-    house = levels(polling_data$fyrirtaeki)
-  ) |>
-  select(
-    house, mean, q5, q95
-  )
-
 fit$summary("phi_f_inv")
 
 
@@ -280,7 +260,7 @@ fit$summary("Omega") |>
 fit$summary("mu_gamma_pred")
 
 dates <- c(
-  unique(c(polling_data$date, constituency_data$date)),
+  poll_dates(polling_data, constituency_data),
   seq.Date(
     max(c(polling_data$date, constituency_data$date)) + 1,
     election_date,
@@ -569,13 +549,25 @@ p <- fit$summary("gamma") |>
   ) |>
   filter(h != 1) |>
   bind_rows(
-    fit$summary("mu_gamma") |>
+    # WHY: mu_gamma holds the first P - 2 parties; the last one's is minus their sum, as in gamma.
+    fit$draws("mu_gamma") |>
+      as_draws_df() |>
+      as_tibble() |>
+      pivot_longer(c(-.chain, -.iteration, -.draw)) |>
+      reframe(
+        p = c(parse_number(name), stan_data$P - 1),
+        value = c(value, -sum(value)),
+        .by = .draw
+      ) |>
+      summarise(
+        mean = mean(value),
+        q5 = quantile(value, 0.05),
+        q95 = quantile(value, 0.95),
+        .by = p
+      ) |>
       mutate(
-        flokkur = colnames(stan_data$y_n)[-1] |>
-          as_factor() |>
-          fct_reorder(mean),
-        fyrirtaeki = "Samtals",
-        .before = variable
+        flokkur = colnames(stan_data$y_n)[-1][p],
+        fyrirtaeki = "Samtals"
       )
   ) |>
   ggplot(aes(0, fyrirtaeki, col = fyrirtaeki)) +

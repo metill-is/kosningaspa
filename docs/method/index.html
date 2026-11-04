@@ -1,0 +1,139 @@
+<!doctype html>
+<!-- Template for index.html, filled by tools/build.py, which replaces the PARTS, N_WRITTEN and N_TOTAL placeholders (each in double braces) below. Edit this file, not index.html. -->
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kosningaspá method</title>
+<style>
+  :root{
+    --bg:#fbf9f4; --panel:#f4f1e8; --ink:#1c1b19; --muted:#6f6b62;
+    --rule:#e3ddcf; --accent:#2b6cb0; --accent-soft:#e8f0f8; --q-bar:#c2872a;
+    --done:#3f7d52; --prog:#c2872a; --todo:#bdb6a6;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#1a1916; --panel:#23211c; --ink:#ece7db; --muted:#a39d8f;
+      --rule:#33302a; --accent:#7fa3d8; --accent-soft:#1c2430; --q-bar:#caa04a;
+      --done:#7bbf8c; --prog:#d8a64e; --todo:#5f5a4e;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#1a1916; --panel:#23211c; --ink:#ece7db; --muted:#a39d8f;
+    --rule:#33302a; --accent:#7fa3d8; --accent-soft:#1c2430; --q-bar:#caa04a;
+    --done:#7bbf8c; --prog:#d8a64e; --todo:#5f5a4e;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0; background:var(--bg); color:var(--ink);
+    font-family:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,"Times New Roman",serif;
+    font-size:18px; line-height:1.6; -webkit-font-smoothing:antialiased}
+  .page{max-width:1000px; margin:0 auto; padding:0 28px 72px}
+  header.top{padding:40px 0 26px; border-bottom:1px solid var(--rule); margin-bottom:28px}
+  .kicker{font-family:ui-sans-serif,system-ui,sans-serif; font-size:.72rem; letter-spacing:.16em;
+    text-transform:uppercase; color:var(--accent); font-weight:600}
+  h1{font-size:2.15rem; line-height:1.08; margin:.16em 0 .12em; font-weight:600; letter-spacing:-.015em}
+  .sub{color:var(--muted); font-size:1.02rem; margin:0; max-width:66ch}
+  .sub.intro{margin-bottom:14px}
+  .stamp{font-family:ui-sans-serif,system-ui,sans-serif; font-size:.82rem; color:var(--muted);
+    background:var(--panel); border:1px solid var(--rule); border-left:3px solid var(--q-bar);
+    border-radius:8px; padding:10px 14px; margin-top:16px; max-width:76ch}
+  .stamp b{color:var(--ink)}
+  h2{font-family:ui-sans-serif,system-ui,sans-serif; font-size:.78rem; letter-spacing:.14em;
+    text-transform:uppercase; color:var(--muted); font-weight:600; margin:0 0 12px}
+  section.part{margin:0 0 30px}
+  ul.chapters{list-style:none; margin:0; padding:0}
+  .chapters li{display:flex; gap:12px; align-items:baseline; padding:9px 2px; border-bottom:1px solid var(--rule)}
+  .chapters .snum{font-family:ui-sans-serif,system-ui,sans-serif; font-size:.8rem; color:var(--muted); flex:none; width:2.6em}
+  .chapters a{color:var(--accent); text-decoration:none; font-weight:600}
+  .chapters a:hover{text-decoration:underline}
+  .chapters .cdesc{font-size:.95rem; margin-top:2px}
+  .chapters .crev{font-family:ui-sans-serif,system-ui,sans-serif; font-size:.76rem; color:var(--muted); margin-top:3px}
+  .chapters .st{margin-left:auto; flex:none; font-size:.8rem}
+  .dot.done{color:var(--done)} .dot.prog{color:var(--prog)} .dot.todo{color:var(--todo)}
+  ul.records{margin:0; padding-left:1.2em; font-size:.95rem}
+  ul.records li{margin:.3em 0}
+  footer{margin-top:34px; padding-top:18px; border-top:1px solid var(--rule);
+    font-family:ui-sans-serif,system-ui,sans-serif; font-size:.78rem; color:var(--muted)}
+  code{font-family:ui-monospace,"SF Mono",Menlo,Monaco,Consolas,monospace;
+    background:var(--panel); padding:1px 5px; border-radius:4px; font-size:.86em; overflow-wrap:anywhere}
+  @media (max-width:640px){ .page{padding:0 16px 56px} h1{font-size:1.8rem} }
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="top">
+    <div class="kicker">Kosningaspá · Methodology notes</div>
+    <h1>How the models work, written up</h1>
+    <p class="sub">Living notes on the kosningaspá forecast model, the Fylgisvakt polling smoother and the v2
+    work in progress: what each model assumes, how the code implements it, and what the records say about
+    why. Kept up to date as the models change, so that the author can stay current with them.
+    4 of 14 chapters written.</p>
+    <div class="stamp"><b>How to read these pages.</b> Every chapter is drafted with Claude from the code and the
+    project's records and is <b>not reviewed by the author</b> unless its stamp says so. Each page's stamp gives the
+    date it describes (kosningaspa <code>master</code> on that date); unmerged work sits in purple branch boxes,
+    recorded numbers are given with their source, and decisions are the author's, dated. The live state is
+    kosningaspa <code>master</code>.</div>
+  </header>
+
+  <section class="part">
+    <h2>Start here</h2>
+    <ul class="chapters">
+      <li><span class="snum">0.1</span><div>Kosningaspá in one place: the models and how they fit together<div class="cdesc">planned</div></div><span class="st"><span class="dot todo">○</span></span></li>
+      <li><span class="snum">0.2</span><div><a href="start/notation.html">Notation and glossary</a><div class="cdesc">A reference page. Every symbol the written chapters use, with its Stan name and the chapter that defines it; the letters that mean two things; the Icelandic terms; the parties and their order in each model; the polling houses; and the words for windows, anchors, epochs and the harness.</div><div class="crev">Not reviewed by the author. Drafted with Claude on 4 Nov 2026 from chapters 1.1, 1.4 and 3.1 and the code on master.</div></div><span class="st"><span class="dot done">●</span></span></li>
+    </ul>
+  </section>
+  <section class="part">
+    <h2>I · The forecast model</h2>
+    <ul class="chapters">
+      <li><span class="snum">1.1</span><div><a href="forecast/walk.html">The latent support walk and its election anchors</a><div class="cdesc">The forecast model&#x27;s latent state: centred log-ratio levels on the poll dates, a correlated random walk run backwards from election day, faster in the 47 days before an election, pinned by each past result with Brownian bridges between results; how parties that do not exist yet are handled; and how the walk is sampled.</div><div class="crev">Not reviewed by the author. Drafted with Claude on 4 Nov 2026 from the code on master.</div></div><span class="st"><span class="dot done">●</span></span></li>
+      <li><span class="snum">1.2</span><div>Fundamentals and their weight<div class="cdesc">planned</div></div><span class="st"><span class="dot todo">○</span></span></li>
+      <li><span class="snum">1.3</span><div>Constituency effects<div class="cdesc">planned</div></div><span class="st"><span class="dot todo">○</span></span></li>
+      <li><span class="snum">1.4</span><div><a href="forecast/seats.html">From vote shares to seats</a><div class="cdesc">How kosningaspá turns kjördæmi votes into Alþingi&#x27;s 63 seats: D&#x27;Hondt in each kjördæmi, nine adjustment seats by national D&#x27;Hondt over the lists with at least 5%, each placed where the list&#x27;s next quotient, as a share of the kjördæmi&#x27;s valid votes, is largest; the two layouts; the 2021 count traced step by step; what folding lists into Annað does; and how the allocator is tested against every official seat since 2016.</div><div class="crev">Not reviewed by the author. Drafted with Claude on 4 Nov 2026 from the code on master and the official results committed under harness/truth/.</div></div><span class="st"><span class="dot done">●</span></span></li>
+    </ul>
+  </section>
+  <section class="part">
+    <h2>II · Fylgisvakt</h2>
+    <ul class="chapters">
+      <li><span class="snum">2.1</span><div>The polling smoother, v4 to v5<div class="cdesc">planned</div></div><span class="st"><span class="dot todo">○</span></span></li>
+      <li><span class="snum">2.2</span><div>From a fit to metill.is<div class="cdesc">planned</div></div><span class="st"><span class="dot todo">○</span></span></li>
+    </ul>
+  </section>
+  <section class="part">
+    <h2>III · Pollster bias</h2>
+    <ul class="chapters">
+      <li><span class="snum">3.1</span><div><a href="bias/updating.html">How pollster bias is modelled and updated at and between elections</a><div class="cdesc">What “bias” means in the forecast model, Fylgisvakt v4 and v5, and v2&#x27;s M1; what tells each model the bias; what happens when a result arrives; the priors on the bias walk; and a worked example, D at the 2024 boundary.</div><div class="crev">Not reviewed by the author. Drafted with Claude on 29 Oct 2026 from the code on master, the v2 branch and the project&#x27;s records; edited on 4 Nov 2026 to keep only what the public repository can cite, again that day for the fixes merged in PR #15, and again for the corrected live data file and the link to chapter 1.1.</div></div><span class="st"><span class="dot done">●</span></span></li>
+      <li><span class="snum">3.2</span><div>Overdispersion and house precision<div class="cdesc">planned</div></div><span class="st"><span class="dot todo">○</span></span></li>
+    </ul>
+  </section>
+  <section class="part">
+    <h2>IV · v2 and the backtest harness</h2>
+    <ul class="chapters">
+      <li><span class="snum">4.1</span><div>The two-election backtest harness<div class="cdesc">planned</div></div><span class="st"><span class="dot todo">○</span></span></li>
+      <li><span class="snum">4.2</span><div>v2&#x27;s components<div class="cdesc">planned</div></div><span class="st"><span class="dot todo">○</span></span></li>
+    </ul>
+  </section>
+  <section class="part">
+    <h2>V · History and state</h2>
+    <ul class="chapters">
+      <li><span class="snum">5.1</span><div>Timeline and decisions<div class="cdesc">planned</div></div><span class="st"><span class="dot todo">○</span></span></li>
+      <li><span class="snum">5.2</span><div>Known issues<div class="cdesc">planned</div></div><span class="st"><span class="dot todo">○</span></span></li>
+    </ul>
+  </section>
+
+  <section class="part">
+    <h2>Related records (outside this site)</h2>
+    <ul class="records">
+      <li>The author's private project notes (Obsidian vault <code>Metill</code>, not public): <code>Kosningar/_MOC.md</code> (the strand hub), <code>Kosningar/Forecast model/model-lineage-and-known-issues.md</code>, the dated design and record notes in <code>Kosningar/Forecast model/</code>.</li>
+      <li>Repo: <code>Stan/CLAUDE.md</code> (model inventory), <code>Stan/polling_watch_variants.md</code> (the Fylgisvakt variants), <code>R/CLAUDE.md</code> (module map), <code>harness/README.md</code>.</li>
+    </ul>
+  </section>
+
+  <footer>
+    Methodology notes in <code>docs/method/</code> of the kosningaspa repository · chapter pages and this contents page are built by
+    <code>tools/build.py</code> from <code>site.json</code> and <code>_index_template.html</code> · open
+    <code>index.html</code> in a browser, no server needed (see <code>README.md</code>).
+  </footer>
+</div>
+</body>
+</html>

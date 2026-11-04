@@ -45,7 +45,7 @@ dir.create(file.path(out, "cmdstan"), recursive = TRUE, showWarnings = FALSE)
 build_stan_data <- function(cutoff) {
   box::use(
     R / data[read_polling_data, read_fundamentals_data, read_constituency_data],
-    R / stan_data[prepare_stan_data]
+    R / stan_data[prepare_stan_data, n_pred_k_2024, kjordaemi_obs_k]
   )
   keep_date <- function(date) if (is.null(cutoff)) rep(TRUE, length(date)) else date <= as.Date(cutoff)
 
@@ -90,12 +90,9 @@ build_stan_data <- function(cutoff) {
     pivot_wider(names_from = kjordaemi, values_from = p, values_fill = 0) |>
     column_to_rownames("date")
   N_obs_k <- nrow(constituency_weights)
-  obs_k <- rep(1:N_obs_k, each = ncol(constituency_weights))
-  stopifnot(length(obs_k) == stan_data$N_k)
+  obs_k <- kjordaemi_obs_k(stan_data, constituency_weights, polling_data, constituency_data)
 
-  kjorsokn <- c(82.0, 81.0, 78.8, 81.2, 79.2, 78.8) / 100
-  kjorskra <- c(22348, 31039, 40994, 79052, 47503, 47486)
-  stan_data$n_pred_k <- as.integer((kjorskra * kjorsokn)[c(5, 6, 4, 1, 2, 3)])
+  stan_data$n_pred_k <- n_pred_k_2024(levels(constituency_data$kjordaemi))
 
   stan_data$constituency_weights <- as.matrix(constituency_weights)
   stan_data$constituency_weights_pred <- constituency_weights[1, ] |> as.numeric()

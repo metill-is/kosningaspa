@@ -83,7 +83,7 @@ prepare_polling_data <- function(polling_data, constituency_data, election_date)
     c(29, 28, 25, 30)
   )
 
-  dates <- unique(c(polling_data$date, constituency_data$date))
+  dates <- poll_dates(polling_data, constituency_data)
 
   time_before_election <- case_when(
     dates <= election_dates[1] ~ election_dates[1] - dates,
@@ -264,6 +264,71 @@ prepare_polling_data <- function(polling_data, constituency_data, election_date)
     constituency_k = constituency_k,
     n_pred_k = n_pred_k
   )
+}
+
+
+#' Expected valid votes in each kjördæmi at the 2024 election (kjörskrá × expected
+#' turnout), the fit scripts' `stan_data$n_pred_k` for the election-day draws, matched to
+#' the kjördæmi factor's levels (which `constituency_k` indexes) by name.
+#'
+#' @param kjordaemi_levels the levels of the constituency data's `kjordaemi` factor.
+#' @return an integer vector, one value per level in their order; an error if a level is
+#'   not one of the six 2024 kjördæmi.
+#' @export
+n_pred_k_2024 <- function(kjordaemi_levels) {
+  votes <- data.frame(
+    kjordaemi = c("Nor\u00f0vestur", "Nor\u00f0austur", "Su\u00f0ur", "Su\u00f0vestur", "Reykjav\u00edk Su\u00f0ur", "Reykjav\u00edk Nor\u00f0ur"),
+    kjorsokn = c(82.0, 81.0, 78.8, 81.2, 79.2, 78.8) / 100,
+    kjorskra = c(22348, 31039, 40994, 79052, 47503, 47486)
+  )
+  votes <- votes[match(kjordaemi_levels, votes$kjordaemi), ]
+  stopifnot(
+    "the 2024 expected valid votes must list the kjordaemi levels, in order" =
+      identical(votes$kjordaemi, kjordaemi_levels)
+  )
+  as.integer(votes$kjorskra * votes$kjorsokn)
+}
+
+
+#' Every national and kjördæmi poll date, sorted: the dates that `date_n` and `date_k`
+#' index (`prepare_polling_data()`'s date levels), and the first D of the fit script's
+#' draw dates.
+#'
+#' @param polling_data,constituency_data the national and kjördæmi rows, each with `date`.
+#' @return a sorted Date vector without duplicates.
+#' @export
+poll_dates <- function(polling_data, constituency_data) {
+  sort(unique(c(polling_data$date, constituency_data$date)))
+}
+
+
+#' `obs_k`, the row of `constituency_weights` for each row of `y_k`, read as K consecutive
+#' rows of y_k per kjördæmi poll date, dates in the weights' row order, and the checks
+#' that this reading is right.
+#'
+#' @param stan_data `prepare_stan_data()`'s output.
+#' @param constituency_weights each kjördæmi poll date's share of its n by kjördæmi: rows
+#'   named by date, one column per kjördæmi.
+#' @param polling_data,constituency_data the rows `stan_data` was built from.
+#' @return an integer vector of length N_k; an error unless the weights' columns are the
+#'   kjördæmi levels (which `constituency_k` indexes), each row of y_k is dated as its
+#'   weights row, each date holds one poll (one house) and that poll one row per kjördæmi.
+#' @export
+kjordaemi_obs_k <- function(stan_data, constituency_weights, polling_data, constituency_data) {
+  K <- ncol(constituency_weights)
+  obs_k <- rep(seq_len(nrow(constituency_weights)), each = K)
+  date_k <- as.character(poll_dates(polling_data, constituency_data)[stan_data$date_k])
+  stopifnot(
+    "kjordaemi_obs_k: constituency_weights' columns must be the kjordaemi levels" =
+      identical(colnames(constituency_weights), levels(constituency_data$kjordaemi)),
+    "kjordaemi_obs_k: each row of y_k must take its date's row of constituency_weights" =
+      identical(date_k, rownames(constituency_weights)[obs_k]),
+    "kjordaemi_obs_k: each kjordaemi poll date must hold one poll" =
+      identical(stan_data$house_k, stan_data$house_k[(obs_k - 1) * K + 1]),
+    "kjordaemi_obs_k: each kjordaemi poll must hold one row of y_k per kjordaemi" =
+      all(table(obs_k, factor(stan_data$constituency_k, levels = seq_len(K))) == 1)
+  )
+  obs_k
 }
 
 
@@ -471,11 +536,30 @@ prepare_polling_watch_data <- function(polling_data) {
     forcats[as_factor, fct_drop]
   )
 
+  # WHY: the data hold n = 0 rows for parties before they existed, so a window that ends
+  # early (a leave-future-out fit) can hold a party no poll reports. With no data its share
+  # would come from the prior alone, taken from the parties that have data.
+  unpolled <- polling_data |>
+    summarise(total = sum(n), .by = flokkur) |>
+    filter(total == 0) |>
+    pull(flokkur)
+  if (length(unpolled) > 0) {
+    message(
+      "prepare_polling_watch_data: dropped parties no poll in the window reports: ",
+      paste(unpolled, collapse = ", ")
+    )
+  }
   polling_data <- polling_data |>
+    filter(!flokkur %in% unpolled) |>
     mutate(
       fyrirtaeki = fct_drop(fyrirtaeki),
       flokkur = fct_drop(flokkur)
     )
+  # WHY: house 1 is the election result (gamma 0, and its rows anchor the walk); without a
+  # result in the window fct_drop() would make the first pollster house 1
+  stopifnot(
+    "the window holds no election result" = levels(polling_data$fyrirtaeki)[1] == "Kosning"
+  )
 
   dates <- sort(unique(polling_data$date))
   date_factor <- factor(dates)
@@ -500,10 +584,12 @@ prepare_polling_watch_data <- function(polling_data) {
     party_index
   }
 
+  # WHY: names_sort puts the columns in the factor's level order. Without it they come in
+  # order of first appearance, which differs once a window starts before a party exists.
   y_n <- polling_data |>
     select(date, fyrirtaeki, flokkur, n) |>
     mutate(n = as.integer(round(n))) |>
-    pivot_wider(names_from = flokkur, values_from = n, values_fill = 0) |>
+    pivot_wider(names_from = flokkur, values_from = n, values_fill = 0, names_sort = TRUE) |>
     select(-date, -fyrirtaeki) |>
     as.matrix()
 
@@ -554,4 +640,60 @@ prepare_polling_watch_data <- function(polling_data) {
     party_names = party_names,
     house_names = house_names
   )
+}
+
+
+#' Bias epochs for `polling_watch_v5_epoch.stan`
+#'
+#' Adds the epoch data to what `prepare_polling_watch_data()` returns. A poll dated after
+#' the k-th election result in the window is in raw epoch k + 1. Raw epochs that hold no
+#' polls (before a result that opens the window, or after the last result until a poll
+#' follows it) are dropped by renumbering; an empty epoch between two results would merge
+#' its neighbours, so it is an error.
+#'
+#' @param prepared The list `prepare_polling_watch_data()` returns.
+#' @param estimate_tau Sample the scales of the bias shocks between epochs (`TRUE`) or fix
+#'   them (`FALSE`).
+#' @param tau_prior_scale Half-normal prior scale of the sampled shock scales.
+#' @param tau_mu_fixed,tau_house_fixed The shock scales when `estimate_tau` is `FALSE`;
+#'   both 0 gives v4's constant bias.
+#' @return `prepared` with `E`, `epoch_n` and the tau settings added to `stan_data`, and an
+#'   `epoch_table` (epoch, first and last poll date, number of polls).
+#' @export
+prepare_polling_watch_epochs <- function(
+  prepared,
+  estimate_tau = TRUE,
+  tau_prior_scale = 0.1,
+  tau_mu_fixed = 0,
+  tau_house_fixed = 0
+) {
+  box::use(
+    dplyr[arrange, n, summarise],
+    tibble[tibble]
+  )
+
+  stan_data <- prepared$stan_data
+  poll_dates <- prepared$date_mapping$date[stan_data$date_n]
+  is_poll <- stan_data$house_n > 1
+  election_dates <- sort(unique(poll_dates[!is_poll]))
+  raw_epoch <- 1L + findInterval(
+    as.numeric(poll_dates), as.numeric(election_dates),
+    left.open = TRUE
+  )
+  used <- sort(unique(raw_epoch[is_poll]))
+  stopifnot("an epoch between two elections has no polls" = all(diff(used) == 1))
+  epoch_n <- ifelse(is_poll, match(raw_epoch, used), 1L)
+
+  stan_data$E <- length(used)
+  stan_data$epoch_n <- as.integer(epoch_n)
+  stan_data$estimate_tau <- as.integer(estimate_tau)
+  stan_data$tau_prior_scale <- tau_prior_scale
+  stan_data$tau_mu_fixed <- tau_mu_fixed
+  stan_data$tau_house_fixed <- tau_house_fixed
+
+  prepared$stan_data <- stan_data
+  prepared$epoch_table <- tibble(epoch = epoch_n[is_poll], date = poll_dates[is_poll]) |>
+    summarise(first_poll = min(date), last_poll = max(date), n_polls = n(), .by = epoch) |>
+    arrange(epoch)
+  prepared
 }

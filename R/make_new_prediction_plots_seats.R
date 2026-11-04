@@ -116,16 +116,6 @@ plot_dat <- d |>
 p <- plot_dat |> 
   filter(p > 0.005) |> 
   mutate(
-    p = if_else(
-      seats == 0, 
-      p * 0.75, 
-      p
-    ),
-    p = if_else(
-      (seats == 0) & (flokkur == "Vinstri græn"),
-      p * 0.25,
-      p
-    ),
     p1 = p / max(p),
     .by = flokkur
   ) |> 

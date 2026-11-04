@@ -95,7 +95,7 @@ draws <- d |>
     CMS = C + M + S,
     CS = C + S,
     DFM = D + F + M,
-    DFS = D + M + S,
+    DFS = D + F + S,
     DS = D + S
   ) |> 
   select(-(L:C)) |> 
@@ -209,7 +209,9 @@ table_dat <- draws |>
     p_in = mean(seats >= 32),
     .by = flokkur
   )|> 
-  arrange(desc(p_in)) |> 
+  # WHY: wrap_table() pairs table and plot rows by position, and the plot orders
+  # coalitions by mean seats (fct_reorder above), so the table must too
+  arrange(desc(mean)) |> 
   mutate(
     p_in = case_when(
       p_in >= 0.99 ~ "Nánast öruggt",

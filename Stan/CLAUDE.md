@@ -16,8 +16,8 @@
 | `polling_and_fundamentals_historic.stan` | Backtesting variant for past elections | `R/modeling_utils.R` |
 | `fundamentals.stan` | Fundamentals-only (no polling data) | `R/fit_fundamentals_model.R` |
 | `base_model_no_polling_bias.stan` | Weighted average baseline (no house effects) | Comparison/baseline |
-| `polling_watch_v4.stan` | Between-election polling smoother (production; the other `polling_watch*.stan` files are superseded or comparison variants, see `polling_watch_variants.md`) | `R/fit_polling_watch.R` |
-| `polling_watch_v5_epoch.stan` | Experimental: v4 with pollster bias (industry `mu_gamma` and house effects) that random-walks across election epochs (`tau_mu`, `tau_house`, sampled or fixed; both 0 reproduces v4) | `R/fit_polling_watch_epoch.R` |
+| `polling_watch_v5_epoch.stan` | Between-election polling smoother, Fylgisvakt's production model since 28 October 2026: v4 with pollster bias (industry `mu_gamma` and house effects) that random-walks across the epochs between election results (`tau_mu`, `tau_house`, sampled or fixed; both fixed at 0 reproduces v4). Its walk and log φ are v4's (below); the posterior is unchanged by that parameterisation apart from the bound on log φ (`polling_watch_variants.md`, §10) | `R/fit_polling_watch.R`, `R/fit_polling_watch_epoch.R` |
+| `polling_watch_v4.stan` | The same smoother with one pollster bias over the whole window: Fylgisvakt's production model until 28 October 2026, kept as v5's comparison (the other `polling_watch*.stan` files are superseded or comparison variants, see `polling_watch_variants.md`). Since 28 October 2026 its walk is anchored at the election results with non-centred Brownian bridges between them, and log φ is bounded above at 20, as in the production model's Parameterisation below; the posterior is unchanged apart from that bound (`polling_watch_variants.md`, §9) | `R/fit_polling_watch_epoch.R` (`--model=v4`), `R/sampler_check/` |
 
 ## forecast_v2.stan's switches
 
@@ -56,7 +56,7 @@ Dirichlet-Multinomial state-space model with:
 | `alpha_f`, `beta_lag_f`, `beta_inc_years_f`, `beta_vnv_f`, `beta_growth_f` | Fundamentals regression coefficients (`beta_vnv_f`, `beta_growth_f`: CPI inflation and previous-year GDP growth for incumbents, `normal(0, 5)` priors) |
 | `delta_free`, `sigma_delta` | Constituency deviations from national trends, `delta_free ~ normal(0, sigma_delta[p])`, partially centred cell by cell (sampled as `delta_t`, weight `lambda_delta`): a party no kjördæmi row reports gets weight 0, non-centred, which removes the centred form's funnel |
 | `tau_f` | Fundamentals weight decay parameter |
-| `y_rep_national`, `y_rep_k` | Posterior predictive draws (national / constituency). Like the likelihood, they gather parties by identity from the full sum-to-zero vector: up to date D, `y_rep_national` draws the parties active at each date (`n_active_d`, `active_index_d`), and `y_rep_k` the parties each constituency poll reported (`party_index_k`); the other columns are 0 |
+| `y_rep_national`, `y_rep_k` | Posterior predictive draws (national / constituency). Like the likelihood, they gather parties by identity from the full sum-to-zero vector: up to date D, `y_rep_national` draws the parties active at each date (`n_active_d`, `active_index_d`), and `y_rep_k` the parties each constituency poll reported (`party_index_k`); the other columns are 0. Up to date D they also use only the likelihood's terms, without the forecasts' hedge `mu_gamma_pred`: `y_rep_k` replicates each poll with its house's `gamma` (which for houses > 1 already holds `mu_gamma`), and `y_rep_national` is an election of size `n_pred` drawn from `beta` alone, as the likelihood's election rows are (house 1, `gamma` = 0). The hedge enters the forecasts alone (`y_rep_national` after D, `y_pred_constituency`), so `y_rep_national` steps between day D and D + 1, which shows in the fit script's `y_rep_national` trend plot |
 
 ## Compilation
 

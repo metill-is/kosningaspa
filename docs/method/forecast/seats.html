@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>1.4 From vote shares to seats · Kosningaspá method</title>
+<meta name="description" content="How kosningaspá turns kjördæmi votes into Alþingi&#x27;s 63 seats: D&#x27;Hondt in each kjördæmi, nine adjustment seats by national D&#x27;Hondt over the lists with at least 5%, each placed where the list&#x27;s next quotient, as a share of the kjördæmi&#x27;s valid votes, is largest; the two layouts; the 2021 count traced step by step; what folding lists into Annað does; and how the allocator is tested against every official seat since 2016.">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<link rel="stylesheet" href="../assets/method.css">
+</head>
+<body>
+<div class="wrap">
+
+<nav class="breadcrumb"><a href="../index.html">Kosningaspá method</a> <span class="sep">/</span> I · The forecast model <span class="sep">/</span> 1.4</nav>
+
+<header class="top">
+  <div class="kicker">Kosningaspá · Method · The forecast model</div>
+  <h1><span class="chnum">1.4</span> From vote shares to seats</h1>
+  <p class="sub">How kosningaspá turns kjördæmi votes into Alþingi&#x27;s 63 seats: D&#x27;Hondt in each kjördæmi, nine adjustment seats by national D&#x27;Hondt over the lists with at least 5%, each placed where the list&#x27;s next quotient, as a share of the kjördæmi&#x27;s valid votes, is largest; the two layouts; the 2021 count traced step by step; what folding lists into Annað does; and how the allocator is tested against every official seat since 2016.</p>
+  <div class="stamp"><b>Review state.</b> Not reviewed by the author. Drafted with Claude on 4 Nov 2026 from the code on master and the official results committed under harness/truth/. <b>Snapshot.</b> Describes the code and records as they stood on master b67a29f, 4 Nov 2026: kosningaspa <code>master</code> unless a box names a branch. Live state: kosningaspa <code>master</code>.</div>
+</header>
+
+<div class="layout">
+  <nav class="toc">
+    <div class="t">On this page</div>
+    <ol>
+      <li><a href="#picture">The plain picture</a></li>
+      <li><a href="#rules">The rules, as the code applies them</a></li>
+      <li><a href="#layouts">The two layouts</a></li>
+      <li><a href="#code">The allocator in code</a></li>
+      <li><a href="#worked">Worked example: 2021</a></li>
+      <li><a href="#draws">From draws to seat distributions</a></li>
+      <li><a href="#tested">How it is tested</a></li>
+      <li><a href="#open">What is open</a></li>
+      <li><a href="#sources">Sources</a></li>
+    </ol>
+    <div class="book"><a href="../index.html">Contents</a></div>
+  </nav>
+
+  <main>
+<!-- content:start -->
+<!--meta
+{"id": "1.4", "title": "From vote shares to seats",
+ "sub": "How kosningaspá turns kjördæmi votes into Alþingi's 63 seats: D'Hondt in each kjördæmi, nine adjustment seats by national D'Hondt over the lists with at least 5%, each placed where the list's next quotient, as a share of the kjördæmi's valid votes, is largest; the two layouts; the 2021 count traced step by step; what folding lists into Annað does; and how the allocator is tested against every official seat since 2016.",
+ "kicker": "The forecast model",
+ "review": "Not reviewed by the author. Drafted with Claude on 4 Nov 2026 from the code on master and the official results committed under harness/truth/.",
+ "snapshot": "master b67a29f, 4 Nov 2026",
+ "sources": [
+  ["R/election_utils.R calculate_seats(), seats_tibble(), seats_layout_2021(), layout_for()", "the allocator and the layouts, master"],
+  ["harness/truth/elections_official.csv, harness/truth/README.md, harness/sources/seats_2021_official.csv", "official votes and seats 2016–2024, committed"],
+  ["tests/harness/test-truth.R, tests/harness/test-seats.R", "the allocator's tests, master"],
+  ["R/harness/scores.R seat_draws(), majority_prob(), seat_scores(); R/archive/predict_seats.R; R/process_seats_draws.R; R/make_meirihlutar_plots.R; R/make_new_prediction_plots_seats.R", "from draws to seat distributions, master"],
+  ["commits e1910f6 (PR #4), aaf0aa1, 6ecf13d and bcd1ea6 (PR #16)", "history"],
+  ["Lög um kosningar til Alþingis nr. 24/2000 (2016, 2017, 2021); Kosningalög nr. 112/2021 (2024)", "the election acts; their articles not checked"],
+  ["docs/method/analysis/1.4-seats/", "the scripts behind this chapter's worked example and folding table, 4 Nov 2026"]
+ ]}
+-->
+
+<section id="picture"><h2>The plain picture</h2>
+<div class="picture">
+<p>Alþingi, Iceland's parliament, has 63 seats in six kjördæmi (constituencies). A party stands as a list in each kjördæmi, under its letter (the letters are in chapter <a href="../start/notation.html#parties">0.2</a>). Kosningaspá allocates the seats in each posterior draw of the kjördæmi votes, with one function, <code>calculate_seats()</code> in <code>R/election_utils.R</code>, in two stages:</p>
+<ul>
+<li><strong>54 kjördæmi seats.</strong> In each kjördæmi, its constituency seats go by D'Hondt over the lists that ran there. A list needs no national threshold for these.</li>
+<li><strong>9 adjustment seats.</strong> These go one at a time to the list with the largest national D'Hondt quotient, its national votes divided by the seats it already holds plus one, among the lists with at least 5% of the national vote. Each is placed in the kjördæmi where that list's next quotient, as a share of the valid votes cast there, is largest, among the kjördæmi that still have an adjustment seat to give.</li>
+</ul>
+<p>On the official results, the function reproduces every seat of the 2016, 2017, 2021 and 2024 elections, and in 2021 it places each adjustment seat where Alþingi's own results page does. In the forecasts of the backtest harness (<code>harness/</code> and <code>R/harness/</code>), the lists are the parties the polls report, and Annað, the residual of small lists, can win no seat. The 2024 forecast let Annað run as an ordinary list.</p>
+</div>
+
+<div class="xref"><span class="lab">See also</span>
+<p>Where the kjördæmi vote draws come from: chapter 1.3 (planned). How the harness scores seat forecasts: 4.1 (planned).</p>
+</div>
+</section>
+
+<section id="rules"><h2>The rules, as the code applies them</h2>
+<div class="algo"><span class="lab">Allocation</span>
+<ol>
+<li><strong>Kjördæmi seats.</strong> For each kjördæmi $k$ with $c_k$ constituency seats: give a seat to the list with the largest quotient $v_{ik}/(s_{ik}+1)$, where $v_{ik}$ is list $i$'s votes there and $s_{ik}$ its seats so far, and repeat $c_k$ times.</li>
+<li><strong>Threshold.</strong> A list takes part in the adjustment seats only if its national share $V_i/\sum_j V_j$ is at least 5%, where $V_i = \sum_k v_{ik}$ and the sum over $j$ runs over every row, the small lists included.</li>
+<li><strong>Which list.</strong> For each of the 9 adjustment seats in turn, give it to the list over the threshold with the largest $V_i/(S_i + 1)$. Here $S_i$ counts all of list $i$'s seats so far, kjördæmi and adjustment.</li>
+<li><strong>Where.</strong> Place that seat in the kjördæmi $k$ that maximises $v_{ik}/(s_{ik}+1)\,/\,\sum_j v_{jk}$, the list's next quotient there as a share of that kjördæmi's valid votes, among the kjördæmi with an adjustment seat still free. Here $s_{ik}$ includes adjustment seats already placed.</li>
+</ol>
+<p>A list passed as <code>ineligible</code> (section <a href="#code">The allocator in code</a>) takes part in neither step 1 nor step 3, but its votes still count in $\sum_j V_j$ in step 2 and in $\sum_j v_{jk}$ in step 4. An exact tie goes to whichever list or kjördæmi comes first in the code's sorted input (section <a href="#code">The allocator in code</a>).</p>
+</div>
+<p>The 2016, 2017 and 2021 elections were counted under Lög um kosningar til Alþingis nr. 24/2000, and the 2024 election under Kosningalög nr. 112/2021, which replaced it on 1 Jan 2022. <code>calculate_seats()</code> reproduces the rule as it was applied in those four elections: that is what the test against every official seat shows (section <a href="#tested">How it is tested</a>). The acts' text has not been read against the code for these notes, so cases the four elections never met, such as exact ties, rest on the code alone.</p>
+<figure>
+<svg viewBox="0 0 720 150" role="img" aria-label="The two stages: D'Hondt in each kjördæmi gives 54 seats, then nine adjustment seats by national D'Hondt over lists with at least 5 per cent, each placed by the largest share quotient" style="color:var(--ink)">
+  <g font-family="ui-sans-serif,system-ui,sans-serif" font-size="11.5" fill="currentColor">
+    <g fill="var(--accent-soft)" stroke="var(--accent)">
+      <rect x="20" y="40" width="190" height="70" rx="6"/><rect x="265" y="40" width="190" height="70" rx="6"/><rect x="510" y="40" width="190" height="70" rx="6"/>
+    </g>
+    <g text-anchor="middle">
+      <text x="115" y="62" font-weight="600">Kjördæmi votes</text><text x="115" y="80">D'Hondt in each of 6</text><text x="115" y="96">→ 54 seats</text>
+      <text x="360" y="62" font-weight="600">Which list</text><text x="360" y="80">largest V / (S + 1)</text><text x="360" y="96">among lists with ≥ 5%</text>
+      <text x="605" y="62" font-weight="600">Where</text><text x="605" y="80">largest v / (s + 1) / Σv</text><text x="605" y="96">with a seat still free</text>
+    </g>
+    <g stroke="currentColor" stroke-width="1.5" fill="none"><path d="M210,75 L262,75"/><path d="M455,75 L507,75"/><path d="M605,110 C605,138 360,138 360,113"/></g>
+    <g fill="currentColor"><path d="M262,75 l-7,-4 l0,8 z"/><path d="M507,75 l-7,-4 l0,8 z"/><path d="M360,113 l-4,7 l8,0 z"/></g>
+    <text x="482" y="146" text-anchor="middle" fill="var(--muted)" font-size="10.5">repeat for each of the 9 adjustment seats</text>
+  </g>
+</svg>
+<figcaption>Figure 1. The two stages of <code>calculate_seats()</code>. $V$ and $S$ are a list's national votes and seats so far; $v$ and $s$ are its votes and seats in one kjördæmi.</figcaption>
+</figure>
+</section>
+
+<section id="layouts"><h2>The two layouts</h2>
+<div class="tbl"><table>
+<thead><tr><th>Kjördæmi</th><th class="num">2013–2021</th><th class="num">2024</th></tr></thead>
+<tbody>
+<tr><td>Reykjavík Suður</td><td class="num">9 + 2</td><td class="num">9 + 2</td></tr>
+<tr><td>Reykjavík Norður</td><td class="num">9 + 2</td><td class="num">9 + 2</td></tr>
+<tr><td>Suðvestur</td><td class="num">11 + 2</td><td class="num">12 + 2</td></tr>
+<tr><td>Suður</td><td class="num">9 + 1</td><td class="num">9 + 1</td></tr>
+<tr><td>Norðaustur</td><td class="num">9 + 1</td><td class="num">9 + 1</td></tr>
+<tr><td>Norðvestur</td><td class="num">7 + 1</td><td class="num">6 + 1</td></tr>
+</tbody>
+<caption>Constituency + adjustment seats. <code>seats_layout_2021()</code> and <code>seats_tibble()</code>; <code>layout_for()</code> returns the first for 2016, 2017 and 2021 and the second for 2024, and refuses any other date. Each layout's 63 seats match the official seats per kjördæmi (<code>tests/harness/test-truth.R</code>).</caption>
+</table></div>
+<p>For 2024 one constituency seat moved from Norðvestur to Suðvestur. A forecast must use the layout in force at the election it forecasts. <code>calculate_seats()</code> defaults to the 2024 layout, so a forecast of 2021 has to pass <code>layout_for("2021-09-25")</code> explicitly. Passing the wrong layout raises no error: the function checks only that the draw's kjördæmi names match the layout's.</p>
+</section>
+
+<section id="code"><h2>The allocator in code</h2>
+<p><code>calculate_seats(draw, layout = seats_tibble(), ineligible = character(0))</code> takes one draw as rows of <code>flokkur</code>, <code>kjordaemi</code> and <code>votes</code>. It returns, per list and kjördæmi, <code>seats</code> (all seats) and <code>kjordaemi_seats</code> (seats before adjustment).</p>
+<ul>
+<li><strong>Ineligible lists</strong> win no seat in either stage. Their votes still count as valid votes, in the 5% threshold and in the shares that place the adjustment seats. The harness passes <code>"Annað"</code>, and <code>seat_draws()</code> does so by default; e1910f6 gives the reason only as "so Annað wins no seat in a forecast". The 2024 forecast's copy (below) has no such argument, so there Annað ran as an ordinary list and could win seats. Whether any of its draws gave Annað a seat is not measured here.</li>
+<li><strong>Ties.</strong> <code>which.max()</code> takes the first maximum, so the function sorts its input by kjördæmi and list first. A tie then always breaks the same way, whatever order the rows came in. Integer vote draws can tie.</li>
+<li><strong>History.</strong> Since e1910f6 (24 Oct 2026, PR #4) the function runs the same two stages as the 2024 forecast's copy, with the 2024 layout as its default and the <code>ineligible</code> argument added. Before that, the live <code>R/election_utils.R</code> had the 2013–2021 layout and a different adjustment rule, built on seat entitlements of each eligible list's share times 63. The 2024 forecast used neither: <code>R/archive/predict_seats.R</code> carries its own copy, with the 2024 layout and the same two stages but no <code>ineligible</code> argument.</li>
+<li><strong>Older helpers.</strong> <code>dhondt()</code> and <code>jofnunarsaeti()</code> in the same file are not part of this allocator, and nothing calls them; <code>R/archive/process_predictions.R</code> defines and uses its own copies.</li>
+</ul>
+</section>
+
+<section id="worked"><h2>Worked example: 2021</h2>
+<p>The 2021 election had 199,730 valid votes over eleven lists, in ten rows: D 24.39%, B 17.27, V 12.57, S 9.93, F 8.85, P 8.63, C 8.33, M 5.45, J 4.10, and Aðrir 0.50, the letterless row in which Hagstofa (Statistics Iceland) puts two small lists. J and Aðrir are under 5%.</p>
+
+<h3>Kjördæmi seats in Norðvestur</h3>
+<div class="tbl"><table>
+<thead><tr><th>List</th><th class="num">÷1</th><th class="num">÷2</th><th class="num">÷3</th><th class="num">÷4</th><th class="num">Seats</th></tr></thead>
+<tbody>
+<tr><td>B</td><td class="num"><b>4,448</b></td><td class="num"><b>2,224</b></td><td class="num"><b>1,483</b></td><td class="num">1,112</td><td class="num">3</td></tr>
+<tr><td>D</td><td class="num"><b>3,897</b></td><td class="num"><b>1,949</b></td><td class="num">1,299</td><td class="num">974</td><td class="num">2</td></tr>
+<tr><td>V</td><td class="num"><b>1,978</b></td><td class="num">989</td><td class="num">659</td><td class="num">495</td><td class="num">1</td></tr>
+<tr><td>F</td><td class="num"><b>1,510</b></td><td class="num">755</td><td class="num">503</td><td class="num">378</td><td class="num">1</td></tr>
+<tr><td>M</td><td class="num">1,278</td><td class="num">639</td><td class="num">426</td><td class="num">320</td><td class="num">0</td></tr>
+<tr><td>S</td><td class="num">1,195</td><td class="num">598</td><td class="num">398</td><td class="num">299</td><td class="num">0</td></tr>
+<tr><td>P</td><td class="num">1,081</td><td class="num">541</td><td class="num">360</td><td class="num">270</td><td class="num">0</td></tr>
+<tr><td>C</td><td class="num">1,063</td><td class="num">532</td><td class="num">354</td><td class="num">266</td><td class="num">0</td></tr>
+<tr><td>J</td><td class="num">728</td><td class="num">364</td><td class="num">243</td><td class="num">182</td><td class="num">0</td></tr>
+</tbody>
+<caption>Norðvestur's 7 constituency seats by D'Hondt (Aðrir, 73 votes, omitted; quotients rounded, halves up). The seven largest quotients, in bold, win; the last elected is 1,483 and the first not elected 1,299 (D), then M's 1,278.</caption>
+</table></div>
+
+<h3>The nine adjustment seats</h3>
+<p>After the 54 kjördæmi seats (D 16, B 13, V 6, S 5, F 6, P 3, C 3, M 2), the adjustment seats go in this order:</p>
+<div class="tbl"><table>
+<thead><tr><th class="num">#</th><th>List</th><th class="num">National quotient</th><th class="num">Votes ÷ divisor</th><th>Placed in</th><th class="num">Share quotient there</th><th>Skipped (full)</th></tr></thead>
+<tbody>
+<tr><td class="num">1</td><td>P</td><td class="num">4,308</td><td class="num">17,233 ÷ 4</td><td>Reykjavík Norður</td><td class="num">0.0642</td><td>—</td></tr>
+<tr><td class="num">2</td><td>C</td><td class="num">4,157</td><td class="num">16,628 ÷ 4</td><td>Suður</td><td class="num">0.0621</td><td>—</td></tr>
+<tr><td class="num">3</td><td>M</td><td class="num">3,626</td><td class="num">10,879 ÷ 3</td><td>Norðvestur</td><td class="num">0.0741</td><td>—</td></tr>
+<tr><td class="num">4</td><td>V</td><td class="num">3,588</td><td class="num">25,114 ÷ 7</td><td>Reykjavík Suður</td><td class="num">0.0734</td><td>Suður</td></tr>
+<tr><td class="num">5</td><td>P</td><td class="num">3,447</td><td class="num">17,233 ÷ 5</td><td>Reykjavík Suður</td><td class="num">0.0546</td><td>Norðvestur, Suður</td></tr>
+<tr><td class="num">6</td><td>C</td><td class="num">3,326</td><td class="num">16,628 ÷ 5</td><td>Suðvestur</td><td class="num">0.0570</td><td>Norðvestur</td></tr>
+<tr><td class="num">7</td><td>S</td><td class="num">3,304</td><td class="num">19,825 ÷ 6</td><td>Reykjavík Norður</td><td class="num">0.0630</td><td>Norðvestur, Reykjavík Suður</td></tr>
+<tr><td class="num">8</td><td>V</td><td class="num">3,139</td><td class="num">25,114 ÷ 8</td><td>Norðaustur</td><td class="num">0.0646</td><td>Suður</td></tr>
+<tr><td class="num">9</td><td>P</td><td class="num">2,872</td><td class="num">17,233 ÷ 6</td><td>Suðvestur</td><td class="num">0.0414</td><td>Norðvestur, Suður, Norðaustur, Reykjavík Norður</td></tr>
+</tbody>
+<caption>The divisor is the list's seats so far plus one. "Share quotient" is the list's next quotient in the kjördæmi as a share of that kjördæmi's valid votes, the largest among kjördæmi with a free adjustment seat. "Skipped" lists the kjördæmi where it was larger but no adjustment seat was left. J is under 5%. D came closest without one: its quotient for a 17th seat, 48,708 ÷ 17 = 2,865, fell just under P's 2,872 for the ninth.</caption>
+</table></div>
+<p>The result is D 16, B 13, V 8, S 6, F 6, P 6, C 5 and M 3, with adjustment seats P 3, C 2, V 2, M 1 and S 1. That is Alþingi's count after the Norðvestur recount, seat for seat in every kjördæmi. Placement depends on the order. Each kjördæmi has only one or two adjustment seats, so a list's best kjördæmi is often full by the time its seat comes, and the ranking is computed afresh for every seat, since each quotient counts the seats the list holds there by then. The ninth seat shows both:</p>
+<div class="tbl"><table>
+<thead><tr><th>Kjördæmi</th><th class="num">P's votes</th><th class="num">P's seats so far</th><th class="num">Valid votes</th><th class="num">Share quotient</th><th class="num">Adjustment seats free</th></tr></thead>
+<tbody>
+<tr><td>Norðvestur</td><td class="num">1,081</td><td class="num">0</td><td class="num">17,251</td><td class="num">0.0627</td><td class="num">0</td></tr>
+<tr><td>Suður</td><td class="num">1,660</td><td class="num">0</td><td class="num">29,713</td><td class="num">0.0559</td><td class="num">0</td></tr>
+<tr><td>Norðaustur</td><td class="num">1,256</td><td class="num">0</td><td class="num">23,536</td><td class="num">0.0534</td><td class="num">0</td></tr>
+<tr><td>Reykjavík Norður</td><td class="num">4,508</td><td class="num">2</td><td class="num">35,118</td><td class="num">0.0428</td><td class="num">0</td></tr>
+<tr><td>Suðvestur</td><td class="num">4,853</td><td class="num">1</td><td class="num">58,608</td><td class="num"><b>0.0414</b></td><td class="num">1</td></tr>
+<tr><td>Reykjavík Suður</td><td class="num">3,875</td><td class="num">2</td><td class="num">35,504</td><td class="num">0.0364</td><td class="num">0</td></tr>
+</tbody>
+<caption>The ninth adjustment seat, P's, in full: P's votes ÷ (seats so far + 1) ÷ the kjördæmi's valid votes. Only Suðvestur still had an adjustment seat, so the seat went there although four kjördæmi ranked higher (<code>d_2021.R</code>).</caption>
+</table></div>
+<div class="measured"><span class="lab">Traced</span>
+<p><code>docs/method/analysis/1.4-seats/d_2021.R</code> (4 Nov 2026) reads <code>harness/truth/elections_official.csv</code>, traces both stages, prints for each adjustment seat the kjördæmi skipped as full and the ninth seat in full, and stops unless the trace equals <code>calculate_seats()</code> and the official seats in all 60 list × kjördæmi cells.</p>
+</div>
+
+</section>
+
+<section id="draws"><h2>From draws to seat distributions</h2>
+<p>A forecast gives, per posterior draw, integer votes for each list in each kjördæmi (<code>y_pred_constituency</code>, chapter 1.3 (planned)). Running an allocator on each draw turns them into a joint distribution of seats. From that come each party's seat distribution and the probability that a set of parties holds a majority, at least 32 of 63 seats.</p>
+<ul>
+<li><strong>The harness</strong> does this in <code>R/harness/scores.R</code>: <code>seat_draws()</code> runs the allocator per draw with Annað ineligible by default, <code>majority_prob()</code> counts draws at 32 seats or more, and <code>seat_scores()</code> scores the seats against a result.</li>
+<li><strong>The live forecast scripts</strong> have no step that writes the seat draws. <code>R/process_seats_draws.R</code>, <code>R/make_meirihlutar_plots.R</code> and <code>R/make_new_prediction_plots_seats.R</code> read a <code>seats_draws.parquet</code> that, for the 2024 forecast, <code>R/archive/predict_seats.R</code> wrote, with Annað as an ordinary list. PR #16 fixed two of the plots built from it. The seat plot (<code>make_new_prediction_plots_seats.R</code>) now draws the posterior's own probabilities (aaf0aa1). In the majority plot, the coalition labelled DFS now sums D, F and S where it had summed D, M and S (6ecf13d), and the side table is sorted as the plot is (bcd1ea6).</li>
+</ul>
+
+<h3>What folding into Annað does</h3>
+<p>The forecast models the parties the polls report, so any list the polls do not name is folded into Annað, which in the harness wins nothing. On the official results that costs seats only when a folded list was big enough to win them:</p>
+<div class="tbl"><table>
+<thead><tr><th>Election</th><th class="num">Annað's share</th><th class="num">Official seats in Annað</th><th>Seats that move when Annað is ineligible</th></tr></thead>
+<tbody>
+<tr><td>2016</td><td class="num">9.36%</td><td class="num">4</td><td>4: the seats of Björt framtíð (Bright Future) go, net, to D (+1), S (+1) and V (+2)</td></tr>
+<tr><td>2017</td><td class="num">1.46%</td><td class="num">0</td><td>none</td></tr>
+<tr><td>2021</td><td class="num">0.50%</td><td class="num">0</td><td>none</td></tr>
+<tr><td>2024</td><td class="num">1.06%</td><td class="num">0</td><td>none</td></tr>
+</tbody>
+<caption><code>docs/method/analysis/1.4-seats/d_fold.R</code> (4 Nov 2026): official votes folded to the parties the polls report, allocated with Annað ineligible, against the official seats. For 2016 the script also prints each cell that changes and the adjustment seats by list.</caption>
+</table></div>
+<p>If none of the folded lists won a seat, folding them into an ineligible Annað changes no seat: the other lists' quotients and each kjördæmi's valid votes stay as they were, and no folded list was ever the largest quotient (exact ties aside). That is Claude's argument from the rule, and the 2017, 2021 and 2024 rows bear it out. When a folded list did win, its seats go to others, and those can shift adjustment seats between the other lists. In 2016 they did. Björt framtíð's constituency seats in Reykjavík Norður and Suðvestur went to V and to Viðreisn (C); C's Suðvestur adjustment seat then went back into the national pass with Björt framtíð's two, and S, D and V took one each. No other list lost a seat in any kjördæmi.</p>
+<p>The poll data have no Björt framtíð category: its votes are part of Annað, so even a forecast that got every vote right would have given its four 2016 seats to others. Whether the planned v2 forecast should split Björt framtíð out of Annað is open in its design (chapter 3.1, What is open; 4.2, planned).</p>
+</section>
+
+<section id="tested"><h2>How it is tested</h2>
+<ul>
+<li><strong>Every official seat.</strong> <code>tests/harness/test-truth.R</code> runs <code>calculate_seats()</code> on the unfolded lists of each election, with no ineligible list. It reproduces every official seat of 2016, 2017, 2021 and 2024, Björt framtíð's four in 2016 included, and each layout's kjördæmi totals.</li>
+<li><strong>2021 placement.</strong> The same file checks each 2021 adjustment seat against Alþingi's results page, which lists the members elected after the recount of Norðvestur's votes (<code>harness/sources/seats_2021_official.csv</code>, counted from a capture of that page). Hagstofa's two 2021 seat tables disagree with that page in six list × kjördæmi cells between them: the older spreadsheet in all six, the current table KOS02019 in four. Both give S no seat in Suður, where D'Hondt on Hagstofa's own votes gives S a constituency seat, which the adjustment step cannot take away. <code>harness/truth/README.md</code> documents this, and the tests do not use those tables.</li>
+<li><strong>The rules for ineligible lists.</strong> <code>tests/harness/test-seats.R</code> checks that:
+  <ul>
+  <li>the 2013–2021 layout holds 63 seats and <code>layout_for()</code> returns the 2013–2021 layout for 2017 and the 2024 layout for 2024, and refuses 2013 (the 2024 layout is checked in <code>test-truth.R</code>, whose allocator test also compares each kjördæmi's official seat total with the layout's);</li>
+  <li>an ineligible list wins no seat while the others still fill 63;</li>
+  <li>its votes count in the 5% threshold;</li>
+  <li>its votes count in the shares that place the adjustment seats.</li>
+  </ul></li>
+</ul>
+<p>The seat tests in <code>test-truth.R</code> compare against <code>build_truth()</code>, which rebuilds the official results from sheets in the harness's git-ignored snapshot (its frozen, checksummed copy of the input data; <code>harness/README.md</code>), so they skip without it. One of them checks that the committed <code>harness/truth/elections_official.csv</code> equals that rebuild; that committed file is what the scripts behind this chapter read, so a reader without the snapshot can rerun the 2021 check with <code>d_2021.R</code>. The four tests in <code>test-seats.R</code> need no snapshot.</p>
+</section>
+
+<section id="open"><h2>What is open</h2>
+<div class="open"><span class="lab">Open</span>
+<ul>
+<li><strong>No live seat step.</strong> No script on master turns a forecast's kjördæmi draws into <code>seats_draws.parquet</code>. The 2024 forecast's copy is in <code>R/archive/</code>, and only the harness calls <code>calculate_seats()</code> on draws.</li>
+<li><strong>Folding.</strong> In the harness a list the polls do not name wins nothing. That matters whenever such a list would win a seat: over 5% nationally, or strong enough in one kjördæmi for a constituency seat, which needs no threshold. Björt framtíð's 2016 seats are the example.</li>
+<li><strong>No seat distribution here.</strong> The chapter shows no forecast's seat distribution: it works from official results only, and no forecast has been fitted for these notes.</li>
+<li><strong>Layouts.</strong> <code>layout_for()</code> knows four election dates. The next election's layout has to be added before it is forecast.</li>
+<li><strong>The acts' articles</strong> have not been read against the code for these notes. Only the official results have been checked.</li>
+</ul>
+</div>
+</section>
+
+<section id="sources"><h2>Sources</h2>
+<ul class="sources">
+<li><code>R/election_utils.R</code> (master b67a29f): <code>calculate_seats()</code>, <code>seats_tibble()</code>, <code>seats_layout_2021()</code>, <code>layout_for()</code>. Earlier copies: <code>git show e1910f6^:R/election_utils.R</code> and <code>R/archive/predict_seats.R</code>.</li>
+<li><code>harness/truth/elections_official.csv</code> and <code>harness/truth/README.md</code> (sources: Hagstofa KOS02118b, KOS02118a, KOS02115/KOS02019 and KOS02018; Alþingi's 2021 results page), and <code>harness/sources/seats_2021_official.csv</code>.</li>
+<li><code>tests/harness/test-truth.R</code> and <code>tests/harness/test-seats.R</code>.</li>
+<li><code>R/harness/scores.R</code> (<code>seat_draws()</code>, <code>majority_prob()</code>, <code>seat_scores()</code>); <code>R/process_seats_draws.R</code>; <code>R/make_meirihlutar_plots.R</code>; <code>R/make_new_prediction_plots_seats.R</code>.</li>
+<li>Commits: e1910f6 (PR #4, merge 5d22031); aaf0aa1, 6ecf13d and bcd1ea6 (PR #16, merge a54f3fe).</li>
+<li>Lög um kosningar til Alþingis nr. 24/2000 (the 2016, 2017 and 2021 elections) and Kosningalög nr. 112/2021 (in force from 1 Jan 2022; the 2024 election).</li>
+<li>Numbers computed for this page: <code>docs/method/analysis/1.4-seats/d_2021.R</code> (the 2021 trace) and <code>d_fold.R</code> (the folding table), 4 Nov 2026, from committed files only.</li>
+</ul>
+</section>
+<!-- content:end -->
+    <nav class="pager"><a href="../forecast/walk.html"><span class="lbl">Previous</span>1.1 The latent support walk and its election anchors</a><a class="next" href="../bias/updating.html"><span class="lbl">Next</span>3.1 How pollster bias is modelled and updated at and between elections</a></nav>
+  </main>
+</div>
+
+<footer>
+  Methodology notes · chapter 1.4 · drafted with Claude from kosningaspá's code and records ·
+  page chrome built by <code>tools/build.py</code> from <code>site.json</code> (edit the body between the content markers, then re-run it) ·
+  maths by KaTeX 0.16.9, code by highlight.js 11.9 (CDN; the page reads fine offline).
+</footer>
+</div>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
+<script defer src="../assets/method.js"></script>
+</body>
+</html>

@@ -27,7 +27,11 @@ that builds offline is not a fresh build. Slow tests (the sweep of every forecas
 `tests/harness/test-sweep.R`, the self-test's kjördæmi and seat scores, the R0 Stan tests
 and the cell runner's test fits of `r0` and `v2s-m0` on the 2024 eve, which compile with CmdStan) call `skip_unless_slow()` and
 run only with `HARNESS_SLOW=1` in the environment:
-`HARNESS_SLOW=1 LC_ALL=en_US.UTF-8 Rscript tests/run.R`. The tests of `Stan/forecast_v2.stan`
+`HARNESS_SLOW=1 LC_ALL=en_US.UTF-8 Rscript tests/run.R`. The one test that reads the live
+`data/` (the Kosning rows of `data/polling_data.csv`, in `tests/harness/test-election-data.R`)
+calls `skip_unless_live_data()` and runs only with `KOSNINGASPA_LIVE_DATA=1`, so the queue's
+preflight never depends on the live data:
+`KOSNINGASPA_LIVE_DATA=1 LC_ALL=en_US.UTF-8 Rscript tests/run.R election-data`. The tests of `Stan/forecast_v2.stan`
 in `tests/harness/test-v2-stan.R` are slow and named by the V2 step they test (`v2s-m0: …`);
 `V2_STEPS=<step>[,<step>…]` runs only those steps' tests (`skip_unless_step()`), and unset it
 runs them all. `HARNESS_V2_STAN=<absolute path>` runs that file's tests on a scratch copy of
