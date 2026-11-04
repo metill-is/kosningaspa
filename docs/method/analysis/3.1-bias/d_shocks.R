@@ -1,0 +1,12 @@
+options(width = 140)
+# Run from the repository root: LC_ALL=en_US.UTF-8 Rscript docs/method/analysis/3.1-bias/<script>.R
+suppressPackageStartupMessages({library(dplyr); library(posterior)})
+fit <- readRDS("data/2026-10-29/polling_watch_fit.rds")
+mu <- as_draws_matrix(fit$draws("mu_gamma"))
+tm <- as.numeric(as_draws_matrix(fit$draws("tau_mu")))
+nm <- c("S","D","M","C","B","F","V","J","P","Annad")
+out <- expand.grid(e = 1:4, k = 1:10)
+out$z <- mapply(function(e, k) median(as.numeric(mu[, sprintf("mu_gamma[%d,%d]", e + 1, k)] - mu[, sprintf("mu_gamma[%d,%d]", e, k)]) / tm), out$e, out$k)
+w <- tidyr::pivot_wider(out |> mutate(party = nm[k], step = paste0("E", e, "-E", e + 1)) |> select(party, step, z), names_from = step, values_from = z)
+w$rms <- sqrt(rowMeans(as.matrix(w[, -1])^2))
+print(w |> mutate(across(where(is.numeric), ~ round(.x, 2))) |> arrange(desc(rms)))

@@ -1,0 +1,129 @@
+{
+ "built": "2026-10-29",
+ "parts": [
+  {
+   "dir": "start",
+   "title": "Start here"
+  },
+  {
+   "dir": "forecast",
+   "title": "I · The forecast model"
+  },
+  {
+   "dir": "fylgisvakt",
+   "title": "II · Fylgisvakt"
+  },
+  {
+   "dir": "bias",
+   "title": "III · Pollster bias"
+  },
+  {
+   "dir": "v2",
+   "title": "IV · v2 and the backtest harness"
+  },
+  {
+   "dir": "history",
+   "title": "V · History and state"
+  }
+ ],
+ "chapters": [
+  {
+   "id": "0.1",
+   "part_dir": "start",
+   "part": "Start here",
+   "title": "Kosningaspá in one place: the models and how they fit together",
+   "path": "start/overview.html"
+  },
+  {
+   "id": "0.2",
+   "part_dir": "start",
+   "part": "Start here",
+   "title": "Notation and glossary",
+   "path": "start/notation.html"
+  },
+  {
+   "id": "1.1",
+   "part_dir": "forecast",
+   "part": "I · The forecast model",
+   "title": "The latent support walk and its election anchors",
+   "path": "forecast/walk.html"
+  },
+  {
+   "id": "1.2",
+   "part_dir": "forecast",
+   "part": "I · The forecast model",
+   "title": "Fundamentals and their weight",
+   "path": "forecast/fundamentals.html"
+  },
+  {
+   "id": "1.3",
+   "part_dir": "forecast",
+   "part": "I · The forecast model",
+   "title": "Constituency effects",
+   "path": "forecast/constituencies.html"
+  },
+  {
+   "id": "1.4",
+   "part_dir": "forecast",
+   "part": "I · The forecast model",
+   "title": "From vote shares to seats",
+   "path": "forecast/seats.html"
+  },
+  {
+   "id": "2.1",
+   "part_dir": "fylgisvakt",
+   "part": "II · Fylgisvakt",
+   "title": "The polling smoother, v4 to v5",
+   "path": "fylgisvakt/smoother.html"
+  },
+  {
+   "id": "2.2",
+   "part_dir": "fylgisvakt",
+   "part": "II · Fylgisvakt",
+   "title": "From a fit to metill.is",
+   "path": "fylgisvakt/publish.html"
+  },
+  {
+   "id": "3.1",
+   "part_dir": "bias",
+   "part": "III · Pollster bias",
+   "title": "How pollster bias is modelled and updated at and between elections",
+   "path": "bias/updating.html"
+  },
+  {
+   "id": "3.2",
+   "part_dir": "bias",
+   "part": "III · Pollster bias",
+   "title": "Overdispersion and house precision",
+   "path": "bias/overdispersion.html"
+  },
+  {
+   "id": "4.1",
+   "part_dir": "v2",
+   "part": "IV · v2 and the backtest harness",
+   "title": "The two-election backtest harness",
+   "path": "v2/harness.html"
+  },
+  {
+   "id": "4.2",
+   "part_dir": "v2",
+   "part": "IV · v2 and the backtest harness",
+   "title": "v2's components",
+   "path": "v2/components.html"
+  },
+  {
+   "id": "5.1",
+   "part_dir": "history",
+   "part": "V · History and state",
+   "title": "Timeline and decisions",
+   "path": "history/timeline.html"
+  },
+  {
+   "id": "5.2",
+   "part_dir": "history",
+   "part": "V · History and state",
+   "title": "Known issues",
+   "path": "history/known-issues.html"
+  }
+ ]
+}
