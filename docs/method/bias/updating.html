@@ -17,7 +17,7 @@
   <div class="kicker">Kosningaspá · Method · Pollster bias</div>
   <h1><span class="chnum">3.1</span> How pollster bias is modelled and updated at and between elections</h1>
   <p class="sub">What “bias” means in the forecast model, Fylgisvakt v4 and v5, and v2&#x27;s M1; what tells each model the bias; what happens when a result arrives; the priors on the bias walk; and a worked example, D at the 2024 boundary.</p>
-  <div class="stamp"><b>Review state.</b> Not reviewed by the author. Drafted with Claude on 29 Oct 2026 from the code on master, the v2 branch and the project&#x27;s records; edited on 4 Nov 2026 to keep only what the public repository can cite. <b>Snapshot.</b> Describes the code and records as they stood on 29 Oct 2026: kosningaspa <code>master</code> unless a box names a branch. Live state: kosningaspa <code>master</code>.</div>
+  <div class="stamp"><b>Review state.</b> Not reviewed by the author. Drafted with Claude on 29 Oct 2026 from the code on master, the v2 branch and the project&#x27;s records; edited on 4 Nov 2026 to keep only what the public repository can cite, and again that day for the fixes merged in PR #15. <b>Snapshot.</b> Describes the code and records as they stood on 29 Oct 2026; the forecast model&#x27;s hedge and known issues as of 4 Nov 2026 (master a54f3fe): kosningaspa <code>master</code> unless a box names a branch. Live state: kosningaspa <code>master</code>.</div>
 </header>
 
 <div class="layout">
@@ -46,10 +46,10 @@
 {"id": "3.1", "title": "How pollster bias is modelled and updated at and between elections",
  "sub": "What “bias” means in the forecast model, Fylgisvakt v4 and v5, and v2's M1; what tells each model the bias; what happens when a result arrives; the priors on the bias walk; and a worked example, D at the 2024 boundary.",
  "kicker": "Pollster bias",
- "review": "Not reviewed by the author. Drafted with Claude on 29 Oct 2026 from the code on master, the v2 branch and the project's records; edited on 4 Nov 2026 to keep only what the public repository can cite.",
- "snapshot": "29 Oct 2026",
+ "review": "Not reviewed by the author. Drafted with Claude on 29 Oct 2026 from the code on master, the v2 branch and the project's records; edited on 4 Nov 2026 to keep only what the public repository can cite, and again that day for the fixes merged in PR #15.",
+ "snapshot": "29 Oct 2026; the forecast model's hedge and known issues as of 4 Nov 2026 (master a54f3fe)",
  "sources": [
-  ["Stan/polling_and_fundamentals_kjordaemi.stan", "the forecast model, master (851965e); the hedge entered git in 9381677"],
+  ["Stan/polling_and_fundamentals_kjordaemi.stan", "the forecast model, master (a54f3fe); the hedge entered git in 9381677"],
   ["Stan/polling_watch_v4.stan, Stan/polling_watch_v5_epoch.stan", "Fylgisvakt v4 and v5, master"],
   ["R/stan_data.R prepare_polling_watch_epochs(); R/fit_polling_watch.R", "epoch assignment and the production fit, master"],
   ["Stan/forecast_v2.stan, R/harness/v2.R, harness/v2/steps.md", "v2 M1, branch claude/epic-lichterman-e32cb6 (read at 18f4c68; tip b0e4a69 since), unmerged"],
@@ -169,18 +169,18 @@ mu_gamma_pred[1:(P - 2)] = mu_gamma;
 mu_gamma_pred[P - 1] = - sum(mu_gamma);
 mu_gamma_pred[1:(P - 3)] /= sqrt(3.0);    // D, B, S, V, P, C, F
 mu_gamma_pred[P - 2] /= sqrt(2.0);        // M
-mu_gamma_pred *= mu_gamma_weight;         // added to beta for the forecast and the replications
+mu_gamma_pred *= mu_gamma_weight;         // added to beta on the forecast days only
 </code></pre>
 <p class="srccap">Generated quantities (master; identical in 9381677).</p>
 <p>$\beta$ is the fully corrected state. In generated quantities only, the forecast adds back $w\,\mu_p/\sqrt{n_e}$, with a fresh $w \sim$ Beta(40, 60) each draw (mean 0.40, 90% 0.32–0.48); the data never inform $w$. The divisors match $\sqrt{n_e}$, the number of anchor elections since 2016 the party ran in: 3 for D, B, S, V, P, C and F, 2 for M; J's row is not divided, as for $n_e = 1$. The bias left in is then $0.4/\sqrt{n_e}$ on average, a logit-scale correction of about 77%, 72% and 60%. The block entered git in the clean-up commit 9381677 (25 Feb 2026) and is unchanged on master. No comment, commit or document records why Beta(40, 60), √3 or √2 were chosen. The v2 design drops the hedge (section <a href="#v2">v2</a>).</p>
+<p>Only the forecast reads the hedge: the national series after the last fitted day and the kjördæmi forecast. The in-sample replications leave it out, as the likelihood does: <code>y_rep_national</code> up to day $D$ draws from $\beta$ alone, and <code>y_rep_k</code> from $\beta + \gamma + \delta$. Until PR #15 (commits f51c3c6 and 253d037, merged 4 Nov 2026) both replications added it, which put the hedge into posterior predictive checks of data the model had fitted without it.</p>
 
 <div class="open"><span class="lab">Known issues</span>
 <ul>
 <li><strong>Annað has no house effect.</strong> A bias in how the polls measure Annað against the other parties cannot be corrected, and J's bias is only implied. This bites when a sizeable party is folded into Annað.</li>
 <li><strong>The hedge breaks the zero sum.</strong> After the √3/√2 scaling, <code>mu_gamma_pred</code> no longer sums to zero, so Annað's predicted share moves too.</li>
 <li><strong>Master's divisors fit 2024 only.</strong> The /√3 and /√2 rows match only the 2024 party set. The harness's R0 arm instead passes <code>mu_gamma_scale</code> $= 1/\sqrt{n_e}$ as data, set to 0 when $n_e = 0$.</li>
-<li><strong>The anchor rows are not the official results.</strong> <code>get_election_data()</code> recycles three vote totals across rows, which moves anchor shares by up to 0.36 pp (M 2017).</li>
-<li><strong>The hedge is also added to the replications:</strong> <code>y_rep_national</code> on the fitted dates, and <code>y_rep_k</code>, the kjördæmi poll replications, on top of $\gamma$. No record says whether that is intended.</li>
+<li><strong>Old data files keep the wrong anchor totals.</strong> <code>get_election_data()</code> used to recycle three vote totals across its 30 rows, which moved anchor shares by up to 0.36 pp (M 2017). Since PR #15 it takes each election's valid votes by date. A <code>data/polling_data.csv</code> written before that keeps the recycled totals until <code>R/correct_election_anchors.R</code> rewrites them; on 4 Nov 2026 the live file still had them on 17 of its 30 Kosning rows (counted by running the script on a copy). The first refit after the correction moves the 2016, 2017 and 2021 anchors by up to that 0.36 pp.</li>
 </ul>
 </div>
 </section>
@@ -373,7 +373,7 @@ d_{1,k} &= \sigma_\gamma\, f_k, & d_{e,k} &= d_{e-1,k} + \tau_{\text{house}}\, z
 <li><strong>Alternatives to one logit-scale $\tau$:</strong> a per-party scale, a share-scaled scale, or a mean-reverting bias with an AR(1) pull towards each party's long-run bias. The dossier's $\lambda = \tau^2/(\tau^2+\omega^2/E)$ is the shrinkage form; a random walk carries the last epoch forward in full. None has been built or tested.</li>
 <li><strong>$\tau$ ignores the time between elections.</strong> In v2's design the M4 $\delta$ walk (plan Task 12; not built yet) scales each step by $\sqrt{\Delta\text{years}/\overline{\Delta}}$. $\overline{\Delta} = 4$ years, the statutory term, is the plan's default (Decision 3, not yet ruled on); spec §6.7 had the mean gap between elections. The bias walk has no such scaling.</li>
 <li><strong>The $\tau_\mu$ prior.</strong> Its posterior median sits at the half-N(0, 0.1) prior's 86th percentile (90% interval: 74th–94th): the data pull it up, though not into the tail. v2 freezes that prior and varies it ×½ and ×2 in Tier 3b. Whether to widen it is undecided.</li>
-<li><strong>The forecast model's issues:</strong> the Annað reference and J closing; the hedge's unrecorded intent, broken zero sum and 2024-only divisors; the recycled anchor totals.</li>
+<li><strong>The forecast model's issues:</strong> the Annað reference and J closing; the hedge's unrecorded intent, broken zero sum and 2024-only divisors; the recycled anchor totals still in data files written before PR #15.</li>
 <li><strong>v2's open choices:</strong> Prósent as MMR's continuation (spec §12 Q2); splitting Björt framtíð out of Annað (Q3). Separately, the build restarts a newcomer's element of each house's uncentred deviation before centring, where spec §6.4 and plan Task 9 restart the centred deviation. The step log argues for the build's reading and pins it with tests; the author has not ruled on it.</li>
 <li><strong>v5 publication.</strong> The platform regen and PR are pending. <code>Stan/polling_watch_variants.md</code> still names v4 as production in its TL;DR and §3 table. §10 also reads the logit sign as direction: by the pp method, E5's industry bias <em>overstates</em> S, by +1.31 pp (90% −1.55 to 4.24), averaged over E5's polls.</li>
 </ul>
@@ -382,7 +382,7 @@ d_{1,k} &= \sigma_\gamma\, f_k, & d_{e,k} &= d_{e-1,k} + \tau_{\text{house}}\, z
 
 <section id="sources"><h2>Sources</h2>
 <ul class="sources">
-<li><code>Stan/polling_and_fundamentals_kjordaemi.stan</code> (master 851965e): house effects (transformed parameters), priors, the hedge (generated quantities). 9381677 for the hedge's first commit; 8146e76 for the hard zero sum; aa2ac1a (forecast) and fdf7590 (v4, v5) for the anchored walk.</li>
+<li><code>Stan/polling_and_fundamentals_kjordaemi.stan</code> (master a54f3fe): house effects (transformed parameters), priors, the hedge (generated quantities). 9381677 for the hedge's first commit; 8146e76 for the hard zero sum; aa2ac1a (forecast) and fdf7590 (v4, v5) for the anchored walk.</li>
 <li><code>Stan/polling_watch_v4.stan</code> and <code>Stan/polling_watch_v5_epoch.stan</code> (master), including the v5 header on identification; <code>R/stan_data.R</code> <code>prepare_polling_watch_epochs()</code>; <code>R/fit_polling_watch.R</code>; <code>R/data.R</code> <code>read_polling_watch_data()</code>, <code>get_election_data()</code>.</li>
 <li><code>Stan/polling_watch_variants.md</code> §1–2 (reference non-invariance), §9 (anchored walk), §10 (v5 and the backtests); commits 6d93978, 88b8663, fdf7590, 723b533, 6d884d9 / 851965e.</li>
 <li>Branch <code>claude/epic-lichterman-e32cb6</code>: <code>Stan/forecast_v2.stan</code>, <code>R/harness/v2.R</code>, <code>harness/v2/steps.md</code>, <code>harness/v2/prior_predictive.md</code>, the Phase 2 plan, Task 9. Unmerged; read with <code>git show</code>.</li>
