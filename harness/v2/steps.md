@@ -760,3 +760,311 @@ LC_ALL=en_US.UTF-8 Rscript R/harness/compare_runs.R stop v2s-m3
 
 Next: M4 (`v2s-m4`), the kjördæmi deviations' walk, on `v2s-m3`'s config with `delta_walk = 1`,
 as long as M3 stands. M4 precedes P2, so its queue lines need seed 2702 as well as 2701.
+
+## v2s-m4: the δ walk (M-step)
+
+`v2s-m3` with `delta_walk = 1` (config `harness/configs/steps/v2s-m4.json`): the kjördæmi
+deviations walk across elections (spec §6.7). δ_1 = M_1(s_δ0 ⊙ ζ_1), and each later epoch's
+δ_e = M_e(δ_{e−1} − c_{e−1} 1ᵀ + √(Δyears_e / Δ̄) s_ζ ⊙ ζ_e), where c_{e−1} is, in each
+kjördæmi, the unweighted mean of δ_{e−1} over S_{e−1}, the parties with results at election
+e − 1. Here ζ_e ~ N(0, 1) on every kjördæmi and party, s_ζ = s̄_ζ s_zeta_raw with
+s̄_ζ ~ half-N(0, `prior_s_bar_zeta`) (0.2 in the config) and s_zeta_raw ~ half-N(0, 1),
+Δyears_e is the years since the previous election (`delta_years`, the open epoch's running to
+E) and Δ̄ = `delta_years_bar` (4). A newcomer's column in its entry epoch e_p > 1 is
+s_δ0,p ζ_{e_p,·,p} before M_e. The parameters are `delta_raw`, now 1 + (n_epoch − 1) matrices
+[K, P] (ζ_1 and the steps' ζ), `s_zeta_raw` [P] and `s_bar_zeta` (an array of one), the last
+two declared after `s_bar_E`; s_ζ is the transformed parameter `s_zeta` [P]. With
+`delta_walk = 0`, δ stays the static M_e(s_δ0 ⊙ ζ) on one ζ. Its lp, size,
+transformed-parameter and generated-quantity tests are in `tests/harness/test-v2-stan.R`, its
+reference tests in `tests/harness/test-v2-reference.R`, and its prior predictive row in
+`harness/v2/prior_predictive.md`. This section is its sampler check.
+
+**The form, and how it departs from §6.7's literal text.** §6.7 writes each step from δ_{e−1}
+itself; the model steps from δ_{e−1} re-centred within each kjördæmi over S_{e−1}. Two
+directions are unseen by every likelihood term before a newcomer enters: the newcomer's own
+earlier column (it is in no softmax before its entry epoch) and a per-kjördæmi offset shared
+by the parties of S_{e−1} (it cancels in every softmax over them). Without the re-centring the
+entering column restarts while the others keep δ_{e−1}, so both directions reach the entry
+epoch's contrasts, and the newcomer enters against a level that nothing observed has set. In
+the R reference with the literal step, moving one of a newcomer's pre-entry ζ by 1 on 2024 eve
+changed the log density by 0.50 to 20.95 beyond that ζ's own N(0, 1) prior, against a
+tolerance of 2.6e-4; on a toy input (4 kjördæmi, 5 parties, one entering at epoch 2) the entry
+epoch's contrasts moved by 0.042 under the newcomer's earlier ζ and by 0.54 under an offset
+shared by S_1. With the re-centring both directions are flat (below, What the lp tests cover).
+The re-centred step equals the literal text wherever no party enters, because M_e removes any
+constant within a kjördæmi and c_{e−1} 1ᵀ is one. The newcomer's column before M_e is still a
+fresh draw s_δ0,p ζ_{e_p,·,p}, as in §6.7: the re-centring changes only what the existing
+parties carry into the entry epoch.
+
+**Fits.** Four fits at 400 + 400: 2024 eve (lane A) and 2021 f180 (lane B), each at seeds 2701
+and 2702, because a P-step follows; they are the four `v2s-m4` lines of
+`harness/runs/v2-steps.txt`. They ran under `R/harness/queue.sh` with the run list
+`results/harness/logs/v2s-m4-runs.txt` (`harness/README.md`, Step checks):
+- **The overnight stall.** The queue started at 2026-10-29 21:54:28. Its preflight (the full
+  slow suite) was still running when the Mac, on battery at 1%, went into "Low Power Sleep" at
+  22:38:27 and hibernated until 07:08:26 on 2026-10-30 (`pmset -g log`). The preflight was
+  inside an R CMD SHLIB compile when it slept; it resumed on wake and passed at 07:25:13. From
+  07:12, `caffeinate -i -w <queue pid>` held an idle-sleep assertion for the queue's lifetime,
+  since the Mac's AC `sleep` setting is 1 minute.
+- **The fits.** Both lanes started their seed-2701 fits at 07:25:13. 2021 f180 seed 2701
+  finished at 07:50:10, and lane B ran seed 2702 from then until 08:40:37; 2024 eve seed 2701
+  finished at 08:43:22 (each run's `meta.json`), and lane A started seed 2702.
+- **A second sleep.** At 08:03:06 the Mac went on battery, and at 08:03:14 into "Clamshell
+  Sleep" (`pmset -g log`), which an idle-sleep assertion does not prevent. Apart from dark
+  wakes of seconds it slept until 08:31:19, back on AC. The two fits running then, 2024 eve seed
+  2701 and 2021 f180 seed 2702, count those 28 minutes in their minutes.
+- **The pause and the refit.** At 09:04 the work was paused and the queue killed by TERM
+  (`QUEUE ABORTED rc=143`), about 21 minutes into 2024 eve seed 2702, which left no `meta.json`.
+  On 2026-11-04 that fit was refitted alone, through the one-line run list
+  `results/harness/logs/v2s-m4-refit-runs.txt`. The first attempt (`QUEUE START` 11:14:01)
+  failed its preflight: every failure was CmdStan's stale precompiled header after a clang
+  update, so CmdStan was rebuilt (`rebuild_cmdstan()`), with Brynjólfur's agreement, twice:
+  once for the clang change and once after a Command Line Tools update. The second attempt
+  (`QUEUE START` 11:33:41) passed its preflight at 12:20:24
+  (`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 6661 ]`). Its fit started at 12:20:24, retired the killed
+  run's partial folder (no `meta.json`) to `_stale/`, finished at 13:05:44 and exited 0, and
+  `queue.log` ends in `QUEUE FINISHED`. All four fits ran the same executable.
+
+CmdStan 2.38.0, `max_treedepth` 12, 10 cores (`hw.ncpu`). The diagnostics table is
+`harness/v2/steps/v2s-m4.md`. `queue.log` after the first queue's `QUEUE START` line, and after
+the refit's second `QUEUE START` line (the `QUEUE START` lines and the failed attempt's two
+lines are left out here: they name the run list or the preflight log by its absolute path):
+
+```
+preflight PASS
+start B v2s-m4_2021-09-25_2021-03-29_s2701 2026-10-30 07:25:13
+start A v2s-m4_2024-11-30_2024-11-29_s2701 2026-10-30 07:25:13
+end v2s-m4_2021-09-25_2021-03-29_s2701 rc=0 DIAG run=v2s-m4_2021-09-25_2021-03-29_s2701 minutes=24.7 max_rhat=1.0371 min_ess_bulk=106 min_ess_tail=149 divergent=0 treedepth_hits=0 max_depth=10 min_ebfmi=0.541 gate=FAIL
+start B v2s-m4_2021-09-25_2021-03-29_s2702 2026-10-30 07:50:10
+end v2s-m4_2021-09-25_2021-03-29_s2702 rc=0 DIAG run=v2s-m4_2021-09-25_2021-03-29_s2702 minutes=50.2 max_rhat=1.0256 min_ess_bulk=127 min_ess_tail=167 divergent=0 treedepth_hits=0 max_depth=10 min_ebfmi=0.509 gate=FAIL
+end v2s-m4_2024-11-30_2024-11-29_s2701 rc=0 DIAG run=v2s-m4_2024-11-30_2024-11-29_s2701 minutes=77.8 max_rhat=1.0624 min_ess_bulk=50 min_ess_tail=225 divergent=0 treedepth_hits=0 max_depth=10 min_ebfmi=0.698 gate=FAIL
+start A v2s-m4_2024-11-30_2024-11-29_s2702 2026-10-30 08:43:22
+QUEUE ABORTED rc=143 killed (TERM) (pid 44643)
+```
+
+```
+preflight PASS
+start A v2s-m4_2024-11-30_2024-11-29_s2702 2026-11-04 12:20:24
+end v2s-m4_2024-11-30_2024-11-29_s2702 rc=0 STALE v2s-m4_2024-11-30_2024-11-29_s2702 (no meta.json)
+QUEUE FINISHED
+```
+
+`queue.log`'s end line for the refit shows the run's `STALE` line, not its `DIAG` line, because
+the queue logs the first `DIAG`, `SKIP` or `STALE` line of the run log and the retire came
+first. The refit's run log, `results/harness/logs/v2s-m4_2024-11-30_2024-11-29_s2702.log`, its
+first line and its `DIAG` line (the retire's second line, which names both folders by their
+absolute paths, is left out):
+
+```
+STALE v2s-m4_2024-11-30_2024-11-29_s2702 (no meta.json)
+DIAG run=v2s-m4_2024-11-30_2024-11-29_s2702 minutes=45.1 max_rhat=1.0352 min_ess_bulk=117 min_ess_tail=264 divergent=0 treedepth_hits=0 max_depth=10 min_ebfmi=0.608 gate=FAIL
+```
+
+**Provenance.** All four fits ran at f7468df on a clean tree (`meta.json`: `git_head` f7468df,
+`git_dirty` false; `fit_cell.R` records both before it fits), with `Stan/forecast_v2.stan` at
+sha256 `8d34b6fe43778b5d073b80e7e41996ee8a66be5c907cda94ffa51880de2be05b` and the config at
+`2a950600e6274b0201369e41aa9b7353d6ceca06c2c01f1f2f28a625b243b3e6`. The next commit, cac85df,
+changed no Stan line and no file the builder reads: in `R/harness` it changed only the prior
+predictive script's header and one row's label, and otherwise tests and the prior predictive
+report. The Stan file's sha256 is the same there and in this step's commit. Each run's
+`meta.json` `data_sha256` equals `stan_data_sha()` (`R/harness/runs.R`) of the data that
+cac85df's builder gives for the same cell through the arm, as `fit_cell.R` builds it, and
+equals the sha256 of the run's frozen `inputs/stan_data.json`:
+
+| Fit (cell, seed) | `git_head`, `git_dirty` | `stan_sha256` | `data_sha256` (`meta.json`) | `stan_data_sha()` at cac85df | sha256 of `inputs/stan_data.json` |
+| --- | --- | --- | --- | --- | --- |
+| 2024 eve, 2701 | f7468df, false | `8d34b6fe43778b5d073b80e7e41996ee8a66be5c907cda94ffa51880de2be05b` | `44395c14fb5a85e5a56908900754065c05c7932d336678bfa55a2db040155e89` | the same | the same |
+| 2024 eve, 2702 | f7468df, false | `8d34b6fe43778b5d073b80e7e41996ee8a66be5c907cda94ffa51880de2be05b` | `44395c14fb5a85e5a56908900754065c05c7932d336678bfa55a2db040155e89` | the same | the same |
+| 2021 f180, 2701 | f7468df, false | `8d34b6fe43778b5d073b80e7e41996ee8a66be5c907cda94ffa51880de2be05b` | `51e36d6557550f65f558fbc9e0aef7fc26c0ce8e598c2c8504fb314fc910b453` | the same | the same |
+| 2021 f180, 2702 | f7468df, false | `8d34b6fe43778b5d073b80e7e41996ee8a66be5c907cda94ffa51880de2be05b` | `51e36d6557550f65f558fbc9e0aef7fc26c0ce8e598c2c8504fb314fc910b453` | the same | the same |
+
+To re-measure a cell's sha, from the project root, with the cell's E and F as the two
+arguments (`2024-11-30 2024-11-29` for 2024 eve and `2021-09-25 2021-03-29` for 2021 f180, the
+two lines below). It reproduces the recorded sha only on a tree whose `R/harness` builder and
+`harness/configs/steps/v2s-m4.json` build the data as cac85df's do; after a later change to
+either it prints another sha, which is not a provenance failure:
+
+```
+LC_ALL=en_US.UTF-8 Rscript -e 'x <- commandArgs(TRUE); options(box.path = getwd()); box::use(R/harness/arms[arm], R/harness/info_set[info_set], R/harness/runs[stan_data_sha]); a <- arm("v2s-m4"); cat(stan_data_sha(a$build(info_set(as.Date(x[1]), as.Date(x[2])), a$read_config(a$config))$data), "\n", sep = "")' 2024-11-30 2024-11-29
+LC_ALL=en_US.UTF-8 Rscript -e 'x <- commandArgs(TRUE); options(box.path = getwd()); box::use(R/harness/arms[arm], R/harness/info_set[info_set], R/harness/runs[stan_data_sha]); a <- arm("v2s-m4"); cat(stan_data_sha(a$build(info_set(as.Date(x[1]), as.Date(x[2])), a$read_config(a$config))$data), "\n", sep = "")' 2021-09-25 2021-03-29
+```
+
+**Stop rule.** `LC_ALL=en_US.UTF-8 Rscript R/harness/compare_runs.R stop v2s-m4` (exit 0):
+
+```
+GO v2s-m4_2024-11-30_2024-11-29_s2701 lp_rhat=1.0237 divergent=0/1600 near_cap=0/1600 max_rhat=1.0624; recorded: minutes=77.8 treedepth_hits=0 ess_bulk_per_1k_grad=0.030
+GO v2s-m4_2024-11-30_2024-11-29_s2702 lp_rhat=1.0144 divergent=0/1600 near_cap=0/1600 max_rhat=1.0352; recorded: minutes=45.1 treedepth_hits=0 ess_bulk_per_1k_grad=0.071
+GO v2s-m4_2021-09-25_2021-03-29_s2701 lp_rhat=1.0160 divergent=0/1600 near_cap=1/1600 max_rhat=1.0372; recorded: minutes=24.7 treedepth_hits=0 ess_bulk_per_1k_grad=0.064
+GO v2s-m4_2021-09-25_2021-03-29_s2702 lp_rhat=1.0211 divergent=0/1600 near_cap=0/1600 max_rhat=1.0257; recorded: minutes=50.2 treedepth_hits=0 ess_bulk_per_1k_grad=0.079
+```
+
+| Fit (cell, seed) | Verdict | R-hat of `lp__` (STOP above 1.1) | Divergences (STOP above 16) | Draws within 0.5 of a cap (STOP above 16) | Max R-hat, gate scope (STOP above 1.10) | Minutes | Treedepth hits | Min bulk ESS per 1,000 gradients (gate scope) |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2024 eve, 2701 | GO | 1.0237 | 0 of 1,600 | 0 of 1,600 | 1.0624 | 77.8 | 0 | 0.030 |
+| 2024 eve, 2702 | GO | 1.0144 | 0 of 1,600 | 0 of 1,600 | 1.0352 | 45.1 | 0 | 0.071 |
+| 2021 f180, 2701 | GO | 1.0160 | 0 of 1,600 | 1 of 1,600 | 1.0372 | 24.7 | 0 | 0.064 |
+| 2021 f180, 2702 | GO | 1.0211 | 0 of 1,600 | 0 of 1,600 | 1.0257 | 50.2 | 0 | 0.079 |
+
+**Verdict: GO on all four fits.** The stop rule's signals are all inside their limits:
+- the largest R-hat of `lp__` is 1.0237;
+- no transition diverged on any fit (0 of 1,600 each), against the limit of 16;
+- one draw came within 0.5 of a cap, on 2021 f180 seed 2701, against the limit of 16;
+- the largest gate-scope R-hat is 1.0624.
+
+Minutes, treedepth hits and ESS per 1,000 gradients are recorded, never a stop.
+
+- **The §5.7 gate is not the stop rule.** Each fit's `DIAG` line reads `gate=FAIL`, because its
+  gate-scope max R-hat (1.0624, 1.0352, 1.0371 and 1.0256 as `DIAG` prints them; the stop rule
+  rounds the last two up to 1.0372 and 1.0257) is above the scoring gate's 1.01. A `dev` arm is
+  never scored.
+- **Divergences per chain.** None diverged on any fit (`meta.json` `divergent` 0), so none in
+  any chain. The runs keep no per-chain counts: `fit_cell.R` deleted the CmdStan CSVs
+  (`HARNESS_KEEP_CMDSTAN` unset), and `key_diagnostics.csv` holds R-hat and ESS only. The one
+  draw near a cap is a draw of log κ (cap 2) in `param_draws.parquet`; `v2s-m3` had none.
+- **ESS per 1,000 gradients** is 0.030 and 0.071 on 2024 eve (seeds 2701 and 2702) and 0.064
+  and 0.079 on 2021 f180, against `v2s-m3`'s 0.176 and 0.292: 2.5 to 5.9 times lower. The
+  gradients barely differ: a post-warmup transition took 1,001 to 1,023 leapfrog steps on
+  average (`n_leapfrog` ÷ 1,600; tree depth 10 is 1,023 steps), here as in `v2s-m3`, so the drop
+  is the min bulk ESS's own. Recorded, not a stop.
+- **What sets the extremes.** log φ_K, the concentration of the closed elections' kjördæmi
+  results, sets both the gate's min bulk ESS and its max R-hat on all four fits: its bulk ESS
+  in `key_diagnostics.csv` (50.2, 117.2, 105.6 and 126.8, in the stop table's order) and its
+  R-hat (1.0624, 1.0352, 1.0371 and 1.0256) are `meta.json`'s `min_ess_bulk` and `max_rhat`.
+  (`key_diagnostics.csv` carries `log_phi_K`, a monotone map of the parameter `log_phi_K_u`,
+  whose bulk ESS and R-hat are the same.) Under `v2s-m3` it mixed well: bulk ESS 2310 and 665,
+  R-hat 1.0001 and 1.0028. Its posterior median rises, from 6.31 to 7.15 on 2024 eve (both
+  seeds) and from 7.02 to 7.89 and 7.78 on 2021 f180 (prior median log 1000 = 6.91). One
+  reading, not checked: with δ free to move between elections, the results' spread across
+  kjördæmi can be read as the walk's steps or as the results' overdispersion around δ, and the
+  two trade off. In `key_diagnostics.csv` the next lowest bulk ESS is s_ζ's on Viðreisn on 2024
+  eve seed 2701 (67; R-hat 1.0478).
+- **Where s̄_ζ sits.** It is never an extreme. Its posterior medians sit above its prior
+  median, 0.135 = 0.2 · qnorm(0.75): a little on 2024 eve (0.16) and more on 2021 f180 (0.22 and
+  0.24), all below the prior's 95% point 0.39. The four chains agree on every fit
+  (`key_diagnostics.csv` and `param_draws.parquet`, s̄_ζ only):
+
+  | Fit (cell, seed) | R-hat | Bulk ESS | Posterior median | 5% and 95% | Chain medians |
+  | --- | --- | --- | --- | --- | --- |
+  | 2024 eve, 2701 | 1.0148 | 496 | 0.160 | 0.101, 0.252 | 0.161, 0.162, 0.156, 0.163 |
+  | 2024 eve, 2702 | 1.0177 | 301 | 0.161 | 0.101, 0.266 | 0.156, 0.161, 0.162, 0.165 |
+  | 2021 f180, 2701 | 1.0119 | 288 | 0.238 | 0.085, 0.400 | 0.237, 0.237, 0.248, 0.227 |
+  | 2021 f180, 2702 | 1.0117 | 249 | 0.224 | 0.087, 0.397 | 0.222, 0.219, 0.235, 0.221 |
+
+  Short fits made before the re-centring (4 chains of 50 + 20 at treedepth 8) had 2024 eve's
+  s̄_ζ at 0.28 to 1.04, with chain medians from 0.31 to 0.82. The full fits do not reproduce
+  that: their chains agree, near 0.16. The short fits differ from these in both the form and
+  the warmup, so they cannot say which of the two moved s̄_ζ.
+- **The minutes read high, and two include a sleep.** They are 77.8 and 45.1 on 2024 eve and
+  24.7 and 50.2 on 2021 f180, against `v2s-m3`'s 54.3 and 30.7. What ran beside each fit:
+  - 2021 f180, seed 2701 (07:25:13 to 07:50:10, awake, on AC): 2024 eve seed 2701 throughout;
+    at 07:26 the post-wake system work (XProtect, installd, an updater), with a 1-minute load
+    average of 69 and each of the 8 chains at about 95% CPU; and a peer session's simulation
+    study, which at 21:56 ran 4 cores and about 10 GB and was due to end at 22:20 to 22:40, but
+    the sleep paused it, so it ran on after the wake: one R process at about 72% CPU at 07:26.
+  - 2021 f180, seed 2702 (07:50:10 to 08:40:37): 2024 eve seed 2701 throughout, and the peer's
+    simulation for as long as it ran. About 28 of its 50.2 minutes are the clamshell sleep, so
+    it ran about 22 minutes awake.
+  - 2024 eve, seed 2701 (07:25:13 to 08:43:22): both 2021 f180 fits, the post-wake work and the
+    peer's simulation, and the same 28 minutes of sleep, so about 50 minutes awake.
+  - 2024 eve, seed 2702 (2026-11-04 12:20:24 to 13:05:44, the only fit of its queue, awake
+    throughout: `pmset -g log` records no sleep from 11:00:10 until after it finished): from
+    about 12:21 to 12:33 this step's fix round, as single R processes: fast test files
+    (escapes, v2-reference, v2-prior-predictive), short reference scripts, the prior predictive
+    report's regeneration (1,000 draws, 1:45) and then the whole fast suite (about 12:29 to
+    12:32), at a 1-minute load average of 6.1 to 8.2; and beside all of it a read-only audit
+    job (a `claude -p` process, no R) and the controller's checks.
+
+  Per chain, the refit took 6.6 ms per gradient and 2021 f180 seed 2701 took 3.6, against
+  `v2s-m3`'s 8.0 and 4.5. No slow test ran beside any fit: the slow suite ran in each
+  preflight, before the fits. No fit is known to have run unloaded, so every fit's minutes read
+  high, by an unknown amount.
+
+**What the lp tests cover.** The refit's preflight (the full slow suite on f7468df, 2026-11-04,
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 6661 ]`) ran the step's Stan tests. On each cell, Stan's log
+density minus the reference's (`v2_lp_ref()`) is constant over the cell's points within one
+tolerance per cell, tol = 1e-9 · max(1, |lp_ref|) with |lp_ref| the largest over the cell's
+points (`lp_tol()`, `tests/harness/helper-v2.R`), and the points of each kind (posterior,
+off-posterior, prior) are also checked against their own `lp_tol()` (`expect_lp_matches()`):
+- on 2024 eve and 2021 f180, over 20 posterior and 10 off-posterior points of a short fit and
+  10 prior points;
+- on 2017 eve, over 10 prior points only (no fit, no forecast).
+
+Each mutant a cell exercises is rejected above 100 × tol, the walk's three included:
+`delta_years_unscaled` (every step on √1, not √(Δyears_e / Δ̄)) at 6.68e+04, 1.27e+05 and
+2.14e+04 times 100 × tol on 2024 eve, 2021 f180 and 2017 eve; `no_delta_restart` (a
+newcomer's column keeps its pre-entry walk) at 5.08e+04, 4.28e+04 and 1.31e+04; and
+`delta_entry_leak` (the literal step, from δ_{e−1} itself) at 3.19e+03, 3.76e+03 and 370.
+370 on 2017 eve is the narrowest margin of any mutant on any cell. 2017 eve has only prior
+points, one closed election and no kjördæmi poll, and its newcomer (Miðflokkurinn) enters in
+the open epoch. So the leak reaches the density only through the open epoch's national polls,
+whose share Σ_k w_k softmax(θ + δ_k) sees δ only through the sum's curvature: M_e makes δ's
+w-weighted kjördæmi mean zero for every party, so the sum's first-order term in δ vanishes.
+
+A fourth check runs 2024 eve's prior points (10, no fit) at `delta_years_bar` = 2.5 and
+`prior_s_bar_zeta` = 0.37: Stan matches the reference there, and three planted slips are
+rejected: Δ̄ written as the literal 4 (9.57e+04 times 100 × tol), the prior's scale as the
+literal 0.2 (43.3), and each step on the previous epoch's gap (2.03e+05). The two flatness
+tests, in
+`tests/harness/test-v2-reference.R`, pin the re-centring in the reference, which the lp test
+ties Stan to:
+- on real data, at seed 9 with s̄_ζ = 0.3, a newcomer's pre-entry ζ (2024 eve, 6 moves) and an
+  offset a_k / s_δ0,q added to the epoch-1 ζ of every party of S_1 (2024 eve and 2021 f180)
+  change the density by their N(0, 1) prior alone, to at most 2.5e-11, 7.9e-13 and 3.6e-12,
+  each also under 1e-10 + 8 ε |lp|; the literal step (`delta_entry_leak`) misses by at least
+  0.50, 43.2 and 12.0, at least 19 times 100 × tol;
+- on the toy input above, neither move shifts epoch 1's contrasts or the entry epoch's by more
+  than 1e-12, and under the literal step each shifts the entry epoch's by more than 1e-3.
+
+Its limits:
+- `house_walk_from_first_poll` is not exercised on 2017 eve, where every house starts in
+  epoch 1, as in M1 to M3.
+- The re-centring is invisible wherever no party enters, since M_e removes it there; every
+  cell has a later entry (Miðflokkurinn, and on 2024 eve and 2021 f180
+  Sósíalistaflokkurinn), so `delta_entry_leak` is exercised on each.
+
+The test's lines:
+
+```
+v2s-m4 eve2024: 40 points, lp constant range 9.9e-10 (tol 0.000667, ratio 1.48e-06; ratio by kind: post 5.25e-06, off 9.09e-07, prior 1.48e-06); weakest exercised mutant previous_w; range / (100 tol): positional_gather 1.46e+06, previous_w 2.89e+03, next_epoch_delta 1.11e+04, close_last_kjordaemi 3.08e+05, conditional_walk 9.84e+05, house_walk_from_first_poll 7.24e+04, newcomer_mean_of_mu1 5.18e+03, no_mu_restart 1.47e+05, no_house_restart 5.94e+04, newcomer_mean_over_all 3.41e+05, shock_unscaled 6.92e+04, delta_years_unscaled 6.68e+04, no_delta_restart 5.08e+04, delta_entry_leak 3.19e+03; not exercised: none
+v2s-m4 f180_2021: 40 points, lp constant range 4.37e-10 (tol 0.000265, ratio 1.65e-06; ratio by kind: post 6.8e-06, off 1.61e-06, prior 1.65e-06); weakest exercised mutant house_walk_from_first_poll; range / (100 tol): positional_gather 2.31e+06, previous_w 2.12e+03, next_epoch_delta 7.09e+04, close_last_kjordaemi 5.34e+05, conditional_walk 1.49e+06, house_walk_from_first_poll 2.04e+03, newcomer_mean_of_mu1 6.38e+03, no_mu_restart 3.64e+04, no_house_restart 3.08e+04, newcomer_mean_over_all 7.84e+05, shock_unscaled 5.45e+04, delta_years_unscaled 1.27e+05, no_delta_restart 4.28e+04, delta_entry_leak 3.76e+03; not exercised: none
+v2s-m4 eve2017: 10 points, lp constant range 5.09e-11 (tol 0.000103, ratio 4.96e-07; ratio by kind: prior 4.96e-07); weakest exercised mutant delta_entry_leak; range / (100 tol): positional_gather 1.04e+06, close_last_kjordaemi 1.2e+06, conditional_walk 1.3e+06, newcomer_mean_of_mu1 587, no_mu_restart 4.45e+03, no_house_restart 4.79e+03, newcomer_mean_over_all 4.28e+05, shock_unscaled 3.8e+04, delta_years_unscaled 2.14e+04, no_delta_restart 1.31e+04, delta_entry_leak 370; not exercised: house_walk_from_first_poll
+v2s-m4 eve2024 at delta_years_bar 2.5, prior_s_bar_zeta 0.37: 10 prior points, lp constant range 9.31e-10 (tol 0.000668); range / (100 tol): literal_bar_4 9.57e+04, literal_0.2 43.3, prev_years 2.03e+05
+```
+
+**The prior predictive rows.** `delta_step_4y`: a 20% party's change in its kjördæmi deviation
+over a 4-year gap, a step in an epoch where no party enters, in pp
+(`harness/v2/prior_predictive.md`):
+
+| Row | Cell | Values | q05 | q50 | q95 | Band | Verdict |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `delta_step_4y` | 2024 eve | 6000 | −4.69 | −0.05 | 4.18 | [5%, 95%] inside [−15, 15] | PASS |
+| `delta_step_4y` | 2021 f180 | 6000 | −4.13 | −0.05 | 4.13 | [5%, 95%] inside [−15, 15] | PASS |
+
+```
+PRIOR PASS delta_step_4y/2024-eve/config
+PRIOR PASS delta_step_4y/2021-f180/config
+```
+
+`kd_delta` now reads δ in the open epoch: its label became "δ in the open epoch: a party's
+kjördæmi deviation from its national share, 20% party (static under `delta_walk` = 0,
+log s_δ0 = μ_sd + τ_sd r; the walk's under 1)", and under the walk its quantiles widen, as the
+open epoch's δ adds the steps to the first epoch's deviation:
+
+| Row | Cell | q05, q50, q95 under `v2s-m3` (static δ) | q05, q50, q95 under `v2s-m4` (the walk) | Band | Verdict |
+| --- | --- | --- | --- | --- | --- |
+| `kd_delta` | 2024 eve | −10.93, −0.80, 10.40 | −12.49, −1.13, 12.98 | [5%, 95%] inside [−25, 25] | PASS |
+| `kd_delta` | 2021 f180 | −11.44, −0.77, 11.58 | −12.24, −0.93, 12.92 | [5%, 95%] inside [−25, 25] | PASS |
+
+Every other summary, table row and verdict line is byte-identical to the report `v2s-m3`'s
+config wrote.
+
+To rewrite the table and the verdicts from the finished runs under `results/harness/`, from the
+project root:
+
+```
+LC_ALL=en_US.UTF-8 Rscript R/harness/tier0_report.R v2s-m4 harness/runs/v2-steps.txt harness/v2/steps/v2s-m4.md
+LC_ALL=en_US.UTF-8 Rscript R/harness/compare_runs.R stop v2s-m4
+```
+
+Next: P2 (`v2s-p2`), the δ form, on `v2s-m4`'s config with `delta_form = 1`, as long as M4
+stands; both seeds of `v2s-m4` are its comparison runs.

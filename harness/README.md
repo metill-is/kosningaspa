@@ -464,6 +464,11 @@ M3 (`v2s-m3`), the election-day shock (`shock = 1`), passed the stop rule too: `
 fits, with no divergence and no draw near a cap (`harness/v2/steps.md`). Its config is
 `v2s-m2`'s with `shock = 1`, as the rule gives, and every later step keeps `shock = 1`.
 
+M4 (`v2s-m4`), the δ walk (`delta_walk = 1`), passed the stop rule as well: `GO` on all four
+fits, both seeds on each cell since P2 follows, with no divergence and one draw near a cap, 1
+of 1,600 on 2021 f180 seed 2701 (`harness/v2/steps.md`). Its config is `v2s-m3`'s with
+`delta_walk = 1`, as the rule gives, and every later step keeps `delta_walk = 1`.
+
 A P-step's form is first checked against the reference form, point by point, by
 `R/harness/v2_equivalence.R` (the plan's Decision 6, condition 1), once for each check of
 `EQUIVALENCE_REQUIRED` (below), all into the step's equivalence CSV:
