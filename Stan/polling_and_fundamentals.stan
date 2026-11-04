@@ -27,7 +27,7 @@ data {
   
   // Latest poll information
   int<lower = 1> last_poll_days;           // Days since last poll
-  int<lower = 1> last_poll_house;          // House that conducted last poll
+  int<lower = 2, upper = H> last_poll_house; // House that conducted last poll (1 is the election)
   int<lower = 1> n_last_poll;              // Sample size of last poll
 
   // Fundamentals Data Section
@@ -293,7 +293,8 @@ generated quantities {
   eta_p[1] = -sum(eta_p[2:P]);                            // Sum-to-zero constraint
   vector[P] pi_p = softmax(eta_p);                        // Convert to probabilities
   // Generate synthetic poll data with house-specific dispersion
-  y_rep_newest_poll = dirichlet_multinomial_rng(pi_p * phi[last_poll_house], n_last_poll);
+  // phi covers houses 2..H, as in the likelihood (phi[house_n[n] - 1])
+  y_rep_newest_poll = dirichlet_multinomial_rng(pi_p * phi[last_poll_house - 1], n_last_poll);
 }
 
 
