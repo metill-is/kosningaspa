@@ -138,7 +138,7 @@ test_that("the LKJ-Cholesky density integrates to 1, and its sampler has LKJ mar
   expect_lt(max(abs(colMeans(r^2) - v) / sqrt((m4 - v^2) / m)), 5)
   expect_equal(unique(round(diag(apply(R, 1:2, mean)), 12)), 1)
 })
-test_that("the reference refuses another form, an unbuilt switch, a missing parameter and an unreachable mutant", {
+test_that("the reference refuses another form, an unbuilt switch, a missing parameter, an unreachable mutant and a delta walk's malformed gaps", {
   d <- d_2024eve()
   pars <- v2_simulate(d, seed = 1, observe = FALSE)$pars
   expect_named(pars, V2_CORE_PARS$name)
@@ -151,6 +151,19 @@ test_that("the reference refuses another form, an unbuilt switch, a missing para
   expect_error(v2_lp_ref(pars[-1], d), "theta1")
   expect_error(v2_lp_ref(utils::modifyList(pars, list(sigma = -pars$sigma)), d), "sigma")
   expect_error(v2_lp_ref(pars, utils::modifyList(d, list(epoch_bias = c(0L, 1L)))), "neither 0 nor 1")
+  d4 <- v2_test_cells(cfg_m4())$eve2024$data
+  expect_identical(as.integer(d4$delta_walk), 1L)
+  pars4 <- v2_simulate(d4, seed = 1, observe = FALSE)$pars
+  expect_error(
+    v2_lp_ref(pars4, utils::modifyList(d4, list(delta_years = d4$delta_years[-1]))),
+    "data$delta_years must be n_epoch non-negative numbers",
+    fixed = TRUE
+  )
+  expect_error(
+    v2_lp_ref(pars4, utils::modifyList(d4, list(delta_years_bar = 0))),
+    "data$delta_years_bar must be one positive number",
+    fixed = TRUE
+  )
 })
 
 # The epoch bias (step v2s-m1, §6.4, switch epoch_bias), on the cells of the Stan lp tests.
@@ -529,12 +542,15 @@ test_that("at z_shock = 0 the shock's density is the shock-free one plus its pri
 })
 
 # The δ walk (step v2s-m4, §6.7, switch delta_walk): δ_1 = M_1(s_δ0 ⊙ ζ_1) and δ_e =
-# M_e(δ_{e−1} + √(Δyears_e / Δ̄) s_ζ ⊙ ζ_e), a newcomer's column fresh at its entry epoch.
+# M_e(δ_{e−1} − c_{e−1} 1ᵀ + √(Δyears_e / Δ̄) s_ζ ⊙ ζ_e), with δ_{e−1} re-centred within each
+# kjördæmi over the previous election's parties (c_{e−1}, their unweighted mean), a newcomer's
+# column fresh at its entry epoch.
 
 test_that("the delta-walk reference: its mutants change the density on every cell, and the identity under permutation holds", {
   # WHY: every cell has a step whose delta_years is not delta_years_bar (2017 eve's one step is
-  # 1 year) and a newcomer entering after the first epoch (M, and J), so both mutants are
-  # exercised on each, 2017 eve's prior points included.
+  # 1 year), which exercises delta_years_unscaled, and a newcomer entering after the first
+  # epoch (M, and J), which exercises no_delta_restart and delta_entry_leak; so all three
+  # mutants are exercised on each cell, 2017 eve's prior points included.
   cells <- v2_test_cells(cfg_m4())
   for (name in names(cells)) {
     d <- cells[[name]]$data
@@ -652,7 +668,7 @@ test_that("with delta_walk = 0 delta_raw is one zeta, the walk's scales have siz
   expect_identical(s1$delta_raw[1, , ], s$delta_raw[1, , ])
 })
 
-test_that("on 2024 eve no newcomer's zeta before its entry epoch reaches the likelihood, which the walk without the re-centring lets through", {
+test_that("on real data neither a newcomer's earlier zeta nor an offset shared by S_1 reaches the likelihood, which the walk without the re-centring lets through", {
   # WHY: before its entry epoch a newcomer is in no softmax, so its column of delta reaches the
   # likelihood only through the walk into its entry epoch. Re-centring delta_{e-1} over the
   # previous election's parties, which exclude it, keeps it out: moving one of its earlier zeta
@@ -674,10 +690,40 @@ test_that("on 2024 eve no newcomer's zeta before its entry epoch reaches the lik
         moved$delta_raw[e, k, p] <- z + 1
         prior <- -0.5 * ((z + 1)^2 - z^2)
         at <- sprintf("party %d (entry epoch %d), zeta of epoch %d, kjordaemi %d", p, entry[p], e, k)
-        expect_lt(abs(v2_lp_ref(moved, d) - lp - prior), tol, label = at)
+        dlp <- v2_lp_ref(moved, d) - lp
+        expect_lt(abs(dlp - prior), tol, label = at)
+        expect_lt(abs(dlp - prior), 1e-10 + 8 * .Machine$double.eps * abs(lp), label = at)
         expect_gt(abs(v2_lp_ref(moved, d, "delta_entry_leak") - lp_leak - prior), 100 * tol, label = paste(at, "under delta_entry_leak"))
       }
     }
+  }
+  # An offset a_k shared by the parties S_1 with results at the first closed election, added to
+  # their epoch-1 delta as a_k / s_delta0,q on zeta_1[k, q], cancels in every softmax over S_1
+  # at epoch 1 and is re-centred away at epoch 2; the literal walk carries it into the entry
+  # epoch's contrasts.
+  a <- c(0.3, -0.2, 0.1, 0.25, -0.15, 0.05)
+  for (name in c("eve2024", "f180_2021")) {
+    d <- v2_test_cells(cfg_m4())[[name]]$data
+    expect_identical(as.integer(d$K), length(a))
+    s <- v2_simulate(d, seed = 9, observe = FALSE)$pars
+    s$s_bar_zeta[] <- 0.3
+    s0 <- v2_natural(s, d)$s_delta0
+    S1 <- d$idx_res[1, seq_len(d$n_rep_res[1])]
+    expect_true(any(c(d$entry_epoch) > 1L), label = name)
+    moved <- s
+    prior <- 0
+    for (q in S1) {
+      z <- s$delta_raw[1, , q]
+      moved$delta_raw[1, , q] <- z + a / s0[q]
+      prior <- prior - 0.5 * sum((z + a / s0[q])^2 - z^2)
+    }
+    lp <- v2_lp_ref(s, d)
+    tol <- lp_tol(lp)
+    dlp <- v2_lp_ref(moved, d) - lp
+    expect_lt(abs(dlp - prior), tol, label = name)
+    expect_lt(abs(dlp - prior), 1e-10 + 8 * .Machine$double.eps * abs(lp), label = name)
+    leak <- v2_lp_ref(moved, d, "delta_entry_leak") - v2_lp_ref(s, d, "delta_entry_leak")
+    expect_gt(abs(leak - prior), 100 * tol, label = paste(name, "under delta_entry_leak"))
   }
 })
 

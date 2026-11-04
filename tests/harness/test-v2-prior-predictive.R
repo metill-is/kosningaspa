@@ -421,6 +421,9 @@ test_that("the delta walk's row runs under its switch, with the band written bef
   expect_identical(row$band[[1]], band_inside(-15, 15))
   expect_identical(row$keys[[1]], "prior_s_bar_zeta")
   expect_length(row$held[[1]], 0)
-  # The label states the construction: a 4-year step, the open epoch's weights, no re-centring.
-  expect_true(all(vapply(c("4-year", "open epoch", "re-centring"), \(x) grepl(x, row$label, fixed = TRUE), logical(1))))
+  # The label states the construction: a 4-year step, the open epoch's weights, and the term
+  # it leaves out, the weight change; "re-centring" names the walk's own -c 1' term.
+  left_out <- "leaving out M_e(\u03b4_{e\u22121}) \u2212 \u03b4_{e\u22121}, the change of kj\u00f6rd\u00e6mi weights"
+  expect_true(all(vapply(c("4-year", "open epoch", left_out), \(x) grepl(x, row$label, fixed = TRUE), logical(1))))
+  expect_false(grepl("re-centring", row$label, fixed = TRUE))
 })

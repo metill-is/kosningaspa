@@ -69,12 +69,13 @@
 #     the ratios to §6.10's targets are expected near 1.13 and 1.05. They read no
 #     party-indexed parameter, so coordinate 1 is the 20% or 5% party.
 #   - delta_step_4y (step v2s-m4, switch delta_walk): the change in a party's kjördæmi
-#     deviation over a 4-year gap (§6.7): row k of M_e(√(4 / Δ̄) s_ζ ⊙ ζ), the walk's step on
-#     the open epoch's weights w, with ζ ~ N(0, 1) on every kjördæmi and party from seed
-#     SEED_AUX + i and s_ζ = s̄_ζ s_zeta_raw (pars s_bar_zeta and s_zeta_raw), coordinate 1 of
-#     every kjördæmi, the kjördæmi pooled. A change δ_e − δ_{e−1} also holds M_e(δ_{e−1}) −
-#     δ_{e−1}, the re-centring of the previous deviations on the new epoch's weights, which this
-#     row leaves out. Coordinate 1's own scale is s_zeta_raw[1].
+#     deviation over a 4-year gap (§6.7), a step in an epoch where no party enters: row k of
+#     M_e(√(4 / Δ̄) s_ζ ⊙ ζ), the walk's step on the open epoch's weights w, with ζ ~ N(0, 1)
+#     on every kjördæmi and party from seed SEED_AUX + i and s_ζ = s̄_ζ s_zeta_raw (pars
+#     s_bar_zeta and s_zeta_raw), coordinate 1 of every kjördæmi, the kjördæmi pooled. In such
+#     an epoch M_e removes the walk's −c_{e−1} 1ᵀ, so a change δ_e − δ_{e−1} is this step plus
+#     M_e(δ_{e−1}) − δ_{e−1}, the change of kjördæmi weights, which this row leaves out.
+#     Coordinate 1's own scale is s_zeta_raw[1].
 #
 # The bands, each built by its constructor and checked by in_band():
 #   band_inside(lo, hi)                      the 5% quantile at least lo, the 95% at most hi
@@ -459,8 +460,8 @@ ROWS <- check_rows(dplyr::bind_rows(
     paste0(
       "A 20% party's change in its kj\u00f6rd\u00e6mi deviation over a 4-year gap: the walk's step ",
       "M_e(\u221a(4 / \u0394\u0304) s_\u03b6 \u2299 \u03b6) on the open epoch's weights, ",
-      "s_\u03b6 = s\u0304_\u03b6 s_zeta_raw, without the re-centring of \u03b4_{e\u22121} on those weights ",
-      "(s\u0304_\u03b6 ~ half-N(0, `prior_s_bar_zeta`), s_zeta_raw ~ half-N(0, 1))"
+      "s_\u03b6 = s\u0304_\u03b6 s_zeta_raw (s\u0304_\u03b6 ~ half-N(0, `prior_s_bar_zeta`), s_zeta_raw ~ half-N(0, 1)), ",
+      "leaving out M_e(\u03b4_{e\u22121}) \u2212 \u03b4_{e\u22121}, the change of kj\u00f6rd\u00e6mi weights"
     ),
     "prior_s_bar_zeta", band_inside(-15, 15)
   )

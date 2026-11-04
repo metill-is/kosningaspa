@@ -21,7 +21,7 @@ Written by `LC_ALL=en_US.UTF-8 Rscript R/harness/v2_prior_predictive.R <config> 
 - **newcomer_entry** (step v2s-m2, switch `newcomer_pool`): A newcomer's entry bias against the existing parties' mean, on a 10% party (m_new + s_new η, m_new ~ N(0, 0.3), s_new ~ half-N(0, 0.3)). Band: [5%, 95%] inside [-10, 10].
 - **shock_sd_20** (step v2s-m3, switch `shock`): The election-day shock's sd on a 20% party: given the draw's s̄_E, the sd of its change over 200 draws of z, on the composition (20%, 80% / (P − 1), …), with ε = C(s̄_E d ⊙ z) and each d = √(min(0.2 / π, 10)) of that composition (s̄_E ~ half-N(0, `prior_s_bar_E`)). Band: median in [0.5, 2] × 1.6.
 - **shock_sd_05** (step v2s-m3, switch `shock`): The election-day shock's sd on a 5% party: given the draw's s̄_E, the sd of its change over 200 draws of z, on the composition (5%, 95% / (P − 1), …), with ε = C(s̄_E d ⊙ z) and each d = √(min(0.2 / π, 10)) of that composition (s̄_E ~ half-N(0, `prior_s_bar_E`)). Band: median in [0.5, 2] × 0.95.
-- **delta_step_4y** (step v2s-m4, switch `delta_walk`): A 20% party's change in its kjördæmi deviation over a 4-year gap: the walk's step M_e(√(4 / Δ̄) s_ζ ⊙ ζ) on the open epoch's weights, s_ζ = s̄_ζ s_zeta_raw, without the re-centring of δ_{e−1} on those weights (s̄_ζ ~ half-N(0, `prior_s_bar_zeta`), s_zeta_raw ~ half-N(0, 1)). Band: [5%, 95%] inside [-15, 15].
+- **delta_step_4y** (step v2s-m4, switch `delta_walk`): A 20% party's change in its kjördæmi deviation over a 4-year gap: the walk's step M_e(√(4 / Δ̄) s_ζ ⊙ ζ) on the open epoch's weights, s_ζ = s̄_ζ s_zeta_raw (s̄_ζ ~ half-N(0, `prior_s_bar_zeta`), s_zeta_raw ~ half-N(0, 1)), leaving out M_e(δ_{e−1}) − δ_{e−1}, the change of kjördæmi weights. Band: [5%, 95%] inside [-15, 15].
 
 ## Results
 
