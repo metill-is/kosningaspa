@@ -810,9 +810,11 @@ and 2702, because a P-step follows; they are the four `v2s-m4` lines of
   finished at 07:50:10, and lane B ran seed 2702 from then until 08:40:37; 2024 eve seed 2701
   finished at 08:43:22 (each run's `meta.json`), and lane A started seed 2702.
 - **A second sleep.** At 08:03:06 the Mac went on battery, and at 08:03:14 into "Clamshell
-  Sleep" (`pmset -g log`), which an idle-sleep assertion does not prevent. Apart from dark
-  wakes of seconds it slept until 08:31:19, back on AC. The two fits running then, 2024 eve seed
-  2701 and 2021 f180 seed 2702, count those 28 minutes in their minutes.
+  Sleep", which an idle-sleep assertion does not prevent. `pmset -g log` then shows seven sleeps
+  (2 min 19 s, 5 min 14 s, 6 min 53 s, 8 min 30 s, 25 s, 3 s and 14 s: 23.6 minutes in all)
+  between dark wakes (about 4.5 minutes in all, the longest 3 minutes, 08:26:35 to 08:29:35),
+  and a full wake at 08:31:19, back on AC. The two fits running then, 2024 eve seed 2701 and
+  2021 f180 seed 2702, count those 28 minutes, 23.6 of them asleep, in their minutes.
 - **The pause and the refit.** At 09:04 the work was paused and the queue killed by TERM
   (`QUEUE ABORTED rc=143`), about 21 minutes into 2024 eve seed 2702, which left no `meta.json`.
   On 2026-11-04 that fit was refitted alone, through the one-line run list
@@ -823,7 +825,12 @@ and 2702, because a P-step follows; they are the four `v2s-m4` lines of
   (`QUEUE START` 11:33:41) passed its preflight at 12:20:24
   (`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 6661 ]`). Its fit started at 12:20:24, retired the killed
   run's partial folder (no `meta.json`) to `_stale/`, finished at 13:05:44 and exited 0, and
-  `queue.log` ends in `QUEUE FINISHED`. All four fits ran the same executable.
+  `queue.log` ends in `QUEUE FINISHED`. All four fits ran the same executable,
+  `Stan/forecast_v2` (git-ignored), compiled at 2026-10-29 21:57 (its modification time), sha256
+  `9a532c8cdb1f5777ab5f30a8cc8c41190c091cd90af5b1fee33e59315487224c`. cmdstanr reuses an
+  executable newer than its .stan file (`Stan/forecast_v2.stan` last changed at 21:37 that
+  day), so the refit did not recompile it, and the two rebuilds served only the preflight's
+  compiles of copies in temporary directories.
 
 CmdStan 2.38.0, `max_treedepth` 12, 10 cores (`hw.ncpu`). The diagnostics table is
 `harness/v2/steps/v2s-m4.md`. `queue.log` after the first queue's `QUEUE START` line, and after
@@ -922,26 +929,37 @@ Minutes, treedepth hits and ESS per 1,000 gradients are recorded, never a stop.
   (`HARNESS_KEEP_CMDSTAN` unset), and `key_diagnostics.csv` holds R-hat and ESS only. The one
   draw near a cap is a draw of log κ (cap 2) in `param_draws.parquet`; `v2s-m3` had none.
 - **ESS per 1,000 gradients** is 0.030 and 0.071 on 2024 eve (seeds 2701 and 2702) and 0.064
-  and 0.079 on 2021 f180, against `v2s-m3`'s 0.176 and 0.292: 2.5 to 5.9 times lower. The
+  and 0.079 on 2021 f180, against `v2s-m3`'s 0.176 and 0.292: 2.5 to 5.8 times lower (from the
+  unrounded `min_ess_bulk` ÷ `n_leapfrog` of each `meta.json`). The
   gradients barely differ: a post-warmup transition took 1,001 to 1,023 leapfrog steps on
   average (`n_leapfrog` ÷ 1,600; tree depth 10 is 1,023 steps), here as in `v2s-m3`, so the drop
   is the min bulk ESS's own. Recorded, not a stop.
 - **What sets the extremes.** log φ_K, the concentration of the closed elections' kjördæmi
-  results, sets both the gate's min bulk ESS and its max R-hat on all four fits: its bulk ESS
-  in `key_diagnostics.csv` (50.2, 117.2, 105.6 and 126.8, in the stop table's order) and its
-  R-hat (1.0624, 1.0352, 1.0371 and 1.0256) are `meta.json`'s `min_ess_bulk` and `max_rhat`.
-  (`key_diagnostics.csv` carries `log_phi_K`, a monotone map of the parameter `log_phi_K_u`,
-  whose bulk ESS and R-hat are the same.) Under `v2s-m3` it mixed well: bulk ESS 2310 and 665,
-  R-hat 1.0001 and 1.0028. Its posterior median rises, from 6.31 to 7.15 on 2024 eve (both
-  seeds) and from 7.02 to 7.89 and 7.78 on 2021 f180 (prior median log 1000 = 6.91). One
-  reading, not checked: with δ free to move between elections, the results' spread across
-  kjördæmi can be read as the walk's steps or as the results' overdispersion around δ, and the
-  two trade off. In `key_diagnostics.csv` the next lowest bulk ESS is s_ζ's on Viðreisn on 2024
-  eve seed 2701 (67; R-hat 1.0478).
-- **Where s̄_ζ sits.** It is never an extreme. Its posterior medians sit above its prior
-  median, 0.135 = 0.2 · qnorm(0.75): a little on 2024 eve (0.16) and more on 2021 f180 (0.22 and
-  0.24), all below the prior's 95% point 0.39. The four chains agree on every fit
-  (`key_diagnostics.csv` and `param_draws.parquet`, s̄_ζ only):
+  results, sets the gate-scope min bulk ESS and max R-hat on all four fits: `meta.json`'s
+  `min_ess_bulk` and `max_rhat`, the "gate scope: parameters block + scored" values of the
+  diagnostics table (the §5.7 gate itself checks the gate-scope max R-hat and the scored min
+  bulk ESS). The gate scope reads the parameter `log_phi_K_u`, which `key_diagnostics.csv` does
+  not hold. It holds `log_phi_K`, a monotone map of it, whose bulk ESS (50.2, 117.2, 105.6 and
+  126.8, in the stop table's order) and R-hat (1.0624, 1.0352, 1.0371 and 1.0256) equal
+  `meta.json`'s `min_ess_bulk` and `max_rhat` to every stored digit. The gate-scope min tail
+  ESS is log φ_K's on 2021 f180 seed 2701, τ_μ's on both 2024 eve fits and s̄_ζ's on 2021 f180
+  seed 2702. Under `v2s-m3` log φ_K mixed well: bulk ESS 2310 and 665, R-hat 1.0001 and 1.0028.
+  Its posterior median rises, from 6.31 to 7.15 on 2024 eve (both seeds) and from 7.02 to 7.89
+  and 7.78 on 2021 f180 (prior median log 1000 = 6.91). §6.9 names the check: the posterior
+  correlation of (log φ_K, s̄_ζ). Over each fit's 1,600 draws pooled across chains
+  (`param_draws.parquet`, columns `log_phi_K` and `s_bar_zeta[1]`), it is 0.31 and 0.30 on 2024
+  eve (seeds 2701 and 2702) and 0.44 and 0.45 on 2021 f180. Draws with larger walk steps have
+  more concentrated results, as a trade-off between the walk's steps and the results'
+  overdispersion around δ would give; the correlation is moderate, and it does not show that
+  the trade-off is what slows log φ_K's mixing. In `key_diagnostics.csv` the next lowest bulk
+  ESS is s_ζ's on Viðreisn on 2024 eve seed 2701 (67; R-hat 1.0478).
+- **Where s̄_ζ sits.** It sets one extreme, the gate-scope min tail ESS on 2021 f180 seed 2702
+  (166.7, `meta.json`'s `min_ess_tail`; s_ζ on Viðreisn has a lower tail ESS there, 162.6, but
+  s_ζ is a transformed parameter, outside the gate scope), and no R-hat or bulk-ESS extreme.
+  Its posterior medians sit above its prior median, 0.135 = 0.2 · qnorm(0.75): a little on
+  2024 eve (0.16) and more on 2021 f180 (0.22 and 0.24), all below the prior's 95% point 0.39.
+  The four chains agree on every fit (`key_diagnostics.csv` and `param_draws.parquet`, s̄_ζ
+  only):
 
   | Fit (cell, seed) | R-hat | Bulk ESS | Posterior median | 5% and 95% | Chain medians |
   | --- | --- | --- | --- | --- | --- |
@@ -962,10 +980,10 @@ Minutes, treedepth hits and ESS per 1,000 gradients are recorded, never a stop.
     study, which at 21:56 ran 4 cores and about 10 GB and was due to end at 22:20 to 22:40, but
     the sleep paused it, so it ran on after the wake: one R process at about 72% CPU at 07:26.
   - 2021 f180, seed 2702 (07:50:10 to 08:40:37): 2024 eve seed 2701 throughout, and the peer's
-    simulation for as long as it ran. About 28 of its 50.2 minutes are the clamshell sleep, so
-    it ran about 22 minutes awake.
+    simulation for as long as it ran. About 23.6 of its 50.2 minutes were asleep, so it ran
+    about 27 minutes not asleep, about 4.5 of them in dark wakes.
   - 2024 eve, seed 2701 (07:25:13 to 08:43:22): both 2021 f180 fits, the post-wake work and the
-    peer's simulation, and the same 28 minutes of sleep, so about 50 minutes awake.
+    peer's simulation, and the same 23.6 minutes asleep, so about 54 minutes not asleep.
   - 2024 eve, seed 2702 (2026-11-04 12:20:24 to 13:05:44, the only fit of its queue, awake
     throughout: `pmset -g log` records no sleep from 11:00:10 until after it finished): from
     about 12:21 to 12:33 this step's fix round, as single R processes: fast test files
@@ -974,10 +992,12 @@ Minutes, treedepth hits and ESS per 1,000 gradients are recorded, never a stop.
     12:32), at a 1-minute load average of 6.1 to 8.2; and beside all of it a read-only audit
     job (a `claude -p` process, no R) and the controller's checks.
 
-  Per chain, the refit took 6.6 ms per gradient and 2021 f180 seed 2701 took 3.6, against
-  `v2s-m3`'s 8.0 and 4.5. No slow test ran beside any fit: the slow suite ran in each
-  preflight, before the fits. No fit is known to have run unloaded, so every fit's minutes read
-  high, by an unknown amount.
+  A per-chain time ratio, wall minutes (warmup included) ÷ (post-warmup gradients ÷ 4), is
+  6.6 ms for the refit and 3.6 ms for 2021 f180 seed 2701, against `v2s-m3`'s 8.0 and 4.5. It
+  counts warmup time against post-warmup gradients only, so it is not a cost per gradient; it
+  compares fits of the same iterations, as these are. No slow test ran beside any fit: the
+  slow suite ran in each preflight, before the fits. No fit is known to have run unloaded, so
+  every fit's minutes read high, by an unknown amount.
 
 **What the lp tests cover.** The refit's preflight (the full slow suite on f7468df, 2026-11-04,
 `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 6661 ]`) ran the step's Stan tests. On each cell, Stan's log
@@ -994,7 +1014,8 @@ Each mutant a cell exercises is rejected above 100 × tol, the walk's three incl
 2.14e+04 times 100 × tol on 2024 eve, 2021 f180 and 2017 eve; `no_delta_restart` (a
 newcomer's column keeps its pre-entry walk) at 5.08e+04, 4.28e+04 and 1.31e+04; and
 `delta_entry_leak` (the literal step, from δ_{e−1} itself) at 3.19e+03, 3.76e+03 and 370.
-370 on 2017 eve is the narrowest margin of any mutant on any cell. 2017 eve has only prior
+370 on 2017 eve is the narrowest margin of any mutant on any cell; only the slip test below
+has a narrower margin, its planted slip `literal_0.2` at 43.3. 2017 eve has only prior
 points, one closed election and no kjördæmi poll, and its newcomer (Miðflokkurinn) enters in
 the open epoch. So the leak reaches the density only through the open epoch's national polls,
 whose share Σ_k w_k softmax(θ + δ_k) sees δ only through the sum's curvature: M_e makes δ's
