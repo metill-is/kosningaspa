@@ -548,7 +548,8 @@ run list `results/harness/logs/v2s-m3-runs.txt` (`harness/README.md`, Step check
 started at 2026-10-29 17:33:08, its preflight (the full slow suite) passed, and both fits
 started at 18:21:20: the preflight took about 48 minutes, longer than before, with M3's new
 slow tests in it and a peer's load beside it. 2021 f180 finished at 18:52:13 and 2024 eve at
-19:15:58 (each run's `meta.json`), both exited 0, and `queue.log` ends in `QUEUE FINISHED`.
+19:15:58 (`queue.log`'s start lines; each `meta.json`'s modification time), both exited 0, and
+`queue.log` ends in `QUEUE FINISHED`.
 CmdStan 2.38.0, `max_treedepth` 12, 10 cores (`hw.ncpu`). The diagnostics table is
 `harness/v2/steps/v2s-m3.md`. `queue.log` after its `QUEUE START` line (left out here: it names
 the run list by its absolute path):
@@ -808,7 +809,8 @@ and 2702, because a P-step follows; they are the four `v2s-m4` lines of
   since the Mac's AC `sleep` setting is 1 minute.
 - **The fits.** Both lanes started their seed-2701 fits at 07:25:13. 2021 f180 seed 2701
   finished at 07:50:10, and lane B ran seed 2702 from then until 08:40:37; 2024 eve seed 2701
-  finished at 08:43:22 (each run's `meta.json`), and lane A started seed 2702.
+  finished at 08:43:22 (`queue.log`'s start lines; each `meta.json`'s modification time), and
+  lane A started seed 2702.
 - **A second sleep.** At 08:03:06 the Mac went on battery, and at 08:03:14 into "Clamshell
   Sleep", which an idle-sleep assertion does not prevent. `pmset -g log` then shows seven sleeps
   (2 min 19 s, 5 min 14 s, 6 min 53 s, 8 min 30 s, 25 s, 3 s and 14 s: 23.6 minutes in all)
@@ -1305,3 +1307,242 @@ LC_ALL=en_US.UTF-8 Rscript R/harness/compare_runs.R adopt v2s-m4 v2s-p2 harness/
 
 Next: M5 (`v2s-m5`), the fundamentals pseudo-observation, on `v2s-m4`'s config
 (`delta_form = 0`).
+
+## v2s-m5: the fundamentals pseudo-observation (M-step)
+
+`v2s-m4` with `fundamentals = 1` (config `harness/configs/steps/v2s-m5.json`, `v2s-m4.json` with
+that one field changed): stage 1's prediction enters the forecast as a pseudo-observation of
+the latent national shares at E (spec §6.5). π_nat,E = Σ_k w_open,k softmax over A_E of
+(θ_G + δ_open,k) is built from the grid's last θ and the open epoch's δ and kjördæmi weights,
+without the shock ε. With x = log π_nat,E over S_f, the term is μ_f ~ N(x − mean(x), τ_f) over
+S_f. Here τ_f = √(V_w (1 − w) / w), with w = `desired_weight` (0.22), and
+V_w = diag(CΣCᵀ)[S_f] ((weight_time − campaign_days) + campaign_days (1 + τ_camp)²), where
+C = I − 11ᵀ/P centres over all P parties: the walk's variance over the 180-day horizon, with
+its last 47 days in the campaign. μ_f is data: stage 1's centred predictor (`stage1_mu_f()`,
+`Stan/fundamentals_v2.stan`), gathered by party identity into `sf_idx` and centred over S_f (9
+parties on 2024 eve, 8 on 2021 f180). The step adds no parameter, transformed parameter or
+generated quantity. Transformed data refuses `fundamentals = 1` when S_f has fewer than 2
+parties, repeats an `sf_idx` entry or holds a party absent at E, when w is outside (0, 1), or
+when weight_time < campaign_days. Its lp, guard and size tests are in
+`tests/harness/test-v2-stan.R`, its reference tests in `tests/harness/test-v2-reference.R`,
+and its prior predictive rows in `harness/v2/prior_predictive.md`. This section is its
+sampler check.
+
+**Fits.** Two fits at 400 + 400, seed 2701: 2024 eve (lane A) and 2021 f180 (lane B), the two
+`v2s-m5` lines of `harness/runs/v2-steps.txt`. They ran under `R/harness/queue.sh` with the run
+list `results/harness/logs/v2s-m5-runs.txt` (`harness/README.md`, Step checks):
+- The queue started at 2026-11-04 20:13:20 on ae18fbe, on AC, under
+  `caffeinate -i -w <queue pid>`. Its preflight (the full slow suite) passed at 21:24:25,
+  `[ FAIL 0 | WARN 0 | SKIP 1 | PASS 7237 ]`, the skip being the one test that reads the live
+  `data/`.
+- Both fits started at 21:24:25. 2021 f180 finished at 21:45:49 and 2024 eve at 22:08:21
+  (`queue.log`'s start lines; each `meta.json`'s modification time). Both exited 0, and
+  `queue.log` ends in `QUEUE FINISHED`. 2024 eve ran beside 2021 f180 for its first 21.4
+  minutes and alone for its last 22.5.
+- Beside them: during the preflight, a read-only review agent (no R); during the fits, only
+  the controller's `awk` and `grep` reads. Every peer session was idle at 21:3x. Other load is
+  unknown.
+- `Stan/forecast_v2` (git-ignored) was compiled at 20:16:27, during the preflight (its
+  modification time), so both fits ran that executable, sha256 `77ab3d3b0579…`.
+- Stage 1 was read from its cache, not fitted. Neither run log has a `STAGE1` line, which
+  `stage1_mu_f()` prints only when it fits. The two cache files under `results/harness/stage1/`
+  were written at 18:44 that day, before the queue. Each `meta.json`'s `stage1_sha256` is that
+  cache's key: `ad28201cf68c…` on 2024 eve and `a4cb18491df8…` on 2021 f180.
+
+CmdStan 2.38.0, `max_treedepth` 12, 10 cores (`hw.ncpu`). The diagnostics table is
+`harness/v2/steps/v2s-m5.md`. Below is `queue.log` after the queue's `QUEUE START` line (left
+out: it names the run list by its absolute path). Each fit's `DIAG` line in its run log,
+`results/harness/logs/v2s-m5_<E>_<F>_s2701.log`, is the same as its `end` line here:
+
+```
+preflight PASS
+start B v2s-m5_2021-09-25_2021-03-29_s2701 2026-11-04 21:24:25
+start A v2s-m5_2024-11-30_2024-11-29_s2701 2026-11-04 21:24:25
+end v2s-m5_2021-09-25_2021-03-29_s2701 rc=0 DIAG run=v2s-m5_2021-09-25_2021-03-29_s2701 minutes=21.2 max_rhat=1.0192 min_ess_bulk=152 min_ess_tail=262 divergent=0 treedepth_hits=0 max_depth=10 min_ebfmi=0.477 gate=FAIL
+end v2s-m5_2024-11-30_2024-11-29_s2701 rc=0 DIAG run=v2s-m5_2024-11-30_2024-11-29_s2701 minutes=43.7 max_rhat=1.0225 min_ess_bulk=229 min_ess_tail=175 divergent=0 treedepth_hits=0 max_depth=10 min_ebfmi=0.576 gate=FAIL
+QUEUE FINISHED
+```
+
+**Provenance.** Both fits ran at ae18fbe on a clean tree (`meta.json`: `git_head` ae18fbe,
+`git_dirty` false), with `Stan/forecast_v2.stan` at sha256
+`d6d7b2cf128e98e3a504591096b53353ed23cffc463696ff7f93f40284aa2d71` and the config at
+`f77b187d21a634c355cf888819405bfc1a385f52376259fcba988efbce65a0df`. The commit that logs this
+step is ae18fbe's child. In `R/harness` it changes only the prior predictive script's header
+comment and two of its functions' documentation, which no fit reads. Each run's `meta.json`
+`data_sha256` equals the sha256 of its frozen `inputs/stan_data.json`:
+`b7917c0c1f43af45b80d0bb41da75bcab9a27c2b7c6f77f41f7a8e4882952b0a` on 2024 eve and
+`c04fbe993ae45c5a9864c363f80644ddce432b5cfe20ca36bfb63a98aaf61536` on 2021 f180. The `v2s-m4`
+fits ran with the file at sha256 `8d34b6fe…`. The `fundamentals = 0` model is pinned across
+the edits since then by every earlier step's lp tests, which this queue's preflight ran at
+ae18fbe.
+
+**What the lp tests cover.** The preflight ran the step's Stan tests. On each cell, Stan's log
+density minus the reference's is constant within `lp_tol()`, as under `v2s-m4`. On 2024 eve
+and 2021 f180 that holds over 20 posterior, 10 off-posterior and 10 prior points; on 2017 eve,
+over 10 prior points only. μ_f is stage 1's on 2024 eve and 2021 f180, read from the cache. On
+2017 eve it is the placeholder's zeros, since no 2017 forecast is computed before the freeze;
+there the term tests the density's form against a zero observation, not stage 1.
+- The mutant `fund_uncentred` (the mean x without its centring) is rejected at 2.27e+04,
+  3.75e+04 and 5.15e+04 times 100 × tol on 2024 eve, 2021 f180 and 2017 eve. Every earlier
+  mutant is rejected as under `v2s-m4`.
+- At w = 0.3, weight_time = 150 and campaign_days = 40 on 2024 eve's prior points, Stan
+  matches the reference. The literals 0.22, 180 and 47, written into Stan in their place, would
+  be rejected at 9.47e+03, 2.61e+03 and 2.18e+03.
+- The switch moves the log density by the reference's term plus one constant per cell:
+  8.27045, 7.35151 and 6.43257. These are n_sf log(2π) / 2 for n_sf = 9, 8 and 7, which Stan's
+  `~` drops. The switch adds no variable to the model.
+- The guards refuse each condition above with its message, and the same data pass with the
+  switch off. At a prior point the term's mean is the centred log of Stan's own `pi_latent_E`
+  over S_f.
+- Four ablation configs each combine switches that no step ran: `v2-noepoch`, `v2-nonew`,
+  `v2-noshock` and `v2-staticdelta`. Each matches the reference at 10 prior points on 2024 eve
+  and on 2021 f180: every range is below 1.2e-09, against a tolerance of at least 2.58e-04.
+  `v2-nofund` is `v2s-m4`'s config, so that step's lp tests cover it.
+
+The test's lines:
+
+```
+v2s-m5 eve2024: 40 points, lp constant range 1.05e-09 (tol 0.000667, ratio 1.57e-06; ratio by kind: post 6.76e-06, off 2.98e-06, prior 1.57e-06); weakest exercised mutant previous_w; range / (100 tol): positional_gather 1.46e+06, previous_w 2.89e+03, next_epoch_delta 1.98e+04, close_last_kjordaemi 6.26e+05, conditional_walk 7.69e+05, house_walk_from_first_poll 7.24e+04, newcomer_mean_of_mu1 9.41e+03, no_mu_restart 1.47e+05, no_house_restart 4.02e+04, newcomer_mean_over_all 3.41e+05, shock_unscaled 6.92e+04, delta_years_unscaled 6.03e+04, no_delta_restart 1.3e+05, delta_entry_leak 3.18e+03, fund_uncentred 2.27e+04; not exercised: none
+v2s-m5 f180_2021: 40 points, lp constant range 3.78e-10 (tol 0.000265, ratio 1.43e-06; ratio by kind: post 6.2e-06, off 1.24e-06, prior 1.43e-06); weakest exercised mutant house_walk_from_first_poll; range / (100 tol): positional_gather 2.26e+06, previous_w 2.12e+03, next_epoch_delta 7.08e+04, close_last_kjordaemi 7.99e+05, conditional_walk 1.47e+06, house_walk_from_first_poll 1.88e+03, newcomer_mean_of_mu1 1.22e+04, no_mu_restart 4.17e+05, no_house_restart 2.42e+05, newcomer_mean_over_all 7.84e+05, shock_unscaled 8.41e+04, delta_years_unscaled 2.77e+05, no_delta_restart 9.41e+04, delta_entry_leak 9.88e+03, fund_uncentred 3.75e+04; not exercised: none
+v2s-m5 eve2017: 10 points, lp constant range 5.82e-11 (tol 0.000103, ratio 5.66e-07; ratio by kind: prior 5.66e-07); weakest exercised mutant delta_entry_leak; range / (100 tol): positional_gather 1.04e+06, close_last_kjordaemi 1.2e+06, conditional_walk 1.3e+06, newcomer_mean_of_mu1 586, no_mu_restart 4.44e+03, no_house_restart 4.78e+03, newcomer_mean_over_all 4.27e+05, shock_unscaled 3.8e+04, delta_years_unscaled 2.14e+04, no_delta_restart 1.31e+04, delta_entry_leak 370, fund_uncentred 5.15e+04; not exercised: house_walk_from_first_poll
+v2s-m5 eve2024 at desired_weight 0.3, weight_time 150, campaign_days 40: 10 prior points, lp constant range 9.31e-10 (tol 0.000667); range / (100 tol): literal_0.22 9.47e+03, literal_180 2.61e+03, literal_47 2.18e+03
+v2s-m5 eve2024: the switch's lp change minus the term, range 2.24e-11 (tol 0.000448), constant 8.27045
+v2s-m5 f180_2021: the switch's lp change minus the term, range 1.28e-11 (tol 0.000198), constant 7.35151
+v2s-m5 eve2017: the switch's lp change minus the term, range 9.41e-12 (tol 0.000143), constant 6.43257
+v2-noepoch eve2024: 10 prior points, lp constant range 9.9e-10 (tol 0.000559, ratio 1.77e-06)
+v2-noepoch f180_2021: 10 prior points, lp constant range 1.46e-10 (tol 0.000258, ratio 5.63e-07)
+v2-nonew eve2024: 10 prior points, lp constant range 9.9e-10 (tol 0.000665, ratio 1.49e-06)
+v2-nonew f180_2021: 10 prior points, lp constant range 3.49e-10 (tol 0.000263, ratio 1.33e-06)
+v2-noshock eve2024: 10 prior points, lp constant range 8.73e-10 (tol 0.000668, ratio 1.31e-06)
+v2-noshock f180_2021: 10 prior points, lp constant range 4.37e-10 (tol 0.000265, ratio 1.65e-06)
+v2-staticdelta eve2024: 10 prior points, lp constant range 1.16e-09 (tol 0.000667, ratio 1.75e-06)
+v2-staticdelta f180_2021: 10 prior points, lp constant range 4.51e-10 (tol 0.000265, ratio 1.7e-06)
+```
+
+**The prior predictive rows.** Both rows read the term's weight for each party of S_f (a
+weight, not pp), pooled over the parties (`harness/v2/prior_predictive.md`).
+- `fund_weight` is the weight against V_w: 0.22 by construction, so it checks the code, not
+  the model.
+- `fund_weight_bias` adds to V_w the variance over the prior draws of the industry bias's
+  open-epoch step, centred over S_f. It is reported, with no band.
+
+| Row | Cell | Values | q05 | q50 | q95 | Band | Verdict |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `fund_weight` | 2024 eve | 9000 | 0.22 | 0.22 | 0.22 | every draw within 1e-08 of 0.22 | PASS |
+| `fund_weight` | 2021 f180 | 8000 | 0.22 | 0.22 | 0.22 | every draw within 1e-08 of 0.22 | PASS |
+| `fund_weight_bias` | 2024 eve | 9000 | 0.22 | 0.24 | 0.33 | none (reported) | REPORT |
+| `fund_weight_bias` | 2021 f180 | 8000 | 0.22 | 0.23 | 0.32 | none (reported) | REPORT |
+
+```
+PRIOR PASS fund_weight/2024-eve/config
+PRIOR PASS fund_weight/2021-f180/config
+PRIOR REPORT fund_weight_bias/2024-eve/config 0.22 0.24 0.33
+PRIOR REPORT fund_weight_bias/2021-f180/config 0.22 0.23 0.32
+```
+
+V_w is centred over all P parties, as §6.5 writes it, while the term's mean and V_bias are
+centred over S_f. So the 0.22 target holds against V_w, not against the variance of the
+centred mean. That choice follows the spec as written and is left to Brynjólfur. Every other
+summary, table row and verdict line is the same as in the report `v2s-m4`'s config wrote,
+apart from the Config line and the Results header's wording.
+
+**Stop rule.** `LC_ALL=en_US.UTF-8 Rscript R/harness/compare_runs.R stop v2s-m5` (exit 0):
+
+```
+GO v2s-m5_2024-11-30_2024-11-29_s2701 lp_rhat=1.0077 divergent=0/1600 near_cap=0/1600 max_rhat=1.0225; recorded: minutes=43.7 treedepth_hits=0 ess_bulk_per_1k_grad=0.139
+GO v2s-m5_2021-09-25_2021-03-29_s2701 lp_rhat=1.0092 divergent=0/1600 near_cap=0/1600 max_rhat=1.0192; recorded: minutes=21.2 treedepth_hits=0 ess_bulk_per_1k_grad=0.092
+```
+
+| Fit (cell, seed) | Verdict | R-hat of `lp__` (STOP above 1.1) | Divergences (STOP above 16) | Draws within 0.5 of a cap (STOP above 16) | Max R-hat, gate scope (STOP above 1.10) | Minutes | Treedepth hits | Min bulk ESS per 1,000 gradients (gate scope) |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2024 eve, 2701 | GO | 1.0077 | 0 of 1,600 | 0 of 1,600 | 1.0225 | 43.7 | 0 | 0.139 |
+| 2021 f180, 2701 | GO | 1.0092 | 0 of 1,600 | 0 of 1,600 | 1.0192 | 21.2 | 0 | 0.092 |
+
+**Verdict: GO on both fits.** The stop rule's signals are all inside their limits:
+- the largest R-hat of `lp__` is 1.0092;
+- no transition diverged;
+- no draw came within 0.5 of a cap;
+- the largest gate-scope R-hat is 1.0225.
+
+The §5.7 gate is not the stop rule. Each fit's `DIAG` line reads `gate=FAIL`, because its
+gate-scope max R-hat (1.0225 and 1.0192) is above the scoring gate's 1.01 at 400 + 400. Tier 0
+is not gated, so the gate column is informational, and a `dev` arm is never scored.
+
+**Like for like with `v2s-m4`.** Each `v2s-m5` fit is set beside `v2s-m4`'s fit of the same
+cell and seed; on 2024 eve, `v2s-m4`'s refit (seed 2702) is shown too. Both seed-2701 pairs ran
+two lanes at once. The values are from each `meta.json`. ESS is to one decimal, R-hat is
+rounded up and E-BFMI and ESS per 1,000 gradients down, as the diagnostics tables print them:
+
+| Fit (arm, cell, seed) | Minutes | Leapfrog steps per post-warmup transition | Min bulk ESS (gate scope) | Min tail ESS (gate scope) | Max R-hat (gate scope) | Divergences | Min E-BFMI | Min bulk ESS per 1,000 gradients | Per-chain time ratio |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `v2s-m4`, 2024 eve, 2701 | 77.8, 28 of them across the sleep (23.6 asleep) | 1,023.00 | 50.2 | 225.4 | 1.0624 | 0 | 0.698 | 0.030 | 11.41 ms |
+| `v2s-m4`, 2024 eve, 2702 (the refit, alone) | 45.1 | 1,023.00 | 117.2 | 264.2 | 1.0352 | 0 | 0.607 | 0.071 | 6.61 ms |
+| `v2s-m5`, 2024 eve, 2701 | 43.7 | 1,023.00 | 228.5 | 175.3 | 1.0225 | 0 | 0.576 | 0.139 | 6.41 ms |
+| `v2s-m4`, 2021 f180, 2701 | 24.7 | 1,023.00 | 105.6 | 148.8 | 1.0372 | 0 | 0.541 | 0.064 | 3.63 ms |
+| `v2s-m5`, 2021 f180, 2701 | 21.2 | 1,023.00 | 152.0 | 262.1 | 1.0192 | 0 | 0.477 | 0.092 | 3.11 ms |
+
+- **Gradients.** Every fit took 1,023.00 leapfrog steps per post-warmup transition
+  (`n_leapfrog` ÷ 1,600; tree depth 10 is 1,023 steps). So the ESS per 1,000 gradients moves
+  with the min bulk ESS alone. Against `v2s-m4` it is 4.6 times seed 2701's and 2.0 times the
+  refit's on 2024 eve, and 1.4 times on 2021 f180 (from the unrounded `min_ess_bulk` ÷
+  `n_leapfrog`).
+- **The time.** For 2024 eve the comparison is with the refit, seed 2702, since seed 2701's
+  minutes include the sleep. The per-chain time ratio (defined under `v2s-m4`; not a cost per
+  gradient) is 6.41 ms against 6.61 ms, 3.1% lower. On 2021 f180 it is 3.11 ms against
+  3.63 ms, 14% lower. The loads differ:
+  - On 2024 eve, `v2s-m5`'s fit had the other lane beside it for its first 21.4 minutes, while
+    the refit ran alone but with a fix round's tests beside it for about 12 minutes.
+  - On 2021 f180 both fits had the other lane beside them throughout. `v2s-m4`'s also had the
+    post-wake system work and a peer's simulation.
+
+  The term adds no parameter. Neither cell shows a time cost, but these loads cannot resolve a
+  small one.
+- **Which variable sets each extreme.** `posterior::ess_bulk`, `ess_tail` and `rhat` were run
+  over each fit's four chains of 400 draws in `param_draws.parquet`: every saved column, plus
+  each `s_zeta_raw[j]` rebuilt as `s_zeta[j]` ÷ `s_bar_zeta[1]`, as under `v2s-p2`. These are
+  the five lowest bulk ESS:
+
+  | Fit (arm, cell, seed) | The five lowest bulk ESS (saved and rebuilt columns) |
+  | --- | --- |
+  | `v2s-m4`, 2024 eve, 2701 | `log_phi_K` 50.2, `s_zeta[6]` 67.3, `s_zeta_raw[6]` (rebuilt) 196.8, `s_zeta[2]` 312.8, `s_bar_E[1]` 332.9 |
+  | `v2s-m5`, 2024 eve, 2701 | `log_phi_K` 228.5, `s_zeta[6]` 244.6, `s_zeta[2]` 304.7, `s_zeta[4]` 329.8, `s_zeta_raw[6]` (rebuilt) 345.6 |
+  | `v2s-m4`, 2021 f180, 2701 | `log_phi_K` 105.6, `s_zeta[3]` 226.0, `s_zeta[6]` 250.3, `s_bar_zeta[1]` 289.0, `s_zeta[2]` 338.6 |
+  | `v2s-m5`, 2021 f180, 2701 | `log_phi_K` 152.0, `s_zeta[3]` 300.1, `s_zeta[6]` 323.4, `s_bar_zeta[1]` 355.1, `s_zeta[2]` 374.5 |
+
+  - **Gate-scope min bulk ESS.** log φ_K sets it on all four fits. The gate scope reads the
+    parameter `log_phi_K_u`, of which `log_phi_K` is a monotone map, so their bulk ESS agree.
+    Under `v2s-m5` it is 228.5457 and 152.0474, equal to `meta.json`'s `min_ess_bulk` to every
+    printed digit.
+  - **Gate-scope max R-hat, 2024 eve.** Under `v2s-m5` τ_μ (`tau_mu[1]`, the industry bias's
+    step scale) sets it, at 1.02250, equal to `meta.json`'s; log φ_K's is 1.01041.
+  - **Gate-scope max R-hat, 2021 f180.** Under `v2s-m5`, `meta.json`'s 1.01917 matches no saved
+    or rebuilt column. The largest is log φ_K's, 1.01615, and `s_delta0_raw`, rebuilt as
+    (log `s_delta0[j]` − `mu_sd`) ÷ `tau_sd`, reaches 1.00591 at most. So 1.01917 belongs to a
+    raw parameter the files do not hold, and it is not located.
+  - **Max R-hat under `v2s-m4`.** log φ_K set it on both cells, at 1.06238 and 1.03712.
+  - **Gate-scope min tail ESS.** Under `v2s-m5`:
+    - on 2024 eve it is `s_zeta_raw[2]`'s, Framsóknarflokkurinn's raw step scale, rebuilt, at
+      175.3141, equal to `meta.json`'s. `s_zeta[2]`'s tail ESS is lower, 174.0, but s_ζ is a
+      transformed parameter, outside the gate scope;
+    - on 2021 f180 it is s̄_ζ's, 262.0812.
+
+    Under `v2s-m4` it was τ_μ's (225.4) and log φ_K's (148.8).
+- **A reading of one seed, not a finding.** log φ_K stays the slowest saved column on both
+  cells, as under `v2s-m4` and `v2s-p2`. On this seed it mixes faster:
+  - bulk ESS 228.5 against 50.2 on 2024 eve, and 152.0 against 105.6 on 2021 f180;
+  - R-hat 1.01041 against 1.06238, and 1.01615 against 1.03712.
+
+  But `v2s-m4`'s two seeds on 2024 eve already gave 50.2 and 117.2. So one seed of `v2s-m5`
+  cannot say whether the term speeds log φ_K. corr(log φ_K, s̄_ζ) over each fit's 1,600 draws
+  is 0.294 on 2024 eve and 0.409 on 2021 f180; `v2s-m4` seed 2701 gave 0.313 and 0.440.
+
+To rewrite the table and the verdicts from the finished runs under `results/harness/`, from the
+project root:
+
+```
+LC_ALL=en_US.UTF-8 Rscript R/harness/tier0_report.R v2s-m5 harness/runs/v2-steps.txt harness/v2/steps/v2s-m5.md
+LC_ALL=en_US.UTF-8 Rscript R/harness/compare_runs.R stop v2s-m5
+```
+
+M5 stands, so every component is built: `harness/configs/v2.json` holds `v2s-m5`'s config
+under the candidate role, and the Phase 2 plan's Tasks 15 and 16 fit it.

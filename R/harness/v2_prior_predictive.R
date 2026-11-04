@@ -98,12 +98,12 @@
 #
 # Verdicts and lines, one per row and cell:
 #   PRIOR PASS <summary>                       the row is in its band
-#   PRIOR FAIL <summary> <q05> <q95>           it is not; out of an exact band, PRIOR FAIL
-#                                              <summary> max abs error <e> instead, e the largest
-#                                              |draw − value| to 3 significant digits (the table too)
+#   PRIOR FAIL <summary> <q05> <q95>           it is not
 #   PRIOR WIDE <summary> <q05> <q95>           it is not, on a config row of a bias whose prior
 #                                              the config holds at §6.10's value (`held`)
 #   PRIOR REPORT <summary> <q05> <q50> <q95>   a band_report() row
+# A FAIL or WIDE row out of an exact band prints PRIOR <verdict> <summary> max abs error <e>
+# instead, e the largest |draw − value| to 3 significant digits, and so does its table row.
 # <summary> is <summary>/<cell>/<kind>, a comparison's kind followed by its fields. A
 # comparison row prints PASS or FAIL, and a report row REPORT; neither ever stops the script.
 # The script writes its report (out), prints the lines, and then stops with an error if a
@@ -598,11 +598,19 @@ verdict_line <- function(verdict, id, q, err = NA_real_) {
 }
 
 #' The largest distance of `values` from an exact band's value, NA for any other band.
+#' @param band a band (`band_inside()` and the other constructors)
+#' @param values every draw's values
+#' @return max |values - value| for a `band_exact()` band; NA_real_ for any other
 #' @export
 band_error <- function(band, values) if (identical(band$type, "exact")) max(abs(values - band$value)) else NA_real_
 
 #' The report table's q05, q50 and q95 cells of a row: the quantiles to 2 decimals, or out of
 #' an exact band (`err` not NA) its largest error to 3 significant digits in the q50 cell.
+#' @param verdict the row's verdict (`row_verdict()`): PASS, FAIL, WIDE or REPORT
+#' @param q the quantiles, named q05, q50, q95
+#' @param err NA, or `band_error()` of an exact band
+#' @return three strings, the q05, q50 and q95 cells; for a FAIL or WIDE row with `err` not NA,
+#'   an en dash, "max abs error <err>" and an en dash
 #' @export
 quantile_cells <- function(verdict, q, err = NA_real_) {
   if (!verdict %in% c("PASS", "REPORT") && !is.na(err)) {

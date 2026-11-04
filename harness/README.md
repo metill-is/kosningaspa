@@ -41,7 +41,7 @@ sha256, so every log records the switch; unset, they test `Stan/forecast_v2.stan
 nothing. `queue.sh` refuses to start while it is set, so the preflight never certifies
 another file than the one the fits use. The slow `v2s-m5` tests, and so the queue's
 preflight, run the real `stage1_mu_f()`, which fits stage 1 into `results_root()/stage1/` on
-a cold cache or reads it there; that fit's warmup prints "Prior size parameter is 0"
+a cold cache or reads it there; that fit's warmup prints "Prior size parameter[5] is 0"
 notices, which are expected. The slow tests of the equivalence check in
 `tests/harness/test-v2-equivalence.R` are named and gated the same way (`v2s-p1: …`): each
 runs `R/harness/v2_equivalence.R` in a subprocess into a temporary CSV, one of them on a
@@ -486,6 +486,10 @@ four equivalence checks and was not adopted: `adopt` printed `KEEP v2s-m4`, cond
 failing on its 8 divergences (all on 2021 f180) against `v2s-m4`'s none. The centred form
 stays built behind `delta_form`, and every later step's config sets `delta_form = 0`; M5's is
 therefore `v2s-m4`'s with its own switch on (`harness/v2/steps.md`).
+
+M5 (`v2s-m5`), the fundamentals pseudo-observation (`fundamentals = 1`), passed the stop rule:
+`GO` on both fits, with no divergence and no draw near a cap (`harness/v2/steps.md`). Every
+component is now built, and V2's candidate config, `harness/configs/v2.json`, is `v2s-m5`'s.
 
 A P-step's form is first checked against the reference form, point by point, by
 `R/harness/v2_equivalence.R` (the plan's Decision 6, condition 1), once for each check of
