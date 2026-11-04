@@ -58,7 +58,7 @@
 
 <section id="picture"><h2>The plain picture</h2>
 <div class="picture">
-<p>Alþingi, Iceland's parliament, has 63 seats in six kjördæmi (constituencies). A party stands as a list in each kjördæmi, under its letter (the letters are in chapter 0.2, planned). Kosningaspá allocates the seats in each posterior draw of the kjördæmi votes, with one function, <code>calculate_seats()</code> in <code>R/election_utils.R</code>, in two stages:</p>
+<p>Alþingi, Iceland's parliament, has 63 seats in six kjördæmi (constituencies). A party stands as a list in each kjördæmi, under its letter (the letters are in chapter <a href="../start/notation.html#parties">0.2</a>). Kosningaspá allocates the seats in each posterior draw of the kjördæmi votes, with one function, <code>calculate_seats()</code> in <code>R/election_utils.R</code>, in two stages:</p>
 <ul>
 <li><strong>54 kjördæmi seats.</strong> In each kjördæmi, its constituency seats go by D'Hondt over the lists that ran there. A list needs no national threshold for these.</li>
 <li><strong>9 adjustment seats.</strong> These go one at a time to the list with the largest national D'Hondt quotient, its national votes divided by the seats it already holds plus one, among the lists with at least 5% of the national vote. Each is placed in the kjördæmi where that list's next quotient, as a share of the valid votes cast there, is largest, among the kjördæmi that still have an adjustment seat to give.</li>

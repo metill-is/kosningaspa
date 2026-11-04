@@ -26,6 +26,8 @@ This file sits in the public repository, so it follows the notes' own citation r
 5. **No fit without the author's go-ahead.** §4 lists the optional fits. Before any heavy R job, check whether other sessions' CmdStan batches are running.
 6. **Each chapter lands in one PR.** That PR holds the chapter's body, its analysis folder, `python3 tools/build.py` run from `docs/method/` (with `--check` clean) and the cross-reference updates in other chapters. Push and PR only on the author's yes.
 
+   From 0.2 on, the author asked for chapters to be committed straight to master, with no PR (4 Nov 2026). Push still waits for the author's yes.
+
 ## 2. Fixed points and boundaries
 
 3.1 already owns the following, and other chapters link to it rather than repeat it:
