@@ -1138,8 +1138,8 @@ results/harness/logs/v2s-p2-runs.txt 400 400` (`harness/README.md`, Step checks)
   6840 ]`, the skip being the one test that reads the live `data/`.
 - Lane A ran 2024 eve seed 2701 from 16:25:34 to 17:25 and seed 2702 from 17:25:26 to 18:11;
   lane B ran 2021 f180 seed 2701 from 16:25:34 to 16:55 and seed 2702 from 16:55:13 to 17:24
-  (each run's `meta.json`). So 2024 eve seed 2702 had no other fit beside it. All four exited
-  0, and `queue.log` ends in `QUEUE FINISHED`.
+  (`queue.log`'s start lines; each `meta.json`'s modification time). So 2024 eve seed 2702 had
+  no other fit beside it. All four exited 0, and `queue.log` ends in `QUEUE FINISHED`.
 - `Stan/forecast_v2` (git-ignored) was compiled at 15:19, during the preflight (its
   modification time, unchanged since), so all four fits ran that executable, sha256
   `dd739150da8c…`.
@@ -1268,24 +1268,30 @@ centred form stays built behind its switch, with its tests and its equivalence c
 - **The time.** The per-chain time ratio defined under `v2s-m4` (wall minutes, warmup
   included, ÷ (post-warmup gradients ÷ 4); not a cost per gradient) is 6.61 ms for
   `v2s-m4`'s 2024 eve seed 2702 and 6.68 ms for `v2s-p2`'s (`meta.json` minutes 45.07 and
-  45.54, `n_leapfrog` 1,636,800 on both), 1.0% higher. Neither fit had another fit beside it.
-  If both warmups took about as many gradients, which is not recorded, the present block's
-  vec-form Kronecker factor and the model block's recomputation add about 1% to a gradient on
-  that cell. Neither fit is known to have run unloaded: `v2s-m4`'s had a fix round's test runs
-  beside it from about 12:21 to 12:33 (above), and other sessions' load is unknown for both.
+  45.54, `n_leapfrog` 1,636,800 on both), 1.0% higher. Neither fit had another fit beside it,
+  but neither is known to have run unloaded: `v2s-m4`'s had a fix round's test runs beside it
+  from about 12:21 to 12:33 (above), and other sessions' load is unknown for both. If both
+  warmups took about as many gradients, which is not recorded, the centred form costs about 1%
+  more per gradient on that cell, more if that load slowed `v2s-m4`'s fit. How that splits
+  between the present block's vec-form Kronecker factor and the model block's recomputation
+  was not measured.
   The other three `v2s-p2` fits ran with the other lane's fit beside them (8.74 ms on 2024 eve
   seed 2701, 4.94 and 4.50 ms on 2021 f180), as `v2s-m4`'s did (11.41, 3.63 and 7.52 ms, two
   of them across the sleep), so they do not compare.
 - **A reading, not a finding.** The divergences come only with the centred form: `v2s-m4` had
   none on any fit. That is consistent with a funnel between a present party's centred
-  coordinates and its step scale, which the non-centred form avoids. s_ζ on Viðreisn does not
-  bear on it either way: it is among the slowest saved columns under both forms (67.3 and 279.7
-  under `v2s-m4`, 127.8 and 91.9 under `v2s-p2` on 2024 eve), so these fits do not show the
-  centred form slowing it, and its raw scale sets 2024 eve seed 2702's minimum because log φ_K
-  now mixes faster. Where the divergences fell is not in the saved outputs, so no funnel is
-  located.
+  coordinates and its step scale, which the non-centred form avoids. s_ζ on Viðreisn is among
+  the slowest saved columns under both forms (67.3 and 279.7 under `v2s-m4`, 127.8 and 91.9
+  under `v2s-p2` on 2024 eve). Its raw scale, `s_zeta_raw[6]`, rebuilt as `s_zeta[6]` ÷
+  `s_bar_zeta[1]` from each fit's `param_draws.parquet` and measured by `posterior::ess_bulk`
+  over the four chains, has bulk ESS 196.8 and 515.0 under `v2s-m4` (seeds 2701 and 2702) and
+  187.9 and 98.4 under `v2s-p2`. 98.4 is below log φ_K's bulk ESS on that seed under either
+  form (117.2 under `v2s-m4`, 147.8 under `v2s-p2`), so seed 2702's minimum moved to the raw
+  scale because the raw scale was slow on that seed, not because log φ_K mixed faster; on seed
+  2701 it held level. Two seeds cannot say whether the centred form slows it. Where the
+  divergences fell is not in the saved outputs, so no funnel is located.
 - **The §5.7 gate is not the stop rule.** Each fit's `DIAG` line reads `gate=FAIL`: its
-  gate-scope max R-hat (1.0195 to 1.0587) is above 1.01, and the 2021 f180 fits diverged. A
+  gate-scope max R-hat (1.0196 to 1.0588) is above 1.01, and the 2021 f180 fits diverged. A
   `dev` arm is never scored.
 
 To rewrite the table and the verdicts from the finished runs under `results/harness/`, from the
