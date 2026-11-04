@@ -1,0 +1,9 @@
+# Analysis behind chapter 1.3 (4 Nov 2026)
+
+Scripts that computed the measured numbers in `forecast/constituencies.html`. No model is fitted. Run them from the repository root with `LC_ALL=en_US.UTF-8 Rscript docs/method/analysis/1.3-constituencies/<script>.R`.
+
+| Script | Reads | Gives |
+|---|---|---|
+| `d_data.R` | the live `data/` (git-ignored), through `R/sampler_check/fit_headless.R --data-only`, which builds the fit script's 2024-eve Stan data and quits; `read_polling_data()` and `read_constituency_data()` for labels | the kjördæmi level order (which kjördæmi is closed); each kjördæmi observation's date, house, rows, count per kjördæmi, the lists a row leaves out, and the size of the national row from the same house and date; every observation in `data/constituency_data.csv` and whether the fit keeps it; `constituency_weights`, `constituency_weights_pred`, `n_pred_k` and its shares; the ratios $w_{o,k}/w_{o,K}$ that close the K-th effect; `info_delta` rebuilt in R as the Stan file builds it, the share of it from the 2021 result's rows, and the partial-centring weight at four values of $\sigma_\delta$; the 2021 national clr against the vote-weighted mean of the kjördæmi clrs and the shares each implies; the 2021 deviations $\hat\delta$ and their sds; Suður's effect under each observation's weights with the free effects held at $\hat\delta$; Figure 2's cells, rounded once to 2 dp from full precision; Suður's implied prior sd as a multiple of $\sigma_\delta$; and the gap between the national draw's shares and the aggregate of the kjördæmi draws' shares, for two values of $\beta$ and two sets of weights |
+
+`d_data.R` was run on 4 Nov 2026, after `R/correct_election_anchors.R` had corrected the live `data/polling_data.csv`. On data changed since then the counts may differ. Figure 2's cell values were written into the page from this script's output by a one-off splice, not retyped, and checked against its 2-dp block cell by cell.

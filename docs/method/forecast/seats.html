@@ -67,7 +67,7 @@
 </div>
 
 <div class="xref"><span class="lab">See also</span>
-<p>Where the kjördæmi vote draws come from: chapter 1.3 (planned). How the harness scores seat forecasts: 4.1 (planned).</p>
+<p>Where the kjördæmi vote draws come from: chapter <a href="constituencies.html#forecast">1.3</a>. How the harness scores seat forecasts: 4.1 (planned).</p>
 </div>
 </section>
 
@@ -185,7 +185,7 @@
 </section>
 
 <section id="draws"><h2>From draws to seat distributions</h2>
-<p>A forecast gives, per posterior draw, integer votes for each list in each kjördæmi (<code>y_pred_constituency</code>, chapter 1.3 (planned)). Running an allocator on each draw turns them into a joint distribution of seats. From that come each party's seat distribution and the probability that a set of parties holds a majority, at least 32 of 63 seats.</p>
+<p>A forecast gives, per posterior draw, integer votes for each list in each kjördæmi (<code>y_pred_constituency</code>, chapter <a href="constituencies.html#forecast">1.3</a>). Running an allocator on each draw turns them into a joint distribution of seats. From that come each party's seat distribution and the probability that a set of parties holds a majority, at least 32 of 63 seats.</p>
 <ul>
 <li><strong>The harness</strong> does this in <code>R/harness/scores.R</code>: <code>seat_draws()</code> runs the allocator per draw with Annað ineligible by default, <code>majority_prob()</code> counts draws at 32 seats or more, and <code>seat_scores()</code> scores the seats against a result.</li>
 <li><strong>The live forecast scripts</strong> have no step that writes the seat draws. <code>R/process_seats_draws.R</code>, <code>R/make_meirihlutar_plots.R</code> and <code>R/make_new_prediction_plots_seats.R</code> read a <code>seats_draws.parquet</code> that, for the 2024 forecast, <code>R/archive/predict_seats.R</code> wrote, with Annað as an ordinary list. PR #16 fixed two of the plots built from it. The seat plot (<code>make_new_prediction_plots_seats.R</code>) now draws the posterior's own probabilities (aaf0aa1). In the majority plot, the coalition labelled DFS now sums D, F and S where it had summed D, M and S (6ecf13d), and the side table is sorted as the plot is (bcd1ea6).</li>
@@ -246,7 +246,7 @@
 </ul>
 </section>
 <!-- content:end -->
-    <nav class="pager"><a href="../forecast/walk.html"><span class="lbl">Previous</span>1.1 The latent support walk and its election anchors</a><a class="next" href="../bias/updating.html"><span class="lbl">Next</span>3.1 How pollster bias is modelled and updated at and between elections</a></nav>
+    <nav class="pager"><a href="../forecast/constituencies.html"><span class="lbl">Previous</span>1.3 Constituency effects</a><a class="next" href="../bias/updating.html"><span class="lbl">Next</span>3.1 How pollster bias is modelled and updated at and between elections</a></nav>
   </main>
 </div>
 
