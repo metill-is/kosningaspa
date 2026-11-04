@@ -379,6 +379,29 @@ test_that("Stan declares the parameters V2_CORE_PARS names, with its types, boun
   expect_identical(utils::tail(V2_CORE_PARS$name, 1), "delta_coord")
 })
 
+test_that("v2_par_dims() refuses a delta_form other than 0 or 1, and delta_form = 1 without the delta walk", {
+  # WHY: without the second refusal, delta_form = 1 with delta_walk = 0 would size delta_raw
+  # at 1 - n_closed matrices instead of stopping: a static delta has no centred form.
+  d <- list(
+    P = 4L, K = 3L, G = 9L, H = 2L, J = 1L, n_closed = 2L, n_epoch = 3L, entry_epoch = c(0L, 0L, 0L, 2L),
+    walk_form = 0L, epoch_bias = 0L, newcomer_pool = 0L, shock = 0L, delta_walk = 1L, delta_form = 1L
+  )
+  expect_identical(
+    lapply(v2_par_dims(d)[c("delta_raw", "delta_coord")], as.integer),
+    list(delta_raw = c(1L, 3L, 4L), delta_coord = c(2L, 2L, 3L))
+  )
+  for (bad in list(2L, -1L, c(0L, 1L), integer(0))) {
+    expect_error(
+      v2_par_dims(utils::modifyList(d, list(delta_form = bad))), "v2 reference: data$delta_form must be 0 or 1",
+      fixed = TRUE
+    )
+  }
+  expect_error(
+    v2_par_dims(utils::modifyList(d, list(delta_walk = 0L))), "v2 reference: data$delta_form = 1 needs delta_walk = 1",
+    fixed = TRUE
+  )
+})
+
 test_that("the newcomer-pool reference: its mutant changes the density on every cell, and the identity under permutation holds", {
   # WHY: every newcomer enters in an epoch of the window (C and F in the first), so the mean
   # over every party differs from the mean over the existing ones on each cell, 2017 eve's

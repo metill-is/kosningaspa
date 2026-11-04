@@ -1023,6 +1023,10 @@ test_that("v2s-p2: transformed data refuses a centred delta it cannot build, nam
   d1 <- d
   d1$w[3, ] <- d$w[3, ] * 1.001
   expect_error(v2_methods(V2_STAN, d1), "forecast_v2: delta_form = 1 needs each closed election's w to sum to 1 within 1e-9, but row 3 of w sums to ", fixed = TRUE)
+  # WHY: 1e-8 off is above the 1e-9 threshold, so a looser guard (1e-6, say) fails here.
+  d1 <- d
+  d1$w[2, ] <- d$w[2, ] * (1 + 1e-8)
+  expect_error(v2_methods(V2_STAN, d1), "forecast_v2: delta_form = 1 needs each closed election's w to sum to 1 within 1e-9, but row 2 of w sums to ", fixed = TRUE)
   # WHY: the real weights sum to 1 only within rounding, about 1e-15, and must pass.
   d1 <- d
   d1$w[2, ] <- d$w[2, ] * (1 + 1e-12)

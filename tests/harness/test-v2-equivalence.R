@@ -7,8 +7,13 @@ box::use(
   R / harness / constants[POLL_PARTIES],
   R / harness / v2_equivalence[
     EQUIVALENCE_SUMMARY, check_reasons, control_verdicts, gq_points_compared, provisional_row, write_equivalence_row
-  ]
+  ],
+  R / harness / v2_reference[M_e]
 )
+
+# The modules' namespaces, for the delta map's internals and the reference's delta walk.
+eq <- environment(check_reasons)
+ref <- environment(M_e)
 
 P1_CONFIG <- "harness/configs/steps/v2s-p1.json"
 P2_CONFIG <- "harness/configs/steps/v2s-p2.json"
@@ -159,6 +164,109 @@ test_that("gq_points_compared() is the one gate on the GQ comparison, and a chec
   x <- utils::read.csv(path, colClasses = "character")
   expect_identical(x$gq_points, "0")
   expect_identical(x$gq_max_rel, "")
+})
+
+# A small layout for the delta form's map, with the real cells' cases: K = 4, P = 5, three
+# closed elections and an open epoch, each epoch with its own weights and each election's
+# parties listed out of order. Party 4 has results at elections 1 and 3 but not at 2; party
+# 5 enters in epoch 2, has no results at its entry election and has them at 3.
+delta_toy <- function() {
+  K <- 4L
+  P <- 5L
+  S <- list(c(3L, 1L, 4L, 2L), c(2L, 3L, 1L), c(5L, 1L, 4L, 3L, 2L))
+  y <- array(0, c(3L, K, P))
+  withr::with_seed(31, for (e in 1:3) y[e, , S[[e]]] <- sample(200:9000, K * length(S[[e]]), replace = TRUE))
+  list(
+    K = K, P = P, n_closed = 3L, n_epoch = 4L, idx_res = t(vapply(S, \(s) c(s, rep(0L, P - length(s))), integer(P))),
+    n_rep_res = lengths(S), y_res = y,
+    w = rbind(c(0.1, 0.2, 0.3, 0.4), c(0.25, 0.25, 0.3, 0.2), c(0.4, 0.3, 0.2, 0.1), c(0.15, 0.35, 0.3, 0.2)),
+    entry_epoch = c(0L, 0L, 0L, 0L, 2L), delta_walk = 1L, delta_form = 1L, delta_years = c(0, 1, 4, 3), delta_years_bar = 4
+  )
+}
+
+# The offset of closed election e on `d`, the coordinates of A_e log(y_e + 1/2) C_S, with
+# explicit matrices: A_e = I - 1 w_e', C_S = I - 11'/|S_e| over S_e's columns, and party p of
+# S_e (p > 1) at coordinate p - 1 of rows 2:K; 0 in the other coordinates.
+offset_by_hand <- function(d, e) {
+  S <- d$idx_res[e, seq_len(d$n_rep_res[e])]
+  A <- diag(d$K) - matrix(1, d$K, 1) %*% d$w[e, , drop = FALSE]
+  Z <- A %*% log(d$y_res[e, , S] + 0.5) %*% (diag(length(S)) - 1 / length(S))
+  off <- matrix(0, d$K - 1, d$P - 1)
+  for (j in seq_along(S)) if (S[j] > 1) off[, S[j] - 1] <- Z[-1, j]
+  off
+}
+
+# Stan/forecast_v2.stan's delta at the closed elections from delta_coord, with base chol()
+# for its QR factors and offset_by_hand() for its offset: at election e, with s_e the step's
+# scales, M the coordinates of M_e(m_e) and D = delta_e[2:K, 2:P], the absent columns D_B =
+# M_B + L_Psi W_B L_BB' and the present ones D_Pr = off_Pr + R - rowSums(D_B) / (|Pr| + 1);
+# then delta_e[k, 1] = -sum D[k - 1, ] and row 1 from the weights.
+centred_delta_by_hand <- function(coord, s_delta0, s_zeta, d) {
+  K <- d$K
+  P <- d$P
+  lower_chol <- function(X) t(chol(X))
+  out <- array(0, c(d$n_closed, K, P))
+  for (e in seq_len(d$n_closed)) {
+    S <- d$idx_res[e, seq_len(d$n_rep_res[e])]
+    pr <- sort(S[S > 1]) - 1L
+    ab <- setdiff(seq_len(P - 1), pr)
+    enter <- d$entry_epoch == e
+    s <- if (e == 1) s_delta0 else ifelse(enter, s_delta0, sqrt(d$delta_years[e] / d$delta_years_bar) * s_zeta)
+    M <- matrix(0, K - 1, P - 1)
+    if (e > 1) {
+      prev <- out[e - 1, , ]
+      m <- prev - rowMeans(prev[, d$idx_res[e - 1, seq_len(d$n_rep_res[e - 1])], drop = FALSE])
+      m[, enter] <- 0
+      M <- M_e(m, d$w[e, ])[-1, -1]
+    }
+    A <- diag(K) - matrix(1, K, 1) %*% d$w[e, , drop = FALSE]
+    Tp <- ((diag(P) - 1 / P) %*% diag(s))[-1, ]
+    W <- coord[e, , ]
+    D <- matrix(0, K - 1, P - 1)
+    if (length(ab)) {
+      D[, ab] <- M[, ab] + lower_chol(tcrossprod(A)[-1, -1]) %*% W[, ab, drop = FALSE] %*% t(lower_chol(tcrossprod(Tp[ab, , drop = FALSE])))
+    }
+    D[, pr] <- offset_by_hand(d, e)[, pr] + W[, pr] - rowSums(D[, ab, drop = FALSE]) / (length(pr) + 1)
+    de <- matrix(0, K, P)
+    de[-1, -1] <- D
+    de[-1, 1] <- -rowSums(D)
+    de[1, ] <- -colSums(d$w[e, -1] * de[-1, , drop = FALSE]) / d$w[e, 1]
+    out[e, , ] <- de
+  }
+  out
+}
+
+test_that("delta_layout() gives each closed election's present and absent coordinates, and its offset over S_e's columns", {
+  # WHY: the toy's elections 1 and 2 lack parties, so an offset centred over all P parties, with
+  # log(0 + 1/2) in the missing ones, differs from one centred over S_e; so do one without the
+  # + 1/2 and one with another epoch's weights.
+  d <- delta_toy()
+  lay <- eq$delta_layout(d)
+  expect_identical(lay$present, list(1:3, 1:2, 1:4))
+  expect_identical(lay$absent, list(4L, 3:4, integer(0)))
+  for (e in 1:3) {
+    expect_identical(lay$S[[e]], d$idx_res[e, seq_len(d$n_rep_res[e])])
+    expect_lt(max(abs(lay$off[[e]] - offset_by_hand(d, e))), 1e-12, label = paste("offset", e))
+    expect_true(all(lay$off[[e]][, lay$absent[[e]]] == 0), label = paste("absent offset", e))
+  }
+})
+
+test_that("to_centred() inverts the centred delta: the reference walk's delta, mapped to delta_coord and built back as the Stan model builds it, is itself", {
+  # WHY: the toy's absent blocks are 1 and 2 parties wide, one of them an entrant at its own
+  # entry election and S changes between elections, so a shift by rowSums(D_B) / |Pr|, an
+  # untransposed L_BB, the mean taken over S_e rather than S_{e-1} or s_zeta as an entrant's
+  # scale each leave delta_coord that builds back to another delta.
+  d <- delta_toy()
+  withr::with_seed(32, {
+    zeta <- array(stats::rnorm(d$n_epoch * d$K * d$P), c(d$n_epoch, d$K, d$P))
+    s_delta0 <- stats::runif(d$P, 0.2, 1.5)
+    s_zeta <- stats::runif(d$P, 0.05, 0.6)
+  })
+  delta <- ref$delta_epochs(zeta, s_delta0, s_zeta, d)
+  coord <- eq$to_centred(delta, s_delta0, s_zeta, d, eq$delta_layout(d))
+  expect_identical(dim(coord), c(3L, d$K - 1L, d$P - 1L))
+  built <- centred_delta_by_hand(coord, s_delta0, s_zeta, d)
+  expect_lt(max(abs(built - delta[1:3, , , drop = FALSE])), 1e-10)
 })
 
 test_that("the script refuses a bad command line before it compiles anything, and writes no CSV", {
