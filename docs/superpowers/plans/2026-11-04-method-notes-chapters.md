@@ -191,6 +191,7 @@ Section counts include the plain picture, "What is open" and "Sources", as 3.1's
 - **Dependencies and risks:**
   - Depends on 1.1, for V_t and the walk's end.
   - **Verify first.** Check in `prepare_fundamentals_data()` that `index_f` and `y_f` line up; a possible lag between them was raised in review and is not settled on master. If there is a lag, it is a known issue here and in 5.2, and possibly a fix PR first (the author decides).
+  - **Checked 4 Nov 2026: the lag is real.** `index_f` and `n_parties_f` keep the first election's column while `y_f`, `incumbent_f`, `incumbent_years`, `vnv` and `growth` drop it, so training column d reads the lists of the election before the result it scores. A new list's votes are left out of that election's likelihood (16 list-elections; 40.1% of the 1999 votes), and a list that stopped running is read with 0 votes (11). `docs/method/analysis/1.2-fundamentals/d_align.R` prints it election by election. The 2024 forecast and arm R0 both carry it. The author paused 1.2 until the v2 sessions settle the fix, which also needs a rule for new lists; write 1.2 on the fixed code.
   - The local `data/fundamentals_data.csv` can lag the sheet.
   - The manuscript still describes the pre-fix formula.
 - **Size:** 9 sections (picture; the regression; training data and economy series; the prediction; the weight target and τ_f; how the weight decays; the 2024 form against master; open; sources), 2 figures (weight curve; V_t with collapse inflation), 2 tables (coefficients and priors; economy series definitions).
@@ -459,7 +460,7 @@ No chapter needs a fit to be written: each is written from the code, committed r
 1. **1.1, the walk.** It is the fixed point 3.1 already points to, the algebra 1.2, 1.3, 2.1 and 3.2 build on, master-only and fit-free. **Recommended first chapter.**
 2. **1.4, seats, in parallel with 1.1.** Its sources are disjoint from 1.1's, it needs no fit, and the tests give high certainty. Run it in its own session and worktree.
 3. **0.2, notation.** Seed it from 3.1 and 1.1 as soon as 1.1 is drafted; every later chapter adds its rows.
-4. **1.2, fundamentals,** after the `index_f`/`y_f` check.
+4. **1.2, fundamentals,** paused (4 Nov 2026) until the v2 sessions fix the `index_f`/`y_f` lag (§3, 1.2).
 5. **1.3, constituencies.**
 6. **2.1, the smoother.** It reuses 1.1 and is measured from X1.
 7. **3.2, overdispersion.** It reuses 1.1 and 2.1, with the calibration box open (D4).
