@@ -68,7 +68,7 @@
     <p class="sub">Living notes on the kosningaspá forecast model, the Fylgisvakt polling smoother and the v2
     work in progress: what each model assumes, how the code implements it, and what the records say about
     why. Kept up to date as the models change, so that the author can stay current with them.
-    2 of 14 chapters written.</p>
+    3 of 14 chapters written.</p>
     <div class="stamp"><b>How to read these pages.</b> Every chapter is drafted with Claude from the code and the
     project's records and is <b>not reviewed by the author</b> unless its stamp says so. Each page's stamp gives the
     date it describes (kosningaspa <code>master</code> on that date); unmerged work sits in purple branch boxes,
@@ -89,7 +89,7 @@
       <li><span class="snum">1.1</span><div><a href="forecast/walk.html">The latent support walk and its election anchors</a><div class="cdesc">The forecast model&#x27;s latent state: centred log-ratio levels on the poll dates, a correlated random walk run backwards from election day, faster in the 47 days before an election, pinned by each past result with Brownian bridges between results; how parties that do not exist yet are handled; and how the walk is sampled.</div><div class="crev">Not reviewed by the author. Drafted with Claude on 4 Nov 2026 from the code on master.</div></div><span class="st"><span class="dot done">●</span></span></li>
       <li><span class="snum">1.2</span><div>Fundamentals and their weight<div class="cdesc">planned</div></div><span class="st"><span class="dot todo">○</span></span></li>
       <li><span class="snum">1.3</span><div>Constituency effects<div class="cdesc">planned</div></div><span class="st"><span class="dot todo">○</span></span></li>
-      <li><span class="snum">1.4</span><div>From vote shares to seats<div class="cdesc">planned</div></div><span class="st"><span class="dot todo">○</span></span></li>
+      <li><span class="snum">1.4</span><div><a href="forecast/seats.html">From vote shares to seats</a><div class="cdesc">How kosningaspá turns kjördæmi votes into Alþingi&#x27;s 63 seats: D&#x27;Hondt in each kjördæmi, nine adjustment seats by national D&#x27;Hondt over the lists with at least 5%, each placed where the list&#x27;s next quotient, as a share of the kjördæmi&#x27;s valid votes, is largest; the two layouts; the 2021 count traced step by step; what folding lists into Annað does; and how the allocator is tested against every official seat since 2016.</div><div class="crev">Not reviewed by the author. Drafted with Claude on 4 Nov 2026 from the code on master and the official results committed under harness/truth/.</div></div><span class="st"><span class="dot done">●</span></span></li>
     </ul>
   </section>
   <section class="part">
