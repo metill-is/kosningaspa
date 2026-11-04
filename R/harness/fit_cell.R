@@ -29,12 +29,11 @@ stopifnot("run from the project root (no R/harness/constants.R here)" = file.exi
 options(box.path = normalizePath("."), width = 120, warn = 1)
 box::use(
   R / harness / arms[arm],
-  R / harness / constants[harness_path],
   R / harness / freeze[forecast_free],
   R / harness / info_set[info_set, validate_inputs],
   R / harness / runs[
     SAMPLER, run_id, run_dir, sha256_file, stan_data_sha, write_frozen_inputs, expected_meta, meta_mismatch,
-    retire_run, chain_sampler, summarise_diagnostics, diagnostics_gate, diag_line
+    retire_run, measure_draws, run_provenance, chain_sampler, summarise_diagnostics, diagnostics_gate, diag_line
   ],
   R / harness / scores[kd_to_nat]
 )
@@ -70,11 +69,6 @@ scored_draws <- function(eday_kd) {
   wide <- tidyr::pivot_wider(long, names_from = "variable", values_from = "share")
   posterior::as_draws_array(posterior::as_draws_df(wide))
 }
-
-#' R-hat and the bulk and tail ESS of each variable of `x`.
-measure <- function(x) posterior::summarise_draws(x, "rhat", "ess_bulk", "ess_tail")
-
-git <- function(...) suppressWarnings(system2("git", c(...), stdout = TRUE, stderr = FALSE))
 
 args <- commandArgs(trailingOnly = TRUE)
 if (length(args) != 6) {
@@ -116,13 +110,7 @@ if (file.exists(meta_path)) {
 }
 
 cell <- list(arm = name, role = a$role, E = format(E), F = format(F), id = id)
-provenance <- list(
-  git_head = git("rev-parse", "HEAD"),
-  git_dirty = length(git("status", "--porcelain")) > 0,
-  snapshot_manifest_sha256 = sha256_file(harness_path("snapshot_manifest.csv")),
-  cmdstan_version = cmdstanr::cmdstan_version(),
-  cmdstanr_version = as.character(utils::packageVersion("cmdstanr"))
-)
+provenance <- run_provenance()
 built_meta <- json_ready(built$meta)
 if (!identical(write_frozen_inputs(dir, built$data, c(cell, expected, built_meta, provenance)), data_sha)) {
   stop("the frozen Stan data do not hash as the built data")
@@ -157,7 +145,7 @@ d <- summarise_diagnostics(params, scored, c(
   list(num_divergent = sampler$num_divergent, num_max_treedepth = sampler$num_max_treedepth, ebfmi = sampler$ebfmi),
   chain_sampler(fit$sampler_diagnostics())
 ))
-key <- rbind(measure(scored), measure(posterior::as_draws_df(arrow::read_parquet(paths[["param_draws"]]))), measure(lp))
+key <- rbind(measure_draws(scored), measure_draws(posterior::as_draws_df(arrow::read_parquet(paths[["param_draws"]]))), measure_draws(lp))
 key_path <- file.path(dir, "key_diagnostics.csv")
 readr::write_csv(key[c("variable", "rhat", "ess_bulk", "ess_tail")], key_path)
 gate <- diagnostics_gate(d)

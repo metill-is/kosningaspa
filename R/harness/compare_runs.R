@@ -1,8 +1,8 @@
 # Sampler checks between runs: the stop rule, the adoption rule and the permutation rule of the
 # Phase 2 plan (its Decisions 5, 6 and 8; docs/superpowers/plans/2026-10-28-v2-harness-phase2-v2-model.md).
 # A plain script whose definitions also load as a box module, so that its test can import
-# perm_z(), perm_verdict(), relative() and EQUIVALENCE_REQUIRED; the script part runs only when
-# box::name() is NULL. Run from the project root:
+# perm_z(), perm_verdict(), relative() and EQUIVALENCE_REQUIRED, and R/harness/recovery.R
+# stop_rule_at(); the script part runs only when box::name() is NULL. Run from the project root:
 #   LC_ALL=en_US.UTF-8 Rscript R/harness/compare_runs.R stop <arm> [run_list]
 #   LC_ALL=en_US.UTF-8 Rscript R/harness/compare_runs.R adopt <ref_arm> <new_arm> <equivalence_csv> [run_list]
 #   LC_ALL=en_US.UTF-8 Rscript R/harness/compare_runs.R perm <arm_a> <arm_b> [run_list]
@@ -249,12 +249,20 @@ near_cap <- function(dir, n) {
 #' A reason, or NULL when `value` is at most `limit`.
 above <- function(value, limit, reason) if (isTRUE(value <= limit)) NULL else reason
 
-#' One run's stop rule (Decision 5).
+#' One run's stop rule (Decision 5), read from the directory that holds its outputs. A
+#' harness run reaches it through `stop_rule()`; a recovery replicate (`R/harness/recovery.R`),
+#' whose directory is not a `run_dir()`, calls it directly.
+#' @param dir the directory: its `key_diagnostics.csv` (the `lp__` row) and
+#'   `param_draws.parquet` (the bounded log concentrations' columns) are read
+#' @param meta its `meta.json`, read with `simplifyVector = TRUE`: `chains`, `iter_sampling`,
+#'   `minutes` and `diagnostics` (`divergent`, `max_rhat`, `treedepth_hits`, `min_ess_bulk`,
+#'   `n_leapfrog`) are read
+#' @param id the name the printed line gives the run
+#' @param cell the run's cell, as `arm_runs()` writes it, or NA
 #' @return a list: the signals, the recorded values, `per_gradient` (NA without n_leapfrog),
 #'   `has_leapfrog`, `reasons` (the failed signals) and the printed `line`
-stop_rule <- function(run) {
-  meta <- read_meta(run)
-  dir <- run_dir(run$id)
+#' @export
+stop_rule_at <- function(dir, meta, id, cell = NA_character_) {
   d <- meta[["diagnostics"]]
   if (!is.list(d)) fail("the meta.json in ", dir, ": diagnostics is not an object")
   n <- number(meta[["chains"]], "chains") * number(meta[["iter_sampling"]], "iter_sampling")
@@ -278,15 +286,19 @@ stop_rule <- function(run) {
   verdict <- if (length(reasons)) "STOP" else "GO"
   line <- sprintf(
     "%s %s lp_rhat=%s divergent=%.0f/%.0f near_cap=%d/%.0f max_rhat=%s; recorded: minutes=%.1f treedepth_hits=%.0f ess_bulk_per_1k_grad=%s%s",
-    verdict, run$id, rhat_shown(lp), divergent, n, near, n, rhat_shown(rhat), number(meta[["minutes"]], "minutes"),
+    verdict, id, rhat_shown(lp), divergent, n, near, n, rhat_shown(rhat), number(meta[["minutes"]], "minutes"),
     number(d[["treedepth_hits"]], "diagnostics$treedepth_hits"), shown(per_gradient, 3),
     if (length(reasons)) paste0("; stop: ", paste(reasons, collapse = "; ")) else ""
   )
   list(
-    id = run$id, cell = run$cell, divergent = divergent, per_gradient = per_gradient, has_leapfrog = has_leapfrog,
+    id = id, cell = cell, divergent = divergent, per_gradient = per_gradient, has_leapfrog = has_leapfrog,
     reasons = reasons, line = line
   )
 }
+
+#' One run's stop rule (Decision 5): `stop_rule_at()` on its `run_dir()` and its own
+#' `meta.json` (`read_meta()`).
+stop_rule <- function(run) stop_rule_at(run_dir(run$id), read_meta(run), run$id, run$cell)
 
 run_stop <- function(arm, path) {
   rules <- lapply(arm_runs(read_run_list(path), arm, path), stop_rule)

@@ -45,7 +45,10 @@ a cold cache or reads it there; that fit's warmup prints "Prior size parameter[5
 notices, which are expected. The slow tests of the equivalence check in
 `tests/harness/test-v2-equivalence.R` are named and gated the same way (`v2s-p1: …`): each
 runs `R/harness/v2_equivalence.R` in a subprocess into a temporary CSV, one of them on a
-copy of the Stan file with a planted fault, which must fail for the constant's range alone. Its
+copy of the Stan file with a planted fault, which must fail for the constant's range alone. The
+slow test of `tests/harness/test-v2-recovery.R` runs `R/harness/recovery.R` in a subprocess,
+one replicate at 20 + 20 on 2021 f180 into a temporary results root, where it compiles its own
+copy of the Stan file and fits stage 1 afresh (Recovery, below). The equivalence check's
 fast tests check the CSV writer, its provisional rows, and the command lines the script
 refuses before it compiles anything: they run it with `CMDSTAN` naming an empty directory,
 after checking that cmdstanr then finds no CmdStan, so a refusal that regressed past the
@@ -635,6 +638,59 @@ It exits 1 on any `PERM FAIL`. `tests/harness/test-compare-runs.R` runs all thre
 run directories, made-up draws only, and checks that every line `perm` prints is a verdict or
 a list of names. It also tests `perm_z()` against a hand computation with posterior's MCSEs,
 and `perm_verdict()` on made-up z's that break each of its three conditions alone.
+
+## Recovery
+
+Simulation-based recovery (spec §8, the Phase 2 plan's Decision 7) asks whether a fit of V2
+covers the parameters that simulated its data. `R/harness/recovery.R` keeps a cell's real
+design (arm `v2`'s config, `draw_forecast = 0`: no forecast is drawn) and replaces every count
+(`y_nat`, `y_kd`, `y_res`) and μ_f with a draw from the model at one draw of V2's prior
+(`v2_simulate()`), so the grid, poll schedule, sample sizes, houses, entry and valid votes stay
+real and no real count survives. A replicate is redrawn, attempt a at seed
+100000 × seed + a, while a reported party's share of a closed election's result in a kjördæmi,
+or its mean share over an epoch's national polls, leaves [0.5%, 70%]; the rule reads the
+simulated data alone, so the ranks stay uniform. Before the fit, a one-iteration fixed_param run
+at the truth must give each truth element (τ_μ, s̄_E, the open epoch's μ, δ at the closed and
+the open epochs) to 1e-8, so each truth is paired with the Stan quantity of its name. Each lane
+runs its seeds one after another, four chains each; from the project root, in a normal shell so
+that the lanes outlive the session:
+
+```
+mkdir -p results/harness/recovery/logs
+nohup env LC_ALL=en_US.UTF-8 Rscript R/harness/recovery.R 2024-11-30 2024-11-29 3001 20 400 400 --lane=A > results/harness/recovery/logs/nohup-A.log 2>&1 &
+nohup env LC_ALL=en_US.UTF-8 Rscript R/harness/recovery.R 2021-09-25 2021-03-29 3101 10 400 400 --lane=B > results/harness/recovery/logs/nohup-B.log 2>&1 &
+LC_ALL=en_US.UTF-8 Rscript R/harness/recovery.R report
+```
+
+A lane re-run skips a finished replicate (`SKIP`), retires to `_stale/` one whose `meta.json`
+names other settings or that has none (`STALE`), and leaves alone one that a running process
+holds (`BUSY`), so a seed range resumes where it stopped, and a second lane given the same range
+takes the seeds the first has not reached. A lane already running refuses a second process.
+
+```
+results/harness/recovery/
+  <E>_<F>/<seed>/     one replicate, read-only: inputs/stan_data.json (the simulated data),
+                      truth.json (the seeds, attempts, true parameters and natural quantities),
+                      ranks.csv (per truth element: its posterior quantile q = mean(draws <
+                      truth), in50 for q in [0.25, 0.75], in90 for q in [0.05, 0.95]),
+                      param_draws.parquet, key_diagnostics.csv, meta.json (written last)
+  logs/lane-<L>.log   each lane's log
+  _lanes/<L>/         each lane's lock and its own compiled copy of Stan/forecast_v2.stan
+```
+
+`report` writes `harness/v2/recovery.md` (committed): the Stan file's and config's sha256 (it
+refuses replicates whose sha256 differs from the others', naming them), each design's
+replicates, draws, rejection rate and truth elements per group, each group's 50% and 90%
+coverage against Decision 7's band (τ_μ and s̄_E: at least 22 of 30 truths inside the 90%
+interval and 8 to 22 inside the 50%; open-epoch μ, closed δ and open δ: the mean over replicates
+of each one's share covered within 3 standard errors of 0.9 and of 0.5), and the stop rule's
+line for every replicate (`compare_runs.R`'s `stop_rule_at()`, its gate-scope R-hat over the
+parameters and the truth elements); a replicate that trips it stays in every count. It ends
+`RECOVERY PASS` or `RECOVERY FAIL` only on Decision 7's set, 20 replicates on 2024 eve and 10 on
+2021 f180, each at 400 + 400, and `RECOVERY INCOMPLETE` with its reasons on any other.
+`tests/harness/test-v2-recovery.R` checks the redraw rule, the ranks, the bands, the folder
+states and the report on made-up replicates, and runs one replicate at 20 + 20 on 2021 f180 into
+a temporary results root (slow).
 
 ## R0's inputs
 

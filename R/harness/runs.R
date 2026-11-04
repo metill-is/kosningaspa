@@ -166,17 +166,43 @@ meta_mismatch <- function(meta, expected) {
 
 #' Move a run aside, for a refit.
 #' @param dir the run directory
-#' @return the new path, `results_root()/_stale/<id>_<YYYYmmddHHMMSS>` with `<id>` the
-#'   directory's name; an error if `dir` is not a directory or the new path exists
+#' @param label the name it is kept under: the directory's name, the run id, by default; a
+#'   recovery replicate, whose directory is named by its seed alone, passes its own
+#' @return the new path, `results_root()/_stale/<label>_<YYYYmmddHHMMSS>`; an error if `dir`
+#'   is not a directory or the new path exists
 #' @export
-retire_run <- function(dir) {
+retire_run <- function(dir, label = basename(dir)) {
   if (!dir.exists(dir)) stop("no run to retire: ", dir)
   stale <- file.path(results_root(), "_stale")
   dir.create(stale, showWarnings = FALSE, recursive = TRUE)
-  to <- file.path(stale, paste0(basename(dir), "_", format(Sys.time(), "%Y%m%d%H%M%S")))
+  to <- file.path(stale, paste0(label, "_", format(Sys.time(), "%Y%m%d%H%M%S")))
   if (file.exists(to)) stop("already retired this second: ", to)
   if (!file.rename(dir, to)) stop("could not move ", dir, " to ", to)
   to
+}
+
+#' R-hat and the bulk and tail ESS of each variable of a draws object.
+#' @param x a posterior draws object
+#' @return `posterior::summarise_draws(x, "rhat", "ess_bulk", "ess_tail")`
+#' @export
+measure_draws <- function(x) posterior::summarise_draws(x, "rhat", "ess_bulk", "ess_tail")
+
+#' What a fit records of where it ran: the commit and whether the tree had changes, the
+#' snapshot manifest's sha256 and the CmdStan and cmdstanr versions.
+#' @return `list(git_head, git_dirty, snapshot_manifest_sha256, cmdstan_version,
+#'   cmdstanr_version)`; `git_head` and `git_dirty` from git run in the working directory,
+#'   which a runner keeps at the project root
+#' @export
+run_provenance <- function() {
+  box::use(R / harness / constants[harness_path])
+  git <- function(...) suppressWarnings(system2("git", c(...), stdout = TRUE, stderr = FALSE))
+  list(
+    git_head = git("rev-parse", "HEAD"),
+    git_dirty = length(git("status", "--porcelain")) > 0,
+    snapshot_manifest_sha256 = sha256_file(harness_path("snapshot_manifest.csv")),
+    cmdstan_version = cmdstanr::cmdstan_version(),
+    cmdstanr_version = as.character(utils::packageVersion("cmdstanr"))
+  )
 }
 
 # WHY: a constant parameter (L_Omega's fixed entries) has no R-hat or ESS.
@@ -231,9 +257,8 @@ summarise_diagnostics <- function(params, scored, sampler) {
   if (!is.numeric(leapfrog) || anyNA(leapfrog) || any(leapfrog < 0 | leapfrog != round(leapfrog))) {
     stop("sampler n_leapfrog must be whole numbers, at least 0")
   }
-  measure <- function(x) posterior::summarise_draws(x, "rhat", "ess_bulk", "ess_tail")
-  p <- measure(params)
-  s <- measure(scored)
+  p <- measure_draws(params)
+  s <- measure_draws(scored)
   list(
     max_rhat = extreme(max, c(present(p$rhat), s$rhat)),
     max_rhat_scored = extreme(max, s$rhat),
