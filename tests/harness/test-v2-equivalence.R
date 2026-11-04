@@ -128,7 +128,7 @@ test_that("check_reasons() fails a walk check on a negative control that is not 
     reasons_at(controls = c(ref_walk = 1, new_anchor = NA, new_bridge = 1e-13, new_forward = NA)),
     c("a negative control passes: new_bridge", "a negative control is not exercised: new_anchor, new_forward")
   )
-  # WHY: on a cell with one closed election (2017 eve) the delta form's mean and entrant terms cannot vary, so only a walk check fails on a control that is not exercised.
+  # WHY: only a walk check fails on a control that is not exercised; under the delta form only new_delta_absent can be constant over the points, on a cell where no closed election lacks a party.
   expect_identical(reasons_at(form = "delta", controls = c(ref_delta = 1, ref_unused = NA, new_delta_absent = 1)), character(0))
   expect_identical(
     reasons_at(form = "delta", controls = c(ref_delta = 1, ref_unused = 1e-13, new_delta_absent = NA)),

@@ -28,10 +28,16 @@
 #                     D_B, L_BB,e = chol(Phi_e[B, B]) and L_Psi,e = chol(Psi_e).
 # The present blocks contribute none: R -> D_Pr is a shift. The open epoch's zeta is shared.
 # Each negative control drops one term and must then fail; a term constant over the points
-# cannot be checked so, and under --form=walk fails the check as not exercised. A point with a
-# bounded log concentration at its cap is outside the claim: counted and excluded. A point
-# whose log density is not finite on both sides is dropped and counted; one finite on one side
-# only fails the check.
+# cannot be checked so, and under --form=walk fails the check as not exercised. Under
+# --form=delta a term not exercised is tolerated. Of its three terms only new_delta_absent can
+# be constant over the points: it is 0 at every point of a cell where no closed election lacks
+# a party, while ref_delta varies with the step scales and ref_unused with zeta's null-space
+# part. A cell with one closed election (2017 eve, e = 1 only) still varies all three; what it
+# leaves untested is the step from the second closed election on (the walk's mean, an
+# entrant's scale, which election's c and w it reads), which no point there reaches.
+# A point with a bounded log concentration at its cap is outside the claim: counted and
+# excluded. A point whose log density is not finite on both sides is dropped and counted; one
+# finite on one side only fails the check.
 #
 # Points. On a fitted cell: --n posterior and --n-off off-posterior points, distinct draws of
 # a 4 x (100 + 40) fit of the new side at seed 5100 and max_treedepth 10 (draw_forecast = 0),
@@ -48,13 +54,13 @@
 # cell neither side may write votes_kd, pi_nat_eday or pi_latent_E.
 #
 # Pass: the constant's range over all kept points below tol = 1e-12 max(1, |lp_new|); under
-# --form=walk every negative control exercised and above tol (under --form=delta those
-# exercised above tol: on a 2017 cell, with one closed election, some terms cannot vary); the
-# generated quantities within 1e-9 relative (|a - b| / max(1, |b|)); the natural quantity
-# (theta, or delta at every epoch) within 1e-8 on both sides; no one-sided point; no posterior
-# point dropped; and at least 5 kept points of each kind. With fewer than 5 kept points of the
-# main kind (posterior, or prior on a 2017 cell) no generated quantities are compared, and the
-# check fails on that count. check_reasons() gives the failed conditions.
+# --form=walk every negative control exercised and above tol, and under --form=delta those
+# exercised above tol (above); the generated quantities within 1e-9 relative (|a - b| /
+# max(1, |b|)); the natural quantity (theta, or delta at every epoch) within 1e-8 on both
+# sides; no one-sided point; no posterior point dropped; and at least 5 kept points of each
+# kind. With fewer than 5 kept points of the main kind (posterior, or prior on a 2017 cell) no
+# generated quantities are compared, and the check fails on that count. check_reasons() gives
+# the failed conditions.
 #
 # Usage, from the project root:
 #   LC_ALL=en_US.UTF-8 Rscript R/harness/v2_equivalence.R --config=<config> --form=walk|delta
@@ -765,7 +771,7 @@ main <- function(args) {
   control_verdict <- control_verdicts(controls, tol)
   cat(sprintf(
     "negative control without_%s: %s\n", terms,
-    ifelse(is.na(controls), "the term is constant over these points, so it is not exercised, which fails the check",
+    ifelse(is.na(controls), paste0("the term is constant over these points, so it is not exercised, which ", if (walk) "fails the check" else "--form=delta tolerates"),
       sprintf("constant range %.3g (%s)", controls, ifelse(controls > tol, "fails, as it must", "PASSES: the check cannot see this term"))
     )
   ), sep = "")

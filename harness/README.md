@@ -498,9 +498,12 @@ minimum-norm preimage of its δ plus an N(0, I) draw in M_e's null space at seed
 point's number, and a 2017 prior point's coordinates come from its δ. Each term left out
 alone, a negative control, must break it; under `--form=walk` every control must be
 exercised, so a term constant over the points fails the check as not exercised, while under
-`--form=delta` a term that cannot vary on a cell (2017 eve has one closed election) is
-tolerated. Both sides' generated quantities at the posterior (or prior) points, by standalone
-`generate_quantities` at seed 1 and `sig_figs = 18`, must agree within 1e-9 relative, and θ
+`--form=delta` such a term is tolerated. Of the delta form's terms only `new_delta_absent` can
+be constant over the points: it is 0 on a cell where no closed election lacks a party. A cell
+with one closed election (2017 eve) varies all three; what it leaves untested is the δ step
+from the second closed election on (the walk's mean, an entrant's scale, which election's c
+and w it reads). Both sides' generated quantities at the posterior (or prior) points, by
+standalone `generate_quantities` at seed 1 and `sig_figs = 18`, must agree within 1e-9 relative, and θ
 (or δ at every epoch) within 1e-8. A point
 with a bounded log concentration at its cap is excluded and counted; one whose log density is
 not finite on both sides is dropped and counted, and a dropped posterior point fails the
