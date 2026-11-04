@@ -1089,3 +1089,213 @@ LC_ALL=en_US.UTF-8 Rscript R/harness/compare_runs.R stop v2s-m4
 
 Next: P2 (`v2s-p2`), the δ form, on `v2s-m4`'s config with `delta_form = 1`, as long as M4
 stands; both seeds of `v2s-m4` are its comparison runs.
+
+## v2s-p2: the δ walk held centred (P-step)
+
+`v2s-m4` with `delta_form = 1` (config `harness/configs/steps/v2s-p2.json`, `v2s-m4.json` with
+that one field changed): at each closed election δ_e is held in its coordinates
+δ_e[2:K, 2:P], the parties without results there non-centred and those with results centred,
+shifted per kjördæmi row and stored relative to the result's kjördæmi log-share deviations;
+the open epoch's step stays non-centred (`Stan/CLAUDE.md`, the `delta_form` row). It
+reparameterises the same model. The R reference `v2_lp_ref()` refuses `delta_form = 1`, so the
+three `v2s-p2` tests in `tests/harness/test-v2-stan.R` cover what needs no reference density:
+transformed data's refusals of a centred δ it cannot build, the parameters' sizes and the free
+size (n_closed (K + P − 1) fewer than `v2s-m4`'s), and each closed election's δ at the result's
+log-share deviations when the present coordinates are 0. Its log density and generated
+quantities are checked against the non-centred walk by `R/harness/v2_equivalence.R
+--form=delta`, whose reference side is the form that `test-v2-stan.R` tests against
+`v2_lp_ref()`. `tests/harness/test-v2-equivalence.R` tests that check, with a control whose
+present block has its Kronecker factors swapped, and the map's offset and inverse on a small
+layout. This section is the check's four results, the sampler check of its fits and the
+adoption rule's verdict.
+
+**Equivalence.** The four checks of `EQUIVALENCE_REQUIRED`, as written to
+`harness/v2/steps/v2s-p2-equivalence.csv` by `LC_ALL=en_US.UTF-8 Rscript
+R/harness/v2_equivalence.R --config=harness/configs/steps/v2s-p2.json --form=delta
+--cell=<E>,<F> --out=harness/v2/steps/v2s-p2-equivalence.csv` (`--n=30 --n-off=15` on the
+fitted cells, 2017 eve with `--n=20`, the reversed row with `--reverse`), every row on
+`Stan/forecast_v2.stan` at sha256 `774680c6…`. Every row: no point dropped, excluded at a cap
+or finite on one side only, and each term's negative control `fails`, as it must.
+
+| Cell | Order | Kept points | Constant range | Tolerance | Max path error (δ) | Generated quantities: points; max relative difference | Controls (`ref_delta`, `ref_unused`, `new_delta_absent`) | Verdict |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2024 eve | default | 30 posterior + 15 off-posterior | 4.657e-10 | 2.677e-07 | 1.021e-14 | 30; 1.063e-13 | fails, fails, fails | PASS |
+| 2021 f180 | default | 30 posterior + 15 off-posterior | 6.548e-11 | 1.797e-07 | 1.976e-14 | 30; 1.915e-13 | fails, fails, fails | PASS |
+| 2017 eve | default | 20 prior (no fit, no forecast) | 8.731e-11 | 1.361e-07 | 7.785e-15 | 20; 1.54e-14 | fails, fails, fails | PASS |
+| 2024 eve | reversed | 30 posterior + 15 off-posterior | 1.164e-10 | 3.392e-07 | 7.161e-15 | 30; 8.027e-14 | fails, fails, fails | PASS |
+
+On 2017 eve, with one closed election, all three terms vary over the points as well, so the
+delta form's tolerance of a control that is not exercised did not come into play on any row.
+What one closed election leaves untested is the δ step from the second closed election on
+(`harness/README.md`, Step checks).
+
+**Fits.** Four fits at 400 + 400 on `v2s-m4`'s cells and seeds: 2024 eve (lane A) and 2021
+f180 (lane B), each with seeds 2701 and 2702, the four `v2s-p2` lines of
+`harness/runs/v2-steps.txt`. They ran under `nohup zsh R/harness/queue.sh
+results/harness/logs/v2s-p2-runs.txt 400 400` (`harness/README.md`, Step checks):
+- The queue started at 2026-11-04 15:16:32. Its preflight (the full slow suite, the two slow
+  `v2s-p2` equivalence tests among it) passed at 16:25, `[ FAIL 0 | WARN 0 | SKIP 1 | PASS
+  6840 ]`, the skip being the one test that reads the live `data/`.
+- Lane A ran 2024 eve seed 2701 from 16:25:34 to 17:25 and seed 2702 from 17:25:26 to 18:11;
+  lane B ran 2021 f180 seed 2701 from 16:25:34 to 16:55 and seed 2702 from 16:55:13 to 17:24
+  (each run's `meta.json`). So 2024 eve seed 2702 had no other fit beside it. All four exited
+  0, and `queue.log` ends in `QUEUE FINISHED`.
+- `Stan/forecast_v2` (git-ignored) was compiled at 15:19, during the preflight (its
+  modification time, unchanged since), so all four fits ran that executable, sha256
+  `dd739150da8c…`.
+
+CmdStan 2.38.0, `max_treedepth` 12, 10 cores (`hw.ncpu`). The diagnostics table is
+`harness/v2/steps/v2s-p2.md`. `queue.log` after the queue's `QUEUE START` line (left out: it
+names the run list by its absolute path):
+
+```
+preflight PASS
+start A v2s-p2_2024-11-30_2024-11-29_s2701 2026-11-04 16:25:34
+start B v2s-p2_2021-09-25_2021-03-29_s2701 2026-11-04 16:25:34
+end v2s-p2_2021-09-25_2021-03-29_s2701 rc=0 DIAG run=v2s-p2_2021-09-25_2021-03-29_s2701 minutes=29.4 max_rhat=1.0195 min_ess_bulk=180 min_ess_tail=134 divergent=2 treedepth_hits=0 max_depth=10 min_ebfmi=0.549 gate=FAIL
+start B v2s-p2_2021-09-25_2021-03-29_s2702 2026-11-04 16:55:13
+end v2s-p2_2021-09-25_2021-03-29_s2702 rc=0 DIAG run=v2s-p2_2021-09-25_2021-03-29_s2702 minutes=28.7 max_rhat=1.0228 min_ess_bulk=162 min_ess_tail=230 divergent=6 treedepth_hits=0 max_depth=10 min_ebfmi=0.619 gate=FAIL
+end v2s-p2_2024-11-30_2024-11-29_s2701 rc=0 DIAG run=v2s-p2_2024-11-30_2024-11-29_s2701 minutes=59.6 max_rhat=1.0360 min_ess_bulk=133 min_ess_tail=97 divergent=0 treedepth_hits=0 max_depth=10 min_ebfmi=0.674 gate=FAIL
+start A v2s-p2_2024-11-30_2024-11-29_s2702 2026-11-04 17:25:26
+end v2s-p2_2024-11-30_2024-11-29_s2702 rc=0 DIAG run=v2s-p2_2024-11-30_2024-11-29_s2702 minutes=45.5 max_rhat=1.0587 min_ess_bulk=98 min_ess_tail=110 divergent=0 treedepth_hits=0 max_depth=10 min_ebfmi=0.663 gate=FAIL
+QUEUE FINISHED
+```
+
+**Provenance.** All four fits ran at 875c633 on a clean tree (`meta.json`: `git_head` 875c633,
+`git_dirty` false), with `Stan/forecast_v2.stan` at sha256
+`774680c6adf1f992d7f4d5d15bbaec958c5d336a8c93e120b161f4dd84731cfe` and the config at
+`860c3be00140137a5b9bd5c18a325b57034b76e3ea831792915ee1a14cc0de9b`. The commit that logs
+this step is 875c633's child and changes no file the builder or the model reads. Each run's
+`meta.json` `data_sha256` equals the sha256 of its frozen `inputs/stan_data.json`:
+`0ca647464fbcb3d38fb7d8feadfab4be3e5619fd3f5cc1cfb6f70f5e0bcac3fa` on 2024 eve and
+`d52dc091401f847c45a3ce9944f62900b3da7229a32240eeb2803c90f7f4c1f4` on 2021 f180. The
+`v2s-m4` fits ran with the file at sha256 `8d34b6fe…`; the `delta_form = 0` model is pinned
+across that edit by `v2s-m4`'s lp tests, which this queue's preflight ran at 875c633.
+
+**Stop rule.** `LC_ALL=en_US.UTF-8 Rscript R/harness/compare_runs.R stop v2s-p2` (exit 0):
+
+```
+GO v2s-p2_2024-11-30_2024-11-29_s2701 lp_rhat=1.0170 divergent=0/1600 near_cap=0/1600 max_rhat=1.0361; recorded: minutes=59.6 treedepth_hits=0 ess_bulk_per_1k_grad=0.081
+GO v2s-p2_2024-11-30_2024-11-29_s2702 lp_rhat=1.0087 divergent=0/1600 near_cap=0/1600 max_rhat=1.0588; recorded: minutes=45.5 treedepth_hits=0 ess_bulk_per_1k_grad=0.060
+GO v2s-p2_2021-09-25_2021-03-29_s2701 lp_rhat=1.0071 divergent=2/1600 near_cap=0/1600 max_rhat=1.0196; recorded: minutes=29.4 treedepth_hits=0 ess_bulk_per_1k_grad=0.126
+GO v2s-p2_2021-09-25_2021-03-29_s2702 lp_rhat=1.0105 divergent=6/1600 near_cap=1/1600 max_rhat=1.0229; recorded: minutes=28.7 treedepth_hits=0 ess_bulk_per_1k_grad=0.106
+```
+
+| Fit (cell, seed) | Verdict | R-hat of `lp__` (STOP above 1.1) | Divergences (STOP above 16) | Draws within 0.5 of a cap (STOP above 16) | Max R-hat, gate scope (STOP above 1.10) | Minutes | Treedepth hits | Min bulk ESS per 1,000 gradients (gate scope) |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2024 eve, 2701 | GO | 1.0170 | 0 of 1,600 | 0 of 1,600 | 1.0361 | 59.6 | 0 | 0.081 |
+| 2024 eve, 2702 | GO | 1.0087 | 0 of 1,600 | 0 of 1,600 | 1.0588 | 45.5 | 0 | 0.060 |
+| 2021 f180, 2701 | GO | 1.0071 | 2 of 1,600 | 0 of 1,600 | 1.0196 | 29.4 | 0 | 0.126 |
+| 2021 f180, 2702 | GO | 1.0105 | 6 of 1,600 | 1 of 1,600 | 1.0229 | 28.7 | 0 | 0.106 |
+
+**Adoption rule.** `LC_ALL=en_US.UTF-8 Rscript R/harness/compare_runs.R adopt v2s-m4 v2s-p2
+harness/v2/steps/v2s-p2-equivalence.csv` (exit 0), its output verbatim:
+
+Adoption rule (Decision 6): v2s-p2 against the reference form v2s-m4; run list harness/runs/v2-steps.txt
+
+| Fit | Min bulk ESS per 1,000 gradients (gate scope) | Divergences | Stop rule |
+| --- | --- | --- | --- |
+| v2s-m4_2024-11-30_2024-11-29_s2701 | 0.030 | 0 | GO |
+| v2s-m4_2024-11-30_2024-11-29_s2702 | 0.071 | 0 | GO |
+| v2s-m4_2021-09-25_2021-03-29_s2701 | 0.064 | 0 | GO |
+| v2s-m4_2021-09-25_2021-03-29_s2702 | 0.079 | 0 | GO |
+| v2s-p2_2024-11-30_2024-11-29_s2701 | 0.081 | 0 | GO |
+| v2s-p2_2024-11-30_2024-11-29_s2702 | 0.060 | 0 | GO |
+| v2s-p2_2021-09-25_2021-03-29_s2701 | 0.126 | 2 | GO |
+| v2s-p2_2021-09-25_2021-03-29_s2702 | 0.106 | 6 | GO |
+
+| Cell (E, F, tag) | v2s-m4: median min bulk ESS per 1,000 gradients | v2s-p2: median min bulk ESS per 1,000 gradients | Ratio | At least 1.25 × v2s-m4's |
+| --- | --- | --- | --- | --- |
+| 2024-11-30, 2024-11-29, eve | 0.051 | 0.070 | 1.38 | yes |
+| 2021-09-25, 2021-03-29, f180 | 0.071 | 0.116 | 1.61 | yes |
+
+```
+1. The equivalence check passes (harness/v2/steps/v2s-p2-equivalence.csv): yes (4 rows, none FAIL, a PASS row of each of the 4 required checks)
+2. On each cell, v2s-p2's median min bulk ESS per 1,000 gradients is at least 1.25 × v2s-m4's: yes
+3. v2s-p2's divergences over its 4 fits, 8, are at most v2s-m4's, 0, plus 4: no
+4. No fit of v2s-m4 or v2s-p2 trips the stop rule: yes
+KEEP v2s-m4: v2s-p2 fails condition 3
+```
+
+**Verdict: KEEP v2s-m4.** `v2s-p2` fails condition 3: its 8 divergences (2 and 6, both on 2021
+f180) are more than `v2s-m4`'s 0 plus 4. Conditions 1, 2 (cell ratios 1.38 and 1.61) and 4
+hold. The rule's verdict stands: `delta_form = 0`, the non-centred walk, stays the V2 form, so
+`v2s-m5`'s config and `v2.json` (the plan's Task 14) take it from `v2s-m4`'s config, and the
+centred form stays built behind its switch, with its tests and its equivalence check.
+
+- **Where the divergences are.** 2 of the 1,600 post-warmup transitions of 2021 f180 seed 2701
+  and 6 of seed 2702's; none on 2024 eve. `meta.json` keeps only their sum and the run log only
+  each fit's count (cmdstanr's warning and the `DIAG` line); `param_draws.parquet` has no
+  `divergent__` column, and `fit_cell.R` deleted the CmdStan CSVs (`HARNESS_KEEP_CMDSTAN`
+  unset). So neither their chains nor their iterations are known. The one draw within 0.5 of a
+  cap, on 2021 f180 seed 2702, is log κ's (cap 2), 1.543 in chain 1, iteration 245
+  (`param_draws.parquet`).
+- **What sets the extremes.** `fit_cell.R` measures the gate scope over every
+  `parameters`-block variable with the scored quantities, while `key_diagnostics.csv` and
+  `param_draws.parquet` hold the `V2_PARAM_VARIABLES` columns, several of them transformed
+  parameters. On 2021 f180 log φ_K sets the gate-scope min bulk ESS on both fits, through the
+  parameter `log_phi_K_u`, of which `log_phi_K` is a monotone map (as under `v2s-m4`, above):
+  its bulk ESS, 180.3 and 162.2, equals `meta.json`'s `min_ess_bulk`. On 2024 eve seed 2701 log
+  φ_K sets it too, at 133.2, and its R-hat, 1.0360, is the gate-scope max; the lowest saved
+  column there, s_ζ on Viðreisn (`s_zeta[6]`, 127.8), is a transformed parameter
+  (s_ζ = s̄_ζ s_zeta_raw), outside the gate scope. On 2024 eve seed 2702 no saved column has
+  `meta.json`'s `min_ess_bulk`, 98.4 (the lowest, `s_zeta[6]`, is 91.9). It is
+  `s_zeta_raw[6]`'s, Viðreisn's raw step scale, which the files do not hold;
+  `s_zeta[6]` ÷ `s_bar_zeta[1]` rebuilds it exactly from `param_draws.parquet`, and the
+  rebuilt column's bulk ESS (98.3669), R-hat (1.05875) and tail ESS (110.2794) equal
+  `meta.json`'s `min_ess_bulk`, `max_rhat` and `min_ess_tail` to every printed digit. The same
+  rebuild finds seed 2701's gate-scope min tail ESS, 97.07, in `s_zeta_raw[10]` (Annað).
+- **ESS like for like.** Per fit, `v2s-m4`'s value first (ESS from `key_diagnostics.csv`, the
+  gate-scope minimum from `meta.json`, both rounded to one decimal; the correlation over each
+  fit's 1,600 draws pooled across chains, `param_draws.parquet` columns `log_phi_K` and
+  `s_bar_zeta[1]`):
+
+  | Fit (cell, seed) | log φ_K bulk ESS | s̄_ζ bulk ESS | s̄_ζ tail ESS | corr(log φ_K, s̄_ζ) | s_ζ on Viðreisn, bulk ESS | Gate-scope min bulk ESS (owner) |
+  | --- | --- | --- | --- | --- | --- | --- |
+  | 2024 eve, 2701 | 50.2; 133.2 | 496.5; 389.4 | 1095.8; 807.5 | 0.313; 0.273 | 67.3; 127.8 | 50.2 (log φ_K); 133.2 (log φ_K) |
+  | 2024 eve, 2702 | 117.2; 147.8 | 301.4; 453.0 | 820.7; 812.9 | 0.297; 0.263 | 279.7; 91.9 | 117.2 (log φ_K); 98.4 (`s_zeta_raw[6]`) |
+  | 2021 f180, 2701 | 105.6; 180.3 | 289.0; 234.7 | 230.5; 134.2 | 0.440; 0.388 | 250.3; 242.8 | 105.6 (log φ_K); 180.3 (log φ_K) |
+  | 2021 f180, 2702 | 126.8; 162.2 | 249.5; 372.8 | 166.7; 292.6 | 0.451; 0.370 | 237.3; 352.9 | 126.8 (log φ_K); 162.2 (log φ_K) |
+
+  log φ_K mixes faster under the centred form on every fit, and the correlation with s̄_ζ is a
+  little lower on every fit. On 2024 eve the minimum moves off log φ_K on seed 2702 only.
+- **Leapfrog steps.** Every 2024 eve fit of both arms took 1,023 leapfrog steps per
+  post-warmup transition (`n_leapfrog` ÷ 1,600 = 1,023.00; tree depth 10 is 1,023 steps). On
+  2021 f180 `v2s-p2`'s fits took 894.06 and 955.17 on average, `v2s-m4`'s 1,023.00 and
+  1,000.92. So on 2021 f180 part of `v2s-p2`'s higher ESS per 1,000 gradients is fewer
+  gradients (12.6% and 4.6% fewer than `v2s-m4`'s fit of the same seed), and the rest its
+  higher min bulk ESS.
+- **The time.** The per-chain time ratio defined under `v2s-m4` (wall minutes, warmup
+  included, ÷ (post-warmup gradients ÷ 4); not a cost per gradient) is 6.61 ms for
+  `v2s-m4`'s 2024 eve seed 2702 and 6.68 ms for `v2s-p2`'s (`meta.json` minutes 45.07 and
+  45.54, `n_leapfrog` 1,636,800 on both), 1.0% higher. Neither fit had another fit beside it.
+  If both warmups took about as many gradients, which is not recorded, the present block's
+  vec-form Kronecker factor and the model block's recomputation add about 1% to a gradient on
+  that cell. Neither fit is known to have run unloaded: `v2s-m4`'s had a fix round's test runs
+  beside it from about 12:21 to 12:33 (above), and other sessions' load is unknown for both.
+  The other three `v2s-p2` fits ran with the other lane's fit beside them (8.74 ms on 2024 eve
+  seed 2701, 4.94 and 4.50 ms on 2021 f180), as `v2s-m4`'s did (11.41, 3.63 and 7.52 ms, two
+  of them across the sleep), so they do not compare.
+- **A reading, not a finding.** The divergences come only with the centred form: `v2s-m4` had
+  none on any fit. That is consistent with a funnel between a present party's centred
+  coordinates and its step scale, which the non-centred form avoids. s_ζ on Viðreisn does not
+  bear on it either way: it is among the slowest saved columns under both forms (67.3 and 279.7
+  under `v2s-m4`, 127.8 and 91.9 under `v2s-p2` on 2024 eve), so these fits do not show the
+  centred form slowing it, and its raw scale sets 2024 eve seed 2702's minimum because log φ_K
+  now mixes faster. Where the divergences fell is not in the saved outputs, so no funnel is
+  located.
+- **The §5.7 gate is not the stop rule.** Each fit's `DIAG` line reads `gate=FAIL`: its
+  gate-scope max R-hat (1.0195 to 1.0587) is above 1.01, and the 2021 f180 fits diverged. A
+  `dev` arm is never scored.
+
+To rewrite the table and the verdicts from the finished runs under `results/harness/`, from the
+project root:
+
+```
+LC_ALL=en_US.UTF-8 Rscript R/harness/tier0_report.R v2s-p2 harness/runs/v2-steps.txt harness/v2/steps/v2s-p2.md
+LC_ALL=en_US.UTF-8 Rscript R/harness/compare_runs.R stop v2s-p2
+LC_ALL=en_US.UTF-8 Rscript R/harness/compare_runs.R adopt v2s-m4 v2s-p2 harness/v2/steps/v2s-p2-equivalence.csv
+```
+
+Next: M5 (`v2s-m5`), the fundamentals pseudo-observation, on `v2s-m4`'s config
+(`delta_form = 0`).

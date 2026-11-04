@@ -473,6 +473,12 @@ fits, both seeds on each cell since P2 follows, with no divergence and one draw 
 of 1,600 on 2021 f180 seed 2701 (`harness/v2/steps.md`). Its config is `v2s-m3`'s with
 `delta_walk = 1`, as the rule gives, and every later step keeps `delta_walk = 1`.
 
+P2 (`v2s-p2`), the δ walk held centred at the closed elections (`delta_form = 1`), passed its
+four equivalence checks and was not adopted: `adopt` printed `KEEP v2s-m4`, condition 3
+failing on its 8 divergences (all on 2021 f180) against `v2s-m4`'s none. The centred form
+stays built behind `delta_form`, and every later step's config sets `delta_form = 0`; M5's is
+therefore `v2s-m4`'s with its own switch on (`harness/v2/steps.md`).
+
 A P-step's form is first checked against the reference form, point by point, by
 `R/harness/v2_equivalence.R` (the plan's Decision 6, condition 1), once for each check of
 `EQUIVALENCE_REQUIRED` (below), all into the step's equivalence CSV:
