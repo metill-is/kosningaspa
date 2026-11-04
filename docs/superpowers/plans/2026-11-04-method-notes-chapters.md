@@ -179,7 +179,7 @@ Section counts include the plain picture, "What is open" and "Sources", as 3.1's
 
   The novelty question for the weight target is the author's to state. The chapter describes the mechanism and cites only public references it has checked.
 - **Keep out:**
-  - numbers from the local-only reproduction of the 2024 forecasts;
+  - numbers from local-only analyses of the 2024 forecasts;
   - the per-party size of the formula fix, which is recorded only privately.
 
   Re-measure them (F2) or leave them out.
@@ -188,7 +188,7 @@ Section counts include the plain picture, "What is open" and "Sources", as 3.1's
   - **Optional fits F2:** leave-one-election-out for `fundamentals.stan`, to show which formula predicts better.
 - **Dependencies and risks:**
   - Depends on 1.1, for V_t and the walk's end.
-  - **Verify first.** The author's private audit record of 4 Nov 2026 lists a confirmed `index_f`/`y_f` lag in the fundamentals data, handed to the v2 sessions. Nothing on master fixes it. Check it in `prepare_fundamentals_data()` before drafting. If it is real, it is a known issue here and in 5.2, and possibly a fix PR first (the author decides).
+  - **Verify first.** Check in `prepare_fundamentals_data()` that `index_f` and `y_f` line up; a possible lag between them was raised in review and is not settled on master. If there is a lag, it is a known issue here and in 5.2, and possibly a fix PR first (the author decides).
   - The local `data/fundamentals_data.csv` can lag the sheet.
   - The manuscript still describes the pre-fix formula.
 - **Size:** 9 sections (picture; the regression; training data and economy series; the prediction; the weight target and τ_f; how the weight decays; the 2024 form against master; open; sources), 2 figures (weight curve; V_t with collapse inflation), 2 tables (coefficients and priors; economy series definitions).
@@ -215,7 +215,7 @@ Section counts include the plain picture, "What is open" and "Sources", as 3.1's
   - `tests/harness/test-kjordaemi-alignment.R`, `test-fit-script-n-pred.R`.
   - Commits: `3c45310`, `63fb201`, `d14df9b`, `ebb3e8d`, `aa2ac1a`, PR #15 (merge `9cd12cb`).
 - **Sources (private):** `Kosningar/Forecast model/2026-10-28 — Anchored, partially centred kjördæmi model (record).md` (the author's question on more kjördæmi data); the design note of 23 Oct, §6.7.
-- **Keep out:** the kjördæmi calibration figures (90% coverage, error against carrying the last election's deviations forward). They come from local-only backtests. They are the chapter's most important evidence, and the open way to get them is the harness's kjördæmi scores (`R/harness/scores.R` `kd_scores()`) after the freeze.
+- **Keep out:** the kjördæmi calibration figures (interval coverage, and error against carrying the last election's deviations forward). They come from local-only backtests. They are the chapter's most important evidence, and the open way to get them is the harness's kjördæmi scores (`R/harness/scores.R` `kd_scores()`) after the freeze.
 - **New measurements:**
   - **No fit needed:** kjördæmi poll counts by house and date.
   - **Optional fit F1:** σ_δ and δ by party and kjördæmi.
@@ -241,9 +241,9 @@ Section counts include the plain picture, "What is open" and "Sources", as 3.1's
   - `harness/truth/elections_official.csv` and `harness/sources/seats_2021_official.csv`.
   - `tests/harness/test-truth.R`, which reproduces every official seat 2016–2024 and the 2021 adjustment-seat placement, and `tests/harness/test-seats.R`.
   - Commits and PRs: `e1910f6` (the allocator made the 2024 production one), PR #16 (`aaf0aa1`, `bcd1ea6`).
-  - The election act, Lög um kosningar til Alþingis nr. 112/2021. Check the article numbers before citing them.
+  - The election acts: Lög um kosningar til Alþingis nr. 24/2000 (the 2016, 2017 and 2021 elections) and Kosningalög nr. 112/2021 (in force from 1 Jan 2022; the 2024 election). Check the article numbers before citing them.
 - **Sources (private):** `Kosningar/Kosningakerfi/Kosningakerfi simulator.md`.
-- **Keep out:** "the allocator matched the saved production seat draws" is a private-record claim. Re-measure it with a kept script from `data/2024-11-30/` (`constituency_predictions.parquet` against `seats_draws.parquet`), with the author's OK to use those draws (Decision D7). Otherwise leave it out. The old allocator's errors can be shown from git (the pre-`e1910f6` `R/election_utils.R`) with a kept script.
+- **Keep out:** any claim about how the allocator compares with the 2024 forecast's saved seat draws. It could be re-measured from `data/2024-11-30/` with a kept script, but Decision D7 keeps this chapter to official results, so it stays out. The old allocator's errors can be shown from git (the pre-`e1910f6` `R/election_utils.R`) with a kept script.
 - **New measurements, none needing a fit:**
   - a worked example, 2021 official votes to seats step by step, from `harness/truth/`;
   - the re-run against the 2024 draws (D7);
