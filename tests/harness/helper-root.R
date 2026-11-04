@@ -21,6 +21,13 @@ skip_unless_slow <- function() {
   if (!identical(Sys.getenv("HARNESS_SLOW"), "1")) testthat::skip("slow test: set HARNESS_SLOW=1")
 }
 
+# WHY: the harness never reads the live data/, so the queue's preflight must not fail on it.
+skip_unless_live_data <- function() {
+  if (!identical(Sys.getenv("KOSNINGASPA_LIVE_DATA"), "1")) {
+    testthat::skip("reads the live data/: set KOSNINGASPA_LIVE_DATA=1")
+  }
+}
+
 # One draw of kjördæmi votes: 10000 votes in each kjördæmi of the 2021 layout, split by `shares`.
 draw_with <- function(shares) {
   tidyr::expand_grid(kjordaemi = seats_layout_2021()$kjordaemi, flokkur = names(shares)) |>

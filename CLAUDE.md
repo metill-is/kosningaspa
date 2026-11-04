@@ -29,7 +29,7 @@ update_constituency_data()
 ```
 
 ### Testing
-The v2 harness has a testthat suite in `tests/harness/`. Run it from the project root with `LC_ALL=en_US.UTF-8 Rscript tests/run.R [filter]`; its real-data tests read `harness/snapshot/` and skip without it. `HARNESS_SLOW=1` runs the slow tests too, and they need CmdStan and the self-test inputs in `harness/selftest/` (`harness/README.md`, Tests). Model validation stays interactive: model diagnostics, posterior predictive checks, and comparing predictions against known results (`R/compare_error.R`, `R/post_analysis.R`).
+The v2 harness has a testthat suite in `tests/harness/`. Run it from the project root with `LC_ALL=en_US.UTF-8 Rscript tests/run.R [filter]`; its real-data tests read `harness/snapshot/` and skip without it. `HARNESS_SLOW=1` runs the slow tests too, and they need CmdStan and the self-test inputs in `harness/selftest/` (`harness/README.md`, Tests). `KOSNINGASPA_LIVE_DATA=1` also runs the one test that reads the live `data/` (the Kosning rows of `data/polling_data.csv`); without it that test skips, so the harness queue's preflight never reads the live data. Model validation stays interactive: model diagnostics, posterior predictive checks, and comparing predictions against known results (`R/compare_error.R`, `R/post_analysis.R`).
 
 ## Architecture
 
@@ -58,7 +58,10 @@ itself. After a refit writes `data/<YYYY-MM-DD>/polling_watch_draws.parquet`, ru
 `~/metill-platform`: it reads the newest dated folder here plus
 `data/post_election_polls.csv` and writes `data/fylgisvakt/{current,meta,timeseries}.json`
 there. Inspect the diff and ship it through a PR in that repo. The platform-side
-runbook and checks live in `~/metill-platform/.claude/rules/fylgisvakt.md`.
+runbook and checks live in `~/metill-platform/.claude/rules/fylgisvakt.md`. The first
+refit after `R/correct_election_anchors.R` corrects the live `data/polling_data.csv`
+(back the CSV up first) reads new 2016, 2017 and 2021 anchors, which move party shares
+by up to 0.36 points, so its diff holds a shift that no new poll explains (`R/CLAUDE.md`).
 
 ### Seat Allocation
 `R/election_utils.R` implements Iceland's electoral system:

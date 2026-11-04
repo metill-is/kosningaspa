@@ -83,7 +83,7 @@ prepare_polling_data <- function(polling_data, constituency_data, election_date)
     c(29, 28, 25, 30)
   )
 
-  dates <- unique(c(polling_data$date, constituency_data$date))
+  dates <- poll_dates(polling_data, constituency_data)
 
   time_before_election <- case_when(
     dates <= election_dates[1] ~ election_dates[1] - dates,
@@ -264,6 +264,71 @@ prepare_polling_data <- function(polling_data, constituency_data, election_date)
     constituency_k = constituency_k,
     n_pred_k = n_pred_k
   )
+}
+
+
+#' Expected valid votes in each kjördæmi at the 2024 election (kjörskrá × expected
+#' turnout), the fit scripts' `stan_data$n_pred_k` for the election-day draws, matched to
+#' the kjördæmi factor's levels (which `constituency_k` indexes) by name.
+#'
+#' @param kjordaemi_levels the levels of the constituency data's `kjordaemi` factor.
+#' @return an integer vector, one value per level in their order; an error if a level is
+#'   not one of the six 2024 kjördæmi.
+#' @export
+n_pred_k_2024 <- function(kjordaemi_levels) {
+  votes <- data.frame(
+    kjordaemi = c("Nor\u00f0vestur", "Nor\u00f0austur", "Su\u00f0ur", "Su\u00f0vestur", "Reykjav\u00edk Su\u00f0ur", "Reykjav\u00edk Nor\u00f0ur"),
+    kjorsokn = c(82.0, 81.0, 78.8, 81.2, 79.2, 78.8) / 100,
+    kjorskra = c(22348, 31039, 40994, 79052, 47503, 47486)
+  )
+  votes <- votes[match(kjordaemi_levels, votes$kjordaemi), ]
+  stopifnot(
+    "the 2024 expected valid votes must list the kjordaemi levels, in order" =
+      identical(votes$kjordaemi, kjordaemi_levels)
+  )
+  as.integer(votes$kjorskra * votes$kjorsokn)
+}
+
+
+#' Every national and kjördæmi poll date, sorted: the dates that `date_n` and `date_k`
+#' index (`prepare_polling_data()`'s date levels), and the first D of the fit script's
+#' draw dates.
+#'
+#' @param polling_data,constituency_data the national and kjördæmi rows, each with `date`.
+#' @return a sorted Date vector without duplicates.
+#' @export
+poll_dates <- function(polling_data, constituency_data) {
+  sort(unique(c(polling_data$date, constituency_data$date)))
+}
+
+
+#' `obs_k`, the row of `constituency_weights` for each row of `y_k`, read as K consecutive
+#' rows of y_k per kjördæmi poll date, dates in the weights' row order, and the checks
+#' that this reading is right.
+#'
+#' @param stan_data `prepare_stan_data()`'s output.
+#' @param constituency_weights each kjördæmi poll date's share of its n by kjördæmi: rows
+#'   named by date, one column per kjördæmi.
+#' @param polling_data,constituency_data the rows `stan_data` was built from.
+#' @return an integer vector of length N_k; an error unless the weights' columns are the
+#'   kjördæmi levels (which `constituency_k` indexes), each row of y_k is dated as its
+#'   weights row, each date holds one poll (one house) and that poll one row per kjördæmi.
+#' @export
+kjordaemi_obs_k <- function(stan_data, constituency_weights, polling_data, constituency_data) {
+  K <- ncol(constituency_weights)
+  obs_k <- rep(seq_len(nrow(constituency_weights)), each = K)
+  date_k <- as.character(poll_dates(polling_data, constituency_data)[stan_data$date_k])
+  stopifnot(
+    "kjordaemi_obs_k: constituency_weights' columns must be the kjordaemi levels" =
+      identical(colnames(constituency_weights), levels(constituency_data$kjordaemi)),
+    "kjordaemi_obs_k: each row of y_k must take its date's row of constituency_weights" =
+      identical(date_k, rownames(constituency_weights)[obs_k]),
+    "kjordaemi_obs_k: each kjordaemi poll date must hold one poll" =
+      identical(stan_data$house_k, stan_data$house_k[(obs_k - 1) * K + 1]),
+    "kjordaemi_obs_k: each kjordaemi poll must hold one row of y_k per kjordaemi" =
+      all(table(obs_k, factor(stan_data$constituency_k, levels = seq_len(K))) == 1)
+  )
+  obs_k
 }
 
 
