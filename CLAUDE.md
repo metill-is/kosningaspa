@@ -12,6 +12,8 @@ The repo is code-first. Modelling code lives at the top level; written outputs a
 
 `harness/` holds the v2 backtest harness's committed inputs and generated tables, and its gitignored, sha256-checked snapshot of the live data (`harness/README.md`). Its code is in `R/harness/` and its tests in `tests/harness/`; `LC_ALL=en_US.UTF-8 Rscript R/harness/build_phase0.R` rewrites the generated tables.
 
+`docs/method/` holds the methodology notes: plain HTML chapters on how the models work, opened as files and rebuilt with `python3 tools/build.py` from inside that folder (`docs/method/README.md`). When a model change lands, update the chapters it touches in the same change. The notes are public, so they cite only what a reader of the repository could check (`docs/method/README.md`).
+
 ## Key Commands
 
 ### Run the full model fitting pipeline
