@@ -66,7 +66,10 @@ levels(polling_data$fyrirtaeki)
 stan_data$desired_weight <- 0.22
 stan_data$weight_time <- 180
 stan_data$last_poll_days <- 9
-stan_data$last_poll_house <- 1
+# WHY: the newest-poll replicate is a Maskína poll (data/poll_predictions/maskina*.csv);
+# house 1 is the election, which has no phi
+stan_data$last_poll_house <- match("Maskína", levels(polling_data$fyrirtaeki))
+stopifnot(!is.na(stan_data$last_poll_house))
 stan_data$n_last_poll <- 1400
 
 

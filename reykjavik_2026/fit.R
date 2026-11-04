@@ -29,7 +29,9 @@ P_CANON <- nrow(parties_canonical)
 polls_2026 <- read_csv(file("polls.csv", encoding = "UTF-8"), show_col_types = FALSE) |>
   mutate(date = as.Date(date)) |>
   rowwise() |>
-  mutate(V_or_A = A + G, Other = O) |> # G (VG residual) joins V_or_A so 2026 Maskína matches Gallup canonicalisation (audit C4)
+  # G is its own list, Góðan daginn (official result: G-listi 361 votes, 0.5%, 0 seats), not a VG
+  # residual: A (Vinstrið) already holds VG. fit_state.rds and exports/ predate this and put G in V_or_A.
+  mutate(V_or_A = A, Other = O + G) |>
   ungroup() |>
   select(date, fyrirtaeki, n, D, S, B, C, M, F, P, J, V_or_A, Other) |>
   mutate(cycle = "2026")
