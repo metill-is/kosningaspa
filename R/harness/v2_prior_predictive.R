@@ -11,9 +11,9 @@
 # cell is ever built), sets its walk and δ forms to the reference forms (reference_forms()),
 # and on each takes n_draws prior points with
 # v2_simulate(data, seed = SEED + i, observe = FALSE): parameters only, no counts, no fit and
-# no forecast. Each row of ROWS reads one summary off every draw, in pp, and is checked
-# against its band (by default on the 5% and 95% quantiles over the draws, pooled over houses
-# or kjördæmi where said below):
+# no forecast. Each row of ROWS reads one summary off every draw, in pp (the fundamentals
+# rows: a weight), and is checked against its band (by default on the 5% and 95% quantiles
+# over the draws, pooled over houses or kjördæmi where said below):
 #   - a config row runs on the config's data;
 #   - a comparison row runs on the same data with its `set` fields changed and nothing else,
 #     and the same seeds (common random numbers). A comparison whose values the config
@@ -85,8 +85,9 @@
 #     check of the code, not of the model. fund_weight_bias takes V = V_w,p + V_bias,p, V_bias,p
 #     the variance over the cell's prior draws of the industry bias's open-epoch step
 #     μ_open,p − μ_{open−1},p (v2_natural()'s μ), over S_f and centred over S_f: the open-epoch
-#     bias uncertainty that §6.5's 0.22 target leaves out. It needs every draw, so its per-draw
-#     values are combined by SUMMARY_POOLED.
+#     bias uncertainty that §6.5's 0.22 target leaves out. V_w stays centred over all P
+#     parties, as §6.5 writes it, so the two variances differ in centring. It needs every draw,
+#     so its per-draw values are combined by SUMMARY_POOLED.
 #
 # The bands, each built by its constructor and checked by in_band():
 #   band_inside(lo, hi)                      the 5% quantile at least lo, the 95% at most hi
@@ -97,7 +98,9 @@
 #
 # Verdicts and lines, one per row and cell:
 #   PRIOR PASS <summary>                       the row is in its band
-#   PRIOR FAIL <summary> <q05> <q95>           it is not
+#   PRIOR FAIL <summary> <q05> <q95>           it is not; out of an exact band, PRIOR FAIL
+#                                              <summary> max abs error <e> instead, e the largest
+#                                              |draw − value| to 3 significant digits (the table too)
 #   PRIOR WIDE <summary> <q05> <q95>           it is not, on a config row of a bias whose prior
 #                                              the config holds at §6.10's value (`held`)
 #   PRIOR REPORT <summary> <q05> <q50> <q95>   a band_report() row
@@ -540,7 +543,8 @@ ROWS <- check_rows(dplyr::bind_rows(
     paste0(
       "The same weight with V_w + V_bias in place of V_w, for every party of S_f (a weight, not pp): V_bias the variance ",
       "over the prior draws of the industry bias's open-epoch step \u03bc_open \u2212 \u03bc_{open\u22121}, over S_f and ",
-      "centred over S_f, which \u00a76.5's 0.22 target leaves out"
+      "centred over S_f, which \u00a76.5's 0.22 target leaves out; V_w is centred over all P parties, as \u00a76.5 ",
+      "writes it, and V_bias over S_f"
     ),
     "prior_tau_mu", band_report()
   )
@@ -575,16 +579,36 @@ row_verdict <- function(ok, kind, held) {
 }
 
 #' The printed line of a verdict: "PRIOR PASS <id>", "PRIOR REPORT <id> <q05> <q50> <q95>",
-#' or "PRIOR <verdict> <id> <q05> <q95>", the quantiles to 2 decimals.
+#' or "PRIOR <verdict> <id> <q05> <q95>", the quantiles to 2 decimals; out of an exact band
+#' (`err` not NA), "PRIOR <verdict> <id> max abs error <err>", `err` to 3 significant digits,
+#' since two decimals cannot show a miss of the band's tolerance.
+#' @param err NA, or `band_error()` of an exact band
 #' @export
-verdict_line <- function(verdict, id, q) {
+verdict_line <- function(verdict, id, q, err = NA_real_) {
   if (verdict == "PASS") {
     return(paste("PRIOR PASS", id))
   }
   if (verdict == "REPORT") {
     return(sprintf("PRIOR REPORT %s %.2f %.2f %.2f", id, q[["q05"]], q[["q50"]], q[["q95"]]))
   }
+  if (!is.na(err)) {
+    return(sprintf("PRIOR %s %s max abs error %.3g", verdict, id, err))
+  }
   sprintf("PRIOR %s %s %.2f %.2f", verdict, id, q[["q05"]], q[["q95"]])
+}
+
+#' The largest distance of `values` from an exact band's value, NA for any other band.
+#' @export
+band_error <- function(band, values) if (identical(band$type, "exact")) max(abs(values - band$value)) else NA_real_
+
+#' The report table's q05, q50 and q95 cells of a row: the quantiles to 2 decimals, or out of
+#' an exact band (`err` not NA) its largest error to 3 significant digits in the q50 cell.
+#' @export
+quantile_cells <- function(verdict, q, err = NA_real_) {
+  if (!verdict %in% c("PASS", "REPORT") && !is.na(err)) {
+    return(c("\u2013", sprintf("max abs error %.3g", err), "\u2013"))
+  }
+  sprintf("%.2f", c(q[["q05"]], q[["q50"]], q[["q95"]]))
 }
 
 #' `data` with `walk_form` and `delta_form` at 0, the reference forms, and every other field
@@ -691,6 +715,7 @@ main <- function(args) {
       q <- stats::setNames(stats::quantile(v, c(0.05, 0.5, 0.95), names = FALSE), c("q05", "q50", "q95"))
       comparison <- run$kind[j] == "comparison"
       vd <- row_verdict(in_band(run$band[[j]], q, v), run$kind[j], !comparison && held_at(run$held[[j]], data))
+      err <- band_error(run$band[[j]], v)
       id <- paste(run$summary[j], cell, if (comparison) paste0("comparison:", set_text(run$set[[j]])) else "config", sep = "/")
       prior <- if (comparison) {
         sprintf("%s (%s)", prior_text(names(run$set[[j]]), run$set[[j]]), run$source[j])
@@ -700,8 +725,8 @@ main <- function(args) {
       results[[length(results) + 1]] <- tibble::tibble(
         summary = run$summary[j], step = run$step[j], kind = run$kind[j], prior = prior, cell = cell,
         n = length(v), q05 = q[["q05"]], q50 = q[["q50"]], q95 = q[["q95"]],
-        band = band_text(run$band[[j]]), verdict = vd$verdict, stops = vd$stops,
-        line = verdict_line(vd$verdict, id, q)
+        band = band_text(run$band[[j]]), verdict = vd$verdict, stops = vd$stops, err = err,
+        line = verdict_line(vd$verdict, id, q, err)
       )
     }
   }
@@ -758,13 +783,16 @@ main <- function(args) {
     "",
     "## Results",
     "",
-    "Quantiles in pp over the prior draws (`Values`: draws \u00d7 houses, kj\u00f6rd\u00e6mi, epoch steps or newcomers for a pooled summary).",
+    paste(
+      "Quantiles over the prior draws, in pp unless a row says otherwise (`Values`: draws \u00d7 houses, kj\u00f6rd\u00e6mi,",
+      "epoch steps, newcomers or parties of S_f for a pooled summary)."
+    ),
     "",
     table_row(c("Summary", "Step", "Kind", "Prior", "Cell", "Values", "q05", "q50", "q95", "Band", "Verdict")),
     table_row(rep("---", 11)),
     vapply(seq_len(nrow(res)), \(i) table_row(c(
       res$summary[i], res$step[i], res$kind[i], res$prior[i], res$cell[i], res$n[i],
-      sprintf("%.2f", res$q05[i]), sprintf("%.2f", res$q50[i]), sprintf("%.2f", res$q95[i]), res$band[i], shown_verdict[i]
+      quantile_cells(res$verdict[i], c(q05 = res$q05[i], q50 = res$q50[i], q95 = res$q95[i]), res$err[i]), res$band[i], shown_verdict[i]
     )), ""),
     "",
     if (length(skipped)) c(paste0("Skipped, as the config holds their values: ", paste(skipped, collapse = "; "), "."), ""),

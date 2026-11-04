@@ -23,11 +23,11 @@ Written by `LC_ALL=en_US.UTF-8 Rscript R/harness/v2_prior_predictive.R <config> 
 - **shock_sd_05** (step v2s-m3, switch `shock`): The election-day shock's sd on a 5% party: given the draw's s̄_E, the sd of its change over 200 draws of z, on the composition (5%, 95% / (P − 1), …), with ε = C(s̄_E d ⊙ z) and each d = √(min(0.2 / π, 10)) of that composition (s̄_E ~ half-N(0, `prior_s_bar_E`)). Band: median in [0.5, 2] × 0.95.
 - **delta_step_4y** (step v2s-m4, switch `delta_walk`): A 20% party's change in its kjördæmi deviation over a 4-year gap: the walk's step M_e(√(4 / Δ̄) s_ζ ⊙ ζ) on the open epoch's weights, s_ζ = s̄_ζ s_zeta_raw (s̄_ζ ~ half-N(0, `prior_s_bar_zeta`), s_zeta_raw ~ half-N(0, 1)), leaving out M_e(δ_{e−1}) − δ_{e−1}, the change of kjördæmi weights. Band: [5%, 95%] inside [-15, 15].
 - **fund_weight** (step v2s-m5, switch `fundamentals`): The fundamentals pseudo-observation's weight against the walk's 180-day variance, for every party of S_f (a weight, not pp): (1/τ_f²) / (1/τ_f² + 1/V_w), τ_f = √(V_w (1 − w) / w), V_w = diag(CΣCᵀ) [(weight_time − campaign_days) + campaign_days (1 + τ_camp)²]: w by construction, a check of the code. Band: every draw within 1e-08 of 0.22.
-- **fund_weight_bias** (step v2s-m5, switch `fundamentals`): The same weight with V_w + V_bias in place of V_w, for every party of S_f (a weight, not pp): V_bias the variance over the prior draws of the industry bias's open-epoch step μ_open − μ_{open−1}, over S_f and centred over S_f, which §6.5's 0.22 target leaves out. Band: none (reported).
+- **fund_weight_bias** (step v2s-m5, switch `fundamentals`): The same weight with V_w + V_bias in place of V_w, for every party of S_f (a weight, not pp): V_bias the variance over the prior draws of the industry bias's open-epoch step μ_open − μ_{open−1}, over S_f and centred over S_f, which §6.5's 0.22 target leaves out; V_w is centred over all P parties, as §6.5 writes it, and V_bias over S_f. Band: none (reported).
 
 ## Results
 
-Quantiles in pp over the prior draws (`Values`: draws × houses, kjördæmi, epoch steps or newcomers for a pooled summary).
+Quantiles over the prior draws, in pp unless a row says otherwise (`Values`: draws × houses, kjördæmi, epoch steps, newcomers or parties of S_f for a pooled summary).
 
 | Summary | Step | Kind | Prior | Cell | Values | q05 | q50 | q95 | Band | Verdict |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |

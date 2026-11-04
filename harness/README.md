@@ -39,7 +39,10 @@ the Stan file instead, for a planted fault's RED: the file must exist and the pa
 absolute, or the test file stops as it loads, and the tests announce the path and its
 sha256, so every log records the switch; unset, they test `Stan/forecast_v2.stan` and print
 nothing. `queue.sh` refuses to start while it is set, so the preflight never certifies
-another file than the one the fits use. The slow tests of the equivalence check in
+another file than the one the fits use. The slow `v2s-m5` tests, and so the queue's
+preflight, run the real `stage1_mu_f()`, which fits stage 1 into `results_root()/stage1/` on
+a cold cache or reads it there; that fit's warmup prints "Prior size parameter is 0"
+notices, which are expected. The slow tests of the equivalence check in
 `tests/harness/test-v2-equivalence.R` are named and gated the same way (`v2s-p1: …`): each
 runs `R/harness/v2_equivalence.R` in a subprocess into a temporary CSV, one of them on a
 copy of the Stan file with a planted fault, which must fail for the constant's range alone. Its
@@ -692,7 +695,8 @@ or `snapshot_manifest.csv`.
   map, the fieldwork corrections, the publication dates, the two correction tables
   (`poll_n_corrections.csv`, `fundamentals_corrections.csv`), the economy release dates,
   the house table and the coalition events. `harness/configs/` holds each arm's settings
-  (`r0.json`), `harness/runs/` the queue's run lists (`tier0.txt`, `v2-steps.txt`), and
+  (`r0.json`, V2's candidate `v2.json` and its ablations `v2-*.json`, and V2's step configs in
+  `steps/`), `harness/runs/` the queue's run lists (`tier0.txt`, `v2-steps.txt`), and
   `harness/tier0/` the Tier 0 reports, which `tier0_report.R` writes from local runs (no offline
   rebuild). `harness/v2/steps.md` is V2's step log and `harness/v2/steps/` each step's
   diagnostics table and equivalence CSV, from local runs too (Step checks).

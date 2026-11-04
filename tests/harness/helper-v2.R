@@ -200,11 +200,12 @@ skip_unless_step <- function(step) {
 # fundamentals = 1 the placeholder's mu_f). The 2017 cell gets prior points only. With
 # fundamentals = 1 the other two cells take mu_f from `stage1`: NULL runs the real
 # stage1_mu_f(), which fits stage 1 with CmdStan unless its cache under
-# results_root()/stage1/ (git-ignored) holds the fit, so only slow tests may pass NULL there;
-# stage1_stub() gives a fast test fixed values with no fit.
+# results_root()/stage1/ (git-ignored) holds the fit, so a test that passes NULL there is
+# skipped unless slow; stage1_stub() gives a fast test fixed values with no fit.
 v2_test_cells <- function(cfg, stage1 = NULL) {
   box::use(R / harness / v2[v2_stan_data])
   skip_without_snapshot()
+  if (identical(as.integer(cfg$fundamentals), 1L) && is.null(stage1)) skip_unless_slow()
   cfg$walk_form <- 0L
   cfg$delta_form <- 0L
   key <- if (is.null(stage1)) "stage1_mu_f" else digest::digest(deparse(stage1))

@@ -859,6 +859,35 @@ test_that("the fundamentals reference: its mutant changes the density on every c
   expect_identical(fund$min_closed, 1L)
 })
 
+test_that("the fundamentals reference refuses data it cannot evaluate, naming the condition, and reads them only under the switch", {
+  d <- v2_test_cells(cfg_m5(), stage1 = stage1_stub)$eve2024$data
+  pars <- v2_simulate(d, seed = 1, observe = FALSE)$pars
+  expect_true(is.finite(v2_lp_ref(pars, d)))
+  sf <- c(d$sf_idx)
+  bad <- list(
+    absent = list(exists = replace(d$exists, cbind(d$G, sf[2]), 0L)),
+    mu_short = list(mu_f = array(c(d$mu_f)[-1])),
+    mu_nonfinite = list(mu_f = array(replace(c(d$mu_f), 1, NaN))),
+    weight_one = list(desired_weight = 1),
+    time_short = list(weight_time = 30),
+    repeated = list(sf_idx = array(replace(sf, 2, sf[1])))
+  )
+  says <- c(
+    absent = "data$fundamentals = 1 needs every party of S_f (sf_idx) to exist at E",
+    mu_short = "data$mu_f must be n_sf finite numbers",
+    mu_nonfinite = "data$mu_f must be n_sf finite numbers",
+    weight_one = "data$desired_weight must be one number in (0, 1)",
+    time_short = "data$weight_time must be at least data$campaign_days, itself at least 1",
+    repeated = "data$fundamentals = 1 needs at least two distinct parties of S_f (n_sf and sf_idx)"
+  )
+  for (n in names(bad)) {
+    x <- utils::modifyList(d, bad[[n]])
+    expect_error(v2_lp_ref(pars, x), says[[n]], fixed = TRUE, label = n)
+    x$fundamentals <- 0L
+    expect_no_error(v2_lp_ref(pars, x))
+  }
+})
+
 test_that("fund_scales(): tau_f gives the pseudo-observation the weight w against V_w, and each scale moves as 6.5 says", {
   d <- list(P = 4L, sf_idx = c(1L, 3L, 4L), weight_time = 180, campaign_days = 47L, desired_weight = 0.22)
   withr::with_seed(5, {

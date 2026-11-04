@@ -463,6 +463,7 @@ v2_par_dims <- function(data) {
 check_core <- function(data, mutant = "none") {
   forms <- vapply(FORM_SWITCHES, \(s) as.integer(data[[s]]), integer(1))
   check(all(forms == 0L), "the reference forms only: walk_form and delta_form must be 0")
+  # WHY: no component switch is left unbuilt since v2s-m5; this refuses one added to V2_SWITCHES before the reference builds it.
   on <- COMPONENT_SWITCHES[vapply(COMPONENT_SWITCHES, \(s) !identical(as.integer(data[[s]]), 0L), logical(1))]
   if (length(on)) fail("switch(es) not in the reference yet: ", listed(on))
   built <- vapply(BUILT_SWITCHES, \(s) length(data[[s]]) == 1 && as.integer(data[[s]]) %in% 0:1, logical(1))

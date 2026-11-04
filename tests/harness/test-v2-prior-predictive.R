@@ -5,9 +5,9 @@
 # report, never the committed one.
 box::use(
   R / harness / v2_prior_predictive[
-    band_exact, band_inside, band_median_ratio, band_q95, band_report, check_rows, fund_weight_against, held_at, in_band,
-    poll_sd_pp, reference_forms, ROWS, row_verdict, same_as, share_change, shock_sd, SUMMARY_FUNS, SUMMARY_POOLED,
-    verdict_line
+    band_error, band_exact, band_inside, band_median_ratio, band_q95, band_report, check_rows, fund_weight_against,
+    held_at, in_band, poll_sd_pp, quantile_cells, reference_forms, ROWS, row_verdict, same_as, share_change, shock_sd,
+    SUMMARY_FUNS, SUMMARY_POOLED, verdict_line
   ]
 )
 
@@ -487,15 +487,53 @@ test_that("the fundamentals rows run under its switch: the construction checked 
   expect_true(grepl("0.22 target leaves out", rows$label[2], fixed = TRUE))
 })
 
+test_that("an exact band's FAIL line and table cells give its largest error, which two decimals would hide", {
+  b <- band_exact(0.22, 1e-8)
+  v <- c(0.22, 0.2200005, 0.22)
+  qv <- stats::setNames(stats::quantile(v, c(0.05, 0.5, 0.95), names = FALSE), c("q05", "q50", "q95"))
+  vd <- row_verdict(in_band(b, qv, v), "config", FALSE)
+  expect_identical(vd$verdict, "FAIL")
+  err <- band_error(b, v)
+  expect_equal(err, 5e-7, tolerance = 1e-6)
+  expect_identical(verdict_line(vd$verdict, "fund_weight/2024-eve/config", qv, err), "PRIOR FAIL fund_weight/2024-eve/config max abs error 5e-07")
+  expect_identical(quantile_cells(vd$verdict, qv, err), c("\u2013", "max abs error 5e-07", "\u2013"))
+  # The quantiles to two decimals read as in band.
+  expect_identical(verdict_line(vd$verdict, "fund_weight/2024-eve/config", qv), "PRIOR FAIL fund_weight/2024-eve/config 0.22 0.22")
+  # In band, and on any other band, the quantiles as before.
+  expect_identical(verdict_line("PASS", "fund_weight/2024-eve/config", qv, band_error(b, rep(0.22, 3))), "PRIOR PASS fund_weight/2024-eve/config")
+  expect_identical(quantile_cells("PASS", qv, band_error(b, rep(0.22, 3))), c("0.22", "0.22", "0.22"))
+  expect_true(is.na(band_error(band_inside(0, 1), v)))
+  expect_identical(quantile_cells("FAIL", q(12.346, 38.004, q50 = 20.5), band_error(band_inside(0, 1), v)), c("12.35", "20.50", "38.00"))
+})
+
 test_that("on v2s-m5 the script checks the weight to 1e-8 and reports the bias weight, every other line as on v2s-m4", {
   skip_without_snapshot()
   before <- committed_sha()
-  m5 <- run_script(c(file.path("harness", "configs", "steps", "v2s-m5.json"), "20", withr::local_tempfile(fileext = ".md")))
+  cfg5 <- file.path("harness", "configs", "steps", "v2s-m5.json")
+  cfg4 <- file.path("harness", "configs", "steps", "v2s-m4.json")
+  out5 <- withr::local_tempfile(fileext = ".md")
+  out4 <- withr::local_tempfile(fileext = ".md")
+  m5 <- run_script(c(cfg5, "20", out5))
   expect_null(attr(m5, "status"), label = paste(m5, collapse = "\n"))
-  m4 <- run_script(c(file.path("harness", "configs", "steps", "v2s-m4.json"), "20", withr::local_tempfile(fileext = ".md")))
+  m4 <- run_script(c(cfg4, "20", out4))
+  expect_null(attr(m4, "status"), label = paste(m4, collapse = "\n"))
+  # The written reports: every Results row but the fundamentals rows as v2s-m4's, number for
+  # number, and the Config line apart from the config's name and sha256.
+  r5 <- readLines(out5, encoding = "UTF-8")
+  r4 <- readLines(out4, encoding = "UTF-8")
+  table5 <- grep("^[|] ", r5, value = TRUE)
+  table4 <- grep("^[|] ", r4, value = TRUE)
+  fund_rows <- startsWith(table5, "| fund_weight")
+  expect_identical(sum(fund_rows), 4L)
+  expect_gt(length(table4), 2L)
+  expect_identical(table5[!fund_rows], table4)
+  sha <- function(f) digest::digest(file = root(f), algo = "sha256")
+  config5 <- grep("^- Config: ", r5, value = TRUE)
+  config4 <- grep("^- Config: ", r4, value = TRUE)
+  expect_length(config5, 1)
+  expect_true(grepl(sha(cfg5), config5, fixed = TRUE) && grepl(cfg5, config5, fixed = TRUE))
+  expect_identical(sub(cfg5, cfg4, sub(sha(cfg5), sha(cfg4), config5, fixed = TRUE), fixed = TRUE), config4)
   lines <- grep("^PRIOR ", m5, value = TRUE)
-  fund <- grepl(" fund_weight", lines, fixed = TRUE)
-  expect_identical(lines[!fund], grep("^PRIOR ", m4, value = TRUE))
   expect_true(all(c("PRIOR PASS fund_weight/2024-eve/config", "PRIOR PASS fund_weight/2021-f180/config") %in% lines))
   expect_identical(sum(startsWith(lines, "PRIOR REPORT fund_weight_bias/")), 2L)
   expect_identical(committed_sha(), before)

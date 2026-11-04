@@ -71,12 +71,12 @@ functions {
 
   // diag(C Sigma C'), C = I - 11'/P and Sigma = diag(sigma) Omega diag(sigma): each party's
   // variance of a walk step per unit Delta s^2 (§6.2), the row sums of squares of
-  // C diag(sigma) L_Omega.
+  // C diag(sigma) L_Omega. Each of its columns sums to 0, so its row 1 is minus the sum of
+  // walk_rows()' rows 2:P.
   vector walk_var(vector sigma, matrix L_Omega) {
     int P = rows(sigma);
-    matrix[P, P] CM = diag_pre_multiply(sigma, L_Omega);
-    CM -= rep_matrix(rep_row_vector(1, P) * CM / P, P);
-    return rows_dot_self(CM);
+    matrix[P - 1, P] R = walk_rows(sigma, L_Omega);
+    return append_row(dot_self(rep_row_vector(1, P - 1) * R), rows_dot_self(R));
   }
 
   // The Cholesky factor of (B B')[rs, rs], with a positive diagonal, as R' from the thin QR
@@ -209,18 +209,35 @@ data {
 
 transformed data {
   // The fundamentals pseudo-observation (fundamentals = 1, §6.5) centres log pi_nat,E over the
-  // parties of S_f, so it needs two of them at least, and each existing at E: outside A_E
-  // pi_nat,E is 0.
+  // parties of S_f, so it needs two of them at least, distinct, and each existing at E: outside
+  // A_E pi_nat,E is 0. Its scale tau_f needs w in (0, 1) and a stretch off the campaign of
+  // weight_time - campaign_days >= 0 days; the data block holds campaign_days >= 1.
   if (fundamentals) {
     if (n_sf < 2) {
       reject("forecast_v2: fundamentals = 1 needs at least two parties of S_f, since mu_f's mean is centred over them, but n_sf = ",
              n_sf);
+    }
+    for (i in 1:(n_sf - 1)) {
+      for (j in (i + 1):n_sf) {
+        if (sf_idx[i] == sf_idx[j]) {
+          reject("forecast_v2: fundamentals = 1 needs the parties of S_f to be distinct, but sf_idx[", i, "] = sf_idx[", j,
+                 "] = ", sf_idx[i]);
+        }
+      }
     }
     for (i in 1:n_sf) {
       if (exists[G, sf_idx[i]] == 0) {
         reject("forecast_v2: fundamentals = 1 needs every party of S_f to exist at E (exists[G, sf_idx[i]] = 1), but sf_idx[",
                i, "] = ", sf_idx[i], " does not");
       }
+    }
+    if (desired_weight <= 0 || desired_weight >= 1) {
+      reject("forecast_v2: fundamentals = 1 needs desired_weight in (0, 1), since tau_f = sqrt(V_w (1 - w) / w), but desired_weight = ",
+             desired_weight);
+    }
+    if (weight_time < campaign_days) {
+      reject("forecast_v2: fundamentals = 1 needs weight_time to be at least campaign_days, since V_w counts weight_time - campaign_days days off the campaign, but weight_time = ",
+             weight_time, " and campaign_days = ", campaign_days);
     }
   }
 

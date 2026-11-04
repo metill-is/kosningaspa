@@ -1204,10 +1204,58 @@ test_that("v2s-m5: transformed data refuses fundamentals it cannot evaluate, nam
     "forecast_v2: fundamentals = 1 needs at least two parties of S_f, since mu_f's mean is centred over them, but n_sf = 1",
     fixed = TRUE
   )
+  # A party of S_f twice: mean(x) and the normal would count it twice.
+  dup <- d
+  dup$sf_idx[2] <- d$sf_idx[1]
+  expect_error(
+    v2_methods(V2_STAN, dup),
+    paste0("forecast_v2: fundamentals = 1 needs the parties of S_f to be distinct, but sf_idx[1] = sf_idx[2] = ", d$sf_idx[1]),
+    fixed = TRUE
+  )
+  # w at 1 gives tau_f = 0, and at 0 an infinite tau_f; the data block admits both.
+  w_at <- function(w) utils::modifyList(d, list(desired_weight = w))
+  for (w in c(1, 0)) {
+    expect_error(
+      v2_methods(V2_STAN, w_at(w)),
+      paste0("forecast_v2: fundamentals = 1 needs desired_weight in (0, 1), since tau_f = sqrt(V_w (1 - w) / w), but desired_weight = ", w),
+      fixed = TRUE
+    )
+  }
+  short <- d
+  short$weight_time <- 30
+  expect_error(
+    v2_methods(V2_STAN, short),
+    paste0(
+      "forecast_v2: fundamentals = 1 needs weight_time to be at least campaign_days, since V_w counts weight_time - campaign_days days off the campaign, but weight_time = 30 and campaign_days = ",
+      d$campaign_days
+    ),
+    fixed = TRUE
+  )
   # With the switch off, the same data are never read.
-  for (x in list(absent, one)) {
+  for (x in list(absent, one, dup, w_at(1), w_at(0), short)) {
     x$fundamentals <- 0L
     expect_no_error(v2_methods(V2_STAN, x))
+  }
+})
+
+test_that("v2s-m5: on the ablations' switch combinations Stan's log density matches the reference at prior points", {
+  skip_unless_slow()
+  skip_unless_step("v2s-m5")
+  box::use(R / harness / v2[read_v2_config])
+  # WHY: the staircase runs only cumulative configs, so each ablation but v2-nofund (v2s-m4's
+  # content) turns one switch off under later ones that no step has run without it. mu_f is
+  # stage 1's, read from the cache the m5 lp test fills; prior points need no fit.
+  for (arm in c("v2-noepoch", "v2-nonew", "v2-noshock", "v2-staticdelta")) {
+    cfg <- read_v2_config(file.path(project_root(), "harness", "configs", paste0(arm, ".json")))
+    expect_identical(as.integer(cfg$fundamentals), 1L, label = arm)
+    cells <- v2_test_cells(cfg)
+    for (name in c("eve2024", "f180_2021")) {
+      d <- cells[[name]]$data
+      m <- v2_methods(V2_STAN, d)
+      pts <- lp_points(m, d, n_post = 0, n_off = 0, n_prior = 10)
+      ok <- expect_lp_matches(m, d, pts)
+      message(sprintf("%s %s: %d prior points, lp constant range %.3g (tol %.3g, ratio %.3g)", arm, name, length(pts), ok$range, ok$tol, ok$range / ok$tol))
+    }
   }
 })
 
