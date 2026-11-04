@@ -323,7 +323,7 @@ bounded_at <- function(m, data, u) {
 # only blank or `//` lines gives 0 rows, with no error, but a `}` straight after `<block> {`
 # errors, naming the `}`. An error too if `<block> {` is not found exactly once, or no `}`
 # follows it. A garbled or empty result still fails the declaration test's exact comparison
-# with V2_CORE_PARS' 31 names and types.
+# with V2_CORE_PARS' 32 names and types.
 stan_block_decls <- function(lines, block) {
   start <- which(lines == paste(block, "{"))
   if (length(start) != 1) stop("stan_block_decls: block ", block, " found ", length(start), " times", call. = FALSE)

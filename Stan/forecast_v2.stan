@@ -19,7 +19,11 @@
 // Step v2s-m4 builds delta_walk = 1 (§6.7): the kjordaemi deviations walk across elections,
 // delta_e = M_e(delta_{e-1} - c_{e-1} 1' + sqrt(delta_years_e / delta_years_bar) s_zeta .*
 // zeta_e), with delta_{e-1} re-centred within each kjordaemi over the parties with results at
-// election e - 1, and a newcomer's column fresh at its entry epoch.
+// election e - 1, and a newcomer's column fresh at its entry epoch. Step v2s-p2 builds
+// delta_form = 1 (§6.7), the same delta walk held centred at the closed elections: each closed
+// election's delta_e in its coordinates delta_e[2:K, 2:P], the parties with results there
+// centred and stored relative to the result, the others non-centred, and the open epoch's
+// step non-centred as before; R/harness/v2_equivalence.R checks that it is the same model.
 functions {
   // The map M_e of §6.7 on a K x P matrix: subtract each party's w-weighted mean over the
   // kjordaemi, then centre each kjordaemi over the parties. The result's rows sum to 0 and
@@ -65,6 +69,48 @@ functions {
   // decomposition of B[rs]': forming B B' would square the condition number (proposal 3).
   matrix chol_gram_rows(matrix B, array[] int rs) {
     return qr_thin_R(B[rs]')';
+  }
+
+  // The prior mean of delta_e given delta_{e-1} in the delta walk (§6.7): delta_{e-1}
+  // re-centred within each kjordaemi over the parties S with results at election e - 1, the
+  // columns of the parties entering in epoch e (enter) 0, as a newcomer's column is fresh then.
+  matrix delta_step_mean(matrix delta_prev, array[] int S, array[] int enter) {
+    int K = rows(delta_prev);
+    int P = cols(delta_prev);
+    vector[K] c = rep_vector(0, K);
+    for (i in 1:size(S)) {
+      c += delta_prev[ : , S[i]];
+    }
+    matrix[K, P] m = delta_prev - rep_matrix(c / size(S), P);
+    for (i in 1:size(enter)) {
+      m[ : , enter[i]] = rep_vector(0, K);
+    }
+    return m;
+  }
+
+  // The column scales of the delta walk's step into epoch e: r s_zeta, r = sqrt(delta_years_e /
+  // delta_years_bar), but s_delta0 for a party entering in epoch e (enter).
+  vector delta_step_scale(real r, vector s_zeta, vector s_delta0, array[] int enter) {
+    vector[rows(s_zeta)] s = r * s_zeta;
+    for (i in 1:size(enter)) {
+      s[enter[i]] = s_delta0[enter[i]];
+    }
+    return s;
+  }
+
+  // The Kronecker product of A and B: block (i, j) is A[i, j] B. The column-major vec of a
+  // matrix X has covariance U kron V when X's columns have cross-covariances U[i, j] V, and the
+  // product of two lower-triangular Cholesky factors is the Cholesky factor of U kron V.
+  matrix kron(matrix A, matrix B) {
+    int p = rows(B);
+    int q = cols(B);
+    matrix[rows(A) * p, cols(A) * q] C;
+    for (i in 1:rows(A)) {
+      for (j in 1:cols(A)) {
+        C[((i - 1) * p + 1):(i * p), ((j - 1) * q + 1):(j * q)] = A[i, j] * B;
+      }
+    }
+    return C;
   }
 }
 
@@ -148,10 +194,9 @@ data {
 }
 
 transformed data {
-  // The core, the anchored walk, the epoch bias, the newcomer pool, the shock and the delta
-  // walk are built: each other switch is refused by name.
+  // The core, the anchored walk, the epoch bias, the newcomer pool, the shock, the delta walk
+  // and its centred form are built: each other switch is refused by name.
   if (fundamentals) reject("forecast_v2: switch fundamentals = ", fundamentals, " is not built yet");
-  if (delta_form) reject("forecast_v2: switch delta_form = ", delta_form, " is not built yet");
 
   // Decision 4: log c = cap - (cap - init) exp(u), so u = 0 is the init and c stays below the cap.
   real phi_cap = 20;
@@ -247,6 +292,77 @@ transformed data {
     }
   }
 
+  // The delta walk held centred at the closed elections (delta_form = 1, §6.7). At closed
+  // election e, delta_e is held in its coordinates D_e = delta_e[2:K, 2:P]: kjordaemi 1 and
+  // party 1 follow from M_e's two constraints, delta_e 1 = 0 and w_e' delta_e = 0. The present
+  // parties are the result's (idx_res) and the absent ones the rest, both without party 1 and
+  // both as coordinates c = 1..P - 1 (party c + 1). The form needs the walk, since a static
+  // delta has fewer free values than the closed elections' coordinates; party 1 in every
+  // result, which the shift by |Pr| + 1 below assumes; w_e1 > 0, since kjordaemi 1 is solved
+  // from the others; and each closed election's w summing to 1, which makes M_e a projection,
+  // within 1e-9, since the data's sums are off by rounding.
+  int n_dc = delta_form * n_closed;
+  if (delta_form && delta_walk == 0) {
+    reject("forecast_v2: delta_form = 1 needs delta_walk = 1: a static delta has no centred form");
+  }
+  for (e in 1:n_dc) {
+    int coord = 0;
+    for (i in 1:n_rep_res[e]) {
+      if (idx_res[e, i] == 1) coord = 1;
+    }
+    if (coord == 0) {
+      reject("forecast_v2: delta_form = 1 needs the coordinate party (index 1) among the parties with results at every",
+             " closed election, but it is not at closed election ", e);
+    }
+    if (w[e, 1] <= 0) {
+      reject("forecast_v2: delta_form = 1 needs w[e, 1] > 0 at every closed election e, but w[", e, ", 1] = ", w[e, 1]);
+    }
+    if (abs(sum(w[e]) - 1) >= 1e-9) {
+      reject("forecast_v2: delta_form = 1 needs each closed election's w to sum to 1 within 1e-9, but row ", e,
+             " of w sums to ", sum(w[e]));
+    }
+  }
+  array[n_dc] int d_n_pres = rep_array(0, n_dc);
+  array[n_dc, P - 1] int d_pres_idx = rep_array(0, n_dc, P - 1);
+  array[n_dc] int d_n_abs = rep_array(0, n_dc);
+  array[n_dc, P - 1] int d_abs_idx = rep_array(0, n_dc, P - 1);
+  array[n_dc, P - 1] int d_order;                     // the absent coordinates, then the present ones
+  // Each closed election's present coordinates are stored relative to d_off, the coordinates
+  // of A_e log(y_res[e, , S_e] + 1/2) C over the result's parties S_e, its kjordaemi log shares
+  // through M_e (the 1/2 guards a zero count), so that delta_coord = 0 starts each result's
+  // rows at its kjordaemi deviations. A data constant: exact, no Jacobian.
+  array[n_dc] matrix[K - 1, P - 1] d_off = rep_array(rep_matrix(0, K - 1, P - 1), n_dc);
+  // L_Psi[e] = chol((A_e A_e')[2:K, 2:K]), A_e = I - 1 w_e': the kjordaemi factor of the
+  // covariance of D_e given delta_{e-1}.
+  array[n_dc] matrix[K - 1, K - 1] L_Psi;
+  matrix[P, P] I_P = identity_matrix(P);
+  for (e in 1:n_dc) {
+    array[n_rep_res[e]] int S = idx_res[e, 1:n_rep_res[e]];
+    array[P] int present = rep_array(0, P);
+    matrix[K, n_rep_res[e]] l;
+    for (i in 1:n_rep_res[e]) {
+      present[S[i]] = 1;
+      for (k in 1:K) {
+        l[k, i] = log(y_res[e, k, S[i]] + 0.5);
+      }
+    }
+    l = kjordaemi_map(l, w[e]);
+    for (i in 1:n_rep_res[e]) {
+      if (S[i] > 1) d_off[e][ : , S[i] - 1] = l[2:K, i];
+    }
+    for (c in 1:(P - 1)) {
+      if (present[c + 1]) {
+        d_n_pres[e] += 1;
+        d_pres_idx[e, d_n_pres[e]] = c;
+      } else {
+        d_n_abs[e] += 1;
+        d_abs_idx[e, d_n_abs[e]] = c;
+      }
+    }
+    d_order[e] = append_array(d_abs_idx[e, 1:d_n_abs[e]], d_pres_idx[e, 1:d_n_pres[e]]);
+    L_Psi[e] = chol_gram_rows(identity_matrix(K) - rep_matrix(w[e], K), linspaced_int_array(K - 1, 2, K));
+  }
+
   // The parties existing at each grid date, by index.
   array[G] int n_exist;
   array[G, P] int exist_idx = rep_array(0, G, P);
@@ -305,7 +421,7 @@ parameters {
   real<lower=0> sigma_phi;
   real log_phi_K_u;                                   // bounded log phi_K
   real log_kappa_u;                                   // bounded log kappa
-  array[1 + delta_walk * (n_epoch - 1)] matrix[K, P] delta_raw;  // zeta: one, or one per epoch
+  array[1 + delta_walk * (n_epoch - 1) - delta_form * n_closed] matrix[K, P] delta_raw;  // zeta: one, one per epoch, or the open epoch's
   vector[P] s_delta0_raw;                             // log s_delta0 = mu_sd + tau_sd s_delta0_raw
   real mu_sd;
   real<lower=0> tau_sd;
@@ -325,9 +441,13 @@ parameters {
   matrix[P, shock * n_closed] z_shock;                // the shocks' standard normals z_e
   array[shock] real<lower=0> s_bar_E;                 // the shock's scale
   // The delta walk (delta_walk = 1, §6.7), each size 0 with delta_walk = 0; its steps'
-  // zeta_2..zeta_n_epoch are delta_raw[2:n_epoch].
+  // zeta_2..zeta_n_epoch are delta_raw[2:n_epoch], or with delta_form = 1 the open epoch's
+  // step's zeta delta_raw[1].
   vector<lower=0>[delta_walk * P] s_zeta_raw;         // s_zeta = s_bar_zeta s_zeta_raw
   array[delta_walk] real<lower=0> s_bar_zeta;         // the walk's scale
+  // The delta walk held centred (delta_form = 1, §6.7), size 0 with delta_form = 0: each closed
+  // election's coordinates, W_B in the absent parties' columns and R in the present ones'.
+  array[delta_form * n_closed] matrix[K - 1, P - 1] delta_coord;
 }
 
 transformed parameters {
@@ -467,27 +587,50 @@ transformed parameters {
   // re-centring is the plain walk wherever no party enters. At an entry it keeps the directions
   // the likelihood cannot see before then, the newcomer's earlier column and an offset shared by
   // the parties S, out of the contrasts: the newcomer enters against the existing parties' mean.
-  {
+  // So delta_e = M_e(m_e + zeta_e diag(s_e)), with m_e = 0 and s_e = s_delta0 at e = 1.
+  //
+  // With delta_form = 1 each closed election's delta_e is built from its coordinates D_e =
+  // delta_e[2:K, 2:P] instead: delta_e[k, 1] = -sum_p D_e[k, p] for k >= 2, and row 1 = -sum_k
+  // w_ek delta_e[k, .] / w_e1, so delta_e lies in M_e's range. Given delta_{e-1}, vec(D_e) ~
+  // N(vec(M), Phi kron Psi), M the coordinates of M_e(m_e), Phi = (C S_e C)[2:P, 2:P], S_e =
+  // diag(s_e^2), and Psi = (A_e A_e')[2:K, 2:K]. With L the Cholesky factor of Phi, the absent
+  // coordinates first, the absent ones are non-centred, D_B = M_B + L_Psi W_B L_BB', and the
+  // present ones centred and shifted, D_Pr = d_off_Pr + R - rowSums(D_B) / (|Pr| + 1), so that
+  // every row k >= 2 of delta_e over the result's parties moves by one constant with D_B and
+  // the result's softmax does not depend on W_B; the model block gives D_Pr its conditional
+  // normal. The open epoch's step stays non-centred.
+  if (delta_walk == 0) {
     matrix[K, P] X = diag_post_multiply(delta_raw[1], s_delta0);
-    if (delta_walk == 0) {
-      for (e in 1:n_epoch) {
-        delta[e] = kjordaemi_map(X, w[e]);
+    for (e in 1:n_epoch) {
+      delta[e] = kjordaemi_map(X, w[e]);
+    }
+  } else {
+    for (e in 1:n_epoch) {
+      matrix[K, P] m = rep_matrix(0, K, P);
+      vector[P] s = s_delta0;
+      if (e > 1) {
+        m = delta_step_mean(delta[e - 1], idx_res[e - 1, 1:n_rep_res[e - 1]], enter_idx[e, 1:n_enter[e]]);
+        s = delta_step_scale(sqrt(delta_years[e] / delta_years_bar), s_zeta, s_delta0, enter_idx[e, 1:n_enter[e]]);
       }
-    } else {
-      delta[1] = kjordaemi_map(X, w[1]);
-      for (e in 2:n_epoch) {
-        vector[K] c = rep_vector(0, K);
-        for (i in 1:n_rep_res[e - 1]) {
-          c += delta[e - 1][ : , idx_res[e - 1, i]];
+      if (e > n_dc) {
+        delta[e] = kjordaemi_map(m + diag_post_multiply(delta_raw[e - n_dc], s), w[e]);
+      } else {
+        int na = d_n_abs[e];
+        int np = d_n_pres[e];
+        array[np] int pr = d_pres_idx[e, 1:np];
+        matrix[K - 1, P - 1] D;
+        if (na > 0) {
+          array[na] int ab = d_abs_idx[e, 1:na];
+          matrix[K - 1, P - 1] M = block(kjordaemi_map(m, w[e]), 2, 2, K - 1, P - 1);
+          matrix[P - 1, P - 1] L = chol_gram_rows(walk_rows(s, I_P), d_order[e]);
+          D[ : , ab] = M[ : , ab] + L_Psi[e] * delta_coord[e][ : , ab] * L[1:na, 1:na]';
+          D[ : , pr] = d_off[e][ : , pr] + delta_coord[e][ : , pr] - rep_matrix(D[ : , ab] * rep_vector(1, na) / (np + 1), np);
+        } else {
+          D = d_off[e] + delta_coord[e];
         }
-        c /= n_rep_res[e - 1];
-        X = delta[e - 1] - rep_matrix(c, P)
-            + sqrt(delta_years[e] / delta_years_bar) * diag_post_multiply(delta_raw[e], s_zeta);
-        for (i in 1:n_enter[e]) {
-          int p = enter_idx[e, i];
-          X[ : , p] = s_delta0[p] * delta_raw[e][ : , p];
-        }
-        delta[e] = kjordaemi_map(X, w[e]);
+        delta[e, 2:K, 2:P] = D;
+        delta[e, 2:K, 1] = -D * rep_vector(1, P - 1);
+        delta[e, 1] = -(w[e, 2:K] * delta[e, 2:K]) / w[e, 1];
       }
     }
   }
@@ -607,6 +750,34 @@ model {
   }
   s_zeta_raw ~ std_normal();
   s_bar_zeta ~ normal(0, prior_s_bar_zeta);
+  // The delta walk held centred (delta_form = 1): at each closed election, N(0, 1) on the absent
+  // parties' W_B and the present parties' conditional normal given D_B and delta_{e-1},
+  // vec(D_Pr) ~ N(vec(M_Pr + L_Psi W_B L_PrB'), (L_PrPr L_PrPr') kron Psi), from the Cholesky
+  // factor L of Phi with the absent coordinates first; with every party present, vec(D_e) ~
+  // N(vec(M), Phi kron Psi). Its normaliser's -(K - 1) sum log diag(L_PrPr) depends on the
+  // scales and stays in the target. D_Pr is R shifted, so R has no Jacobian.
+  for (e in 1:n_dc) {
+    int na = d_n_abs[e];
+    int np = d_n_pres[e];
+    array[np] int pr = d_pres_idx[e, 1:np];
+    matrix[K, P] m = rep_matrix(0, K, P);
+    vector[P] s = s_delta0;
+    if (e > 1) {
+      m = delta_step_mean(delta[e - 1], idx_res[e - 1, 1:n_rep_res[e - 1]], enter_idx[e, 1:n_enter[e]]);
+      s = delta_step_scale(sqrt(delta_years[e] / delta_years_bar), s_zeta, s_delta0, enter_idx[e, 1:n_enter[e]]);
+    }
+    matrix[K - 1, P - 1] M = block(kjordaemi_map(m, w[e]), 2, 2, K - 1, P - 1);
+    matrix[K - 1, P - 1] D = block(delta[e], 2, 2, K - 1, P - 1);
+    matrix[P - 1, P - 1] L = chol_gram_rows(walk_rows(s, I_P), d_order[e]);
+    matrix[np, np] L_PrPr = L[(na + 1):(P - 1), (na + 1):(P - 1)];
+    matrix[K - 1, np] mean_pr = M[ : , pr];
+    if (na > 0) {
+      array[na] int ab = d_abs_idx[e, 1:na];
+      to_vector(delta_coord[e][ : , ab]) ~ std_normal();
+      mean_pr += L_Psi[e] * delta_coord[e][ : , ab] * L[(na + 1):(P - 1), 1:na]';
+    }
+    to_vector(D[ : , pr]) ~ multi_normal_cholesky(to_vector(mean_pr), kron(L_PrPr, L_Psi[e]));
+  }
   // The bounded transforms' log-Jacobians, |d log c / d u| = (cap - init) exp(u).
   target += H * log(phi_cap - phi_init) + sum(log_phi_u);
   target += log(phi_K_cap - phi_K_init) + log_phi_K_u;

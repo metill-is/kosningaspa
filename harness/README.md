@@ -283,8 +283,8 @@ arm <arm>'s role <new>"; retire such a run (`retire_run()`) and refit it. A run 
 recorded role takes its arm's current role and is not refused. Plan 4 may add roles for the arms it scores. Every arm
 but `r0` runs `Stan/forecast_v2.stan` with its own config, an entry `v2_arm(config, role)`
 builds. `ARMS` holds `r0`, `v2s-m0`, `v2s-p1`, `v2s-m1` (the epoch bias), `v2s-m2` (the
-newcomer pool), `v2s-m3` (the election-day shock) and `v2s-m4` (the δ walk); each other V2 arm
-is registered as its config lands.
+newcomer pool), `v2s-m3` (the election-day shock), `v2s-m4` (the δ walk) and `v2s-p2` (the δ walk
+held centred at the closed elections); each other V2 arm is registered as its config lands.
 
 **R0's extraction.** `r0_extract(draws, meta, dir)` (`R/harness/r0.R`) writes the four
 parquets of spec §5.5 from a fit's draws: `eday_kjordaemi` (`.chain`, `.iteration`,
@@ -478,7 +478,7 @@ A P-step's form is first checked against the reference form, point by point, by
 `EQUIVALENCE_REQUIRED` (below), all into the step's equivalence CSV:
 
 ```
-LC_ALL=en_US.UTF-8 Rscript R/harness/v2_equivalence.R --config=harness/configs/steps/<step>.json --form=walk --cell=<E>,<F> --out=harness/v2/steps/<step>-equivalence.csv [--n=30] [--n-off=15] [--stan=Stan/forecast_v2.stan] [--reverse]
+LC_ALL=en_US.UTF-8 Rscript R/harness/v2_equivalence.R --config=harness/configs/steps/<step>.json --form=walk|delta --cell=<E>,<F> --out=harness/v2/steps/<step>-equivalence.csv [--n=30] [--n-off=15] [--stan=Stan/forecast_v2.stan] [--reverse]
 ```
 
 The new side is the config as written and the reference side the same config with the form
@@ -487,14 +487,21 @@ at 0; a config whose form is 0 is refused. On a fitted cell the points are `--n`
 4 × (100 + 40) fit of the new side at seed 5100 and max_treedepth 10 that draws no forecast;
 on a 2017 cell they are `--n` prior draws of the reference side (`v2_simulate()`, seeds 5101,
 5102, …), nothing is fitted, and the check stops if either side's generated quantities hold
-a forecast variable. Each point maps to the other side through θ, every other parameter
-copied, and (lp_new − J_new) − (lp_ref − J_ref) must be one constant within
-1e-12 × max(1, |lp_new|), lp being `log_prob(jacobian = TRUE)` and J each side's
-log-Jacobian from its standard normals to θ (the script's header lists the terms). Each term
-left out alone, a negative control, must break it; under `--form=walk` every control must be
-exercised, so a term constant over the points fails the check as not exercised. Both sides'
-generated quantities at the posterior (or prior) points, by standalone `generate_quantities`
-at seed 1 and `sig_figs = 18`, must agree within 1e-9 relative, and θ within 1e-8. A point
+a forecast variable. Each point maps to the other side through the quantity the form
+changes, θ for `walk_form` and δ for `delta_form`, every other parameter copied, and
+(lp_new − J_new) − (lp_ref − J_ref) must be one constant within 1e-12 × max(1, |lp_new|), lp
+being `log_prob(jacobian = TRUE)` and J each side's terms: its log-Jacobian from its standard
+normals to θ or δ and, for `delta_form`, the reference's density of the K + P − 1 directions
+of each closed election's ζ that M_e removes, which the centred form does not hold (the
+script's header lists the terms). Under `--form=delta` a posterior point's ζ is the
+minimum-norm preimage of its δ plus an N(0, I) draw in M_e's null space at seed 5200 + the
+point's number, and a 2017 prior point's coordinates come from its δ. Each term left out
+alone, a negative control, must break it; under `--form=walk` every control must be
+exercised, so a term constant over the points fails the check as not exercised, while under
+`--form=delta` a term that cannot vary on a cell (2017 eve has one closed election) is
+tolerated. Both sides' generated quantities at the posterior (or prior) points, by standalone
+`generate_quantities` at seed 1 and `sig_figs = 18`, must agree within 1e-9 relative, and θ
+(or δ at every epoch) within 1e-8. A point
 with a bounded log concentration at its cap is excluded and counted; one whose log density is
 not finite on both sides is dropped and counted, and a dropped posterior point fails the
 check, as does one finite on one side only; each kind needs at least 5 kept points; with
@@ -509,8 +516,8 @@ quantities' largest relative difference, never a forecast value, then `EQUIV PAS
 `EQUIV FAIL` (exit 1). `--out` must be a file in an existing directory. Once the command line
 is accepted, the script first writes a provisional `FAIL` row for its cell and order (reasons
 `incomplete`, the current `stan_sha256`), which its own row replaces at the end, so a check
-that stops leaves no earlier verdict standing. Only the walk form's map is built:
-`--form=delta` and `--form=both` stop until the plan's Task 13 builds the delta map. A check
+that stops leaves no earlier verdict standing. `--form=both` stops: P1 kept `walk_form = 0`,
+so no step config sets both forms. A check
 of 10 + 5 points on 2021 f180 took 5 min 6 s (`time`, 29 Oct 2026); 2024 eve's grid has 274
 dates to 2021 f180's 160.
 

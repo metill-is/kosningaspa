@@ -18,7 +18,8 @@ box::use(
 #' in this order, and `v2_lp_ref()` reads one. `N_new` is the number of parties with
 #' `entry_epoch` > 0, and `new_raw` holds one element per such party, in party order.
 #' `delta_raw` holds δ's ζ: with `delta_walk` = 0 one, mapped through every epoch's M_e
-#' (static δ); with 1 one per epoch, ζ_e of the walk (§6.7). `s_delta0_raw` is r,
+#' (static δ); with 1 one per epoch, ζ_e of the walk (§6.7); with `delta_form` = 1 as well,
+#' only the open epoch's. `s_delta0_raw` is r,
 #' with log s_δ0 = μ_sd + τ_sd r. `anchor_w` is the anchored walk's (walk_form = 1, §6.9):
 #' size 0 in the reference forms, where `z_walk` has its G − 1 columns. The epoch bias's
 #' (§6.4, `epoch_bias` = 1) come next, each size 0 with `epoch_bias` = 0: `mu_step_raw` holds
@@ -29,28 +30,31 @@ box::use(
 #' newcomer's bias contrast m_new + s_new η, each an array of one. The shock's (§6.6,
 #' `shock` = 1) come next, each size 0 with `shock` = 0: `z_shock`, P × n_closed, column e
 #' holding closed election e's z_e, and `s_bar_E`, the shock's scale s̄_E, an array of one.
-#' The δ walk's (§6.7, `delta_walk` = 1) come last, each size 0 with `delta_walk` = 0:
+#' The δ walk's (§6.7, `delta_walk` = 1) come next, each size 0 with `delta_walk` = 0:
 #' `s_zeta_raw`, the walk's per-party scales over s̄_ζ (s_ζ = s̄_ζ `s_zeta_raw`), and
-#' `s_bar_zeta`, s̄_ζ, an array of one.
+#' `s_bar_zeta`, s̄_ζ, an array of one. `delta_coord` is last, the δ walk held centred at the
+#' closed elections (`delta_form` = 1, §6.7): n_closed × (K − 1) × (P − 1), each closed
+#' election's coordinates of δ_e[2:K, 2:P]; size 0 in the reference forms.
 #' @export
 V2_CORE_PARS <- tibble::tibble(
   name = c(
     "theta1", "anchor_w", "z_walk", "sigma", "L_Omega", "tau_camp", "mu1", "house_raw", "sigma_gamma", "new_raw",
     "log_phi_u", "mu_phi", "sigma_phi", "log_phi_K_u", "log_kappa_u", "delta_raw", "s_delta0_raw", "mu_sd",
     "tau_sd", "nu", "mu_step_raw", "house_step_raw", "tau_mu", "tau_mu_A", "tau_house", "m_new", "s_new", "z_shock",
-    "s_bar_E", "s_zeta_raw", "s_bar_zeta"
+    "s_bar_E", "s_zeta_raw", "s_bar_zeta", "delta_coord"
   ),
   type = c(
     "sum_to_zero_vector[P]", "array[walk_form * n_closed] vector[P - 1]", "matrix[P - 1, G - 1 - walk_form * n_closed]",
     "vector<lower=0>[P]", "cholesky_factor_corr[P]",
     "real<lower=0>", "sum_to_zero_vector[P]", "matrix[H, P]", "real<lower=0>", "vector[N_new]", "vector[H]",
-    "real", "real<lower=0>", "real", "real", "array[1 + delta_walk * (n_epoch - 1)] matrix[K, P]", "vector[P]",
+    "real", "real<lower=0>", "real", "real", "array[1 + delta_walk * (n_epoch - 1) - delta_form * n_closed] matrix[K, P]",
+    "vector[P]",
     "real", "real<lower=0>",
     "array[J] sum_to_zero_vector[P]", "matrix[P, epoch_bias * (n_epoch - 1)]",
     "array[H] matrix[P, epoch_bias * (n_epoch - 1)]", "array[epoch_bias] real<lower=0>",
     "array[epoch_bias] real<lower=0>", "array[epoch_bias] real<lower=0>", "array[newcomer_pool] real",
     "array[newcomer_pool] real<lower=0>", "matrix[P, shock * n_closed]", "array[shock] real<lower=0>",
-    "vector<lower=0>[delta_walk * P]", "array[delta_walk] real<lower=0>"
+    "vector<lower=0>[delta_walk * P]", "array[delta_walk] real<lower=0>", "array[delta_form * n_closed] matrix[K - 1, P - 1]"
   )
 )
 
@@ -386,7 +390,9 @@ lkj_corr_cholesky_rng <- function(P, eta) {
 #' 1, `m_new` and `s_new` are 1 each; with 0, 0. With `shock` = 1, `z_shock` is P × n_closed
 #' and `s_bar_E` 1; with 0, `z_shock` is P × 0 and `s_bar_E` 0. With `delta_walk` = 1,
 #' `delta_raw` is n_epoch × K × P, `s_zeta_raw` P and `s_bar_zeta` 1; with 0, `delta_raw` is
-#' 1 × K × P and the other two 0.
+#' 1 × K × P and the other two 0. With `delta_form` = 1 (which needs `delta_walk` = 1),
+#' `delta_coord` is n_closed × (K − 1) × (P − 1) and `delta_raw` 1 × K × P, the open epoch's ζ;
+#' with 0, `delta_coord` is 0 × (K − 1) × (P − 1).
 #' @param data a `v2_stan_data()` data list
 #' @return a named list of integer vectors
 #' @export
@@ -404,15 +410,19 @@ v2_par_dims <- function(data) {
   check(length(sh) == 1 && sh %in% 0:1, "data$shock must be 0 or 1")
   dw <- as.integer(data$delta_walk)
   check(length(dw) == 1 && dw %in% 0:1, "data$delta_walk must be 0 or 1")
+  df <- as.integer(data$delta_form)
+  check(length(df) == 1 && df %in% 0:1, "data$delta_form must be 0 or 1")
+  check(df <= dw, "data$delta_form = 1 needs delta_walk = 1")
   list(
     theta1 = P, anchor_w = c(n_anchor, P - 1L), z_walk = c(P - 1L, data$G - 1L - n_anchor), sigma = P,
     L_Omega = c(P, P), tau_camp = 1L, mu1 = P,
     house_raw = c(data$H, P), sigma_gamma = 1L, new_raw = sum(c(data$entry_epoch) > 0), log_phi_u = data$H,
     mu_phi = 1L, sigma_phi = 1L, log_phi_K_u = 1L, log_kappa_u = 1L,
-    delta_raw = c(1L + dw * (as.integer(data$n_epoch) - 1L), data$K, P),
+    delta_raw = c(1L + dw * (as.integer(data$n_epoch) - 1L) - df * as.integer(data$n_closed), data$K, P),
     s_delta0_raw = P, mu_sd = 1L, tau_sd = 1L, nu = c(data$J, P), mu_step_raw = c(P, n_step),
     house_step_raw = c(data$H, P, n_step), tau_mu = eb, tau_mu_A = eb, tau_house = eb, m_new = np, s_new = np,
-    z_shock = c(P, sh * as.integer(data$n_closed)), s_bar_E = sh, s_zeta_raw = dw * P, s_bar_zeta = dw
+    z_shock = c(P, sh * as.integer(data$n_closed)), s_bar_E = sh, s_zeta_raw = dw * P, s_bar_zeta = dw,
+    delta_coord = c(df * as.integer(data$n_closed), data$K - 1L, P - 1L)
   )
 }
 
@@ -934,6 +944,8 @@ draw_prior <- function(data) {
   }
   out$s_zeta_raw <- abs(stats::rnorm(dw * P))
   out$s_bar_zeta <- array(abs(stats::rnorm(dw, 0, data$prior_s_bar_zeta)), dw)
+  # WHY: size 0 in the reference forms, the only ones drawn here; it draws nothing.
+  out$delta_coord <- array(numeric(0), c(0L, K - 1L, P - 1L))
   out
 }
 
@@ -1080,7 +1092,8 @@ permute_v2 <- function(pars, data, party_perm, kd_perm) {
     tau_mu = pars$tau_mu, tau_mu_A = pars$tau_mu_A, tau_house = pars$tau_house, m_new = pars$m_new, s_new = pars$s_new,
     z_shock = p$z_shock[pp, , drop = FALSE], s_bar_E = pars$s_bar_E,
     # WHY: numeric(0)[pp] would be P NAs.
-    s_zeta_raw = if (length(p$s_zeta_raw)) p$s_zeta_raw[pp] else p$s_zeta_raw, s_bar_zeta = pars$s_bar_zeta
+    s_zeta_raw = if (length(p$s_zeta_raw)) p$s_zeta_raw[pp] else p$s_zeta_raw, s_bar_zeta = pars$s_bar_zeta,
+    delta_coord = array(numeric(0), c(0L, K - 1L, P - 1L))
   )
   ljac <- function(L) sum((P - 2:P) * log(diag(L)[2:P]))
   structure(list(pars = out_pars, data = out_data), ljac_L_Omega = ljac(L) - ljac(p$L_Omega))

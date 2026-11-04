@@ -370,7 +370,13 @@ test_that("Stan declares the parameters V2_CORE_PARS names, with its types, boun
   # per epoch then, one for every epoch with delta_walk = 0.
   expect_identical(V2_CORE_PARS$type[V2_CORE_PARS$name == "s_zeta_raw"], "vector<lower=0>[delta_walk * P]")
   expect_identical(V2_CORE_PARS$type[V2_CORE_PARS$name == "s_bar_zeta"], "array[delta_walk] real<lower=0>")
-  expect_identical(V2_CORE_PARS$type[V2_CORE_PARS$name == "delta_raw"], "array[1 + delta_walk * (n_epoch - 1)] matrix[K, P]")
+  expect_identical(
+    V2_CORE_PARS$type[V2_CORE_PARS$name == "delta_raw"], "array[1 + delta_walk * (n_epoch - 1) - delta_form * n_closed] matrix[K, P]"
+  )
+  # §6.7 held centred (delta_form = 1): each closed election's coordinates delta_e[2:K, 2:P],
+  # plain unconstrained matrices, and delta_raw then only the open epoch's zeta.
+  expect_identical(V2_CORE_PARS$type[V2_CORE_PARS$name == "delta_coord"], "array[delta_form * n_closed] matrix[K - 1, P - 1]")
+  expect_identical(utils::tail(V2_CORE_PARS$name, 1), "delta_coord")
 })
 
 test_that("the newcomer-pool reference: its mutant changes the density on every cell, and the identity under permutation holds", {

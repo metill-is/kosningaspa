@@ -455,17 +455,19 @@ V2_DRAW_VARIABLES <- c("votes_kd", "pi_nat_eday", "pi_latent_E", "y_rep_res")
 V2_PARAM_VARIABLES <- c(
   "sigma", "L_Omega", "tau_camp", "mu_phi", "sigma_phi", "log_phi", "log_phi_K", "log_kappa", "sigma_gamma", "mu",
   "tau_mu", "tau_mu_A", "tau_house", "m_new", "s_new", "s_bar_E", "mu_sd", "tau_sd", "s_delta0", "s_bar_zeta", "s_zeta",
-  "anchor_w"
+  "anchor_w", "delta_coord"
 )
 
 #' The switch that puts each switch-dependent variable of `V2_PARAM_VARIABLES` in the model:
 #' the epoch walk's scales (§6.4), the newcomer pool's mean and scale (§6.4), the shock's
-#' scale (§6.6), the δ walk's scales (§6.7) and the anchored walk's anchors (`walk_form = 1`,
-#' §6.9). Each is size 0, or absent, with its switch at 0.
+#' scale (§6.6), the δ walk's scales (§6.7), the anchored walk's anchors (`walk_form = 1`,
+#' §6.9) and the centred δ walk's coordinates at the closed elections (`delta_form = 1`, §6.7).
+#' Each is size 0, or absent, with its switch at 0.
 #' @export
 V2_PARAM_SWITCH <- c(
   tau_mu = "epoch_bias", tau_mu_A = "epoch_bias", tau_house = "epoch_bias", m_new = "newcomer_pool",
-  s_new = "newcomer_pool", s_bar_E = "shock", s_bar_zeta = "delta_walk", s_zeta = "delta_walk", anchor_w = "walk_form"
+  s_new = "newcomer_pool", s_bar_E = "shock", s_bar_zeta = "delta_walk", s_zeta = "delta_walk", anchor_w = "walk_form",
+  delta_coord = "delta_form"
 )
 
 #' The variables of `V2_PARAM_VARIABLES` in the model under `switches`.

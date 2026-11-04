@@ -24,6 +24,8 @@ SCALARS <- c("tau_camp", "mu_phi", "sigma_phi", "log_phi_K", "log_kappa", "sigma
 # and s_bar_zeta[1].
 ONE_ELEMENT <- c("tau_mu", "tau_mu_A", "tau_house", "m_new", "s_new", "s_bar_E", "s_bar_zeta")
 MATRICES <- c("L_Omega", "mu", "anchor_w")
+# The centred delta walk's coordinates, an array of matrices: three indices.
+ARRAYS <- "delta_coord"
 DRAW <- seq_len(16)
 
 # Element names of a parameter in Stan's (column-major) order.
@@ -34,6 +36,8 @@ elements <- function(v) {
     paste0(v, "[1]")
   } else if (v %in% MATRICES) {
     paste0(v, c("[1,1]", "[2,1]", "[1,2]"))
+  } else if (v %in% ARRAYS) {
+    paste0(v, c("[1,1,1]", "[2,1,1]", "[1,2,1]", "[1,1,2]"))
   } else {
     paste0(v, c("[1]", "[2]"))
   }
@@ -81,11 +85,12 @@ test_that("V2_PARAM_VARIABLES lists the core's and the switched parameters in pa
   expect_identical(V2_PARAM_VARIABLES, c(
     "sigma", "L_Omega", "tau_camp", "mu_phi", "sigma_phi", "log_phi", "log_phi_K", "log_kappa", "sigma_gamma", "mu",
     "tau_mu", "tau_mu_A", "tau_house", "m_new", "s_new", "s_bar_E", "mu_sd", "tau_sd", "s_delta0", "s_bar_zeta", "s_zeta",
-    "anchor_w"
+    "anchor_w", "delta_coord"
   ))
   expect_identical(V2_PARAM_SWITCH, c(
     tau_mu = "epoch_bias", tau_mu_A = "epoch_bias", tau_house = "epoch_bias", m_new = "newcomer_pool",
-    s_new = "newcomer_pool", s_bar_E = "shock", s_bar_zeta = "delta_walk", s_zeta = "delta_walk", anchor_w = "walk_form"
+    s_new = "newcomer_pool", s_bar_E = "shock", s_bar_zeta = "delta_walk", s_zeta = "delta_walk", anchor_w = "walk_form",
+    delta_coord = "delta_form"
   ))
   expect_identical(setdiff(V2_PARAM_VARIABLES, names(V2_PARAM_SWITCH)), CORE)
 })
@@ -212,6 +217,11 @@ test_that("param_draws holds the parameters the meta's switches put in the model
   pd <- extracted(synthetic_draws(c(with_walk, "s_zeta_raw", "delta_raw")), walked)$read$param_draws
   expect_identical(names(pd), c(".chain", ".iteration", ".draw", columns_of(with_walk)))
   expect_true(all(c("s_bar_zeta[1]", "s_zeta[1]") %in% names(pd)))
+  centred <- utils::modifyList(walked, list(switches = replace(walked$switches, "delta_form", 1L)))
+  with_coord <- c(with_walk, "delta_coord")
+  pd <- extracted(synthetic_draws(c(with_coord, "s_zeta_raw", "delta_raw")), centred)$read$param_draws
+  expect_identical(names(pd), c(".chain", ".iteration", ".draw", columns_of(with_coord)))
+  expect_true(all(c("delta_coord[2,1,1]", "delta_coord[1,1,2]") %in% names(pd)))
 })
 
 test_that("v2_extract reads every variable v2_variables() names for the meta's switches, and no other", {
@@ -240,6 +250,7 @@ test_that("v2_extract stops on a missing cell, a non-whole count, a missing para
   fails(synthetic_draws(drop = "tau_sd"), what = "tau_sd")
   walk <- utils::modifyList(META, list(switches = replace(SWITCHES, "walk_form", 1L)))
   fails(synthetic_draws(), walk, "no anchor_w")
+  fails(synthetic_draws(), utils::modifyList(META, list(switches = replace(SWITCHES, "delta_form", 1L))), "no delta_coord")
   for (f in c("party_order", "kjordaemi_levels", "closed_elections", "switches")) {
     fails(synthetic_draws(), META[setdiff(names(META), f)], paste("lacks", f))
   }

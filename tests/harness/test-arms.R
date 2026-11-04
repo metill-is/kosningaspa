@@ -91,23 +91,24 @@ test_that("v2_variables() names the forecast, the replicates and the parameters 
   expect_identical(v2_variables(switched(shock = 1L)), c(V2_GQ, append(CORE, "s_bar_E", after = match("mu", CORE))))
   expect_identical(v2_variables(switched(delta_walk = 1L)), c(V2_GQ, CORE, "s_bar_zeta", "s_zeta"))
   expect_identical(v2_variables(switched(walk_form = 1L)), c(V2_GQ, CORE, "anchor_w"))
-  expect_identical(v2_variables(switched(fundamentals = 1L, delta_form = 1L)), c(V2_GQ, CORE))
+  expect_identical(v2_variables(switched(delta_form = 1L)), c(V2_GQ, CORE, "delta_coord"))
+  expect_identical(v2_variables(switched(fundamentals = 1L)), c(V2_GQ, CORE))
   all_on <- do.call(switched, as.list(stats::setNames(rep(1L, length(V2_SWITCHES)), V2_SWITCHES)))
-  expect_length(v2_variables(all_on), length(V2_GQ) + 22)
+  expect_length(v2_variables(all_on), length(V2_GQ) + 23)
   expect_error(v2_variables(cfg_m0()[setdiff(names(cfg_m0()), "shock")]), "switches")
   expect_error(v2_variables(switched(shock = 2L)), "switches")
 })
 
-test_that("every variable v2_variables() names for v2s-m0, v2s-m1, v2s-m2, v2s-m3 and v2s-m4 is declared in Stan/forecast_v2.stan", {
+test_that("every variable v2_variables() names for v2s-m0, v2s-m1, v2s-m2, v2s-m3, v2s-m4 and v2s-p2 is declared in Stan/forecast_v2.stan", {
   skip_unless_slow()
   v <- cmdstanr::cmdstan_model(root(V2_STAN), compile = FALSE)$variables()
   declared <- c(names(v$parameters), names(v$transformed_parameters), names(v$generated_quantities))
-  for (a in c("v2s-m0", "v2s-m1", "v2s-m2", "v2s-m3", "v2s-m4")) {
+  for (a in c("v2s-m0", "v2s-m1", "v2s-m2", "v2s-m3", "v2s-m4", "v2s-p2")) {
     vars <- v2_variables(read_v2_config(root(arm(a)$config)))
     expect_true(all(vars %in% declared), info = paste(a, paste(setdiff(vars, declared), collapse = ", ")))
   }
   expect_true(all(c(
-    "tau_mu", "tau_mu_A", "tau_house", "m_new", "s_new", "z_shock", "s_bar_E", "s_zeta_raw", "s_bar_zeta"
+    "tau_mu", "tau_mu_A", "tau_house", "m_new", "s_new", "z_shock", "s_bar_E", "s_zeta_raw", "s_bar_zeta", "delta_coord"
   ) %in% names(v$parameters)))
   expect_true("s_zeta" %in% names(v$transformed_parameters))
   expect_true(all(V2_GQ %in% names(v$generated_quantities)))
@@ -164,11 +165,22 @@ test_that("v2s-m4's config is v2s-m3's with delta_walk = 1 and nothing else", {
   expect_identical(arm("v2s-m4")$role, "dev")
 })
 
+test_that("v2s-p2's config is v2s-m4's with delta_form = 1 and nothing else", {
+  m4 <- jsonlite::read_json(root(arm("v2s-m4")$config))
+  p2 <- jsonlite::read_json(root(arm("v2s-p2")$config))
+  expect_identical(m4$delta_form, 0L)
+  expect_identical(p2$delta_form, 1L)
+  expect_identical(c(p2$walk_form, p2$delta_walk), c(0L, 1L))
+  expect_identical(names(p2), names(m4))
+  expect_identical(utils::modifyList(p2, list(delta_form = 0L)), m4)
+  expect_identical(arm("v2s-p2")$role, "dev")
+})
+
 test_that("while P1's verdict stands (KEEP v2s-m0: the anchored walk is not adopted), every step config but v2s-p1 sets walk_form = 0", {
   # WHY: the steps after P1 build on the reference walk; a re-ruling that adopts the anchored
   # walk changes this test and the later step configs together.
   files <- Sys.glob(root("harness", "configs", "steps", "v2s-*.json"))
-  expect_true(all(root("harness", "configs", "steps", c("v2s-m1.json", "v2s-m2.json", "v2s-m3.json", "v2s-m4.json")) %in% files))
+  expect_true(all(root("harness", "configs", "steps", c("v2s-m1.json", "v2s-m2.json", "v2s-m3.json", "v2s-m4.json", "v2s-p2.json")) %in% files))
   for (f in files) {
     want <- if (basename(f) == "v2s-p1.json") 1L else 0L
     expect_identical(jsonlite::read_json(f)$walk_form, want, label = basename(f))

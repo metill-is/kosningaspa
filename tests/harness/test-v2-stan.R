@@ -118,7 +118,7 @@ test_that("v2s-m0: v2_methods stops on each unbuilt switch with CmdStan's text n
   skip_unless_slow()
   skip_unless_step("v2s-m0")
   d <- v2_test_cells(cfg_m0())$eve2024$data
-  for (sw in c("fundamentals", "delta_form")) {
+  for (sw in c("fundamentals")) {
     d1 <- d
     d1[[sw]] <- 1L
     expect_error(v2_methods(V2_STAN, d1), paste0("forecast_v2: switch ", sw, " = 1 is not built yet"), fixed = TRUE)
@@ -966,4 +966,123 @@ test_that("v2s-m4: a fit_values() point keeps s_bar_zeta as a one-element array,
   expect_identical(dim(r$pars$delta_raw), as.integer(c(d$n_epoch, d$K, d$P)))
   again <- gq_at(V2_STAN, d, r$pars)
   for (n in WALK_PARS) expect_equal(c(again$pars[[n]]), c(r$pars[[n]]), tolerance = 1e-12, label = n)
+})
+
+# Step v2s-p2, delta held centred at the closed elections (delta_form = 1, §6.7): at each
+# closed election e, delta_e in the coordinates D_e = delta_e[2:K, 2:P], the parties without
+# results non-centred and those with results centred, shifted per kjordaemi row and stored
+# relative to the result's kjordaemi log-share deviations; the open epoch non-centred. The
+# same model as v2s-m4's, which R/harness/v2_equivalence.R checks.
+P2_PARS <- c("delta_raw", "delta_coord")
+
+# The cell's data with delta held centred; nothing else in the data depends on the switch.
+p2_data <- function(d) {
+  d$delta_form <- 1L
+  d
+}
+
+# A point of the centred form on `d2` (p2_data()): a prior draw of v2s-m4's parameters at
+# `seed`, its delta_raw cut to the open epoch's zeta and delta_coord N(0, 0.3) draws; named
+# and ordered as v2_par_dims(d2).
+p2_point <- function(d2, seed) {
+  d0 <- d2
+  d0$delta_form <- 0L
+  pars <- v2_simulate(d0, seed = seed, observe = FALSE)$pars
+  dims <- v2_par_dims(d2)
+  pars$delta_raw <- pars$delta_raw[d2$n_epoch, , , drop = FALSE]
+  withr::with_seed(seed, pars$delta_coord <- array(stats::rnorm(prod(dims$delta_coord), 0, 0.3), dims$delta_coord))
+  pars[names(dims)]
+}
+
+# Each closed election's present coordinates (1..P - 1, party c + 1, with results there).
+p2_present <- function(d) {
+  idx <- matrix(as.integer(d$idx_res), d$n_closed, d$P)
+  lapply(seq_len(d$n_closed), \(e) sort(setdiff(idx[e, seq_len(d$n_rep_res[e])], 1L)) - 1L)
+}
+
+test_that("v2s-p2: transformed data refuses a centred delta it cannot build, naming the condition", {
+  skip_unless_slow()
+  skip_unless_step("v2s-p2")
+  d <- p2_data(v2_test_cells(cfg_m4())$eve2024$data)
+  d1 <- d
+  d1$delta_walk <- 0L
+  expect_error(v2_methods(V2_STAN, d1), "forecast_v2: delta_form = 1 needs delta_walk = 1", fixed = TRUE)
+  # WHY: party 1 missing from the second result's parties while its votes stay.
+  d1 <- d
+  rest <- setdiff(as.integer(d$idx_res[2, seq_len(d$n_rep_res[2])]), 1L)
+  d1$idx_res[2, ] <- c(rest, rep(0L, d$P - length(rest)))
+  d1$n_rep_res[2] <- length(rest)
+  expect_error(
+    v2_methods(V2_STAN, d1),
+    "forecast_v2: delta_form = 1 needs the coordinate party (index 1) among the parties with results at every closed election, but it is not at closed election 2",
+    fixed = TRUE
+  )
+  d1 <- d
+  d1$w[1, 1] <- 0
+  expect_error(v2_methods(V2_STAN, d1), "forecast_v2: delta_form = 1 needs w[e, 1] > 0 at every closed election e, but w[1, 1] = 0", fixed = TRUE)
+  d1 <- d
+  d1$w[3, ] <- d$w[3, ] * 1.001
+  expect_error(v2_methods(V2_STAN, d1), "forecast_v2: delta_form = 1 needs each closed election's w to sum to 1 within 1e-9, but row 3 of w sums to ", fixed = TRUE)
+  # WHY: the real weights sum to 1 only within rounding, about 1e-15, and must pass.
+  d1 <- d
+  d1$w[2, ] <- d$w[2, ] * (1 + 1e-12)
+  expect_no_error(v2_methods(V2_STAN, d1))
+})
+
+test_that("v2s-p2: delta_raw and delta_coord have v2_par_dims()' sizes, and the free size loses the gauge's n_closed (K + P - 1)", {
+  skip_unless_slow()
+  skip_unless_step("v2s-p2")
+  for (cell in v2_test_cells(cfg_m4())) {
+    d <- p2_data(cell$data)
+    m <- v2_methods(V2_STAN, d)
+    expect_identical(names(v2_model(V2_STAN)$variables()$parameters), V2_CORE_PARS$name)
+    dims <- v2_par_dims(d)
+    expect_identical(lapply(dims[P2_PARS], as.integer), list(
+      delta_raw = as.integer(c(1L, d$K, d$P)), delta_coord = as.integer(c(d$n_closed, d$K - 1L, d$P - 1L))
+    ))
+    sizes <- m$metadata()$stan_variable_sizes
+    expect_identical(lapply(sizes[P2_PARS], as.integer), lapply(dims[P2_PARS], as.integer))
+    expect_identical(as.integer(v2_par_dims(cell$data)$delta_coord), as.integer(c(0L, d$K - 1L, d$P - 1L)))
+    # WHY: M_e removes K + P - 1 directions of each closed election's zeta, which the centred
+    # coordinates do not hold.
+    expect_identical(as.numeric(n_unc(v2_methods(V2_STAN, cell$data)) - n_unc(m)), as.numeric(d$n_closed * (d$K + d$P - 1)))
+    pars <- p2_point(d, seed = 1)
+    back <- stan_pars(m, m$unconstrain_variables(pars))
+    for (n in P2_PARS) expect_equal(as.numeric(back[[n]]), c(pars[[n]]), tolerance = 1e-12, label = n)
+  }
+})
+
+test_that("v2s-p2: with the present coordinates at 0 each closed election's delta is at the result's kjordaemi log-share deviations, whatever the absent parties do", {
+  skip_unless_slow()
+  skip_unless_step("v2s-p2")
+  ref <- environment(v2_lp_ref)
+  for (cell in v2_test_cells(cfg_m4())) {
+    d <- p2_data(cell$data)
+    m <- v2_methods(V2_STAN, d)
+    K <- d$K
+    P <- d$P
+    delta_at <- function(pars) {
+      tp <- m$constrain_variables(m$unconstrain_variables(pars), transformed_parameters = TRUE, generated_quantities = FALSE)
+      array(tp$delta, c(d$n_epoch, K, P))
+    }
+    present <- p2_present(d)
+    pars <- p2_point(d, seed = 2)
+    for (e in seq_len(d$n_closed)) pars$delta_coord[e, , present[[e]]] <- 0
+    moved <- pars
+    for (e in seq_len(d$n_closed)) {
+      absent <- setdiff(seq_len(P - 1), present[[e]])
+      moved$delta_coord[e, , absent] <- pars$delta_coord[e, , absent] + 1
+    }
+    d0 <- delta_at(pars)
+    d1 <- delta_at(moved)
+    for (e in seq_len(d$n_closed)) {
+      S <- c(1L, present[[e]] + 1L)
+      # The result's kjordaemi log shares (+ 1/2 for a zero count), through M_e over its parties.
+      target <- ref$M_e(log(matrix(d$y_res[e, , ], K, P)[, S] + 0.5), d$w[e, ])
+      centred <- function(x) x[, S] - rowMeans(x[, S])
+      expect_equal(centred(matrix(d0[e, , ], K, P)), target, tolerance = 1e-12, label = paste("closed election", e))
+      expect_equal(centred(matrix(d1[e, , ], K, P)), target, tolerance = 1e-12, label = paste("moved, closed election", e))
+      if (length(S) < P) expect_gt(max(abs(d1[e, , -S] - d0[e, , -S])), 1e-6, label = paste("absent parties at closed election", e))
+    }
+  }
 })

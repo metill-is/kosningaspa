@@ -11,6 +11,7 @@ box::use(
 )
 
 P1_CONFIG <- "harness/configs/steps/v2s-p1.json"
+P2_CONFIG <- "harness/configs/steps/v2s-p2.json"
 
 # The script's output lines, with attribute `status` when it exits non-zero.
 run_equivalence <- function(args) {
@@ -122,8 +123,18 @@ test_that("check_reasons() fails a walk check on a negative control that is not 
     reasons_at(controls = c(ref_walk = 1, new_anchor = NA, new_bridge = 1e-13, new_forward = NA)),
     c("a negative control passes: new_bridge", "a negative control is not exercised: new_anchor, new_forward")
   )
-  # WHY: under the delta form (the plan's Task 13) the walk's Jacobian terms need not vary, so only a walk check fails on a control that is not exercised.
-  expect_identical(reasons_at(form = "delta", controls = controls), character(0))
+  # WHY: on a cell with one closed election (2017 eve) the delta form's mean and entrant terms cannot vary, so only a walk check fails on a control that is not exercised.
+  expect_identical(reasons_at(form = "delta", controls = c(ref_delta = 1, ref_unused = NA, new_delta_absent = 1)), character(0))
+  expect_identical(
+    reasons_at(form = "delta", controls = c(ref_delta = 1, ref_unused = 1e-13, new_delta_absent = NA)),
+    "a negative control passes: ref_unused"
+  )
+})
+
+test_that("the summary has one control column per log-Jacobian term of each form, before the reasons", {
+  controls <- paste0("control_", c("ref_walk", "new_anchor", "new_bridge", "new_forward", "ref_delta", "ref_unused", "new_delta_absent"))
+  expect_identical(EQUIVALENCE_SUMMARY[EQUIVALENCE_SUMMARY %in% controls], controls)
+  expect_identical(utils::tail(EQUIVALENCE_SUMMARY, length(controls) + 1), c(controls, "reasons"))
 })
 
 test_that("check_reasons() fails on fewer than 5 kept points of the main kind and judges no generated quantities then", {
@@ -163,9 +174,10 @@ test_that("the script refuses a bad command line before it compiles anything, an
     list(c(paste0("--config=", P1_CONFIG), "--form=walk", "--cell=2024-11-30", paste0("--out=", out)), "--cell must be <E>,<F>"),
     list(c(paste0("--config=", P1_CONFIG), "--form=centred", cell, paste0("--out=", out)), "--form must be walk, delta or both"),
     list(c(paste0("--config=", P1_CONFIG), "--form=walk", cell, paste0("--out=", missing_dir)), "--out must be a file in an existing directory"),
-    list(c(paste0("--config=", P1_CONFIG), "--form=delta", cell, paste0("--out=", out)), "only the walk form's map is built: --form=walk (the delta map needs the plan's Task 13)"),
-    list(c(paste0("--config=", P1_CONFIG), "--form=both", cell, paste0("--out=", out)), "only the walk form's map is built: --form=walk (the delta map needs the plan's Task 13)"),
+    list(c(paste0("--config=", P1_CONFIG), "--form=delta", cell, paste0("--out=", out)), "the config's delta_form is 0"),
+    list(c(paste0("--config=", P2_CONFIG), "--form=both", cell, paste0("--out=", out)), "--form=both is not built: P1 kept walk_form = 0"),
     list(c("--config=harness/configs/steps/v2s-m0.json", "--form=walk", cell, paste0("--out=", out)), "the config's walk_form is 0"),
+    list(c(paste0("--config=", P2_CONFIG), "--form=walk", cell, paste0("--out=", out)), "the config's walk_form is 0"),
     list(c(paste0("--config=", P1_CONFIG), "--form=walk", "--cell=2017-10-28,2017-10-27", paste0("--out=", out), "--n-off=5"), "a 2017 cell takes prior points only")
   )
   for (case in cases) {
@@ -256,4 +268,53 @@ test_that("v2s-p1: the anchored walk is the reference walk on 2024 eve under the
   expect_false(paste("coordinate party:", POLL_PARTIES[1]) %in% res)
   x <- utils::read.csv(out, colClasses = "character")
   expect_identical(unlist(x[1, c("E", "F", "order", "verdict")], use.names = FALSE), c("2024-11-30", "2024-11-29", "reversed", "PASS"))
+})
+
+# Step v2s-p2, delta held centred at the closed elections (delta_form = 1): the same model as
+# v2s-m4's non-centred delta walk.
+test_that("v2s-p2: the centred delta is the delta walk on 2024 eve", {
+  skip_unless_slow()
+  skip_unless_step("v2s-p2")
+  skip_without_snapshot()
+  out <- withr::local_tempfile(fileext = ".csv")
+  res <- run_equivalence(c(
+    paste0("--config=", P2_CONFIG), "--form=delta", "--cell=2024-11-30,2024-11-29", "--n=10", "--n-off=5", paste0("--out=", out)
+  ))
+  expect_null(attr(res, "status"), label = shown(res))
+  expect_match(res, "^EQUIV PASS", all = FALSE)
+  x <- utils::read.csv(out, colClasses = "character")
+  expect_identical(nrow(x), 1L)
+  expect_identical(unlist(x[1, c("E", "F", "order", "verdict", "form")], use.names = FALSE), c("2024-11-30", "2024-11-29", "default", "PASS", "delta"))
+  expect_identical(unlist(x[1, c("n_posterior", "n_off", "n_prior", "n_rejected", "n_outside", "n_one_sided")], use.names = FALSE), c("10", "5", "0", "0", "0", "0"))
+  # WHY: 2024 eve has absent parties at its first two closed elections and entrants at its second and third, so each term varies and its negative control is decisive.
+  expect_identical(unlist(x[1, paste0("control_", c("ref_delta", "ref_unused", "new_delta_absent"))], use.names = FALSE), rep("fails", 3))
+  expect_identical(unlist(x[1, paste0("control_", c("ref_walk", "new_anchor", "new_bridge", "new_forward"))], use.names = FALSE), rep("", 4))
+})
+
+test_that("v2s-p2: the check fails when the present block's Kronecker factors are swapped", {
+  skip_unless_slow()
+  skip_unless_step("v2s-p2")
+  skip_without_snapshot()
+  # The present block's conditional covariance (L_PrPr L_PrPr') x Psi on the column-major
+  # to_vector(D_Pr) has the factor kron(L_PrPr, L_Psi); swapped, it is a valid density of the
+  # same size, but not the delta walk's, so the constant moves between points.
+  stan <- readLines(root("Stan", "forecast_v2.stan"))
+  factor <- "kron(L_PrPr, L_Psi[e])"
+  hit <- grepl(factor, stan, fixed = TRUE)
+  expect_identical(sum(hit), 1L)
+  mutant <- file.path(withr::local_tempdir("v2-equivalence-mutant-"), "forecast_v2.stan")
+  writeLines(sub(factor, "kron(L_Psi[e], L_PrPr)", stan, fixed = TRUE), mutant)
+  out <- withr::local_tempfile(fileext = ".csv")
+  res <- run_equivalence(c(
+    paste0("--config=", P2_CONFIG), "--form=delta", "--cell=2024-11-30,2024-11-29", "--n=10", "--n-off=5",
+    paste0("--out=", out), paste0("--stan=", mutant)
+  ))
+  expect_identical(attr(res, "status"), 1L, label = shown(res))
+  expect_match(res, "^EQUIV FAIL", all = FALSE)
+  x <- utils::read.csv(out, colClasses = "character")
+  expect_identical(x$verdict, "FAIL")
+  # WHY: the FAIL must come from the density check alone, not an error: the path, the generated quantities and the points are as asked.
+  expect_match(x$reasons, "^constant range [^;]* is not below tol [^;]*$")
+  expect_lt(as.numeric(x$path_err), 1e-8)
+  expect_identical(unlist(x[1, c("n_posterior", "n_off", "n_rejected", "n_outside", "n_one_sided")], use.names = FALSE), c("10", "5", "0", "0", "0"))
 })
