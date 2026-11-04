@@ -287,7 +287,8 @@ Minutes, treedepth hits and ESS per 1,000 gradients are recorded, never a stop.
   rounds the second up to 1.0198) is above the scoring gate's 1.01. A `dev` arm is never
   scored.
 - **The minutes read high.** Other work shared the 10 cores while the fits ran. 2021 f180
-  finished at 12:05:02 (its `meta.json`) and 2024 eve at 12:30:13. Beside both fits ran:
+  finished at 12:05:02 and 2024 eve at 12:30:13 (each `meta.json`'s modification time). Beside
+  both fits ran:
   - single-file test runs (the reference, extract, escapes, data, arms, prior predictive and
     run-comparison tests), from about 11:47 to 11:52 and 12:03 to 12:05;
   - a scratch script that compiled `Stan/forecast_v2.stan` and ran three one-draw
@@ -384,10 +385,10 @@ JSON round-trip tests are in `tests/harness/test-v2-stan.R`, its reference tests
 `v2s-m2` lines of `harness/runs/v2-steps.txt`. They ran under `R/harness/queue.sh` with the
 run list `results/harness/logs/v2s-m2-runs.txt` (`harness/README.md`, Step checks). The queue
 started at 2026-10-29 13:52:11, and its preflight (the full slow suite) passed. Both fits
-started at 14:33:25. 2021 f180 finished at 15:02:45 and 2024 eve at 15:27:18 (each run's
-`meta.json`), both exited 0, and `queue.log` ends in `QUEUE FINISHED`. CmdStan 2.38.0,
-`max_treedepth` 12, 10 cores (`hw.ncpu`). The diagnostics table is
-`harness/v2/steps/v2s-m2.md`.
+started at 14:33:25. 2021 f180 finished at 15:02:45 and 2024 eve at 15:27:18 (`queue.log`'s
+start lines; each `meta.json`'s modification time), both exited 0, and `queue.log` ends in
+`QUEUE FINISHED`. CmdStan 2.38.0, `max_treedepth` 12, 10 cores (`hw.ncpu`). The diagnostics
+table is `harness/v2/steps/v2s-m2.md`.
 
 **Provenance.** Both fits ran at b0e4a69 on a clean tree (`meta.json`: `git_head` b0e4a69,
 `git_dirty` false), with `Stan/forecast_v2.stan` at sha256
@@ -1528,7 +1529,7 @@ rounded up and E-BFMI and ESS per 1,000 gradients down, as the diagnostics table
 
     Under `v2s-m4` it was τ_μ's (225.4) and log φ_K's (148.8).
 - **A reading of one seed, not a finding.** log φ_K stays the slowest saved column on both
-  cells, as under `v2s-m4` and `v2s-p2`. On this seed it mixes faster:
+  cells, as under every `v2s-m4` fit and `v2s-p2` on 2021 f180. On this seed it mixes faster:
   - bulk ESS 228.5 against 50.2 on 2024 eve, and 152.0 against 105.6 on 2021 f180;
   - R-hat 1.01041 against 1.06238, and 1.01615 against 1.03712.
 
