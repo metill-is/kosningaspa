@@ -1,7 +1,7 @@
 # Test fixtures for arm V2: its step configs, the 2024-eve cell and its Stan data, helpers
 # that each plant one fault in one table of an info_set(), stage 1's data and R reference
-# (reverse_labels() and the stage1_* functions), random_sigma() for the walk's covariance
-# algebra, and the comparison of Stan/forecast_v2.stan with the R reference
+# (reverse_labels(), the stage1_* functions and stage1_stub()), random_sigma() for the
+# walk's covariance algebra, and the comparison of Stan/forecast_v2.stan with the R reference
 # (skip_unless_step(), v2_test_cells(), lp_points(), stan_pars(), expect_lp_matches(),
 # expect_lp_rejects(), mutant_exercised(), bounded_at(), stan_block_decls()). The model
 # methods on V2's Stan files (v2_model(), v2_methods(), n_unc(), fixed_param_run(),
@@ -24,6 +24,7 @@ V2_M1_CONFIG <- file.path(project_root(), "harness", "configs", "steps", "v2s-m1
 V2_M2_CONFIG <- file.path(project_root(), "harness", "configs", "steps", "v2s-m2.json")
 V2_M3_CONFIG <- file.path(project_root(), "harness", "configs", "steps", "v2s-m3.json")
 V2_M4_CONFIG <- file.path(project_root(), "harness", "configs", "steps", "v2s-m4.json")
+V2_M5_CONFIG <- file.path(project_root(), "harness", "configs", "steps", "v2s-m5.json")
 
 # WHY: read_inputs() and v2_stan_data() take seconds, and the 2024-eve fixtures serve many tests.
 v2_cache <- new.env(parent = emptyenv())
@@ -59,6 +60,12 @@ cfg_m3 <- function() {
 cfg_m4 <- function() {
   box::use(R / harness / v2[read_v2_config])
   read_v2_config(V2_M4_CONFIG)
+}
+
+# Step v2s-m5's config: v2s-m4's with the fundamentals pseudo-observation (§6.5).
+cfg_m5 <- function() {
+  box::use(R / harness / v2[read_v2_config])
+  read_v2_config(V2_M5_CONFIG)
 }
 
 # A temporary copy of the m0 config with the named keys changed (NULL drops a key, a new
@@ -187,24 +194,41 @@ skip_unless_step <- function(step) {
 }
 
 # The three cells of the Stan lp tests, as list(data, n_post, n_off), built on first call in
-# the R session for each config, never when the helper is sourced: `data` is
+# the R session for each config and stage 1, never when the helper is sourced: `data` is
 # v2_stan_data()'s for `cfg` with walk_form and delta_form at 0, under a temporary root with
-# no freeze, so the 2017 cell is its pre-freeze form (draw_forecast = 0). The 2017 cell gets
-# prior points only.
-v2_test_cells <- function(cfg) {
+# no freeze, so the 2017 cell is its pre-freeze form (draw_forecast = 0, and with
+# fundamentals = 1 the placeholder's mu_f). The 2017 cell gets prior points only. With
+# fundamentals = 1 the other two cells take mu_f from `stage1`: NULL runs the real
+# stage1_mu_f(), which fits stage 1 with CmdStan unless its cache under
+# results_root()/stage1/ (git-ignored) holds the fit, so only slow tests may pass NULL there;
+# stage1_stub() gives a fast test fixed values with no fit.
+v2_test_cells <- function(cfg, stage1 = NULL) {
   box::use(R / harness / v2[v2_stan_data])
   skip_without_snapshot()
   cfg$walk_form <- 0L
   cfg$delta_form <- 0L
-  cached(paste("v2_test_cells", digest::digest(cfg)), {
+  key <- if (is.null(stage1)) "stage1_mu_f" else digest::digest(deparse(stage1))
+  cached(paste("v2_test_cells", digest::digest(cfg), key), {
     root <- withr::local_tempdir("v2-cells-root-")
-    build <- function(E, F) v2_stan_data(info_set(as.Date(E), as.Date(F), v2_inputs()), cfg, root = root)$data
+    build <- function(E, F) {
+      info <- info_set(as.Date(E), as.Date(F), v2_inputs())
+      if (is.null(stage1)) v2_stan_data(info, cfg, root = root)$data else v2_stan_data(info, cfg, stage1 = stage1, root = root)$data
+    }
     list(
       eve2024 = list(data = build("2024-11-30", "2024-11-29"), n_post = 20L, n_off = 10L),
       f180_2021 = list(data = build("2021-09-25", "2021-03-29"), n_post = 20L, n_off = 10L),
       eve2017 = list(data = build("2017-10-28", "2017-10-27"), n_post = 0L, n_off = 0L)
     )
   })
+}
+
+# A stand-in for stage1_mu_f() with fixed values and no fit: mu_f over the parties of S_f, in
+# that order, (i - (n + 1) / 2 + 1/4) / 4 for party i of n, so every value is away from 0 and
+# no two are equal.
+stage1_stub <- function(info, cfg, root) {
+  S_f <- info$fundamentals$S_f
+  n <- length(S_f)
+  list(mu_f = stats::setNames((seq_len(n) - (n + 1) / 2 + 0.25) / 4, S_f), sha256 = "stub", diagnostics = list())
 }
 
 # The core's parameters at unconstrained point `u` of the v2_methods() fit `m`, as

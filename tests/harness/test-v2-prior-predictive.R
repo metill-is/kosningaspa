@@ -5,8 +5,9 @@
 # report, never the committed one.
 box::use(
   R / harness / v2_prior_predictive[
-    band_exact, band_inside, band_median_ratio, band_q95, band_report, check_rows, held_at, in_band,
-    poll_sd_pp, reference_forms, ROWS, row_verdict, same_as, share_change, shock_sd, SUMMARY_FUNS, verdict_line
+    band_exact, band_inside, band_median_ratio, band_q95, band_report, check_rows, fund_weight_against, held_at, in_band,
+    poll_sd_pp, reference_forms, ROWS, row_verdict, same_as, share_change, shock_sd, SUMMARY_FUNS, SUMMARY_POOLED,
+    verdict_line
   ]
 )
 
@@ -426,4 +427,76 @@ test_that("the delta walk's row runs under its switch, with the band written bef
   left_out <- "leaving out M_e(\u03b4_{e\u22121}) \u2212 \u03b4_{e\u22121}, the change of kj\u00f6rd\u00e6mi weights"
   expect_true(all(vapply(c("4-year", "open epoch", left_out), \(x) grepl(x, row$label, fixed = TRUE), logical(1))))
   expect_false(grepl("re-centring", row$label, fixed = TRUE))
+})
+
+# A hand-built design for the fundamentals rows: P = 3 parties, S_f the first and third, three
+# epochs, and the spec's weight, days and campaign.
+FUND_DATA <- list(
+  P = 3L, n_epoch = 3L, fundamentals = 1L, sf_idx = c(1L, 3L), weight_time = 180, campaign_days = 47L, desired_weight = 0.22
+)
+
+# A draw for the fundamentals rows: independent walk scales sigma (L_Omega = I), tau_camp, and
+# the industry bias mu by epoch (3 x 3).
+fund_sim <- function(sigma, tau_camp, mu) list(pars = list(sigma = sigma, L_Omega = diag(3), tau_camp = tau_camp), truth = list(mu = mu))
+
+test_that("fund_weight is the pseudo-observation's weight against V_w for every party of S_f, w by construction", {
+  sigma <- c(0.01, 0.02, 0.015)
+  C <- diag(3) - 1 / 3
+  V_w <- diag(C %*% diag(sigma^2) %*% C)[c(1, 3)] * (133 + 47 * 1.5^2)
+  tau_f <- sqrt(V_w * 0.78 / 0.22)
+  sim <- fund_sim(sigma, 0.5, matrix(0, 3, 3))
+  expect_equal(SUMMARY_FUNS$fund_weight(sim, FUND_DATA, 1L), rep(0.22, 2), tolerance = 1e-12)
+  expect_equal(fund_weight_against(tau_f, V_w), rep(0.22, 2), tolerance = 1e-12)
+  # Against twice V_w the weight is 2w / (2w + 1 - w).
+  expect_equal(fund_weight_against(tau_f, 2 * V_w), rep(0.44 / 1.22, 2), tolerance = 1e-12)
+  expect_error(SUMMARY_FUNS$fund_weight(sim, utils::modifyList(FUND_DATA, list(fundamentals = 0L)), 1L), "fundamentals = 1")
+  expect_error(SUMMARY_FUNS$fund_weight(sim, utils::modifyList(FUND_DATA, list(sf_idx = 1L)), 1L), "two parties of S_f")
+})
+
+test_that("fund_weight_bias adds the variance over the draws of the open-epoch step over S_f, centred over S_f", {
+  sigma <- c(0.01, 0.02, 0.015)
+  C <- diag(3) - 1 / 3
+  V_w <- diag(C %*% diag(sigma^2) %*% C)[c(1, 3)] * (133 + 47 * 1.5^2)
+  tau_f <- sqrt(V_w * 0.78 / 0.22)
+  # The open epoch is 3: each draw's step mu[3, ] - mu[2, ] over parties 1 and 3, centred, is
+  # (-a, a) with a = 0.1, -0.2, 0.4; a common shift (party 2's value, 5) cancels.
+  steps <- c(0.1, -0.2, 0.4)
+  mus <- lapply(steps, \(a) rbind(c(0, 0, 0), c(0.3, 1, -0.3), c(0.3 - a + 5, 6, -0.3 + a + 5)))
+  draws <- lapply(seq_along(mus), \(i) SUMMARY_FUNS$fund_weight_bias(fund_sim(sigma, 0.5, mus[[i]]), FUND_DATA, i))
+  expect_equal(draws[[2]]$step, c(0.2, -0.2), tolerance = 1e-12)
+  V_bias <- rep(stats::var(steps), 2)
+  want <- c(t(rbind(fund_weight_against(tau_f, V_w + V_bias), fund_weight_against(tau_f, V_w + V_bias), fund_weight_against(tau_f, V_w + V_bias))))
+  expect_equal(SUMMARY_POOLED$fund_weight_bias(draws, FUND_DATA), want, tolerance = 1e-12)
+  expect_true(all(want > 0.22))
+  # With no step, or a step shared by S_f, nothing is added: the weight is w.
+  flat <- lapply(1:3, \(i) SUMMARY_FUNS$fund_weight_bias(fund_sim(sigma, 0.5, rbind(0, 0, c(i, 7, i))), FUND_DATA, i))
+  expect_equal(SUMMARY_POOLED$fund_weight_bias(flat, FUND_DATA), rep(0.22, 6), tolerance = 1e-12)
+})
+
+test_that("the fundamentals rows run under its switch: the construction checked to 1e-8, the bias weight reported with no band", {
+  rows <- ROWS[ROWS$step == "v2s-m5", ]
+  expect_identical(rows$summary, c("fund_weight", "fund_weight_bias"))
+  expect_identical(rows$kind, c("config", "config"))
+  expect_identical(rows$switch, c("fundamentals", "fundamentals"))
+  expect_identical(rows$band[[1]], band_exact(0.22, 1e-8))
+  expect_identical(rows$band[[2]], band_report())
+  expect_identical(rows$keys[[1]], c("desired_weight", "weight_time", "campaign_days"))
+  expect_identical(rows$keys[[2]], "prior_tau_mu")
+  expect_identical(names(SUMMARY_POOLED), "fund_weight_bias")
+  # The bias row's label says what 6.5's target leaves out.
+  expect_true(grepl("0.22 target leaves out", rows$label[2], fixed = TRUE))
+})
+
+test_that("on v2s-m5 the script checks the weight to 1e-8 and reports the bias weight, every other line as on v2s-m4", {
+  skip_without_snapshot()
+  before <- committed_sha()
+  m5 <- run_script(c(file.path("harness", "configs", "steps", "v2s-m5.json"), "20", withr::local_tempfile(fileext = ".md")))
+  expect_null(attr(m5, "status"), label = paste(m5, collapse = "\n"))
+  m4 <- run_script(c(file.path("harness", "configs", "steps", "v2s-m4.json"), "20", withr::local_tempfile(fileext = ".md")))
+  lines <- grep("^PRIOR ", m5, value = TRUE)
+  fund <- grepl(" fund_weight", lines, fixed = TRUE)
+  expect_identical(lines[!fund], grep("^PRIOR ", m4, value = TRUE))
+  expect_true(all(c("PRIOR PASS fund_weight/2024-eve/config", "PRIOR PASS fund_weight/2021-f180/config") %in% lines))
+  expect_identical(sum(startsWith(lines, "PRIOR REPORT fund_weight_bias/")), 2L)
+  expect_identical(committed_sha(), before)
 })

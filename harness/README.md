@@ -283,8 +283,13 @@ arm <arm>'s role <new>"; retire such a run (`retire_run()`) and refit it. A run 
 recorded role takes its arm's current role and is not refused. Plan 4 may add roles for the arms it scores. Every arm
 but `r0` runs `Stan/forecast_v2.stan` with its own config, an entry `v2_arm(config, role)`
 builds. `ARMS` holds `r0`, `v2s-m0`, `v2s-p1`, `v2s-m1` (the epoch bias), `v2s-m2` (the
-newcomer pool), `v2s-m3` (the election-day shock), `v2s-m4` (the δ walk) and `v2s-p2` (the δ walk
-held centred at the closed elections); each other V2 arm is registered as its config lands.
+newcomer pool), `v2s-m3` (the election-day shock), `v2s-m4` (the δ walk), `v2s-p2` (the δ walk
+held centred at the closed elections), `v2s-m5` (the fundamentals pseudo-observation), `v2`
+(`harness/configs/v2.json`, `v2s-m5`'s config: every component on, both forms at 0, as neither
+P-step's form was adopted) and its five ablations (`harness/configs/v2-*.json`, each `v2.json`
+with one component switch at 0: `epoch_bias`, `newcomer_pool`, `shock`, `delta_walk` or
+`fundamentals`; `tests/harness/test-arms.R` asserts each one's single differing field).
+`v2-perm` is registered as its config lands.
 
 **R0's extraction.** `r0_extract(draws, meta, dir)` (`R/harness/r0.R`) writes the four
 parquets of spec §5.5 from a fit's draws: `eday_kjordaemi` (`.chain`, `.iteration`,

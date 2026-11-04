@@ -1,8 +1,8 @@
 box::use(
   R / harness / v2[v2_stan_data],
   R / harness / v2_reference[
-    dirmult_lpmf, dirmult_rng, lkj_corr_cholesky_lpdf, lkj_corr_cholesky_rng, M_e, permute_v2,
-    V2_CORE_PARS, V2_MUTANTS, v2_lp_ref, v2_mutants, v2_natural, v2_par_dims, v2_simulate
+    chol_of_gram, dirmult_lpmf, dirmult_rng, fund_scales, lkj_corr_cholesky_lpdf, lkj_corr_cholesky_rng, M_e, permute_v2,
+    V2_CORE_PARS, V2_MUTANTS, v2_lp_ref, v2_mutants, v2_natural, v2_par_dims, v2_simulate, walk_rows, walk_scale
   ]
 )
 
@@ -138,14 +138,19 @@ test_that("the LKJ-Cholesky density integrates to 1, and its sampler has LKJ mar
   expect_lt(max(abs(colMeans(r^2) - v) / sqrt((m4 - v^2) / m)), 5)
   expect_equal(unique(round(diag(apply(R, 1:2, mean)), 12)), 1)
 })
-test_that("the reference refuses another form, an unbuilt switch, a missing parameter, an unreachable mutant and a delta walk's malformed gaps", {
+test_that("the reference refuses another form, fundamentals without S_f, a missing parameter, an unreachable mutant and a delta walk's malformed gaps", {
   d <- d_2024eve()
   pars <- v2_simulate(d, seed = 1, observe = FALSE)$pars
   expect_named(pars, V2_CORE_PARS$name)
   expect_setequal(v2_mutants(d), V2_MUTANTS$mutant[is.na(V2_MUTANTS$switch)])
   expect_false(any(c("previous_w", "next_epoch_delta") %in% v2_mutants(utils::modifyList(d, list(n_closed = 1L)))))
   expect_error(v2_lp_ref(pars, utils::modifyList(d, list(walk_form = 1L))), "reference forms")
-  expect_error(v2_lp_ref(pars, utils::modifyList(d, list(fundamentals = 1L))), "fundamentals")
+  # WHY: the m0 build has fundamentals = 0, so it carries no party of S_f to centre over.
+  expect_error(
+    v2_lp_ref(pars, utils::modifyList(d, list(fundamentals = 1L))),
+    "data$fundamentals = 1 needs at least two distinct parties of S_f (n_sf and sf_idx)",
+    fixed = TRUE
+  )
   expect_error(v2_simulate(utils::modifyList(d, list(delta_form = 1L)), seed = 1), "reference forms")
   expect_error(v2_lp_ref(pars, d, "no_such_mutant"), "mutant")
   expect_error(v2_lp_ref(pars[-1], d), "theta1")
@@ -786,4 +791,106 @@ test_that("on a toy input neither a newcomer's earlier zeta nor an offset shared
       if (leak) expect_gt(change, 1e-3) else expect_lt(change, 1e-12)
     }
   }
+})
+
+# The fundamentals pseudo-observation (step v2s-m5, §6.5, switch fundamentals), on the cells of
+# the Stan lp tests with stage1_stub()'s mu_f, so no stage-1 fit runs here.
+
+# The pseudo-observation's log density written out from §6.5 at a prior point `pars`: x the log
+# of the shock-free latent national share at E over S_f, centred; v each party's variance of a
+# walk step, read off the walk's own factor (coordinates 2:P step by L_walk z and party 1 by
+# minus their sum); V_w that variance over a stretch of weight_time - campaign_days days off the
+# campaign and campaign_days on it, through the walk's own step scales.
+fund_written_out <- function(pars, d) {
+  nat <- v2_natural(pars, d)
+  A <- which(d$exists[d$G, ] == 1L)
+  share <- numeric(d$P)
+  for (k in seq_len(d$K)) {
+    eta <- nat$theta[A, d$G] + nat$delta[d$n_epoch, k, A]
+    share[A] <- share[A] + d$w[d$n_epoch, k] * exp(eta) / sum(exp(eta))
+  }
+  sf <- c(d$sf_idx)
+  x <- log(share[sf])
+  L <- chol_of_gram(walk_rows(pars$sigma, matrix(pars$L_Omega, d$P, d$P)))
+  v <- c(sum(colSums(L)^2), rowSums(L^2))[sf]
+  stretch <- list(delta_days = c(d$weight_time - d$campaign_days, d$campaign_days), campaign = c(0L, 1L))
+  V_w <- v * sum(walk_scale(pars$tau_camp, stretch)^2)
+  sum(stats::dnorm(c(d$mu_f), x - mean(x), sqrt(V_w * (1 - d$desired_weight) / d$desired_weight), log = TRUE))
+}
+
+test_that("the fundamentals reference adds the term of 6.5 written out, and nothing with fundamentals = 0", {
+  cells <- v2_test_cells(cfg_m5(), stage1 = stage1_stub)
+  for (name in names(cells)) {
+    d <- cells[[name]]$data
+    expect_identical(as.integer(d$fundamentals), 1L)
+    d0 <- d
+    d0$fundamentals <- 0L
+    d4 <- v2_test_cells(cfg_m4())[[name]]$data
+    for (seed in 1:3) {
+      pars <- v2_simulate(d, seed = seed, observe = FALSE)$pars
+      lp <- v2_lp_ref(pars, d)
+      lp0 <- v2_lp_ref(pars, d0)
+      expect_equal(lp - lp0, fund_written_out(pars, d), tolerance = 1e-8, label = paste(name, "the term"))
+      # The switch off is v2s-m4 exactly: the same draw and the same density as its own build.
+      expect_identical(v2_simulate(d4, seed = seed, observe = FALSE)$pars, pars)
+      expect_identical(v2_lp_ref(pars, d4), lp0)
+    }
+  }
+})
+
+test_that("the fundamentals reference: its mutant changes the density on every cell, and the identity under permutation holds", {
+  # WHY: mean(log pi[S_f]) is negative for any share vector, so the uncentred mean shifts every
+  # party's, on every cell.
+  cells <- v2_test_cells(cfg_m5(), stage1 = stage1_stub)
+  for (name in names(cells)) {
+    d <- cells[[name]]$data
+    expect_true("fund_uncentred" %in% v2_mutants(d), label = name)
+    for (seed in 1:2) {
+      s <- v2_simulate(d, seed = seed, observe = FALSE)
+      lp <- v2_lp_ref(s$pars, d)
+      expect_gt(abs(v2_lp_ref(s$pars, d, "fund_uncentred") - lp), 1e-6, label = name)
+      p <- permute_v2(s$pars, d, rev(seq_len(d$P)), rev(seq_len(d$K)))
+      expect_identical(d$P + 1L - c(p$data$sf_idx), c(d$sf_idx))
+      expect_lt(abs(v2_lp_ref(p$pars, p$data) - lp - attr(p, "ljac_L_Omega")), 1e-10 + 4 * .Machine$double.eps * abs(lp))
+    }
+  }
+  fund <- V2_MUTANTS[V2_MUTANTS$switch %in% "fundamentals", ]
+  expect_identical(fund$mutant, "fund_uncentred")
+  expect_identical(fund$min_closed, 1L)
+})
+
+test_that("fund_scales(): tau_f gives the pseudo-observation the weight w against V_w, and each scale moves as 6.5 says", {
+  d <- list(P = 4L, sf_idx = c(1L, 3L, 4L), weight_time = 180, campaign_days = 47L, desired_weight = 0.22)
+  withr::with_seed(5, {
+    for (i in 1:5) {
+      sigma <- stats::runif(4, 0.005, 0.04)
+      L <- lkj_corr_cholesky_rng(4, 2)
+      tau <- stats::rexp(1)
+      sc <- fund_scales(sigma, L, tau, d)
+      C <- diag(4) - 1 / 4
+      expect_equal(sc$v, diag(C %*% diag(sigma) %*% tcrossprod(L) %*% diag(sigma) %*% C)[c(1, 3, 4)], tolerance = 1e-12)
+      expect_equal(sc$V_w, sc$v * (133 + 47 * (1 + tau)^2), tolerance = 1e-12)
+      prec <- 1 / sc$tau_f^2
+      expect_equal(prec / (prec + 1 / sc$V_w), rep(0.22, 3), tolerance = 1e-12)
+      # At tau_camp = 0 the campaign days count as any other.
+      expect_equal(fund_scales(sigma, L, 0, d)$V_w, sc$v * 180, tolerance = 1e-12)
+    }
+  })
+})
+
+test_that("v2_simulate() with observe redraws mu_f after every count, from N(x_c, tau_f), and leaves it alone without", {
+  ref <- environment(v2_lp_ref)
+  d <- v2_test_cells(cfg_m5(), stage1 = stage1_stub)$eve2024$data
+  d0 <- d
+  d0$fundamentals <- 0L
+  s <- v2_simulate(d, seed = 3)
+  s0 <- v2_simulate(d0, seed = 3)
+  for (f in c("y_nat", "y_kd", "y_res")) expect_identical(s$data[[f]], s0$data[[f]], label = f)
+  expect_identical(s0$data$mu_f, d$mu_f)
+  expect_identical(v2_simulate(d, seed = 3, observe = FALSE)$data$mu_f, d$mu_f)
+  expect_identical(dim(s$data$mu_f), dim(d$mu_f))
+  p <- ref$core_pars(s$pars, d)
+  f <- ref$fund_normal(p, ref$natural(p, d), d)
+  z <- (c(s$data$mu_f) - f$mean) / f$tau_f
+  expect_true(all(is.finite(z)) && all(abs(z) < 6) && all(z != (c(d$mu_f) - f$mean) / f$tau_f))
 })

@@ -7,7 +7,7 @@
 // gathers its parties by identity through the data's idx_* lists, never by position. The
 // data come from v2_stan_data() in R/harness/v2.R, and tests/harness/test-v2-stan.R tests
 // the log density against the R reference R/harness/v2_reference.R. A component switch or
-// a form other than 0 is refused until the step that builds it (Stan/CLAUDE.md, switches).
+// a form other than 0 was refused until the step that built it (Stan/CLAUDE.md, switches).
 // Step v2s-p1 builds walk_form = 1, the walk anchored at the closed elections (§6.9), the
 // same model as the reference walk; R/harness/v2_equivalence.R checks that it is. Step v2s-m1
 // builds epoch_bias = 1 (§6.4): the industry bias and each house's deviations walk across
@@ -24,6 +24,10 @@
 // election's delta_e in its coordinates delta_e[2:K, 2:P], the parties with results there
 // centred and stored relative to the result, the others non-centred, and the open epoch's
 // step non-centred as before; R/harness/v2_equivalence.R checks that it is the same model.
+// Step v2s-m5 builds fundamentals = 1 (§6.5): stage 1's mu_f enters as data, mu_f ~ N(x_c,
+// tau_f) over S_f, x_c the log of the latent national share at E (no shock) centred over S_f,
+// tau_f = sqrt(V_w (1 - w) / w) and V_w the walk's variance over weight_time days, the last
+// campaign_days of them in the campaign. It adds no parameter.
 functions {
   // The map M_e of §6.7 on a K x P matrix: subtract each party's w-weighted mean over the
   // kjordaemi, then centre each kjordaemi over the parties. The result's rows sum to 0 and
@@ -63,6 +67,16 @@ functions {
     matrix[P, P] CM = diag_pre_multiply(sigma, L_Omega);
     CM -= rep_matrix(rep_row_vector(1, P) * CM / P, P);
     return CM[2:P];
+  }
+
+  // diag(C Sigma C'), C = I - 11'/P and Sigma = diag(sigma) Omega diag(sigma): each party's
+  // variance of a walk step per unit Delta s^2 (§6.2), the row sums of squares of
+  // C diag(sigma) L_Omega.
+  vector walk_var(vector sigma, matrix L_Omega) {
+    int P = rows(sigma);
+    matrix[P, P] CM = diag_pre_multiply(sigma, L_Omega);
+    CM -= rep_matrix(rep_row_vector(1, P) * CM / P, P);
+    return rows_dot_self(CM);
   }
 
   // The Cholesky factor of (B B')[rs, rs], with a positive diagonal, as R' from the thin QR
@@ -194,9 +208,21 @@ data {
 }
 
 transformed data {
-  // The core, the anchored walk, the epoch bias, the newcomer pool, the shock, the delta walk
-  // and its centred form are built: each other switch is refused by name.
-  if (fundamentals) reject("forecast_v2: switch fundamentals = ", fundamentals, " is not built yet");
+  // The fundamentals pseudo-observation (fundamentals = 1, §6.5) centres log pi_nat,E over the
+  // parties of S_f, so it needs two of them at least, and each existing at E: outside A_E
+  // pi_nat,E is 0.
+  if (fundamentals) {
+    if (n_sf < 2) {
+      reject("forecast_v2: fundamentals = 1 needs at least two parties of S_f, since mu_f's mean is centred over them, but n_sf = ",
+             n_sf);
+    }
+    for (i in 1:n_sf) {
+      if (exists[G, sf_idx[i]] == 0) {
+        reject("forecast_v2: fundamentals = 1 needs every party of S_f to exist at E (exists[G, sf_idx[i]] = 1), but sf_idx[",
+               i, "] = ", sf_idx[i], " does not");
+      }
+    }
+  }
 
   // Decision 4: log c = cap - (cap - init) exp(u), so u = 0 is the init and c stays below the cap.
   real phi_cap = 20;
@@ -675,6 +701,21 @@ model {
     for (k in 1:K) {
       y_res[e, k, S] ~ dirichlet_multinomial(phi_K * softmax(theta[S, t] + eps[e, S]' + delta[de][k, S]'));
     }
+  }
+
+  // The fundamentals pseudo-observation (fundamentals = 1, §6.5): mu_f ~ N(x_c, tau_f), x = log
+  // pi_nat,E[S_f] with pi_nat,E the latent national share at E (theta_E with the open epoch's
+  // delta and w, over A_E, and no shock), x_c = x - mean(x), tau_f = sqrt(V_w (1 - w) / w) and
+  // V_w = diag(C Sigma C')[S_f] ((weight_time - campaign_days) + campaign_days (1 + tau_camp)^2),
+  // the walk's variance over weight_time days, the last campaign_days in the campaign: the
+  // weight w at weight_time days is relative to that variance alone. A likelihood term on data,
+  // so no Jacobian; tau_f depends on sigma, Omega and tau_camp, so the sampling statement keeps
+  // its -log tau_f.
+  if (fundamentals) {
+    vector[P] pi_E = national_share(theta[ : , G], delta[n_epoch], w[n_epoch], exist_idx[G, 1:n_exist[G]]);
+    vector[n_sf] x = log(pi_E[sf_idx]);
+    vector[n_sf] V_w = walk_var(sigma, L_Omega)[sf_idx] * ((weight_time - campaign_days) + campaign_days * square(1 + tau_camp));
+    mu_f ~ normal(x - mean(x), sqrt(V_w * (1 - desired_weight) / desired_weight));
   }
 
   // Priors (§6.10, Decisions 1, 2 and 4). A normal on a sum_to_zero_vector is on every element.

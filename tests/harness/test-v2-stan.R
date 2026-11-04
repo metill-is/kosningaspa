@@ -114,16 +114,6 @@ test_that("v2s-m0: v2_methods attaches methods to a 2017 cell without drawing a 
   m <- v2_methods(V2_STAN, v2_test_cells(cfg_m0())$eve2017$data)
   expect_false(any(c("votes_kd", "pi_nat_eday", "pi_latent_E") %in% m$metadata()$stan_variables))
 })
-test_that("v2s-m0: v2_methods stops on each unbuilt switch with CmdStan's text naming it", {
-  skip_unless_slow()
-  skip_unless_step("v2s-m0")
-  d <- v2_test_cells(cfg_m0())$eve2024$data
-  for (sw in c("fundamentals")) {
-    d1 <- d
-    d1[[sw]] <- 1L
-    expect_error(v2_methods(V2_STAN, d1), paste0("forecast_v2: switch ", sw, " = 1 is not built yet"), fixed = TRUE)
-  }
-})
 test_that("v2s-m0: votes_kd is Dirichlet-multinomial with concentration phi_K at a prior point", {
   skip_unless_slow()
   skip_unless_step("v2s-m0")
@@ -1088,5 +1078,156 @@ test_that("v2s-p2: with the present coordinates at 0 each closed election's delt
       expect_equal(centred(matrix(d1[e, , ], K, P)), target, tolerance = 1e-12, label = paste("moved, closed election", e))
       if (length(S) < P) expect_gt(max(abs(d1[e, , -S] - d0[e, , -S])), 1e-6, label = paste("absent parties at closed election", e))
     }
+  }
+})
+
+# Step v2s-m5, the fundamentals pseudo-observation (§6.5, switch fundamentals): mu_f ~
+# N(x_c, tau_f) over S_f, x the log of the latent national share at E without the shock
+# (theta_E with the open epoch's delta and w, over the parties existing at E), x_c = x -
+# mean(x), tau_f = sqrt(V_w (1 - w) / w) and V_w = diag(C Sigma C') [(weight_time -
+# campaign_days) + campaign_days (1 + tau_camp)^2]; no new parameter, on v2s-m4's delta walk.
+# mu_f is stage 1's on 2024 eve and 2021 f180, and the placeholder's zeros on 2017 eve before
+# the freeze. No test prints mu_f or the latent share: those compare by isTRUE().
+
+test_that("v2s-m5: the cells carry stage 1's mu_f over parties existing at E, and 2017 eve the placeholder's zeros", {
+  skip_unless_slow()
+  skip_unless_step("v2s-m5")
+  cells <- v2_test_cells(cfg_m5())
+  for (name in names(cells)) {
+    d <- cells[[name]]$data
+    expect_identical(as.integer(d$fundamentals), 1L, label = name)
+    expect_true(d$n_sf >= 2L && length(d$sf_idx) == d$n_sf && length(d$mu_f) == d$n_sf, label = name)
+    expect_true(all(d$exists[d$G, c(d$sf_idx)] == 1L), label = name)
+  }
+  expect_true(all(c(cells$eve2017$data$mu_f) == 0))
+  # WHY: the mutant fund_uncentred and the term's slope in mu_f need values away from 0 and unequal.
+  for (name in c("eve2024", "f180_2021")) {
+    mf <- c(cells[[name]]$data$mu_f)
+    expect_true(isTRUE(all(mf != 0) && !anyDuplicated(mf)), label = name)
+  }
+})
+
+test_that("v2s-m5: Stan's log density matches the reference up to a constant", {
+  skip_unless_slow()
+  skip_unless_step("v2s-m5")
+  hit <- expect_step_lp("v2s-m5", cfg_m5())
+  # WHY: mean(log pi[S_f]) is negative for any share vector, so the uncentred mean differs on
+  # every cell, 2017 eve's (whose mu_f is 0) included.
+  by_cell <- attr(hit, "by_cell")
+  expect_identical(names(by_cell), c("eve2024", "f180_2021", "eve2017"))
+  for (name in names(by_cell)) expect_true("fund_uncentred" %in% by_cell[[name]], label = name)
+  expect_true(all(c(
+    "delta_years_unscaled", "delta_entry_leak", "no_delta_restart", "shock_unscaled", "newcomer_mean_over_all",
+    "house_walk_from_first_poll", "newcomer_mean_of_mu1", "no_mu_restart", "no_house_restart"
+  ) %in% hit))
+})
+
+test_that("v2s-m5: with desired_weight 0.3, weight_time 150 and campaign_days 40, Stan's log density matches the reference, and the spec's literals would not", {
+  skip_unless_slow()
+  skip_unless_step("v2s-m5")
+  # WHY: the other cells run at 0.22, 180 and 47, where literals in Stan would pass. Stan reads
+  # campaign_days in this term alone (the campaign flags are the builder's), so the data can
+  # change it here without rebuilding.
+  d <- v2_test_cells(cfg_m5())$eve2024$data
+  d$desired_weight <- 0.3
+  d$weight_time <- 150
+  d$campaign_days <- 40L
+  m <- v2_methods(V2_STAN, d)
+  pts <- lp_points(m, d, n_post = 0, n_off = 0, n_prior = 10)
+  ok <- expect_lp_matches(m, d, pts)
+  literal <- function(...) utils::modifyList(d, list(...))
+  slips <- c(
+    literal_0.22 = lp_range(lp_gap(m, literal(desired_weight = 0.22), pts)$gap),
+    literal_180 = lp_range(lp_gap(m, literal(weight_time = 180), pts)$gap),
+    literal_47 = lp_range(lp_gap(m, literal(campaign_days = 47L), pts)$gap)
+  )
+  for (n in names(slips)) expect_gt(slips[[n]], 100 * ok$tol, label = n)
+  message(sprintf(
+    "v2s-m5 eve2024 at desired_weight 0.3, weight_time 150, campaign_days 40: %d prior points, lp constant range %.3g (tol %.3g); range / (100 tol): %s",
+    length(pts), ok$range, ok$tol, paste(sprintf("%s %.3g", names(slips), slips / (100 * ok$tol)), collapse = ", ")
+  ))
+})
+
+test_that("v2s-m5: the switch adds the reference's term to the density and no variable to the model", {
+  skip_unless_slow()
+  skip_unless_step("v2s-m5")
+  ref <- environment(v2_lp_ref)
+  for (name in names(v2_test_cells(cfg_m5()))) {
+    d <- v2_test_cells(cfg_m5())[[name]]$data
+    d0 <- d
+    d0$fundamentals <- 0L
+    m <- v2_methods(V2_STAN, d)
+    m0 <- v2_methods(V2_STAN, d0)
+    expect_identical(n_unc(m), n_unc(m0))
+    expect_identical(m$metadata()$stan_variable_sizes, m0$metadata()$stan_variable_sizes)
+    lp <- numeric(0)
+    gap <- numeric(0)
+    term <- numeric(0)
+    for (seed in 1:5) {
+      pars <- v2_simulate(d, seed = seed, observe = FALSE)$pars
+      u <- m$unconstrain_variables(pars)
+      p <- ref$core_pars(stan_pars(m, u), d)
+      term[seed] <- ref$fund_lp(p, ref$natural(p, d), d)
+      lp[seed] <- m$log_prob(u, jacobian = FALSE)
+      gap[seed] <- (lp[seed] - m0$log_prob(u, jacobian = FALSE)) - term[seed]
+    }
+    # WHY: one constant, the normal's -n_sf log(2 pi) / 2 if the sampling statement drops it;
+    # the tolerance is the lp tests', since the two log densities are sums of that size.
+    tol <- lp_tol(lp)
+    expect_lt(lp_range(gap), tol, label = paste(name, "range of the switch's lp change minus the reference's term"))
+    expect_gt(lp_range(term), 100 * tol, label = paste(name, "range of the term over the points"))
+    message(sprintf("v2s-m5 %s: the switch's lp change minus the term, range %.3g (tol %.3g), constant %.6g", name, lp_range(gap), tol, mean(gap)))
+  }
+})
+
+test_that("v2s-m5: transformed data refuses fundamentals it cannot evaluate, naming the condition, and reads them only under the switch", {
+  skip_unless_slow()
+  skip_unless_step("v2s-m5")
+  d <- v2_test_cells(cfg_m5())$eve2024$data
+  # A party of S_f that does not exist at E: its latent share there is 0.
+  absent <- d
+  absent$exists[d$G, d$sf_idx[2]] <- 0L
+  expect_error(
+    v2_methods(V2_STAN, absent),
+    paste0(
+      "forecast_v2: fundamentals = 1 needs every party of S_f to exist at E (exists[G, sf_idx[i]] = 1), but sf_idx[2] = ",
+      d$sf_idx[2], " does not"
+    ),
+    fixed = TRUE
+  )
+  one <- d
+  one$n_sf <- 1L
+  one$sf_idx <- array(d$sf_idx[1], 1)
+  one$mu_f <- array(d$mu_f[1], 1)
+  expect_error(
+    v2_methods(V2_STAN, one),
+    "forecast_v2: fundamentals = 1 needs at least two parties of S_f, since mu_f's mean is centred over them, but n_sf = 1",
+    fixed = TRUE
+  )
+  # With the switch off, the same data are never read.
+  for (x in list(absent, one)) {
+    x$fundamentals <- 0L
+    expect_no_error(v2_methods(V2_STAN, x))
+  }
+})
+
+test_that("v2s-m5: at a prior point the pseudo-observation's mean is the centred log of pi_latent_E over S_f", {
+  skip_unless_slow()
+  skip_unless_step("v2s-m5")
+  # WHY: §6.5's pi_nat,E is §6.8's shock-free latent share at E, which Stan writes as
+  # pi_latent_E; the reference computes it apart, so this ties the term's mean to Stan's own
+  # theta_E, open-epoch delta and weights.
+  ref <- environment(v2_lp_ref)
+  cells <- v2_test_cells(cfg_m5())
+  for (name in c("eve2024", "f180_2021")) {
+    d <- cells[[name]]$data
+    expect_identical(as.integer(d$draw_forecast), 1L)
+    r <- gq_at(V2_STAN, d, v2_simulate(d, seed = 4, observe = FALSE)$pars)
+    p <- ref$core_pars(r$pars, d)
+    nat <- ref$natural(p, d)
+    x <- log(c(r$gq$pi_latent_E)[c(d$sf_idx)])
+    expect_true(isTRUE(all.equal(ref$fund_normal(p, nat, d)$mean, x - mean(x), tolerance = 1e-10)), label = name)
+    expect_true(isTRUE(all.equal(ref$fund_normal(p, nat, d, uncentred = TRUE)$mean, x, tolerance = 1e-10)), label = name)
+    expect_false(isTRUE(all.equal(x - mean(x), x, tolerance = 1e-3)), label = name)
   }
 })

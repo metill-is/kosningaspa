@@ -42,8 +42,13 @@ v2_arm <- function(config, role) {
 #' `v2s-p1`, its walk anchored at the closed elections, `v2s-m1`, the core with the
 #' pollster biases drifting across epochs, `v2s-m2`, `v2s-m1` with the newcomer contrast's
 #' mean and scale estimated, `v2s-m3`, `v2s-m2` with the election-day shock, `v2s-m4`,
-#' `v2s-m3` with the kjördæmi deviations walking across elections, and `v2s-p2`, `v2s-m4`
-#' with those deviations held centred at the closed elections, are dev arms.
+#' `v2s-m3` with the kjördæmi deviations walking across elections, `v2s-p2`, `v2s-m4`
+#' with those deviations held centred at the closed elections, and `v2s-m5`, `v2s-m4` with
+#' the fundamentals pseudo-observation, are dev arms. `v2`, `v2s-m5`'s config with the
+#' adopted forms (both 0: neither P-step's form was adopted), is the candidate, and
+#' `v2-noepoch`, `v2-nonew`, `v2-noshock`, `v2-staticdelta` and `v2-nofund`, each `v2` with
+#' one component switch off (`epoch_bias`, `newcomer_pool`, `shock`, `delta_walk` and
+#' `fundamentals`), are its ablations.
 #' @export
 ARMS <- local({
   box::use(R / harness / r0[r0_stan_data, read_r0_config, r0_extract, R0_EXTRACT_VARIABLES])
@@ -63,7 +68,14 @@ ARMS <- local({
     `v2s-m2` = v2_arm("harness/configs/steps/v2s-m2.json", "dev"),
     `v2s-m3` = v2_arm("harness/configs/steps/v2s-m3.json", "dev"),
     `v2s-m4` = v2_arm("harness/configs/steps/v2s-m4.json", "dev"),
-    `v2s-p2` = v2_arm("harness/configs/steps/v2s-p2.json", "dev")
+    `v2s-p2` = v2_arm("harness/configs/steps/v2s-p2.json", "dev"),
+    `v2s-m5` = v2_arm("harness/configs/steps/v2s-m5.json", "dev"),
+    v2 = v2_arm("harness/configs/v2.json", "candidate"),
+    `v2-noepoch` = v2_arm("harness/configs/v2-noepoch.json", "ablation"),
+    `v2-nonew` = v2_arm("harness/configs/v2-nonew.json", "ablation"),
+    `v2-noshock` = v2_arm("harness/configs/v2-noshock.json", "ablation"),
+    `v2-staticdelta` = v2_arm("harness/configs/v2-staticdelta.json", "ablation"),
+    `v2-nofund` = v2_arm("harness/configs/v2-nofund.json", "ablation")
   )
 })
 

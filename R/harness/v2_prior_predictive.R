@@ -76,6 +76,17 @@
 #     an epoch M_e removes the walk's −c_{e−1} 1ᵀ, so a change δ_e − δ_{e−1} is this step plus
 #     M_e(δ_{e−1}) − δ_{e−1}, the change of kjördæmi weights, which this row leaves out.
 #     Coordinate 1's own scale is s_zeta_raw[1].
+#   - fund_weight and fund_weight_bias (step v2s-m5, switch fundamentals): no composition, and
+#     not in pp. The fundamentals pseudo-observation's weight (§6.5) for each party p of S_f
+#     (the data's sf_idx; prior draws never read μ_f, so the placeholder's suffices), the
+#     parties pooled: (1/τ_f,p²) / (1/τ_f,p² + 1/V), with τ_f and V_w,p from the draw's σ, L_Ω
+#     and τ_camp (fund_scales(), the reference's code). fund_weight takes V = V_w,p, the walk's
+#     variance over weight_time days, where the weight is `desired_weight` by construction: a
+#     check of the code, not of the model. fund_weight_bias takes V = V_w,p + V_bias,p, V_bias,p
+#     the variance over the cell's prior draws of the industry bias's open-epoch step
+#     μ_open,p − μ_{open−1},p (v2_natural()'s μ), over S_f and centred over S_f: the open-epoch
+#     bias uncertainty that §6.5's 0.22 target leaves out. It needs every draw, so its per-draw
+#     values are combined by SUMMARY_POOLED.
 #
 # The bands, each built by its constructor and checked by in_band():
 #   band_inside(lo, hi)                      the 5% quantile at least lo, the 95% at most hi
@@ -97,7 +108,8 @@
 # mistuned one, and is no tuning target.
 #
 # Later steps append their rows to ROWS (keyed by summary and step; a row with a switch, one
-# of V2_SWITCHES, runs only when the config turns it on) and their summaries to SUMMARY_FUNS.
+# of V2_SWITCHES, runs only when the config turns it on) and their summaries to SUMMARY_FUNS;
+# a summary that needs every draw adds the function that combines them to SUMMARY_POOLED.
 if (is.null(box::name())) {
   if (!isTRUE(l10n_info()[["UTF-8"]])) {
     stop("v2_prior_predictive.R needs a UTF-8 locale: run under LC_ALL=en_US.UTF-8", call. = FALSE)
@@ -110,7 +122,7 @@ box::use(
   R / harness / constants[harness_path, project_root, TARGETS],
   R / harness / info_set[info_set, read_inputs],
   R / harness / v2[read_v2_config, shock_scaling, stage1_placeholder, V2_SWITCHES, v2_stan_data],
-  R / harness / v2_reference[M_e, v2_simulate]
+  R / harness / v2_reference[fund_scales, M_e, v2_simulate]
 )
 
 #' The share of the party whose change the composition summaries read, the poll size of
@@ -195,9 +207,29 @@ shock_row <- function(sim, data, seed, share) {
 #' @export
 poll_sd_pp <- function(phi, s = SHARE, n = POLL_N) 100 * sqrt(s * (1 - s) / n * (n + phi) / (1 + phi))
 
+#' The fundamentals pseudo-observation's weight (§6.5) against the variance `V` for each party
+#' of S_f: (1/τ_f²) / (1/τ_f² + 1/V).
+#' @param tau_f the pseudo-observation's sds, one per party of S_f
+#' @param V the variances it is weighed against, as long as `tau_f`
+#' @return a numeric vector as long as `tau_f`
+#' @export
+fund_weight_against <- function(tau_f, V) {
+  prec <- 1 / tau_f^2
+  prec / (prec + 1 / V)
+}
+
+#' `fund_scales()` at a draw's σ, L_Ω and τ_camp, after checking the data hold S_f.
+fund_draw_scales <- function(sim, data) {
+  if (!identical(as.integer(data$fundamentals), 1L) || length(data$sf_idx) < 2) {
+    stop("prior predictive: the fundamentals rows need fundamentals = 1 and at least two parties of S_f", call. = FALSE)
+  }
+  fund_scales(sim$pars$sigma, sim$pars$L_Omega, sim$pars$tau_camp, data)
+}
+
 #' The summaries, each a function of a `v2_simulate()` draw `sim`, its `data` and a `seed`
 #' for any further randomness, returning the draw's values in pp (one per house,
-#' kjördæmi, epoch step or newcomer for a pooled summary). The header comment says which coordinate each reads.
+#' kjördæmi, epoch step or newcomer for a pooled summary), or, for a summary of
+#' `SUMMARY_POOLED`, what its pooling function reads. The header comment says which coordinate each reads.
 #' @export
 SUMMARY_FUNS <- list(
   house_d = function(sim, data, seed) {
@@ -242,6 +274,30 @@ SUMMARY_FUNS <- list(
     s_zeta <- as.numeric(sim$pars$s_bar_zeta) * as.numeric(sim$pars$s_zeta_raw)
     x <- sqrt(DELTA_GAP_YEARS / data$delta_years_bar) * zeta * matrix(s_zeta, data$K, data$P, byrow = TRUE)
     apply(M_e(x, data$w[data$n_epoch, ]), 1, share_change)
+  },
+  fund_weight = function(sim, data, seed) {
+    sc <- fund_draw_scales(sim, data)
+    fund_weight_against(sc$tau_f, sc$V_w)
+  },
+  fund_weight_bias = function(sim, data, seed) {
+    sc <- fund_draw_scales(sim, data)
+    mu <- sim$truth$mu
+    step <- mu[data$n_epoch, c(data$sf_idx)] - mu[data$n_epoch - 1L, c(data$sf_idx)]
+    list(tau_f = sc$tau_f, V_w = sc$V_w, step = step - mean(step))
+  }
+)
+
+#' The summaries whose values need every draw, by name: each takes the list of its
+#' `SUMMARY_FUNS` results over the draws (one per draw, in seed order) and the data, and
+#' returns the row's values. `fund_weight_bias`: V_bias,p is the variance over the draws of
+#' the centred open-epoch step, and each draw's value for party p is
+#' `fund_weight_against(tau_f, V_w + V_bias)`, draw by draw and party by party.
+#' @export
+SUMMARY_POOLED <- list(
+  fund_weight_bias = function(draws, data) {
+    part <- function(n) do.call(rbind, lapply(draws, `[[`, n))
+    V_bias <- apply(part("step"), 2, stats::var)
+    c(t(fund_weight_against(part("tau_f"), part("V_w") + matrix(V_bias, length(draws), length(V_bias), byrow = TRUE))))
   }
 )
 
@@ -354,6 +410,7 @@ check_rows <- function(rows) {
   sw <- rows$switch[!is.na(rows$switch)]
   if (!all(sw %in% V2_SWITCHES)) bad("switch not in V2_SWITCHES: ", paste(setdiff(sw, V2_SWITCHES), collapse = ", "))
   if (!all(rows$summary %in% names(SUMMARY_FUNS))) bad("summary not in SUMMARY_FUNS: ", paste(setdiff(rows$summary, names(SUMMARY_FUNS)), collapse = ", "))
+  if (!all(names(SUMMARY_POOLED) %in% names(SUMMARY_FUNS))) bad("a SUMMARY_POOLED summary not in SUMMARY_FUNS")
   types <- vapply(rows$band, \(b) if (is.list(b) && is.character(b$type)) b$type else "", "")
   known <- c("inside", "q95", "median_ratio", "exact", "report")
   if (!all(types %in% known)) bad("unknown band type: ", paste(setdiff(types, known), collapse = ", "))
@@ -377,7 +434,10 @@ check_rows <- function(rows) {
 #' shock's (step v2s-m3, switch `shock`): its sd on a 20% and on a 5% party, each median
 #' within [0.5×, 2×] of §6.10's 1.6 and 0.95 pp, written before any fit of that step. The δ
 #' walk's (step v2s-m4, switch `delta_walk`): the change in a 20% party's kjördæmi deviation
-#' over a 4-year gap, its band written before any fit of that step.
+#' over a 4-year gap, its band written before any fit of that step. The fundamentals
+#' pseudo-observation's (step v2s-m5, switch `fundamentals`): its weight against the walk's
+#' 180-day variance, `desired_weight` by construction and checked to 1e-8, and the same weight
+#' with the open-epoch bias's variance added, reported with no band.
 #' @export
 ROWS <- check_rows(dplyr::bind_rows(
   summary_rows(
@@ -464,6 +524,25 @@ ROWS <- check_rows(dplyr::bind_rows(
       "leaving out M_e(\u03b4_{e\u22121}) \u2212 \u03b4_{e\u22121}, the change of kj\u00f6rd\u00e6mi weights"
     ),
     "prior_s_bar_zeta", band_inside(-15, 15)
+  ),
+  summary_rows(
+    "fund_weight", "v2s-m5", "fundamentals",
+    paste0(
+      "The fundamentals pseudo-observation's weight against the walk's 180-day variance, for every party of S_f ",
+      "(a weight, not pp): (1/\u03c4_f\u00b2) / (1/\u03c4_f\u00b2 + 1/V_w), \u03c4_f = \u221a(V_w (1 \u2212 w) / w), ",
+      "V_w = diag(C\u03a3C\u1d40) [(weight_time \u2212 campaign_days) + campaign_days (1 + \u03c4_camp)\u00b2]: ",
+      "w by construction, a check of the code"
+    ),
+    c("desired_weight", "weight_time", "campaign_days"), band_exact(0.22, 1e-8)
+  ),
+  summary_rows(
+    "fund_weight_bias", "v2s-m5", "fundamentals",
+    paste0(
+      "The same weight with V_w + V_bias in place of V_w, for every party of S_f (a weight, not pp): V_bias the variance ",
+      "over the prior draws of the industry bias's open-epoch step \u03bc_open \u2212 \u03bc_{open\u22121}, over S_f and ",
+      "centred over S_f, which \u00a76.5's 0.22 target leaves out"
+    ),
+    "prior_tau_mu", band_report()
   )
 ))
 
@@ -544,7 +623,10 @@ cell_values <- function(rows, data, n_draws, cell) {
       sim <- v2_simulate(d, seed = SEED + i, observe = FALSE)
       for (m in seq_along(j)) vals[[m]][[i]] <- SUMMARY_FUNS[[rows$summary[j[m]]]](sim, d, SEED_AUX + i)
     }
-    out[j] <- lapply(vals, unlist)
+    out[j] <- lapply(seq_along(j), \(m) {
+      pooled <- SUMMARY_POOLED[[rows$summary[j[m]]]]
+      if (is.null(pooled)) unlist(vals[[m]]) else pooled(vals[[m]], d)
+    })
     cat(sprintf("%s, %s: %d prior draws in %.1f s\n", cell, v, n_draws, proc.time()[["elapsed"]] - start))
   }
   out

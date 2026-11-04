@@ -173,6 +173,21 @@ test_that("a 2017 cell under a sealed freeze draws a forecast and calls stage 1"
   expect_identical(b$meta$party_order[b$data$sf_idx], S_f)
   expect_identical(c(b$data$mu_f), seq_along(S_f) / 10)
 })
+test_that("with fundamentals = 0 the builder never calls stage 1, on the cells where stage 1 runs", {
+  skip_without_snapshot()
+  stop_stage1 <- \(...) stop("stage 1 called")
+  for (cell in list(c("2024-11-30", "2024-11-29"), c("2021-09-25", "2021-03-29"))) {
+    info <- info_set(as.Date(cell[1]), as.Date(cell[2]), v2_inputs())
+    b <- v2_stan_data(info, cfg_m4(), stage1 = stop_stage1, root = withr::local_tempdir())
+    expect_identical(b$data$fundamentals, 0L)
+    expect_identical(b$data$n_sf, 0L)
+    expect_length(b$data$sf_idx, 0)
+    expect_length(b$data$mu_f, 0)
+    expect_null(b$meta$stage1_sha256)
+    # The power check: on the same cell with fundamentals = 1 the stub fires.
+    expect_error(v2_stan_data(info, cfg_m5(), stage1 = stop_stage1, root = withr::local_tempdir()), "stage 1 called")
+  }
+})
 
 test_that("every one-dimensional field is a JSON array, even of length 1, as CmdStan reads it", {
   skip_without_snapshot()

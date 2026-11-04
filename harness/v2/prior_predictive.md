@@ -2,7 +2,7 @@
 
 Written by `LC_ALL=en_US.UTF-8 Rscript R/harness/v2_prior_predictive.R <config> [n_draws]`. Prior draws only (`v2_simulate(observe = FALSE)`): nothing is fitted and no forecast is computed.
 
-- Config: `harness/configs/steps/v2s-m4.json` (sha256 `2a950600e6274b0201369e41aa9b7353d6ceca06c2c01f1f2f28a625b243b3e6`)
+- Config: `harness/configs/steps/v2s-m5.json` (sha256 `f77b187d21a634c355cf888819405bfc1a385f52376259fcba988efbce65a0df`)
 - Prior draws: 1000 per cell and row, seeds 6001 to 7000 (the walk, shock and δ-step rows' z: seeds 7000001 to 7001000)
 - Cell 2024-eve (E 2024-11-30, F 2024-11-29): P 10 parties, H 6 houses, K 6 kjördæmi, J 9 kjördæmi polls, 4 epochs
 - Cell 2021-f180 (E 2021-09-25, F 2021-03-29): P 10 parties, H 5 houses, K 6 kjördæmi, J 1 kjördæmi polls, 3 epochs
@@ -22,6 +22,8 @@ Written by `LC_ALL=en_US.UTF-8 Rscript R/harness/v2_prior_predictive.R <config> 
 - **shock_sd_20** (step v2s-m3, switch `shock`): The election-day shock's sd on a 20% party: given the draw's s̄_E, the sd of its change over 200 draws of z, on the composition (20%, 80% / (P − 1), …), with ε = C(s̄_E d ⊙ z) and each d = √(min(0.2 / π, 10)) of that composition (s̄_E ~ half-N(0, `prior_s_bar_E`)). Band: median in [0.5, 2] × 1.6.
 - **shock_sd_05** (step v2s-m3, switch `shock`): The election-day shock's sd on a 5% party: given the draw's s̄_E, the sd of its change over 200 draws of z, on the composition (5%, 95% / (P − 1), …), with ε = C(s̄_E d ⊙ z) and each d = √(min(0.2 / π, 10)) of that composition (s̄_E ~ half-N(0, `prior_s_bar_E`)). Band: median in [0.5, 2] × 0.95.
 - **delta_step_4y** (step v2s-m4, switch `delta_walk`): A 20% party's change in its kjördæmi deviation over a 4-year gap: the walk's step M_e(√(4 / Δ̄) s_ζ ⊙ ζ) on the open epoch's weights, s_ζ = s̄_ζ s_zeta_raw (s̄_ζ ~ half-N(0, `prior_s_bar_zeta`), s_zeta_raw ~ half-N(0, 1)), leaving out M_e(δ_{e−1}) − δ_{e−1}, the change of kjördæmi weights. Band: [5%, 95%] inside [-15, 15].
+- **fund_weight** (step v2s-m5, switch `fundamentals`): The fundamentals pseudo-observation's weight against the walk's 180-day variance, for every party of S_f (a weight, not pp): (1/τ_f²) / (1/τ_f² + 1/V_w), τ_f = √(V_w (1 − w) / w), V_w = diag(CΣCᵀ) [(weight_time − campaign_days) + campaign_days (1 + τ_camp)²]: w by construction, a check of the code. Band: every draw within 1e-08 of 0.22.
+- **fund_weight_bias** (step v2s-m5, switch `fundamentals`): The same weight with V_w + V_bias in place of V_w, for every party of S_f (a weight, not pp): V_bias the variance over the prior draws of the industry bias's open-epoch step μ_open − μ_{open−1}, over S_f and centred over S_f, which §6.5's 0.22 target leaves out. Band: none (reported).
 
 ## Results
 
@@ -55,6 +57,10 @@ Quantiles in pp over the prior draws (`Values`: draws × houses, kjördæmi, epo
 | shock_sd_05 | v2s-m3 | config | `prior_s_bar_E` = 0.15 | 2021-f180 | 1000 | 0.10 | 0.94 | 3.27 | median in [0.5, 2] × 0.95 | PASS |
 | delta_step_4y | v2s-m4 | config | `prior_s_bar_zeta` = 0.2 | 2024-eve | 6000 | -4.69 | -0.05 | 4.18 | [5%, 95%] inside [-15, 15] | PASS |
 | delta_step_4y | v2s-m4 | config | `prior_s_bar_zeta` = 0.2 | 2021-f180 | 6000 | -4.13 | -0.05 | 4.13 | [5%, 95%] inside [-15, 15] | PASS |
+| fund_weight | v2s-m5 | config | `desired_weight` = 0.22, `weight_time` = 180, `campaign_days` = 47 | 2024-eve | 9000 | 0.22 | 0.22 | 0.22 | every draw within 1e-08 of 0.22 | PASS |
+| fund_weight | v2s-m5 | config | `desired_weight` = 0.22, `weight_time` = 180, `campaign_days` = 47 | 2021-f180 | 8000 | 0.22 | 0.22 | 0.22 | every draw within 1e-08 of 0.22 | PASS |
+| fund_weight_bias | v2s-m5 | config | `prior_tau_mu` = 0.1 | 2024-eve | 9000 | 0.22 | 0.24 | 0.33 | none (reported) | REPORT |
+| fund_weight_bias | v2s-m5 | config | `prior_tau_mu` = 0.1 | 2021-f180 | 8000 | 0.22 | 0.23 | 0.32 | none (reported) | REPORT |
 
 Skipped, as the config holds their values: house_d comparison prior_rate_sigma_gamma=1 (§6.10); industry_mu1 comparison prior_sd_mu1=1 (§6.10); poll_sd comparison prior_mu_phi=6.90776 (proposal 1).
 
@@ -87,6 +93,10 @@ PRIOR PASS shock_sd_05/2024-eve/config
 PRIOR PASS shock_sd_05/2021-f180/config
 PRIOR PASS delta_step_4y/2024-eve/config
 PRIOR PASS delta_step_4y/2021-f180/config
+PRIOR PASS fund_weight/2024-eve/config
+PRIOR PASS fund_weight/2021-f180/config
+PRIOR REPORT fund_weight_bias/2024-eve/config 0.22 0.24 0.33
+PRIOR REPORT fund_weight_bias/2021-f180/config 0.22 0.23 0.32
 ```
 
 ## Reading the verdicts
@@ -95,4 +105,5 @@ PRIOR PASS delta_step_4y/2021-f180/config
 - **WIDE**: a config row of a bias whose prior the config holds at §6.10's value, out of its band. §6.10 fixes that prior, so the row goes to Brynjólfur as information and does not stop the script.
 - **FAIL (stops)**: a config row out of its band. The script stops after writing this report.
 - **FAIL (comparison)**: a comparison row out of its band, reported as information; it never stops the script.
+- **REPORT**: a row with no band, reported as information; it never stops the script.
 - A band catches a broken prior (a wrong scale, unit or sign), not a mistuned one. It is wide on purpose, and no band is a tuning target: the quantiles themselves are the result.

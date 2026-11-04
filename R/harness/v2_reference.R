@@ -1,7 +1,8 @@
 # Arm V2's R reference for the core (spec §6.2–§6.7 in the reference forms) and the components
 # built so far (step v2s-m1's epoch bias, §6.4, switch epoch_bias; step v2s-m2's newcomer
 # pooling, §6.4, switch newcomer_pool; step v2s-m3's election-day shock, §6.6, switch shock;
-# step v2s-m4's δ walk across elections, §6.7, switch delta_walk), written from the spec and
+# step v2s-m4's δ walk across elections, §6.7, switch delta_walk; step v2s-m5's fundamentals
+# pseudo-observation, §6.5, switch fundamentals), written from the spec and
 # never from Stan/forecast_v2.stan, so that the Stan file is tested against an independent
 # oracle: the log density that log_prob(u, jacobian = FALSE) evaluates, a prior simulator, the
 # kjördæmi map M_e, the failure modes the tests use as mutants, and the map of a point and its
@@ -113,21 +114,27 @@ V2_CORE_PARS <- tibble::tibble(
 #'   previous election's parties, so at an entry epoch the newcomer's earlier column and an
 #'   offset shared by those parties reach the contrasts (`delta_epochs()`). Any newcomer
 #'   entering after the first epoch exercises it, the 2017 cells' included.
+#'
+#' The fundamentals pseudo-observation's (`fundamentals`, §6.5):
+#' - `fund_uncentred`: μ_f's mean is log π_nat,E[S_f] itself, not centred over S_f. The mean
+#'   of the log of shares below 1 is negative, so every cell exercises it, the 2017 cells'
+#'   (whose μ_f is the placeholder's zeros) included.
 #' @export
 V2_MUTANTS <- tibble::tibble(
   mutant = c(
     "positional_gather", "previous_w", "next_epoch_delta", "close_last_kjordaemi", "conditional_walk",
     "house_walk_from_first_poll", "newcomer_mean_of_mu1", "no_mu_restart", "no_house_restart",
-    "newcomer_mean_over_all", "shock_unscaled", "delta_years_unscaled", "no_delta_restart", "delta_entry_leak"
+    "newcomer_mean_over_all", "shock_unscaled", "delta_years_unscaled", "no_delta_restart", "delta_entry_leak",
+    "fund_uncentred"
   ),
-  switch = c(rep(NA_character_, 5), rep("epoch_bias", 4), "newcomer_pool", "shock", rep("delta_walk", 3)),
-  min_closed = c(1L, 2L, 2L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L)
+  switch = c(rep(NA_character_, 5), rep("epoch_bias", 4), "newcomer_pool", "shock", rep("delta_walk", 3), "fundamentals"),
+  min_closed = c(1L, 2L, 2L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L)
 )
 
 #' The component switches the reference has (each 0 or 1), the switches of the components it
-#' does not have yet (the M-steps' tasks add them), and the parameterisation switches whose
-#' reference form is 0.
-BUILT_SWITCHES <- c("epoch_bias", "newcomer_pool", "shock", "delta_walk")
+#' does not have yet (none: step v2s-m5 built the last), and the parameterisation switches
+#' whose reference form is 0.
+BUILT_SWITCHES <- c("epoch_bias", "newcomer_pool", "shock", "delta_walk", "fundamentals")
 FORM_SWITCHES <- c("walk_form", "delta_form")
 COMPONENT_SWITCHES <- setdiff(V2_SWITCHES, c(FORM_SWITCHES, BUILT_SWITCHES))
 
@@ -268,6 +275,31 @@ walk_rows <- function(sigma, L_Omega) {
 #' The factor L_walk = chol((CΣC)[2:P, 2:P]) of Σ = diag(σ) Ω diag(σ), Ω = LLᵀ, computed as
 #' the Cholesky factor of the Gram matrix of the rows 2:P of C diag(σ) L.
 walk_factor <- function(sigma, L_Omega) chol_of_gram(walk_rows(sigma, L_Omega))
+
+#' The scales of the fundamentals pseudo-observation (§6.5) at the walk's σ, L_Ω and τ_camp,
+#' for the parties of S_f (`data$sf_idx`, in that order): v_p = diag(CΣCᵀ)_p, each party's
+#' variance of a walk step per unit Δ s² (§6.2), with Σ = diag(σ) Ω diag(σ), Ω = L_Ω L_Ωᵀ and
+#' C = I − 11ᵀ/P over all P parties, formed here as the matrix product; the walk's variance
+#' over `weight_time` days whose last `campaign_days` are in the campaign, V_w,p =
+#' v_p [(weight_time − campaign_days) + campaign_days (1 + τ_camp)²]; and
+#' τ_f,p = √(V_w,p (1 − w) / w), w = `desired_weight`, the sd that gives the pseudo-observation
+#' the weight w against V_w: (1/τ_f²) / (1/τ_f² + 1/V_w) = w.
+#' @param sigma the P walk scales σ
+#' @param L_Omega the Cholesky factor of Ω (P × P, or its P² elements column-major)
+#' @param tau_camp the campaign multiplier τ_camp
+#' @param data a `v2_stan_data()` data list: `P`, `sf_idx`, `weight_time`, `campaign_days` and
+#'   `desired_weight` are read
+#' @return `list(v, V_w, tau_f)`, each as long as `data$sf_idx`
+#' @export
+fund_scales <- function(sigma, L_Omega, tau_camp, data) {
+  P <- data$P
+  Sigma <- tcrossprod(as.numeric(sigma) * matrix(as.numeric(L_Omega), P, P))
+  C <- diag(P) - 1 / P
+  v <- diag(C %*% Sigma %*% C)[as.integer(c(data$sf_idx))]
+  V_w <- v * ((data$weight_time - data$campaign_days) + data$campaign_days * (1 + as.numeric(tau_camp))^2)
+  w <- data$desired_weight
+  list(v = v, V_w = V_w, tau_f = sqrt(V_w * (1 - w) / w))
+}
 
 #' The map M_e of §6.7: (I − 1wᵀ) X C. It subtracts each party's w-weighted mean over the
 #' kjördæmi, then centres each kjördæmi over the parties, so the result's rows sum to 0 and
@@ -444,6 +476,22 @@ check_core <- function(data, mutant = "none") {
     check(length(y) == data$n_epoch && all(is.finite(y)) && all(y >= 0), "data$delta_years must be n_epoch non-negative numbers")
     b <- data$delta_years_bar
     check(length(b) == 1 && is.finite(b) && b > 0, "data$delta_years_bar must be one positive number")
+  }
+  if (identical(as.integer(data$fundamentals), 1L)) {
+    sf <- as.integer(c(data$sf_idx))
+    check(
+      identical(as.integer(data$n_sf), length(sf)) && length(sf) >= 2 && all(sf %in% seq_len(data$P)) && !anyDuplicated(sf),
+      "data$fundamentals = 1 needs at least two distinct parties of S_f (n_sf and sf_idx)"
+    )
+    check(all(data$exists[data$G, sf] == 1L), "data$fundamentals = 1 needs every party of S_f (sf_idx) to exist at E")
+    check(length(data$mu_f) == length(sf) && all(is.finite(c(data$mu_f))), "data$mu_f must be n_sf finite numbers")
+    w <- data$desired_weight
+    check(length(w) == 1 && is.finite(w) && w > 0 && w < 1, "data$desired_weight must be one number in (0, 1)")
+    check(
+      length(data$weight_time) == 1 && length(data$campaign_days) == 1 && is.finite(data$weight_time) &&
+        data$weight_time >= data$campaign_days && data$campaign_days >= 1,
+      "data$weight_time must be at least data$campaign_days, itself at least 1"
+    )
   }
   check(
     is.character(mutant) && length(mutant) == 1 && mutant %in% c("none", v2_mutants(data)),
@@ -687,7 +735,7 @@ natural <- function(p, data, conditional = FALSE, close_last = FALSE, house_from
 #' @param pars a named list as `constrain_variables(..., transformed_parameters = FALSE)`
 #'   returns it (`V2_CORE_PARS`)
 #' @param data a `v2_stan_data()` data list of the core in the reference forms, `epoch_bias`,
-#'   `newcomer_pool`, `shock` and `delta_walk` 0 or 1
+#'   `newcomer_pool`, `shock`, `delta_walk` and `fundamentals` 0 or 1
 #' @return a list: `theta` (P × G), `pi_nat` (N_nat × P: π_nat at each national poll's
 #'   date), `mu` (n_epoch × P, each row summing to 0), `gamma` (n_epoch × H × P), `delta`
 #'   (n_epoch × K × P), `eps` (n_closed × P: the closed elections' shocks ε_e, each row
@@ -760,6 +808,31 @@ row_counts <- function(data, r) {
   )
 }
 
+#' The fundamentals pseudo-observation's normal (§6.5) at a checked point `p` with its natural
+#' quantities `nat`: μ_f ~ N(x_c, τ_f) over S_f (`data$sf_idx`, in that order), where
+#' x = log π_nat,E[S_f], π_nat,E = Σ_k w_open,k softmax over A_E of (θ_E + δ_open,k) with no
+#' shock (θ_E the walk at grid date G, which is E; δ_open and w_open the open epoch's; A_E the
+#' parties existing at E), x_c = x − mean(x), and τ_f is `fund_scales()`'. `uncentred`
+#' switches to the `fund_uncentred` mutant, x in place of x_c.
+#' @return `list(mean, tau_f)`, each as long as `data$sf_idx`
+fund_normal <- function(p, nat, data, uncentred = FALSE) {
+  G <- data$G
+  e <- data$n_epoch
+  A <- which(data$exists[G, ] == 1L)
+  share <- numeric(data$P)
+  for (k in seq_len(data$K)) share[A] <- share[A] + data$w[e, k] * softmax(nat$theta[A, G] + nat$delta[e, k, A])
+  x <- log(share[as.integer(c(data$sf_idx))])
+  list(mean = if (uncentred) x else x - mean(x), tau_f = fund_scales(p$sigma, p$L_Omega, p$tau_camp, data)$tau_f)
+}
+
+#' The fundamentals pseudo-observation's log density, Σ_p log N(μ_f,p | x_c,p, τ_f,p) over S_f
+#' with its normalising constant (`fund_normal()`). It is a likelihood term on data, so it has
+#' no Jacobian; τ_f depends on σ, Ω and τ_camp, so its −log τ_f terms count.
+fund_lp <- function(p, nat, data, uncentred = FALSE) {
+  f <- fund_normal(p, nat, data, uncentred)
+  sum(stats::dnorm(c(data$mu_f), f$mean, f$tau_f, log = TRUE))
+}
+
 #' The prior terms of a checked point, one per block, with every normalising constant: the
 #' §6.10 priors on the constrained values, the half-t and half-normals normalised over the
 #' positive half-line, `lkj_corr_cholesky_lpdf()` on L itself, and the bounded transforms'
@@ -808,7 +881,10 @@ prior_terms <- function(p, nat, data) {
 #' m_new and s_new estimated; the election-day shock, §6.6, with `shock` = 1: ε_e in each
 #' closed election's kjördæmi softmax, z_shock ~ N(0, 1) and s̄_E ~ half-N(0,
 #' `prior_s_bar_E`); the δ walk, §6.7, with `delta_walk` = 1: each epoch's ζ ~ N(0, 1),
-#' `s_zeta_raw` ~ half-N(0, 1) and s̄_ζ ~ half-N(0, `prior_s_bar_zeta`)): what Stan's
+#' `s_zeta_raw` ~ half-N(0, 1) and s̄_ζ ~ half-N(0, `prior_s_bar_zeta`); the fundamentals
+#' pseudo-observation, §6.5, with `fundamentals` = 1: μ_f ~ N(x_c, τ_f) over S_f, x_c the
+#' centred log π_nat,E[S_f], a likelihood term on data with no new parameter, `fund_normal()`
+#' and `fund_scales()`): what Stan's
 #' `log_prob(u, jacobian = FALSE)`
 #' evaluates in the reference forms, up to a constant. It is the density of the parameters
 #' on their constrained values (the §6.10
@@ -822,12 +898,14 @@ prior_terms <- function(p, nat, data) {
 #' not depend on the party or kjördæmi order beyond a rounding.
 #' @param pars a named list as `constrain_variables(..., transformed_parameters = FALSE)`
 #'   returns it: the `V2_CORE_PARS`, each in cmdstanr's column-major order
-#' @param data a `v2_stan_data()` data list with `walk_form`, `delta_form` and the
-#'   component switches 0, apart from `epoch_bias`, `newcomer_pool`, `shock` and `delta_walk`,
-#'   each 0 or 1
+#' @param data a `v2_stan_data()` data list with `walk_form` and `delta_form` 0 and each
+#'   component switch (`epoch_bias`, `newcomer_pool`, `shock`, `delta_walk`, `fundamentals`)
+#'   0 or 1; with `fundamentals` = 1, at least two distinct parties in `sf_idx`, each existing
+#'   at E, and `mu_f` as long, finite
 #' @param mutant "none", or a mutant of `v2_mutants(data)` (`V2_MUTANTS`)
 #' @return numeric(1). An error, "v2 reference: ...", for another form or switch, another
-#'   mutant, or a point with a missing, misshapen or out-of-bounds parameter
+#'   mutant, fundamentals data it cannot read, or a point with a missing, misshapen or
+#'   out-of-bounds parameter
 #' @export
 v2_lp_ref <- function(pars, data, mutant = "none") {
   check_core(data, mutant)
@@ -844,7 +922,12 @@ v2_lp_ref <- function(pars, data, mutant = "none") {
   )
   rows <- dm_rows(p, nat, data, positional = mutant == "positional_gather", next_delta = mutant == "next_epoch_delta")
   lik <- vapply(rows, \(r) dirmult_lpmf(row_counts(data, r), r$alpha), numeric(1))
-  neumaier(c(prior_terms(p, nat, data), lik))
+  terms <- c(prior_terms(p, nat, data), lik)
+  # WHY: with fundamentals = 0 the term is left out, so every earlier step sums the same terms as before.
+  if (identical(as.integer(data$fundamentals), 1L)) {
+    terms <- c(terms, fundamentals = fund_lp(p, nat, data, uncentred = mutant == "fund_uncentred"))
+  }
+  neumaier(terms)
 }
 
 #' The mutants of `V2_MUTANTS` that can change the density on `data`: those whose switch is
@@ -952,7 +1035,7 @@ draw_prior <- function(data) {
 #' A draw from V2's core: parameters from the prior, and, when `observe`, every count from
 #' the model given them.
 #' @param data a `v2_stan_data()` data list of the core in the reference forms, `epoch_bias`,
-#'   `newcomer_pool`, `shock` and `delta_walk` 0 or 1
+#'   `newcomer_pool`, `shock`, `delta_walk` and `fundamentals` 0 or 1
 #' @param seed the seed; the draw uses its own RNG stream (`withr::with_seed()`), leaving the
 #'   caller's untouched
 #' @param observe whether to replace the counts
@@ -969,7 +1052,8 @@ draw_prior <- function(data) {
 #'     row keeps its total and its reported parties (`idx_*`, `n_rep_*`), its other cells
 #'     stay 0, and its reported counts are one Dirichlet-multinomial draw with the row's
 #'     concentrations, as the likelihood has them. A reported party can draw 0 and stays
-#'     reported. Every other field is unchanged
+#'     reported. With `fundamentals` = 1, `mu_f` is replaced too, after every count, by one
+#'     draw of N(x_c, τ_f) (`fund_normal()`). Every other field is unchanged
 #' @export
 v2_simulate <- function(data, seed, observe = TRUE) {
   check_core(data)
@@ -989,6 +1073,11 @@ v2_simulate <- function(data, seed, observe = TRUE) {
           sim[[r$field]][r$at, ] <- 0L
           sim[[r$field]][r$at, r$S] <- dirmult_rng(n, r$alpha)
         }
+      }
+      # WHY: drawn after every count, so that with fundamentals = 0 nothing more is drawn and with 1 every count is the draw fundamentals = 0 gives.
+      if (identical(as.integer(data$fundamentals), 1L)) {
+        f <- fund_normal(p, nat, data)
+        sim$mu_f <- same_shape(stats::rnorm(length(f$mean), f$mean, f$tau_f), data$mu_f)
       }
     }
   })
@@ -1047,7 +1136,7 @@ permute_data <- function(data, pp, kp) {
 #' identity; kjördæmi poll rows re-sorted by poll and new kjördæmi; `sf_idx` re-indexed.
 #' @param pars a named list of `V2_CORE_PARS`
 #' @param data a `v2_stan_data()` data list of the core in the reference forms, `epoch_bias`,
-#'   `newcomer_pool`, `shock` and `delta_walk` 0 or 1
+#'   `newcomer_pool`, `shock`, `delta_walk` and `fundamentals` 0 or 1
 #' @param party_perm a permutation of 1:P
 #' @param kd_perm a permutation of 1:K
 #' @return `list(pars, data)` with attribute `ljac_L_Omega`: the change in

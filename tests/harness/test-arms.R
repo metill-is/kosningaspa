@@ -32,6 +32,13 @@ table_role <- function(name) {
 
 v2_family <- function() names(ARMS)[vapply(ARMS, \(a) identical(a$stan_file, V2_STAN), logical(1))]
 
+# Each ablation of V2 and the one switch it turns off (the Phase 2 plan's ablation table);
+# V2-staticdelta keeps delta_form = 0, which V2 already holds, so it differs in delta_walk alone.
+V2_ABLATIONS <- c(
+  `v2-noepoch` = "epoch_bias", `v2-nonew` = "newcomer_pool", `v2-noshock` = "shock", `v2-staticdelta` = "delta_walk",
+  `v2-nofund` = "fundamentals"
+)
+
 # The m0 config with the named switches set.
 switched <- function(...) utils::modifyList(cfg_m0(), list(...))
 
@@ -99,11 +106,12 @@ test_that("v2_variables() names the forecast, the replicates and the parameters 
   expect_error(v2_variables(switched(shock = 2L)), "switches")
 })
 
-test_that("every variable v2_variables() names for v2s-m0, v2s-m1, v2s-m2, v2s-m3, v2s-m4 and v2s-p2 is declared in Stan/forecast_v2.stan", {
+test_that("every variable v2_variables() names for v2s-m0, v2s-m1, v2s-m2, v2s-m3, v2s-m4, v2s-p2, v2s-m5, v2 and its ablations is declared in Stan/forecast_v2.stan", {
   skip_unless_slow()
   v <- cmdstanr::cmdstan_model(root(V2_STAN), compile = FALSE)$variables()
   declared <- c(names(v$parameters), names(v$transformed_parameters), names(v$generated_quantities))
-  for (a in c("v2s-m0", "v2s-m1", "v2s-m2", "v2s-m3", "v2s-m4", "v2s-p2")) {
+  arms <- c("v2s-m0", "v2s-m1", "v2s-m2", "v2s-m3", "v2s-m4", "v2s-p2", "v2s-m5", "v2", names(V2_ABLATIONS))
+  for (a in arms) {
     vars <- v2_variables(read_v2_config(root(arm(a)$config)))
     expect_true(all(vars %in% declared), info = paste(a, paste(setdiff(vars, declared), collapse = ", ")))
   }
@@ -176,13 +184,66 @@ test_that("v2s-p2's config is v2s-m4's with delta_form = 1 and nothing else", {
   expect_identical(arm("v2s-p2")$role, "dev")
 })
 
-test_that("while P1's verdict stands (KEEP v2s-m0: the anchored walk is not adopted), every step config but v2s-p1 sets walk_form = 0", {
+test_that("while P1's verdict stands (KEEP v2s-m0: the anchored walk is not adopted), every step config but v2s-p1 sets walk_form = 0, and so do V2 and its ablations", {
   # WHY: the steps after P1 build on the reference walk; a re-ruling that adopts the anchored
   # walk changes this test and the later step configs together.
-  files <- Sys.glob(root("harness", "configs", "steps", "v2s-*.json"))
-  expect_true(all(root("harness", "configs", "steps", c("v2s-m1.json", "v2s-m2.json", "v2s-m3.json", "v2s-m4.json", "v2s-p2.json")) %in% files))
+  files <- c(Sys.glob(root("harness", "configs", "steps", "v2s-*.json")), Sys.glob(root("harness", "configs", "v2*.json")))
+  steps <- c("v2s-m1.json", "v2s-m2.json", "v2s-m3.json", "v2s-m4.json", "v2s-p2.json", "v2s-m5.json")
+  expect_true(all(root("harness", "configs", "steps", steps) %in% files))
+  expect_true(all(root("harness", "configs", c("v2.json", paste0(names(V2_ABLATIONS), ".json"))) %in% files))
   for (f in files) {
     want <- if (basename(f) == "v2s-p1.json") 1L else 0L
     expect_identical(jsonlite::read_json(f)$walk_form, want, label = basename(f))
+  }
+})
+
+test_that("while P2's verdict stands (KEEP v2s-m4: the centred delta is not adopted), every step config but v2s-p2 sets delta_form = 0, and so do V2 and its ablations", {
+  # WHY: the steps after P2 build on the non-centred delta walk; a re-ruling that adopts the
+  # centred form changes this test and v2s-m5, V2 and the ablations together.
+  files <- c(Sys.glob(root("harness", "configs", "steps", "v2s-*.json")), Sys.glob(root("harness", "configs", "v2*.json")))
+  expect_true(all(root("harness", "configs", c("steps/v2s-m5.json", "v2.json", paste0(names(V2_ABLATIONS), ".json"))) %in% files))
+  for (f in files) {
+    want <- if (basename(f) == "v2s-p2.json") 1L else 0L
+    expect_identical(jsonlite::read_json(f)$delta_form, want, label = basename(f))
+  }
+})
+
+test_that("v2s-m5's config is v2s-m4's with fundamentals = 1 and nothing else", {
+  m4 <- jsonlite::read_json(root(arm("v2s-m4")$config))
+  m5 <- jsonlite::read_json(root(arm("v2s-m5")$config))
+  expect_identical(m4$fundamentals, 0L)
+  expect_identical(m5$fundamentals, 1L)
+  expect_identical(c(m5$walk_form, m5$delta_form), c(0L, 0L))
+  expect_identical(names(m5), names(m4))
+  expect_identical(utils::modifyList(m5, list(fundamentals = 0L)), m4)
+  expect_identical(arm("v2s-m5")$role, "dev")
+})
+
+test_that("V2's config is v2s-m5's, every component on and both forms at the adopted 0, and it is the candidate", {
+  m5 <- jsonlite::read_json(root(arm("v2s-m5")$config))
+  v2 <- jsonlite::read_json(root(arm("v2")$config))
+  expect_identical(arm("v2")$config, "harness/configs/v2.json")
+  expect_identical(v2, m5)
+  expect_identical(unlist(v2[c("epoch_bias", "newcomer_pool", "shock", "delta_walk", "fundamentals")]), c(
+    epoch_bias = 1L, newcomer_pool = 1L, shock = 1L, delta_walk = 1L, fundamentals = 1L
+  ))
+  expect_identical(c(v2$walk_form, v2$delta_form), c(0L, 0L))
+  expect_identical(arm("v2")$role, "candidate")
+})
+
+test_that("each ablation's config differs from V2's in exactly its one switch, set to 0, and is an ablation", {
+  v2 <- jsonlite::read_json(root("harness", "configs", "v2.json"))
+  registered <- names(ARMS)[vapply(ARMS, \(a) identical(a$role, "ablation"), logical(1))]
+  expect_setequal(registered, names(V2_ABLATIONS))
+  for (n in names(V2_ABLATIONS)) {
+    a <- arm(n)
+    expect_identical(a$config, file.path("harness", "configs", paste0(n, ".json")), label = n)
+    expect_identical(a$role, "ablation", label = n)
+    cfg <- jsonlite::read_json(root(a$config))
+    expect_identical(names(cfg), names(v2), label = n)
+    differs <- names(v2)[!vapply(names(v2), \(k) identical(cfg[[k]], v2[[k]]), logical(1))]
+    expect_identical(differs, V2_ABLATIONS[[n]], label = n)
+    expect_identical(cfg[[V2_ABLATIONS[[n]]]], 0L, label = n)
+    expect_identical(v2[[V2_ABLATIONS[[n]]]], 1L, label = n)
   }
 })
