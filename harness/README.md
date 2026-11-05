@@ -110,8 +110,24 @@ and the wider suite waits for a forecast that is published or frozen. From the p
 
 - **A change meant to improve forecasts:** fit the old and the new model once each on both
   cells, 2024 eve and 2021 f180, and compare them against the real results with
-  `score_cell(run_dir)` for each run (The freeze and the 2017 locks), which scores a target
-  cell only once the freeze is sealed.
+  `score_cell(run_dir)` for each run, which scores a 2021 or 2024 cell with no freeze (The
+  freeze and the 2017 locks). Fit the old model from the previous commit, in a worktree of its
+  own with a copy of the snapshot, into a results root of its own:
+
+  ```
+  git worktree add ../kosningaspa-old <previous commit>
+  cp -R harness/snapshot ../kosningaspa-old/harness/
+  cd ../kosningaspa-old
+  HARNESS_RESULTS="$PWD/results/harness" PREFLIGHT=lean zsh R/harness/queue.sh <run_list> <iter_warmup> <iter_sampling>
+  ```
+
+  `results_root()` is `HARNESS_RESULTS`, or else `results/harness` under the checkout's own
+  root, so setting it there keeps an exported value from sending the old fits into the new
+  model's root. The two must not share one: a fit of the same arm, cell and seed in one
+  results root finds the other's `meta.json` with another Stan sha256 and retires it to
+  `_stale/` as STALE. Run the two queues one after the other, since each queue's guard refuses
+  to start while any `fit_cell.R` runs, and score both runs from the current checkout, by
+  their directories.
 - **Before a published forecast, or before the freeze:** the wider suite, at a size chosen
   then (for example as the next Alþingi election approaches):
   - the full slow suite, the queue's default preflight:
@@ -152,10 +168,10 @@ changed: a miss means the scorer is wrong. The national test runs whenever
 (allocating seats for the run's 8000 draws took 107 s on 24 Oct 2026). Without the folder
 they skip, but the test of the committed manifest still runs.
 
-It is the phase's one scoring of a known result. No harness forecast is compared with its
-result before the freeze (spec §8), and the self-test keeps that rule: it re-scores draws
-the earlier study had already scored and published, not a harness arm's, so no harness arm
-meets a result.
+It was Phase 1's one scoring of a known result. Spec §8 kept every harness forecast from its
+result until the freeze; since 5 November 2026 only a 2017 cell is held back (The freeze and
+the 2017 locks). The self-test re-scores draws the earlier study had already scored and
+published, not a harness arm's.
 
 ## The freeze and the 2017 locks
 
@@ -165,7 +181,12 @@ whose role is `check` or `dev` and a run whose `meta.json` records a role other 
 arm's (Runs, Arms), calls `freeze_guard(E, F)` (`R/harness/freeze.R`), and only once the guard passes reads the
 result (`cell_truth()`) and then the draws. With the default result reader, which reads
 this project's results, it refuses a `root` other than the project's, since the guard
-would otherwise check another repository's freeze. The guard stops at the first failure:
+would otherwise check another repository's freeze.
+
+The guard refuses a cell that is not in `TARGETS` (check 1). A 2021 or 2024 cell passes it
+with no freeze: Brynjólfur decided on 5 November 2026 that the model is developed without
+such locks, so no freeze file is read for those cells. A 2017 cell, the held-out confirmatory
+target, stops at the first of these failures:
 
 1. (E, F) is not a cell of `TARGETS`;
 2. `harness/FREEZE.md` or `harness/FREEZE.sha256` does not exist;
@@ -176,8 +197,8 @@ would otherwise check another repository's freeze. The guard stops at the first 
    so an edit the index is told to ignore, by `--assume-unchanged` or `--skip-worktree`,
    still counts).
 
-A 2017 cell, the confirmatory target, is locked until `harness/DECISION.md` and
-`harness/DECISION.sha256` pass checks 2–5 as well (the refusal names the check that
+A 2017 cell is also locked until `harness/DECISION.md` and
+`harness/DECISION.sha256` pass checks 2–5 (the refusal names the check that
 failed), and locked for good once `harness/CONFIRM.md` exists. Past both locks, `score_cell()` still refuses it: 2017 is
 scored once, by the Tier C runbook, which writes `CONFIRM.md`. Phase 1 has no such writer.
 
@@ -217,10 +238,11 @@ Past the guard and the 2017 refusal, it recomputes the Brier event,
 fit: refit <run>" unless its parties are those `meta.json` recorded: the sha-skip keys do
 not cover the event, so a reused run could otherwise be scored against an outdated one. It
 stops with "no list at E" if a party the run forecasts has a national result of 0, as a
-party with no list would, since the alr scores would take the log of that zero. Until Phase
-3 commits `FREEZE.md`, it refuses every target cell of this repository;
-`tests/harness/test-scorer.R` checks that with a result reader that fails if it is called.
-The tests that pass the guard run in temporary git repositories.
+party with no list would, since the alr scores would take the log of that zero. With this
+repository unfrozen, it reads the result for every 2021 and 2024 cell and refuses every 2017
+one before any result is read; `tests/harness/test-scorer.R` checks both with a result
+reader that fails if it is called, and scores a 2021 cell with no freeze. The tests of a
+sealed freeze and decision run in temporary git repositories.
 
 ## Runs
 
@@ -323,9 +345,9 @@ one of `ARM_ROLES`:
 
 | Role | Arms | Scored |
 |---|---|---|
-| `reference` | `r0` | yes, after the freeze |
-| `candidate` | `v2` | yes, after the freeze |
-| `ablation` | `v2-noepoch`, `v2-nonew`, `v2-noshock`, `v2-staticdelta`, `v2-nofund` | yes, after the freeze |
+| `reference` | `r0` | yes; a 2017 cell only after the freeze and the decision |
+| `candidate` | `v2` | yes; a 2017 cell only after the freeze and the decision |
+| `ablation` | `v2-noepoch`, `v2-nonew`, `v2-noshock`, `v2-staticdelta`, `v2-nofund` | yes; a 2017 cell only after the freeze and the decision |
 | `check` | `v2-perm`, V2 with both orders reversed, which must reproduce `v2` | never |
 | `dev` | `v2s-m0` and the rest of V2's staircase, one component or form per step | never |
 

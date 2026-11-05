@@ -9,7 +9,7 @@ box::use(
 )
 
 # WHY: the phase's one scoring of a known result (spec §5.6, §8). It re-scores draws the
-# overdisp study already scored, so no harness arm meets a result before the freeze.
+# overdisp study already scored, not a harness arm's.
 # The reference values are that study's published scores for base_eve, read on 2026-10-24.
 ZERO_SHARE <- 0.5 / 196292
 E <- "2024-11-30"

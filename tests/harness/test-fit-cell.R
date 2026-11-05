@@ -420,8 +420,9 @@ test_that("fit_cell.R fits a cell, skips it while meta.json matches, and retires
     calls <<- calls + 1L
     stop("truth read")
   }
-  expect_error(score_cell(dir, truth = reader), "no freeze")
-  expect_identical(calls, 0L)
+  # WHY: a 2024 cell is scored with no freeze, so the scorer reaches the result reader.
+  expect_error(score_cell(dir, truth = reader), "truth read", fixed = TRUE)
+  expect_identical(calls, 1L)
 
   kd <- arrow::read_parquet(file.path(dir, "eday_kjordaemi.parquet"))
   expect_identical(sort(unique(kd$.draw)), seq_len(40L))
