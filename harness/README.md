@@ -715,6 +715,57 @@ checks the redraw rule, the ranks, the truth check, the bands, the folder states
 on made-up replicates, and runs one replicate at 20 + 20 on 2021 f180 into a temporary results
 root (slow; skipped while the real results root's stage-1 cache for that cell is cold).
 
+## V2
+
+V2 is the candidate arm, `Stan/forecast_v2.stan` under `harness/configs/v2.json` (spec §6). This
+section is a map: each item names the section or file that holds the detail.
+
+- **Arms and roles.** `v2` is the candidate, `v2-no*` and `v2-staticdelta` its five ablations,
+  `v2-perm` its check and the `v2s-*` arms the staircase's `dev` steps (Runs, the role table under
+  Arms). The model's switches, and the forms V2 runs, are in `Stan/CLAUDE.md` (forecast_v2.stan's
+  switches).
+- **The staircase.** V2 was built one step at a time: an M-step adds a component and a P-step
+  reparameterises the model, checked first by `R/harness/v2_equivalence.R` (Step checks).
+  Neither P-step was adopted, so `v2.json` is `v2s-m5`'s config, with `walk_form` and
+  `delta_form` at 0.
+- **The step log**, `harness/v2/steps.md`: every step's verdict, the command that rewrites its
+  diagnostics table `harness/v2/steps/<step>.md`, and the exit. A P-step's equivalence CSV is
+  `harness/v2/steps/<step>-equivalence.csv` (Step checks).
+- **The checks.**
+  - The prior predictive check, `harness/v2/prior_predictive.md`: prior draws on the snapshot,
+    with no fit (Committed versus generated).
+  - Recovery, `harness/v2/recovery.md`: simulation-based recovery of V2's parameters (Recovery).
+  - Tier 0, the runs of `harness/runs/tier0-v2.txt`: `v2` and `v2-perm` at the 2024 eve cell
+    (seed 1201, lane A) and the 2021 f180 cell (seed 1202, lane B), at 200 + 200 iterations, as
+    R0's Tier 0 (Tier 0). `harness/tier0/v2.md` and `harness/tier0/v2-perm.md` are each arm's
+    sampler diagnostics (`tier0_report.R`).
+  - `harness/tier0/v2_checks.md`, spec §6.9's extras, by `R/harness/v2_checks.R`, whose header
+    lists what it reads and computes: per run the minutes projected to 1000 + 2000, flagged above
+    120; corr(log φ_K, s̄_ζ); each bounded concentration's draws within 2 and within 0.5 of its
+    cap, stage 1's log φ_f included; the min bulk ESS of the (σ, Ω) flat directions; and per
+    closed election the count of kjördæmi × party cells whose in-sample PIT under `y_rep_res`
+    lies outside [0.025, 0.975]. Counts only: no forecast quantity is read or printed.
+  - The permutation check (the plan's Decision 8): `v2` and `v2-perm` must give the same forecast
+    draws within Monte Carlo error (Step checks, `perm`). Its output, as printed, ends
+    `v2_checks.md` in a fenced block under the heading `## Permutation check`. `v2_checks.R`
+    rewrites the whole file, so after a rerun the permutation output is appended again.
+
+Each committed report is rewritten from the project root by:
+
+```
+LC_ALL=en_US.UTF-8 Rscript R/harness/v2_prior_predictive.R harness/configs/steps/v2s-m5.json
+LC_ALL=en_US.UTF-8 Rscript R/harness/recovery.R report
+LC_ALL=en_US.UTF-8 Rscript R/harness/tier0_report.R v2 harness/runs/tier0-v2.txt
+LC_ALL=en_US.UTF-8 Rscript R/harness/tier0_report.R v2-perm harness/runs/tier0-v2.txt harness/tier0/v2-perm.md
+LC_ALL=en_US.UTF-8 Rscript R/harness/v2_checks.R harness/runs/tier0-v2.txt
+LC_ALL=en_US.UTF-8 Rscript R/harness/compare_runs.R perm v2 v2-perm harness/runs/tier0-v2.txt
+```
+
+The first needs only the snapshot. `report` reads the recovery replicates (Recovery). The Tier 0
+commands read the finished runs of `harness/runs/tier0-v2.txt`, which
+`zsh R/harness/queue.sh harness/runs/tier0-v2.txt 200 200` fits, started as in Tier 0. Each step's
+own commands are in its section of `harness/v2/steps.md`.
+
 ## R0's inputs
 
 `R/harness/r0.R` builds the Stan data of arm R0, production mapped to E (spec §5.4).

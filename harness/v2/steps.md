@@ -1547,3 +1547,7 @@ LC_ALL=en_US.UTF-8 Rscript R/harness/compare_runs.R stop v2s-m5
 
 M5 stands, so every component is built: `harness/configs/v2.json` holds `v2s-m5`'s config
 under the candidate role, and the Phase 2 plan's Tasks 15 and 16 fit it.
+
+## Exit
+
+The exit's equivalence re-run on the final model (`R/harness/v2_equivalence.R --config=harness/configs/v2.json --form=both`) is skipped: neither P-step was adopted (P1 `KEEP v2s-m0`, P2 `KEEP v2s-m4`), so `v2.json` sets both forms to 0, the reference forms the M-steps' log-density tests ran in, and `--form=both` has nothing to check, as the script says when it refuses it.
