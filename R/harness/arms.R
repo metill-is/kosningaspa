@@ -48,7 +48,8 @@ v2_arm <- function(config, role) {
 #' adopted forms (both 0: neither P-step's form was adopted), is the candidate, and
 #' `v2-noepoch`, `v2-nonew`, `v2-noshock`, `v2-staticdelta` and `v2-nofund`, each `v2` with
 #' one component switch off (`epoch_bias`, `newcomer_pool`, `shock`, `delta_walk` and
-#' `fundamentals`), are its ablations.
+#' `fundamentals`), are its ablations. `v2-perm`, `v2`'s config with `order` = `"reversed"`
+#' (both the party and the kjördæmi order), is the check that must reproduce `v2`.
 #' @export
 ARMS <- local({
   box::use(R / harness / r0[r0_stan_data, read_r0_config, r0_extract, R0_EXTRACT_VARIABLES])
@@ -75,7 +76,8 @@ ARMS <- local({
     `v2-nonew` = v2_arm("harness/configs/v2-nonew.json", "ablation"),
     `v2-noshock` = v2_arm("harness/configs/v2-noshock.json", "ablation"),
     `v2-staticdelta` = v2_arm("harness/configs/v2-staticdelta.json", "ablation"),
-    `v2-nofund` = v2_arm("harness/configs/v2-nofund.json", "ablation")
+    `v2-nofund` = v2_arm("harness/configs/v2-nofund.json", "ablation"),
+    `v2-perm` = v2_arm("harness/configs/v2-perm.json", "check")
   )
 })
 

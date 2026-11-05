@@ -297,7 +297,8 @@ held centred at the closed elections), `v2s-m5` (the fundamentals pseudo-observa
 P-step's form was adopted) and its five ablations (`harness/configs/v2-*.json`, each `v2.json`
 with one component switch at 0: `epoch_bias`, `newcomer_pool`, `shock`, `delta_walk` or
 `fundamentals`; `tests/harness/test-arms.R` asserts each one's single differing field).
-`v2-perm` is registered as its config lands.
+`v2-perm` (`harness/configs/v2-perm.json`, `v2.json` with `order` = `"reversed"`) is the check;
+`tests/harness/test-arms.R` asserts that it differs from `v2.json` in that field alone.
 
 **R0's extraction.** `r0_extract(draws, meta, dir)` (`R/harness/r0.R`) writes the four
 parquets of spec §5.5 from a fit's draws: `eday_kjordaemi` (`.chain`, `.iteration`,
