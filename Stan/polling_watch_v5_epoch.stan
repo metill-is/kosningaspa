@@ -13,16 +13,40 @@
 //     mu_gamma[1]  = mu_gamma0                       (v4's mu_gamma)
 //     mu_gamma[e]  = mu_gamma[e-1] + tau_mu * z_mu[e-1]
 //     dev[1, k]    = sigma_gamma * gamma_free[k]     (v4's house deviation)
-//     dev[e, k]    = dev[e-1, k] + tau_house * z_house[e-1, k]
+//     dev[e, k]    = dev[e-1, k] + tau_house * z_house[e-1, k]   for e > f_k
+//                  = dev[e-1, k]                                  for e <= f_k
 //     gamma[e, h]  = mu_gamma[e] + dev[e, h-1] for h = 2..H,  gamma[e, 1] = 0 (election)
 //
-// Shocks are zero-sum over parties (sum_to_zero_vector, std_normal), exactly
-// like v4's mu_gamma and gamma_free, so the model stays reference-invariant.
+// where f_k is house k's first epoch, the epoch of its first poll: a house's walk starts
+// there, so a house that first polls in a later epoch enters at its epoch-1 deviation and
+// carries no prior-only steps into its first polls (5 Nov 2026, as in the v2 forecast).
+//
+// Newcomers (5 Nov 2026, the v2 forecast's entry rule). A party's entry epoch is the first
+// epoch in which a poll reports it. Before that no poll speaks to its bias, and since every
+// bias vector sums to zero, the drift shared by the parties already polled is flat in the
+// data too. Without a restart both would reach the likelihood at entry, as extra prior
+// variance on the newcomer's contrasts and as evidence about the taus. So at its entry
+// epoch e, after that epoch's step, a newcomer p restarts, with B the parties that entered
+// before e:
+//
+//     mu_gamma[e][p] = mu_gamma0[p] + mean over q in B of (mu_gamma[e][q] - mu_gamma0[q])
+//     dev[e, k][p]   = dev[1, k][p] + mean over q in B of (dev[e, k][q] - dev[1, k][q])
+//                      (for each house k with e > f_k)
+//
+// and the vector is re-centred to sum to zero. The newcomer's contrasts with B are then its
+// epoch-1 draw's, and it walks with the rest afterwards. On the window from 2016,
+// Miðflokkurinn enters in epoch 2 and Sósíalistaflokkurinn in epoch 3; Prósent first polls
+// in epoch 2 and Maskína in epoch 3.
+//
+// Shocks are zero-sum over parties (sum_to_zero_vector, std_normal, so each has covariance
+// C = I - 11'/P), exactly like v4's mu_gamma and gamma_free, so the model stays
+// reference-invariant; R/sampler_check/exact_checks_polling_watch.R checks that the log
+// density is unchanged when the parties are permuted.
 //
 // tau_mu and tau_house are either sampled (estimate_tau = 1, half-normal prior
 // with scale tau_prior_scale) or fixed from data (estimate_tau = 0). With both
-// fixed at 0 every z is prior-only and the model is v4, which is the
-// implementation check.
+// fixed at 0 every z is prior-only, the restarts change nothing and the model is v4,
+// which is the implementation check.
 //
 // Identification. An epoch between two elections is pinned at both ends: the
 // latent state is continuous and equals the result on each election day, so
@@ -39,7 +63,12 @@
 // non-centred Brownian bridges between them, and log phi centred and bounded above at
 // phi_cap = 20. The earlier form, a forward walk from beta0, reached the depth cap on
 // the window from 2016. The posterior is unchanged apart from the bound
-// (R/sampler_check/equivalence_polling_watch.R).
+// (R/sampler_check/equivalence_polling_watch.R). The reference party only picks the
+// coordinates: a step's covariance per day is C Sigma C over all P parties, with
+// Sigma = diag(sigma) Omega diag(sigma) and C = I - 11'/P, since L_walk L_walk' is its
+// block over the other parties and the reference's step, minus their sum, completes it
+// (each column of C Sigma C sums to zero). So no party's variance or correlations are
+// special, as in the v2 forecast's walk.
 
 data {
   int<lower = 1> D;                                // Number of time points
@@ -207,6 +236,39 @@ transformed data {
     }
     if (n_polls > 0) phi_init /= n_polls;
   }
+
+  // Each house's first epoch (the epoch of its first poll; house 1, the results, has none)
+  // and each party's entry epoch (the first epoch in which a poll reports it; E + 1 for a
+  // party no poll reports, whose bias never reaches the likelihood). Per epoch e: the
+  // parties entering at e (enter_idx) and those that entered before it (before_idx).
+  array[H] int house_first = rep_array(E + 1, H);
+  array[P] int entry = rep_array(E + 1, P);
+  for (n in 1:N) {
+    if (house_n[n] > 1) {
+      house_first[house_n[n]] = min(house_first[house_n[n]], epoch_n[n]);
+      for (j in 1:n_parties_n[n]) {
+        entry[party_index_n[n, j]] = min(entry[party_index_n[n, j]], epoch_n[n]);
+      }
+    }
+  }
+  array[E] int n_enter = rep_array(0, E);
+  array[E, P] int enter_idx = rep_array(0, E, P);
+  array[E] int n_before = rep_array(0, E);
+  array[E, P] int before_idx = rep_array(0, E, P);
+  for (e in 1:E) {
+    for (p in 1:P) {
+      if (entry[p] == e) {
+        n_enter[e] += 1;
+        enter_idx[e, n_enter[e]] = p;
+      } else if (entry[p] < e) {
+        n_before[e] += 1;
+        before_idx[e, n_before[e]] = p;
+      }
+    }
+    if (e > 1 && n_enter[e] > 0 && n_before[e] == 0) {
+      reject("polling_watch_v5_epoch: parties enter at epoch ", e, " but none entered before it");
+    }
+  }
 }
 
 parameters {
@@ -249,24 +311,47 @@ transformed parameters {
   real<lower = 0> tau_mu = estimate_tau ? tau_mu_est[1] : tau_mu_fixed;
   real<lower = 0> tau_house = estimate_tau ? tau_house_est[1] : tau_house_fixed;
 
+  // The bias by epoch (header: the bias walk, house starts and newcomers). k = h - 1 indexes
+  // houses 2..H. dev0[k] is house k's epoch-1 deviation; its walk starts after its first
+  // epoch. At a party's entry epoch, after that epoch's step, its industry bias and each
+  // walking house's deviation restart at their epoch-1 value plus the mean drift of the
+  // parties that entered before it, then the vector is re-centred. With tau_mu = tau_house
+  // = 0 nothing drifts, the restarts change nothing, and the model is v4.
   array[E] vector[P] mu_gamma;
   array[E, H] vector[P] gamma;
   {
+    array[H - 1] vector[P] dev0;
     array[H - 1] vector[P] dev;
-    for (h in 1:(H - 1)) {
-      dev[h] = sigma_gamma * gamma_free[h];
+    for (k in 1:(H - 1)) {
+      dev0[k] = sigma_gamma * gamma_free[k];
+      dev[k] = dev0[k];
     }
-    mu_gamma[1] = mu_gamma0;
+    vector[P] mu = mu_gamma0;
     for (e in 1:E) {
       if (e > 1) {
-        mu_gamma[e] = mu_gamma[e - 1] + tau_mu * z_mu[e - 1];
-        for (h in 1:(H - 1)) {
-          dev[h] += tau_house * z_house[e - 1, h];
+        mu += tau_mu * z_mu[e - 1];
+        for (k in 1:(H - 1)) {
+          if (e > house_first[k + 1]) {
+            dev[k] += tau_house * z_house[e - 1, k];
+          }
+        }
+        if (n_enter[e] > 0) {
+          array[n_enter[e]] int pe = enter_idx[e, 1:n_enter[e]];
+          array[n_before[e]] int pb = before_idx[e, 1:n_before[e]];
+          mu[pe] = mu_gamma0[pe] + mean(mu[pb] - mu_gamma0[pb]);
+          mu -= mean(mu);
+          for (k in 1:(H - 1)) {
+            if (e > house_first[k + 1]) {
+              dev[k][pe] = dev0[k][pe] + mean(dev[k][pb] - dev0[k][pb]);
+              dev[k] -= mean(dev[k]);
+            }
+          }
         }
       }
+      mu_gamma[e] = mu;
       gamma[e, 1] = rep_vector(0.0, P);
       for (h in 2:H) {
-        gamma[e, h] = mu_gamma[e] + dev[h - 1];
+        gamma[e, h] = mu + dev[h - 1];
       }
     }
   }

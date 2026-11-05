@@ -2,6 +2,109 @@
 
 Newest first. Each section names the old and new model files by commit and sha256, the data, and the commands that reproduce it.
 
+## Fylgisvakt: the v2 forecast's entry rules for late houses and newcomers (5 November 2026)
+
+`Stan/polling_watch_v5_epoch.stan` was audited against the fixes made for the v2 forecast
+(`Stan/forecast_v2.stan` on `claude/epic-lichterman-e32cb6`). It already had three of them: a walk
+whose step covariance is C Σ C over all ten parties, so that no party is special; zero-sum
+shocks for the industry and house walks; and the polls' parties gathered by identity. It lacked
+the other two, and both apply on the production window. A house's walk started at epoch 1
+rather than at its first poll (Prósent first polls in epoch 2, Maskína in epoch 3). A newcomer's
+bias carried the drift of the epochs before it entered (Miðflokkurinn enters in epoch 2,
+Sósíalistaflokkurinn in epoch 3). Before a newcomer's entry, no poll speaks to its bias, and
+since each bias vector sums to zero, the drift shared by the parties already polled is flat in
+the data too. Both reached the newcomer's contrasts at entry, as did a late house's prior-only
+steps, as extra prior variance and as evidence about the taus. The model now holds each house's
+deviation until its first epoch. At a party's entry epoch, after that epoch's step, it restarts
+the party's industry bias and each walking house's deviation at their epoch-1 value plus the
+mean drift of the parties that entered earlier (the form of v2's fix F1, applied to both), and
+then re-centres (the model's header). With both taus at 0 the model is still v4.
+
+- **Old model:** `Stan/polling_watch_v5_epoch.stan` at fdf7590 (sha256
+  `c9160d29cf3b5e2ad145c062cc0b1781d874955c4289972776a8d596d2d21d0f`).
+- **New model:** the file as committed with this section. The fit ran its text with sha256
+  `5602771be124176a5570d73deb10ae88b495f213a77c5eb3150fcaf867742765`.
+- **Data:** `read_polling_watch_data()` from 1 January 2016 on the data files of 5 November
+  2026, which hold the corrected election anchors (`R/correct_election_anchors.R`): N = 336
+  rows on D = 314 dates from 2016-01-16 to 2026-09-27, H = 7, P = 10, E = 5, the epochs of the
+  previous section. Stan data md5 `1a4c422409224e35d1e277f5bc4f9297`.
+- **Sampler:** as in the previous section (4 chains, 1000 + 1000, `init = 0`, seed 4100,
+  `max_treedepth = 12`, taus sampled under half-normal(0, 0.1)).
+
+### Exact checks
+
+`exact_checks_polling_watch.R` evaluates identities of the log density with the model methods
+at six random points around a realistic base, with no fit. The log densities are about 1.7e6,
+so the tolerance, 1e-11 of that, is about 1.7e-5. **EXACT PASS.**
+
+| Check | Model | Result |
+|---|---|---|
+| A. The step covariance from `L_walk`, completed by the reference's minus-sum, equals C Σ C | new | relative error ≤ 1.2e-15 |
+| B. Log density unchanged with the parties reversed (reference Annað → Samfylkingin) and in a random order (→ Viðreisn), less the order term of `lkj_corr_cholesky` | new, old | ≤ 7.0e-10 |
+| | mutant: walk covariance Σ's block (the old models' (P − 1)-dimensional form) | 48 to 1,880: fails, as it must |
+| | mutant: polls' parties sliced by position | 8,370 to 81,300: fails, as it must |
+| | new, without the LKJ order term | 0.08 to 3.2: the term is needed |
+| C. A shock along a direction the data cannot see (the drift shared by the earlier parties before M's or J's entry, in the industry walk and in each house walking before it; a late house's steps before its first epoch) moves the log density only through its own prior | new | ≤ 3.9e-10, all 13 directions |
+| | old | 0.02 to 3,370 in the 12 directions that reach a later poll; the drift of Fréttablaðið/Stöð 2/Vísir before J's entry is flat in both (the house stopped polling in epoch 2) |
+| | new, positive controls (a step the data do see) | 3.2 to 508 |
+| D. New equals old with both taus fixed at 0 (v4), and on the window from the 2021 result (every party and house polled in epoch 1) | new vs old | exactly 0 |
+| | on the window from 2016, taus sampled | 46 to 2,110 |
+
+### Old against new
+
+Both on the same data. The house-start rule alone (a scratch copy of the new model without the
+newcomer restart) was fitted the same way, to see which rule moves what.
+
+| | Old | House start only | New |
+|---|---|---|---|
+| Tree depth; divergent; at the cap | 8 (4,000); 0; 0 | 8 (4,000); 0; 0 | 8 (4,000); 0; 0 |
+| Step size | 0.0168–0.0192 | 0.0157–0.0212 | 0.0204–0.0213 |
+| Max R-hat, parameters and `pi_smooth` | 1.009 | 1.005 | 1.004 |
+| Min bulk / tail ESS | 1057 / 1085 | 1162 / 1255 | 863 / 396 |
+| Min bulk ESS of `pi_smooth` | 2247 | 2425 | 3223 |
+| Wall time | 11.4 min | 14.0 min | 13.3 min |
+| `tau_mu`, median (90%) | 0.151 (0.115–0.196) | 0.149 (0.114–0.194) | 0.150 (0.114–0.195) |
+| `tau_house` | 0.050 (0.039–0.063) | 0.054 (0.042–0.069) | 0.054 (0.042–0.070) |
+| `sigma_gamma` | 0.065 (0.047–0.087) | 0.066 (0.049–0.088) | 0.071 (0.054–0.091) |
+| S, last date, median (90%) | 27.34 (24.79–30.09) | | 27.40 (24.86–29.99) |
+| D | 24.81 (22.68–27.00) | | 24.78 (22.69–27.00) |
+| P(S ahead of D), last date (MCSE) | 0.866 (0.006) | 0.856 (0.005) | 0.863 (0.006) |
+
+The published quantities do not move: on the last date no share's 5%, 50% or 95% quantile
+differs by more than twice its MCSE (max |z| 1.55; largest median difference 0.06 pp, S), and
+P(S ahead) is unchanged within MCSE. The bias scales move a little, within their intervals.
+`tau_house` rises once the late houses' first deviations no longer have prior-only steps to
+absorb them, and `sigma_gamma` rises once the newcomers' house contrasts at entry rest on it
+alone.
+
+The new fit's minimum tail ESS, 396, is `sigma[2]`, D's walk volatility, whose posterior has a
+long lower tail. One of the four chains went further into it than any chain of the other two
+fits (its 1% quantile is 3.9e-5, against 4.4e-4 to 1.3e-3 in the other chains of all three fits).
+The restarts do not touch σ or the walk, and the house-start fit has tail ESS 1255 there. Its
+bulk ESS (863) and R-hat (1.002) pass the platform's publish gate, which checks bulk ESS and
+R-hat, not tail ESS. Wall times are not comparable: the old fit ran beside a compile, and the
+other two ran side by side.
+
+### Reproducing
+
+From the project root, with `<dir>` a scratch folder (the first fit writes the data file the
+others read):
+
+```bash
+git show fdf7590:Stan/polling_watch_v5_epoch.stan > <dir>/v5_old.stan
+cp Stan/polling_watch_v5_epoch.stan <dir>/v5_new.stan
+LC_ALL=en_US.UTF-8 Rscript R/sampler_check/exact_checks_polling_watch.R --out=<dir>/exact_checks.csv
+LC_ALL=en_US.UTF-8 Rscript R/sampler_check/fit_polling_watch_headless.R --out=<dir>/old \
+  --stan=<dir>/v5_old.stan --start=2016-01-01 --data-json=<dir>/v5_2016.json
+LC_ALL=en_US.UTF-8 Rscript R/sampler_check/fit_polling_watch_headless.R --out=<dir>/new \
+  --stan=<dir>/v5_new.stan --data-json=<dir>/v5_2016.json
+LC_ALL=en_US.UTF-8 Rscript R/sampler_check/compare_polling_watch.R --old=<dir>/old \
+  --new=<dir>/new --out=<dir>/compare --label=old_new
+```
+
+The house-start-only copy is the new file without the block that begins
+`if (n_enter[e] > 0) {` in transformed parameters; it was not committed.
+
 ## Fylgisvakt: epoch-varying pollster bias on the anchored walk (28 October 2026)
 
 `R/fit_polling_watch.R` moves from `Stan/polling_watch_v4.stan` to

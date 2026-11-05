@@ -158,14 +158,14 @@ computes marginal + precision-based partial correlations, clusters parties by co
 
 | file | role |
 |---|---|
-| `Stan/polling_watch_v5_epoch.stan` | **production** model since 28 October 2026: v4 with pollster bias per epoch between election results (§10) |
+| `Stan/polling_watch_v5_epoch.stan` | **production** model since 28 October 2026: v4 with pollster bias per epoch between election results (§10); since 5 November 2026 with the v2 forecast's entry rules for late houses and newcomer parties (§11) |
 | `Stan/polling_watch_v4.stan` | one pollster bias over the whole window; production until 28 October 2026, kept as v5's comparison |
 | `Stan/polling_watch_v2.stan`, `_v3.stan`, `_v3b.stan` | invariant alternatives (kept as documentation) |
 | `Stan/polling_watch_v4_sym.stan` | rejected (symmetric beta0); kept for the record |
 | `Stan/polling_watch_v4_gmrf.stan` | rejected (GMRF-state; reintroduced a scale funnel); kept for the record |
 | `Stan/polling_watch.stan` | original drop-one model (superseded; not invariant) |
 | `R/fit_polling_watch.R` | fits v5 to `read_polling_watch_data()` from 1 January 2016, the election forecast's window (fixed party order + locale guard), with the epochs of `prepare_polling_watch_epochs()`; writes the `pi_smooth`, `Omega` and per-epoch house-effect parquets, the epoch table, the fit, `diagnostics.json` and the polls it saw |
-| `R/sampler_check/fit_polling_watch_headless.R`, `equivalence_polling_watch.R`, `compare_polling_watch.R` | the §9 and §10 checks: headless fits (optionally leave-future-out), the point-by-point equivalence check, old against new |
+| `R/sampler_check/fit_polling_watch_headless.R`, `equivalence_polling_watch.R`, `compare_polling_watch.R`, `exact_checks_polling_watch.R` | the §9–§11 checks: headless fits (optionally leave-future-out), the point-by-point equivalence check, old against new, and §11's exact checks (reference invariance, entry flatness, reductions) |
 | `R/make_correlation_plots.R` | renders the clustered marginal + partial (precision) correlation heatmap from `Omega` |
 
 ---
@@ -249,3 +249,23 @@ Sjálfstæðisflokkurinn by 0.19 on the logit scale and overstate Samfylkingin b
 for the epoch since the 2024 election says they understate both, Sjálfstæðisflokkurinn by 0.11
 and Samfylkingin by 0.04, so it lifts Sjálfstæðisflokkurinn less than v4 does and lifts
 Samfylkingin a little where v4 lowered it.
+
+## 11. Entry rules from the v2 forecast (5 November 2026)
+
+v5 was audited against the fixes made for the v2 forecast (`Stan/forecast_v2.stan` on its
+branch). It already had three: a walk whose step covariance is C Σ C over all ten parties, so
+the reference party only picks coordinates; zero-sum shocks; and identity-gathered partial
+polls. It lacked two, which v5 now has:
+
+- **A house's walk starts at its first poll.** Before this change, Prósent (first poll in
+  epoch 2) and Maskína (epoch 3) entered with one and two prior-only steps of `tau_house`.
+- **A newcomer restarts at its entry epoch.** Miðflokkurinn enters in epoch 2 and
+  Sósíalistaflokkurinn in epoch 3. At entry, after that epoch's step, the newcomer's industry
+  bias and each walking house's deviation are reset to their epoch-1 value plus the mean drift
+  of the parties already polled, and the vector is re-centred. Without this, drift that no poll
+  could see reached its contrasts.
+
+With both taus at 0 v5 is still v4. `R/sampler_check/exact_checks_polling_watch.R` checks the
+invariance and both rules exactly; on the production window the shares at the last date move by
+at most 0.06 pp and P(S ahead) stays at 0.86 (`R/sampler_check/RESULTS.md`, Fylgisvakt: the v2
+forecast's entry rules). The §10 backtests ran the model before this change and were not rerun.
