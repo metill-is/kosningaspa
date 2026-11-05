@@ -1,7 +1,114 @@
 box::use(
+  R / harness / compare_runs[NEAR_CAP],
+  R / harness / constants[project_root],
   R / harness / info_set[info_set],
-  R / harness / stage1[stage1_data, stage1_mu_f]
+  R / harness / runs[sha256_file],
+  R / harness / stage1[
+    STAGE1_STAN, stage1_current, stage1_data, stage1_key, stage1_mu_f, stage1_near_cap, stage1_near_cap_of
+  ],
+  R / harness / v2_reference[V2_CAP_MARGIN, V2_STAGE1_LOG_CAP]
 )
+
+# The near-cap counts of a stage-1 record over 4 x 1000 draws.
+NEAR_RECORD <- list(cap = 20, margin = 2, near_cap = 0.5, n_draws = 4000L, within_margin = 6L, within_near_cap = 2L)
+
+# A stage-1 cache record as stage1_mu_f() writes it (iter_sampling 1000, so 4 x 1000 draws), at
+# key `key`, its log phi_f near-cap counts `near` (none: a record written before they were).
+stage1_record <- function(key = strrep("e5", 32), near = NEAR_RECORD, parties = c("p1", "p2")) {
+  diagnostics <- list(
+    max_rhat = 1.002, min_ess_bulk = 900, min_ess_tail = 800, num_divergent = 0L, num_max_treedepth = 0L,
+    min_ebfmi = 0.9, minutes = 0.2
+  )
+  if (!is.null(near)) diagnostics$log_phi_f_near_cap <- near
+  list(
+    sha256 = key, E = "2021-09-25", F = "2021-03-29", parties = I(parties), mu_f = I(rep(0, length(parties))),
+    diagnostics = diagnostics, seed = 20261028L, iter_warmup = 1000L, iter_sampling = 1000L, cmdstan_version = "2.38.0"
+  )
+}
+
+# `rec` written to `path` as stage1_mu_f() writes mu_f.json; returns `path`.
+round_trip <- function(rec, path = withr::local_tempfile(fileext = ".json", .local_envir = parent.frame())) {
+  jsonlite::write_json(rec, path, auto_unbox = TRUE, pretty = TRUE, digits = I(17))
+  path
+}
+
+test_that("stage 1's cap and the two margins are Decision 4's, the stop rule's and the Stan file's", {
+  # WHY: written out here, so that a change to any of them shows.
+  expect_identical(V2_STAGE1_LOG_CAP, c(log_phi_f = 20))
+  expect_identical(V2_CAP_MARGIN, 2)
+  expect_identical(NEAR_CAP, 0.5)
+  line <- grep("phi_f_inv;", readLines(root(STAGE1_STAN)), value = TRUE)
+  expect_length(line, 1)
+  expect_match(line, "real<lower = exp(-20)> phi_f_inv;", fixed = TRUE)
+})
+
+test_that("stage 1 counts the draws of log phi_f within 2 and within 0.5 of its cap, strictly", {
+  # WHY: log phi_f = -log(phi_f_inv); 18 and 19.5 sit exactly on the margins and round-trip exp() and log() exactly.
+  log_phi_f <- c(rep(18.5, 3), 18, rep(19.75, 2), 19.5, rep(10, 5))
+  near <- stage1_near_cap(matrix(exp(-log_phi_f), ncol = 1))
+  expect_identical(near, list(cap = 20, margin = 2, near_cap = 0.5, n_draws = 12L, within_margin = 6L, within_near_cap = 2L))
+  expect_identical(stage1_near_cap(exp(-rep(5, 8)))[c("within_margin", "within_near_cap")], list(within_margin = 0L, within_near_cap = 0L))
+  expect_error(stage1_near_cap(numeric(0)), "stage 1: phi_f_inv has no draws")
+  expect_error(stage1_near_cap(c(0.1, NA)), "stage 1: phi_f_inv has no draws, or a missing or non-positive one")
+  expect_error(stage1_near_cap(c(0.1, 0)), "non-positive")
+})
+
+test_that("a stage-1 record holds its near-cap counts only when they are the current code's", {
+  read <- function(rec) stage1_near_cap_of(jsonlite::read_json(round_trip(rec)))
+  expect_identical(read(stage1_record()), list(n_draws = 4000L, within_margin = 6L, within_near_cap = 2L))
+  # WHY: a record written before the counts were recorded is stale.
+  expect_null(read(stage1_record(near = NULL)))
+  near <- NEAR_RECORD
+  stale <- list(
+    list(margin = 1.5), list(near_cap = 0.25), list(cap = 22), list(n_draws = 400L), list(within_margin = 1L),
+    list(within_near_cap = -1L), list(within_margin = 6.5), list(within_margin = 4001L, n_draws = 4000L)
+  )
+  for (edit in stale) expect_null(read(stage1_record(near = utils::modifyList(near, edit))), label = paste(names(edit), unlist(edit)))
+  expect_null(read(stage1_record(near = near[names(near) != "within_near_cap"])))
+  expect_null(stage1_near_cap_of(list()))
+  expect_null(stage1_near_cap_of("not a record"))
+
+  dir <- withr::local_tempdir()
+  path <- file.path(dir, "mu_f.json")
+  expect_false(stage1_current(path))
+  round_trip(stage1_record(near = NULL), path)
+  expect_false(stage1_current(path))
+  round_trip(stage1_record(), path)
+  expect_true(stage1_current(path))
+})
+
+test_that("a stale stage-1 record is refitted, or with fit = FALSE read as a cold cache, and a current one read without a compile", {
+  skip_without_snapshot()
+  results <- withr::local_tempdir()
+  withr::local_envvar(HARNESS_RESULTS = results)
+  # WHY: a fit would then fail with "compiled", so a read that returns shows no fit ran.
+  local_mocked_bindings(cmdstan_model = function(...) stop("compiled"), .package = "cmdstanr")
+  info <- info_set(as.Date("2021-09-25"), as.Date("2021-03-29"))
+  cfg <- cfg_m0()
+  # The key, as stage1_mu_f() computes it.
+  data <- stage1_data(info)
+  attributes(data) <- list(names = names(data))
+  json <- withr::local_tempfile(fileext = ".json")
+  cmdstanr::write_stan_json(data, json)
+  S_f <- info$fundamentals$S_f
+  key <- stage1_key(sha256_file(file.path(project_root(), STAGE1_STAN)), sha256_file(json), cfg$stage1, S_f)
+  path <- file.path(results, "stage1", key, "mu_f.json")
+  dir.create(dirname(path), recursive = TRUE)
+
+  round_trip(stage1_record(key, near = NULL, parties = S_f), path)
+  expect_error(
+    stage1_mu_f(info, cfg, fit = FALSE),
+    "the cached record has no log phi_f near-cap counts, so it is stale", fixed = TRUE
+  )
+  expect_error(stage1_mu_f(info, cfg, fit = FALSE), "stage 1: no cached fit for 2021-09-25 F 2021-03-29", fixed = TRUE)
+  expect_error(stage1_mu_f(info, cfg), "compiled", fixed = TRUE)
+  round_trip(stage1_record(key, parties = S_f), path)
+  s1 <- stage1_mu_f(info, cfg, fit = FALSE)
+  expect_identical(s1$sha256, key)
+  expect_identical(stage1_mu_f(info, cfg), s1)
+  expect_identical(s1$diagnostics$log_phi_f_near_cap$within_margin, 6L)
+})
+
 
 test_that("the target row cannot reach stage 1", {
   skip_without_snapshot()
@@ -36,7 +143,13 @@ test_that("stage 1 is cached by its inputs", {
   expect_identical(a, b)
   expect_named(a$mu_f, info$fundamentals$S_f)
   expect_lt(abs(sum(a$mu_f)), 1e-8)
-  expect_true(file.exists(file.path(Sys.getenv("HARNESS_RESULTS"), "stage1", a$sha256, "mu_f.json")))
+  path <- file.path(Sys.getenv("HARNESS_RESULTS"), "stage1", a$sha256, "mu_f.json")
+  expect_true(file.exists(path))
+  # WHY: the fit records Decision 4's near-cap counts of log phi_f over its chains x iter_sampling draws.
+  near <- stage1_near_cap_of(jsonlite::read_json(path))
+  expect_identical(near$n_draws, 4L * cfg$stage1$iter_sampling)
+  expect_true(near$within_near_cap <= near$within_margin && near$within_margin <= near$n_draws)
+  expect_true(stage1_current(path))
   out <- capture.output(again <- stage1_mu_f(info, cfg))
   expect_false(any(startsWith(out, "STAGE1")))
   expect_identical(again, a)

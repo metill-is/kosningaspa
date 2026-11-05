@@ -176,6 +176,19 @@ TAU_HOUSE_SD <- 0.1
 #' @export
 V2_LOG_CAPS <- c(log_phi = LOG_PHI_CAP, log_phi_K = LOG_PHI_K_CAP, log_kappa = LOG_KAPPA_CAP)
 
+#' The cap of stage 1's bounded log concentration (Decision 4), log φ_f < 20, which
+#' `Stan/fundamentals_v2.stan` sets as `phi_f_inv > exp(-20)`. Stage 1 is not V2's model, so
+#' it is kept apart from `V2_LOG_CAPS`, whose names are `param_draws.parquet` columns;
+#' `R/harness/stage1.R` counts its draws near it.
+#' @export
+V2_STAGE1_LOG_CAP <- c(log_phi_f = 20)
+
+#' Decision 4's reporting margin: the Tier 0 checks (`R/harness/v2_checks.R`) report the draws
+#' of each bounded log concentration within this of its cap, log c > cap − 2, beside the stop
+#' rule's 0.5 (`NEAR_CAP`, `R/harness/compare_runs.R`).
+#' @export
+V2_CAP_MARGIN <- 2
+
 #' Stop with "v2 reference: " and `...`.
 fail <- function(...) stop("v2 reference: ", ..., call. = FALSE)
 

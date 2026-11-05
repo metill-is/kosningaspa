@@ -100,6 +100,9 @@ USAGE <- paste(
 # Decision 5.
 LP_RHAT_MAX <- 1.1
 DIVERGENT_MAX <- 0.01
+#' The stop rule's margin: a draw is near a cap when cap - x <= NEAR_CAP. The Tier 0 checks
+#' (R/harness/v2_checks.R) and stage 1's record (R/harness/stage1.R) report the draws within it.
+#' @export
 NEAR_CAP <- 0.5
 NEAR_CAP_MAX <- 0.01
 RHAT_MAX <- 1.10

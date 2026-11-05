@@ -1,8 +1,8 @@
 # v2_checks.R (the Phase 2 plan's Task 16), run as a script on synthetic run directories: made-up
-# meta.json, param_draws.parquet and ppc_results.parquet, never a fit's draws, with the committed
-# official counts of harness/truth/. Its counts, correlation and ESS are compared with values
-# computed here by hand. The run directories hold no eday_* or latent_* parquet, so a script that
-# read one would stop.
+# meta.json, param_draws.parquet, ppc_results.parquet and stage-1 records, never a fit's draws,
+# with the committed official counts of harness/truth/. Its counts, correlation and ESS are
+# compared with values computed here by hand. The run directories hold no eday_* or latent_*
+# parquet, so a script that read one would stop.
 box::use(
   R / harness / constants[KJORDAEMI, POLL_PARTIES],
   R / harness / runs[run_id],
@@ -22,6 +22,11 @@ KD <- KJORDAEMI$kjordaemi
 PARTIES <- POLL_PARTIES
 # WHY: a forecast-like field of meta.json, which the checks must not print.
 DECOY <- 0.4242
+# Two stage-1 keys: the 2024 eve cell's record holds the near-cap counts; the 2021 f180 cell's
+# was written before they were recorded.
+SHA_EVE <- strrep("a1", 32)
+SHA_F180 <- strrep("b2", 32)
+NEAR_EVE <- list(cap = 20, margin = 2, near_cap = 0.5, n_draws = 4000L, within_margin = 40L, within_near_cap = 8L)
 
 # v2_checks.R run from the project root; its output, with the exit status as attribute "status"
 # when it is not 0.
@@ -51,19 +56,28 @@ ar1 <- function(rho) {
   }))
 }
 
-# The made-up parameters of one run, in draw order (chain by chain): per draw, the walk scales
-# sigma and a random correlation matrix Omega over the ten parties, three houses' log phi, log
-# phi_K, log kappa and s_bar_zeta. Each sigma and each entry of the matrix whose Gram matrix
-# gives Omega mixes at its own rate, so the entries' ESS differ and the min names one of them.
-# With `near`, some draws sit within 2 of a cap (20, 20, 2): log_phi[1] on 4 draws (and at exactly
-# cap - 2 on a fifth, which is not within), log_phi[2] on 12, log_phi_K on 8 (and exactly at 18
-# on one), log_kappa on 16 (and exactly at 0 on one).
-make_params <- function(seed, near = FALSE) {
-  P <- length(PARTIES)
+# The made-up parameters of one run over P parties, in draw order (chain by chain): per draw, the
+# walk scales sigma and a random correlation matrix Omega, three houses' log phi, log phi_K, log
+# kappa and s_bar_zeta. By default each sigma and each entry of the matrix whose Gram matrix gives
+# Omega mixes at its own rate, so the entries' ESS differ. With `offdiag`, sigma and that matrix
+# mix fast but a slow factor ties parties 1 and 2, so C Sigma C's slowest entry is off its
+# diagonal. With `near`, draws sit at or near the caps (20, 20, 2) as NEAR_CELLS describes.
+make_params <- function(seed, near = FALSE, offdiag = FALSE, P = length(PARTIES)) {
   p <- withr::with_seed(seed, {
-    sigma <- exp(-4 + 0.4 * vapply(stats::runif(P, 0, 0.9), ar1, numeric(DRAWS)))
-    z <- vapply(stats::runif((P + 3) * P, 0, 0.95), ar1, numeric(DRAWS))
-    omega <- lapply(seq_len(DRAWS), \(i) stats::cov2cor(crossprod(matrix(z[i, ], P + 3, P))))
+    if (offdiag) {
+      sigma <- exp(-4 + 0.3 * vapply(rep(0, P), ar1, numeric(DRAWS)))
+      z <- vapply(rep(0, (P + 3) * P), ar1, numeric(DRAWS))
+      slow <- ar1(0.97)
+      omega <- lapply(seq_len(DRAWS), \(i) {
+        A <- matrix(z[i, ], P + 3, P)
+        A[, 2] <- A[, 2] + 2 * slow[i] * A[, 1]
+        stats::cov2cor(crossprod(A))
+      })
+    } else {
+      sigma <- exp(-4 + 0.4 * vapply(stats::runif(P, 0, 0.9), ar1, numeric(DRAWS)))
+      z <- vapply(stats::runif((P + 3) * P, 0, 0.95), ar1, numeric(DRAWS))
+      omega <- lapply(seq_len(DRAWS), \(i) stats::cov2cor(crossprod(matrix(z[i, ], P + 3, P))))
+    }
     log_phi_K <- stats::rnorm(DRAWS, 8, 1)
     list(
       sigma = sigma, omega = omega, log_phi = matrix(stats::runif(DRAWS * 3, 5, 15), DRAWS, 3), log_phi_K = log_phi_K,
@@ -71,16 +85,33 @@ make_params <- function(seed, near = FALSE) {
     )
   })
   if (near) {
-    p$log_phi[1:4, 1] <- 18.5
-    p$log_phi[5, 1] <- 18
-    p$log_phi[6:17, 2] <- 19.9
-    p$log_phi_K[18:25] <- 18.25
-    p$log_phi_K[26] <- 18
-    p$log_kappa[27:42] <- 0.5
-    p$log_kappa[43] <- 0
+    # log_phi[1]: 20 draws within 2 of the cap but not within 0.5; log_phi[2]: 12 within both;
+    # log_phi[3]: 2 exactly at cap - 0.5 (within 2, not within 0.5) and 1 exactly at cap - 2 (in neither).
+    p$log_phi[1:20, 1] <- 18.5
+    p$log_phi[21:32, 2] <- 19.9
+    p$log_phi[33:34, 3] <- 19.5
+    p$log_phi[35, 3] <- 18
+    # log_phi_K: 8 within 2 only, 4 within both, 2 exactly at 19.5 (within 2 only), 1 exactly at 18.
+    p$log_phi_K[36:43] <- 18.25
+    p$log_phi_K[44:47] <- 19.75
+    p$log_phi_K[48:49] <- 19.5
+    p$log_phi_K[50] <- 18
+    # log_kappa (cap 2): 16 within 2 only, 6 within both, 2 exactly at 1.5 (within 2 only), 1 exactly at 0.
+    p$log_kappa[51:66] <- 0.5
+    p$log_kappa[67:72] <- 1.8
+    p$log_kappa[73:74] <- 1.5
+    p$log_kappa[75] <- 0
   }
   p
 }
+
+# The cap cells the `near` draws give: log_phi's largest count is log_phi[1]'s within 2 and
+# log_phi[2]'s within 0.5; log_phi_K 8 + 4 + 2 and 4; log_kappa 16 + 6 + 2 and 6.
+NEAR_CELLS <- c(
+  "20 of 400 (5.0%) in log_phi[1] (House A); 12 of 400 (3.0%) in log_phi[2] (House B)",
+  "14 of 400 (3.5%); 4 of 400 (1.0%)", "24 of 400 (6.0%); 6 of 400 (1.5%)"
+)
+ZERO_CELLS <- rep("0 of 400 (0.0%); 0 of 400 (0.0%)", 3)
 
 # param_draws.parquet of `p`, as v2_extract() writes it: .chain, .iteration, .draw, then sigma,
 # L_Omega (the Cholesky factor of Omega, column-major), other parameters, the log
@@ -108,14 +139,14 @@ param_table <- function(p, reverse = FALSE, shuffle = FALSE) {
 # into PARTIES).
 planted <- function(election, k, p) paste(election, KD[k], PARTIES[p])
 
-# ppc_results.parquet of one run: for each closed election, kjördæmi and party, DRAWS replicates of
-# the official count y (read by name from the folded official table): half at y - 1, half at y + 1,
-# except a planted cell's c(below, tie, above) counts at y - 1, y and y + 1; 0 for a party with no
-# official count at that election. With `reverse`, the parties and kjördæmi in reversed order, and
-# with `shuffle`, the rows in a random order.
-ppc_table <- function(closed, plant = list(), reverse = FALSE, shuffle = FALSE) {
+# ppc_results.parquet of one run: for each closed election, kjördæmi and party of `parties`, DRAWS
+# replicates of the official count y (read by name from the folded official table): half at
+# y - 1, half at y + 1, except a planted cell's c(below, tie, above) counts at y - 1, y and y + 1;
+# 0 for a party with no official count at that election. With `reverse`, the parties and kjördæmi
+# in reversed order, and with `shuffle`, the rows in a random order.
+ppc_table <- function(closed, plant = list(), reverse = FALSE, shuffle = FALSE, parties = PARTIES) {
   folded <- fold_truth(read_truth())
-  parties <- if (reverse) rev(PARTIES) else PARTIES
+  if (reverse) parties <- rev(parties)
   kd <- if (reverse) rev(KD) else KD
   grid <- expand.grid(flokkur = parties, kjordaemi = kd, election = closed, stringsAsFactors = FALSE)
   rows <- lapply(seq_len(nrow(grid)), \(i) {
@@ -138,34 +169,58 @@ ppc_table <- function(closed, plant = list(), reverse = FALSE, shuffle = FALSE) 
   ppc
 }
 
-# A finished V2-family run under `results`: its meta.json (passed through `edit_meta`), its
-# param_draws.parquet and its ppc_results.parquet (each passed through its `edit_` function).
+# A stage-1 cache record under `results`, as stage1_mu_f() writes it, at key `sha` and naming
+# `key`; with `near`, its log phi_f near-cap counts, without, as written before they were recorded.
+write_stage1 <- function(results, sha, near = NULL, key = sha) {
+  dir <- file.path(results, "stage1", sha)
+  dir.create(dir, recursive = TRUE, showWarnings = FALSE)
+  diagnostics <- list(
+    max_rhat = 1.002, min_ess_bulk = 900, min_ess_tail = 800, num_divergent = 0L, num_max_treedepth = 0L,
+    min_ebfmi = 0.9, minutes = 0.2
+  )
+  if (!is.null(near)) diagnostics$log_phi_f_near_cap <- near
+  rec <- list(
+    sha256 = key, E = "2024-11-30", F = "2024-11-29", parties = I(c("p1", "p2")), mu_f = I(c(0.1, -0.1)),
+    diagnostics = diagnostics, seed = 20261028L, iter_warmup = 1000L, iter_sampling = 1000L, cmdstan_version = "2.38.0"
+  )
+  jsonlite::write_json(rec, file.path(dir, "mu_f.json"), auto_unbox = TRUE, pretty = TRUE, digits = I(17))
+}
+
+# A finished V2-family run under `results`: its meta.json (passed through `edit_meta`; `stage1`
+# its stage1_sha256, NULL for a run with no stage 1), its param_draws.parquet and its
+# ppc_results.parquet (each passed through its `edit_` function).
 fake_run <- function(results, arm, cell, seed, closed, params, plant = list(), minutes = 1, reverse = FALSE,
-                     shuffle = FALSE, edit_meta = identity, edit_pd = identity, edit_ppc = identity) {
+                     shuffle = FALSE, stage1 = NULL, parties = PARTIES, edit_meta = identity, edit_pd = identity,
+                     edit_ppc = identity) {
   dir <- file.path(results, run_id(arm, cell[1], cell[2], seed))
   dir.create(dir, recursive = TRUE)
   meta <- list(
     arm = arm, role = if (arm == "v2") "candidate" else "check", E = cell[1], F = cell[2], id = basename(dir),
     seed = seed, iter_warmup = WARMUP, iter_sampling = ITERS, chains = CHAINS, max_treedepth = 12L, minutes = minutes,
-    party_order = I(if (reverse) rev(PARTIES) else PARTIES), kjordaemi_levels = I(if (reverse) rev(KD) else KD),
-    house_levels = I(HOUSES), closed_elections = I(closed), decoy_median_share = DECOY
+    party_order = I(if (reverse) rev(parties) else parties), kjordaemi_levels = I(if (reverse) rev(KD) else KD),
+    house_levels = I(HOUSES), closed_elections = I(closed), stage1_sha256 = stage1, decoy_median_share = DECOY
   )
-  jsonlite::write_json(edit_meta(meta), file.path(dir, "meta.json"), auto_unbox = TRUE, pretty = TRUE, digits = NA, na = "string")
+  # WHY: null = "null", as fit_cell.R writes a NULL stage1_sha256.
+  jsonlite::write_json(edit_meta(meta), file.path(dir, "meta.json"),
+    auto_unbox = TRUE, pretty = TRUE, digits = NA, na = "string", null = "null"
+  )
   arrow::write_parquet(edit_pd(param_table(params, reverse, shuffle)), file.path(dir, "param_draws.parquet"))
-  arrow::write_parquet(edit_ppc(ppc_table(closed, plant, reverse, shuffle)), file.path(dir, "ppc_results.parquet"))
+  arrow::write_parquet(edit_ppc(ppc_table(closed, plant, reverse, shuffle, parties)), file.path(dir, "ppc_results.parquet"))
   invisible(dir)
 }
 
 # By hand, from the parameters themselves (Omega, not its factor): per draw C Sigma C' with an
 # explicit C = I - 11'/P, and Omega's off-diagonal entries, all P^2 and P(P - 1) of them; each
-# one's bulk ESS over the chains, and the min, rounded down as the report rounds.
-flat_by_hand <- function(p) {
+# one's bulk ESS over the chains, and the min, rounded down as the report rounds. With
+# `diagonal`, the min over C Sigma C's diagonal alone.
+flat_by_hand <- function(p, diagonal = FALSE) {
   P <- ncol(p$sigma)
   C <- diag(P) - matrix(1 / P, P, P)
   csc <- t(vapply(seq_len(DRAWS), \(i) {
     S <- diag(p$sigma[i, ]) %*% p$omega[[i]] %*% diag(p$sigma[i, ])
     c(C %*% S %*% t(C))
   }, numeric(P * P)))
+  if (diagonal) csc <- csc[, which(diag(P) == 1)]
   off <- t(vapply(seq_len(DRAWS), \(i) p$omega[[i]][row(diag(P)) != col(diag(P))], numeric(P * (P - 1))))
   ess <- function(m) apply(m, 2, \(x) posterior::ess_bulk(matrix(x, ITERS, CHAINS)))
   c(sprintf("%.0f", floor(round(min(ess(csc)), 6))), sprintf("%.0f", floor(round(min(ess(off)), 6))))
@@ -190,7 +245,7 @@ PLANT_EVE <- stats::setNames(
     planted("2021-09-25", 4, 9), planted("2021-09-25", 2, 4)
   )
 )
-# The 2021 f180 run's: two outside in 2016 (mid-PIT 0 and 1), none in 2017 (0.05).
+# The 2021 f180 runs': two outside in 2016 (mid-PIT 0 and 1), none in 2017 (0.05).
 PLANT_F180 <- stats::setNames(
   list(c(0L, 0L, 400L), c(400L, 0L, 0L), c(20L, 0L, 380L)),
   c(planted("2016-10-29", 3, 1), planted("2016-10-29", 6, 2), planted("2017-10-28", 1, 8))
@@ -199,9 +254,9 @@ PLANT_F180 <- stats::setNames(
 HEADINGS <- c(
   "Arm", "Cell (E, F, tag)", "Seed", "Iterations (warmup + sampling)", "Minutes", "Minutes projected to 1000 + 2000",
   "Over 120 projected minutes (spec \u00a76.9)", "Corr(log \u03c6_K, s\u0304_\u03b6)",
-  "Draws with log \u03c6_h > 18 (cap 20 \u2212 2), max over houses", "Draws with log \u03c6_K > 18 (cap 20 \u2212 2)",
-  "Draws with log \u03ba > 0 (cap 2 \u2212 2)", "Min bulk ESS over the entries of C\u03a3C\u1d40",
-  "Min bulk ESS over the off-diagonals of \u03a9 = L_Omega L_Omega\u1d40"
+  "Draws with log \u03c6_h within 2; within 0.5 of cap 20, max over houses", "Draws with log \u03c6_K within 2; within 0.5 of cap 20",
+  "Draws with log \u03ba within 2; within 0.5 of cap 2", "Stage 1: draws with log \u03c6_f within 2; within 0.5 of cap 20",
+  "Min bulk ESS over the entries of C\u03a3C\u1d40", "Min bulk ESS over the off-diagonals of \u03a9 = L_Omega L_Omega\u1d40"
 )
 PPC_HEADINGS <- c("Arm", "Cell (E, F, tag)", "Seed", "Closed election", "Cells with PIT outside [0.025, 0.975]", "Cells")
 
@@ -213,22 +268,34 @@ test_that("the Tier 0 run list holds V2's and v2-perm's fits on 2024 eve and 202
   ))
 })
 
-test_that("the V2 checks report the hand-computed counts, correlation and ESS, by name, and no forecast", {
+test_that("the V2 checks report the hand-computed counts, correlation, ESS and minutes, by name, and no forecast", {
   results <- withr::local_tempdir()
   out_dir <- withr::local_tempdir()
   withr::local_envvar(HARNESS_RESULTS = results)
   eve <- make_params(11, near = TRUE)
-  f180 <- make_params(12)
-  fake_run(results, "v2", EVE, 1201L, CLOSED_EVE, eve, PLANT_EVE, minutes = 12.4)
-  fake_run(results, "v2", F180, 1202L, CLOSED_F180, f180, PLANT_F180, minutes = 10)
+  f180 <- make_params(12, offdiag = TRUE)
+  write_stage1(results, SHA_EVE, NEAR_EVE)
+  write_stage1(results, SHA_F180)
+  fake_run(results, "v2", EVE, 1201L, CLOSED_EVE, eve, PLANT_EVE, minutes = 12.4, stage1 = SHA_EVE)
+  # WHY: 200 + 100 iterations, so warmup + sampling (300) is neither 400 nor chains x sampling, and 12 minutes project to 12 x 3000 / 300 = 120 exactly, which is not flagged.
+  fake_run(results, "v2", F180, 1202L, CLOSED_F180, f180, PLANT_F180,
+    minutes = 12, stage1 = SHA_F180,
+    edit_meta = \(m) utils::modifyList(m, list(iter_warmup = 200L))
+  )
   # WHY: v2-perm's parameters and replicates are V2's in the reversed orders, its rows and columns shuffled, so its row repeats V2's only if every value is read by name.
-  fake_run(results, "v2-perm", EVE, 1201L, CLOSED_EVE, eve, PLANT_EVE, minutes = 17, reverse = TRUE, shuffle = TRUE)
-  runs <- file.path(out_dir, "runs.txt")
+  # WHY: 16.008 minutes at 300 + 100 project to 120.06, just above 120, which is flagged.
+  fake_run(results, "v2-perm", EVE, 1201L, CLOSED_EVE, eve, PLANT_EVE,
+    minutes = 16.008, reverse = TRUE, shuffle = TRUE, stage1 = SHA_EVE
+  )
+  fake_run(results, "v2-nofund", F180, 1202L, CLOSED_F180, f180, PLANT_F180, minutes = 10)
+  # WHY: the run list sits under the results root, so the report must print it as $HARNESS_RESULTS/..., never as the absolute path given.
+  runs <- file.path(results, "runs.txt")
   writeLines(c(
     "# lane arm E F seed",
     "A v2 2024-11-30 2024-11-29 1201",
     "B v2 2021-09-25 2021-03-29 1202",
-    "A v2-perm 2024-11-30 2024-11-29 1201"
+    "A v2-perm 2024-11-30 2024-11-29 1201",
+    "B v2-nofund 2021-09-25 2021-03-29 1202"
   ), runs)
   out <- file.path(out_dir, "v2_checks.md")
   tier0 <- root("harness", "tier0")
@@ -236,92 +303,199 @@ test_that("the V2 checks report the hand-computed counts, correlation and ESS, b
 
   shown <- checks(c(runs, out))
   expect_null(attr(shown, "status"), info = paste(shown, collapse = "\n"))
-  # WHY: 17 minutes at 300 + 100 iterations project to 17 x 3000 / 400 = 127.5 minutes.
-  expect_match(shown, "FLAG v2-perm_2024-11-30_2024-11-29_s1201: projected to 127.5 minutes at 1000 + 2000, over 120",
-    fixed = TRUE, all = FALSE
-  )
-  expect_length(grep("^FLAG", shown), 1)
+  expect_identical(grep("^FLAG", shown, value = TRUE), paste(
+    "FLAG v2-perm_2024-11-30_2024-11-29_s1201: projected to 120.1 minutes at 1000 + 2000, over 120",
+    "(spec \u00a76.9: report before Tier 1)"
+  ))
   text <- readLines(out, encoding = "UTF-8")
 
   main <- table_after(text, "## Parameters and compute")
   expect_identical(main[[1]], HEADINGS)
-  expect_length(main, 4)
+  expect_length(main, 5)
   flat_eve <- flat_by_hand(eve)
   flat_f180 <- flat_by_hand(f180)
+  # WHY: the f180 run's slowest C Sigma C' entry is off its diagonal, so a script that read the diagonal alone would print another min.
+  expect_false(identical(flat_by_hand(f180, diagonal = TRUE)[1], flat_f180[1]))
   corr_eve <- sprintf("%.3f", pearson(eve$log_phi_K, eve$s_bar_zeta))
   corr_f180 <- sprintf("%.3f", pearson(f180$log_phi_K, f180$s_bar_zeta))
-  near_eve <- c("12 of 400 (3.0%) in log_phi[2] (House B)", "8 of 400 (2.0%)", "16 of 400 (4.0%)")
+  stage1_eve <- "40 of 4000 (1.0%); 8 of 4000 (0.2%)"
   expect_identical(main[[2]], c(
-    "v2", "2024-11-30, 2024-11-29, eve", "1201", "300 + 100", "12.4", "93.0", "no", corr_eve, near_eve, flat_eve
+    "v2", "2024-11-30, 2024-11-29, eve", "1201", "300 + 100", "12.4", "93.0", "no", corr_eve, NEAR_CELLS, stage1_eve,
+    flat_eve
   ))
   expect_identical(main[[3]], c(
-    "v2", "2021-09-25, 2021-03-29, f180", "1202", "300 + 100", "10.0", "75.0", "no", corr_f180,
-    rep("0 of 400 (0.0%)", 3), flat_f180
+    "v2", "2021-09-25, 2021-03-29, f180", "1202", "200 + 100", "12.0", "120.0", "no", corr_f180, ZERO_CELLS,
+    "not recorded", flat_f180
   ))
   expect_identical(main[[4]], c(
-    "v2-perm", "2024-11-30, 2024-11-29, eve", "1201", "300 + 100", "17.0", "127.5", "yes", corr_eve, near_eve, flat_eve
+    "v2-perm", "2024-11-30, 2024-11-29, eve", "1201", "300 + 100", "16.0", "120.1", "yes", corr_eve, NEAR_CELLS,
+    stage1_eve, flat_eve
+  ))
+  expect_identical(main[[5]], c(
+    "v2-nofund", "2021-09-25, 2021-03-29, f180", "1202", "300 + 100", "10.0", "75.0", "no", corr_f180, ZERO_CELLS,
+    "no stage 1", flat_f180
   ))
 
   ppc <- table_after(text, "## Past elections: in-sample PIT under `y_rep_res`")
   expect_identical(ppc[[1]], PPC_HEADINGS)
   # WHY: 2016 had 8 parties with official counts (no M, no J), 2017 9 (no J) and 2021 all 10, each in 6 kjördæmi.
-  expect_identical(do.call(rbind, ppc[-1]), rbind(
-    c("v2", "2024-11-30, 2024-11-29, eve", "1201", "2016-10-29", "3", "48"),
-    c("v2", "2024-11-30, 2024-11-29, eve", "1201", "2017-10-28", "1", "54"),
-    c("v2", "2024-11-30, 2024-11-29, eve", "1201", "2021-09-25", "0", "60"),
-    c("v2", "2021-09-25, 2021-03-29, f180", "1202", "2016-10-29", "2", "48"),
-    c("v2", "2021-09-25, 2021-03-29, f180", "1202", "2017-10-28", "0", "54"),
-    c("v2-perm", "2024-11-30, 2024-11-29, eve", "1201", "2016-10-29", "3", "48"),
-    c("v2-perm", "2024-11-30, 2024-11-29, eve", "1201", "2017-10-28", "1", "54"),
-    c("v2-perm", "2024-11-30, 2024-11-29, eve", "1201", "2021-09-25", "0", "60")
-  ))
+  eve_rows <- function(arm) {
+    rbind(
+      c(arm, "2024-11-30, 2024-11-29, eve", "1201", "2016-10-29", "3", "48"),
+      c(arm, "2024-11-30, 2024-11-29, eve", "1201", "2017-10-28", "1", "54"),
+      c(arm, "2024-11-30, 2024-11-29, eve", "1201", "2021-09-25", "0", "60")
+    )
+  }
+  f180_rows <- function(arm) {
+    rbind(
+      c(arm, "2021-09-25, 2021-03-29, f180", "1202", "2016-10-29", "2", "48"),
+      c(arm, "2021-09-25, 2021-03-29, f180", "1202", "2017-10-28", "0", "54")
+    )
+  }
+  expect_identical(do.call(rbind, ppc[-1]), rbind(eve_rows("v2"), f180_rows("v2"), eve_rows("v2-perm"), f180_rows("v2-nofund")))
 
-  own <- gsub(out_dir, "", text, fixed = TRUE)
-  expect_true(any(grepl("- Run list: `/runs.txt`", own, fixed = TRUE)))
+  expect_true("- Run list: `$HARNESS_RESULTS/runs.txt`" %in% text)
+  expect_false(any(grepl(results, text, fixed = TRUE) | grepl(normalizePath(results), text, fixed = TRUE)))
+  expect_false(any(grepl("/[U]sers/", text)))
   # WHY: no column, header or row label may be a forecast quantity, so the whole report is checked for the words.
-  expect_false(any(grepl("\\b(share|votes|seats)\\b|eday|latent|pi_", own, ignore.case = TRUE)))
-  expect_false(any(grepl("0\\.424|42\\.4|4242", own)))
+  expect_false(any(grepl("\\b(share|votes|seats)\\b|eday|latent|pi_", text, ignore.case = TRUE)))
+  expect_false(any(grepl("0\\.424|42\\.4|4242", text)))
   expect_identical(tools::md5sum(list.files(tier0, full.names = TRUE)), before)
 })
 
-test_that("the V2 checks stop, writing nothing, on a run they cannot read", {
+test_that("the V2 checks stop, writing nothing, on each guard of their header", {
   results <- withr::local_tempdir()
   out_dir <- withr::local_tempdir()
   withr::local_envvar(HARNESS_RESULTS = results)
-  runs <- file.path(out_dir, "runs.txt")
+  runs <- file.path(results, "runs.txt")
   out <- file.path(out_dir, "v2_checks.md")
-  writeLines(c("A v2 2021-09-25 2021-03-29 1202", "A v2 2024-11-30 2024-11-29 1201"), runs)
+  run_list <- function(...) writeLines(c(...), runs)
   p <- make_params(13)
+  write_stage1(results, SHA_EVE, NEAR_EVE)
+  write_stage1(results, SHA_F180)
   # WHY: a readable run comes first, so a stop on the second shows that nothing is written in part.
-  fake_run(results, "v2", F180, 1202L, CLOSED_F180, p)
+  fake_run(results, "v2", F180, 1202L, CLOSED_F180, p, stage1 = SHA_F180)
   second <- file.path(results, run_id("v2", EVE[1], EVE[2], 1201L))
-  fails_with <- function(message, args = c(runs, out), ...) {
+  both <- c("A v2 2021-09-25 2021-03-29 1202", "A v2 2024-11-30 2024-11-29 1201")
+  # Builds the second run (unless `make` is FALSE) with `...` passed to fake_run(), then calls `post`.
+  fails_with <- function(message, ..., args = c(runs, out), params = p, post = NULL, make = TRUE) {
     unlink(second, recursive = TRUE)
-    if (length(list(...))) fake_run(results, "v2", EVE, 1201L, CLOSED_EVE, p, ...)
+    if (make) fake_run(results, "v2", EVE, 1201L, CLOSED_EVE, params, stage1 = SHA_EVE, ...)
+    if (!is.null(post)) post()
     unlink(out)
     shown <- checks(args)
     expect_identical(attr(shown, "status"), 1L, label = message)
-    expect_match(shown, message, fixed = TRUE, all = FALSE)
+    expect_match(shown, message, fixed = TRUE, all = FALSE, label = message)
     expect_false(file.exists(out))
+    expect_false(any(grepl(results, shown, fixed = TRUE) | grepl(normalizePath(results), shown, fixed = TRUE)), label = message)
   }
 
-  fails_with("usage: Rscript R/harness/v2_checks.R <run_list> [out]", args = character(0))
-  fails_with("v2_checks: no meta.json")
+  # The command line and the run list.
+  fails_with("usage: Rscript R/harness/v2_checks.R <run_list> [out]", args = character(0), make = FALSE)
+  fails_with("usage: Rscript R/harness/v2_checks.R <run_list> [out]", args = c(runs, out, "extra"), make = FALSE)
+  # WHY: a path under the project root, given absolute, is printed relative to it.
+  fails_with(
+    "v2_checks: no run list: harness/runs/no-such-list.txt",
+    args = c(root("harness", "runs", "no-such-list.txt"), out), make = FALSE
+  )
+  run_list("# lane arm E F seed")
+  fails_with("v2_checks: no run in $HARNESS_RESULTS/runs.txt", make = FALSE)
+  run_list("A v2 2024-11-30 2024-11-29")
+  fails_with("v2_checks: $HARNESS_RESULTS/runs.txt: a run has 5 fields (lane arm E F seed)", make = FALSE)
+  run_list("A v2 2017-10-28 2017-10-27 1201")
+  fails_with("v2_checks: 2017 is not checked before the freeze", make = FALSE)
+
+  # meta.json.
+  run_list(both)
+  fails_with("v2_checks: no meta.json for run v2_2024-11-30_2024-11-29_s1201", make = FALSE)
   fails_with("is not of the run list's run v2_2024-11-30_2024-11-29_s1201", edit_meta = \(m) utils::modifyList(m, list(seed = 1299L)))
+  fails_with("v2_checks: meta.json: E is not a date", edit_meta = \(m) utils::modifyList(m, list(E = "soon")))
   fails_with("v2_checks: meta.json: minutes is not a number", edit_meta = \(m) m[names(m) != "minutes"])
+  fails_with("v2_checks: meta.json: chains is not a positive whole number", edit_meta = \(m) utils::modifyList(m, list(chains = 0L)))
+  fails_with("v2_checks: meta.json: iter_warmup is not a number", edit_meta = \(m) utils::modifyList(m, list(iter_warmup = "many")))
+  fails_with(
+    "v2_checks: meta.json: house_levels is not one or more distinct strings",
+    edit_meta = \(m) utils::modifyList(m, list(house_levels = I(c("House A", "House A", "House C"))))
+  )
+  # WHY: labels_of()'s own message, not the date parse's, for a repeated closed election.
+  fails_with(
+    "v2_checks: meta.json: closed_elections is not one or more distinct strings",
+    edit_meta = \(m) utils::modifyList(m, list(closed_elections = I(c("2016-10-29", "2016-10-29"))))
+  )
+  fails_with(
+    "v2_checks: meta.json: closed_elections are not dates",
+    edit_meta = \(m) utils::modifyList(m, list(closed_elections = I(c("2016-10-29", "later"))))
+  )
+  fails_with(
+    "v2_checks: meta.json: closed_elections include 2024-11-30, not before E = 2024-11-30",
+    edit_meta = \(m) utils::modifyList(m, list(closed_elections = I(c(CLOSED_EVE, "2024-11-30"))))
+  )
+  fails_with("v2_checks: meta.json: stage1_sha256 is not a sha256", edit_meta = \(m) utils::modifyList(m, list(stage1_sha256 = "abc")))
+  run_list("A v2 2021-09-25 2021-03-29 1202", "A v2 2024-11-30 2024-11-28 1201")
+  unlink(second, recursive = TRUE)
+  odd <- fake_run(results, "v2", c(EVE[1], "2024-11-28"), 1201L, CLOSED_EVE, p, stage1 = SHA_EVE)
+  fails_with("v2_checks: run v2_2024-11-30_2024-11-28_s1201: not a forecast cell", make = FALSE)
+  unlink(odd, recursive = TRUE)
+  run_list(both)
+
+  # param_draws.parquet.
+  fails_with(
+    "v2_checks: no param_draws.parquet for run v2_2024-11-30_2024-11-29_s1201",
+    post = \() unlink(file.path(second, "param_draws.parquet"))
+  )
   fails_with("v2_checks: param_draws.parquet lacks L_Omega[3,2]", edit_pd = \(pd) pd[names(pd) != "L_Omega[3,2]"])
+  fails_with("v2_checks: param_draws.parquet holds a missing or non-numeric value of log_kappa", edit_pd = \(pd) {
+    pd$log_kappa[7] <- NA
+    pd
+  })
   fails_with("v2_checks: param_draws.parquet holds 399 draws, not chains x iter_sampling = 400", edit_pd = \(pd) pd[-1, ])
+  fails_with("v2_checks: param_draws.parquet's .chain and .iteration do not hold each of the 4 x 100 draws once", edit_pd = \(pd) {
+    pd$.iteration[2] <- 1L
+    pd
+  })
+  fails_with("v2_checks: param_draws.parquet holds elements of sigma beyond meta.json's levels: sigma[11]", edit_pd = \(pd) {
+    pd[["sigma[11]"]] <- pd[["sigma[1]"]]
+    pd
+  })
+
+  # The stage-1 record.
+  fails_with(
+    paste0("v2_checks: no stage-1 record for run v2_2024-11-30_2024-11-29_s1201: $HARNESS_RESULTS/stage1/", strrep("c3", 32), "/mu_f.json"),
+    edit_meta = \(m) utils::modifyList(m, list(stage1_sha256 = strrep("c3", 32)))
+  )
+  write_stage1(results, strrep("d4", 32), NEAR_EVE, key = SHA_EVE)
+  fails_with(
+    paste0("v2_checks: the stage-1 record $HARNESS_RESULTS/stage1/", strrep("d4", 32), "/mu_f.json is not of run"),
+    edit_meta = \(m) utils::modifyList(m, list(stage1_sha256 = strrep("d4", 32)))
+  )
+
+  # ppc_results.parquet and the official counts.
+  fails_with(
+    "v2_checks: no ppc_results.parquet for run v2_2024-11-30_2024-11-29_s1201",
+    post = \() unlink(file.path(second, "ppc_results.parquet"))
+  )
   fails_with(
     "v2_checks: ppc_results.parquet's elections are not meta.json's closed elections",
-    edit_meta = \(m) utils::modifyList(m, list(closed_elections = I(CLOSED_EVE[1:2])))
+    edit_ppc = \(ppc) ppc[ppc$election != as.Date("2021-09-25"), ]
   )
+  fails_with("or party outside meta.json's levels: Elsewhere", edit_ppc = \(ppc) {
+    ppc$kjordaemi[ppc$kjordaemi == KD[6]] <- "Elsewhere"
+    ppc
+  })
   fails_with("v2_checks: ppc_results.parquet does not hold 400 draws of each cell", edit_ppc = \(ppc) ppc[-1, ])
+  fails_with("v2_checks: no official count for 2016-10-29, Elsewhere, ", edit_ppc = \(ppc) {
+    ppc$kjordaemi[ppc$kjordaemi == KD[6]] <- "Elsewhere"
+    ppc
+  }, edit_meta = \(m) utils::modifyList(m, list(kjordaemi_levels = I(c(KD[1:5], "Elsewhere")))))
+  # WHY: a run without Annað (PARTIES[10]), which has official counts at every closed election.
+  fails_with(
+    "v2_checks: parties outside run v2_2024-11-30_2024-11-29_s1201 have official counts at its closed elections",
+    params = make_params(14, P = 9L), parties = PARTIES[1:9]
+  )
   # WHY: Miðflokkurinn (PARTIES[8]) had no list in 2016, so its replicates there must be 0.
   fails_with("a replicate count for a party with no official count", edit_ppc = \(ppc) {
     hit <- which(ppc$election == as.Date("2016-10-29") & ppc$flokkur == PARTIES[8])[1]
     ppc$votes[hit] <- 5L
     ppc
   })
-  writeLines("A v2 2017-10-28 2017-10-27 1201", runs)
-  fails_with("v2_checks: 2017 is not checked before the freeze")
 })

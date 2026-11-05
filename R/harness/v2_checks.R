@@ -5,46 +5,63 @@
 #
 # The run list is the queue's (harness/runs/; "lane arm E F seed" per line, # for comments). For
 # each run in it, in order, the script reads only the run's meta.json, param_draws.parquet and
-# ppc_results.parquet, in results_root()/<run_id>, and the closed elections' official counts in
+# ppc_results.parquet, in results_root()/<run_id>; the run's stage-1 record,
+# results_root()/stage1/<stage1_sha256>/mu_f.json, the sha256 read from meta.json (none for a run
+# with no stage 1); and the closed elections' official counts in
 # harness/truth/elections_official.csv (read_truth(), folded to the poll parties by fold_truth()).
 # It writes two markdown tables to out (default harness/tier0/v2_checks.md):
 #   - one row per run: the minutes, and the minutes projected to 1000 + 2000 iterations,
-#     minutes x 3000 / (iter_warmup + iter_sampling), flagged above 120 (spec section 6.9); the
-#     posterior correlation of log_phi_K and s_bar_zeta[1], the chains pooled; for each bounded
-#     log concentration, the draws within 2 of its cap on the model's log scale (log c > cap - 2,
-#     the caps V2_LOG_CAPS), for log_phi (one column per house) the largest count over the houses
-#     and the house that has it; and the (sigma, Omega) flat directions, computed per draw from
-#     sigma and L_Omega: the min bulk ESS over the chains of each distinct entry of C Sigma C', and
-#     of each off-diagonal entry of Omega, where Sigma = diag(sigma) Omega diag(sigma),
-#     Omega = L_Omega L_Omega' and C = I - 11'/P over the run's P parties;
+#     minutes x 3000 / (iter_warmup + iter_sampling), flagged strictly above 120 (spec section
+#     6.9); the posterior correlation of log_phi_K and s_bar_zeta[1], the chains pooled; for each
+#     bounded log concentration (Decision 4), the draws within V2_CAP_MARGIN (2) and within
+#     NEAR_CAP (0.5, the stop rule's margin) of its cap on the model's log scale, within m meaning
+#     log c > cap - m: log_phi (one column per house; for each margin the largest count over the
+#     houses and the house that has it), log_phi_K and log_kappa against V2_LOG_CAPS, and stage
+#     1's log_phi_f against V2_STAGE1_LOG_CAP, as its record counts them (stage1_near_cap_of();
+#     "not recorded" for a record without the counts, "no stage 1" for a run without one); and
+#     the (sigma, Omega) flat directions, computed per draw from sigma and L_Omega: the min bulk
+#     ESS over the chains of each distinct entry of C Sigma C', and of each off-diagonal entry of
+#     Omega, where Sigma = diag(sigma) Omega diag(sigma), Omega = L_Omega L_Omega' and
+#     C = I - 11'/P over the run's P parties;
 #   - one row per run and closed election: the count of kjördæmi x party cells whose mid-PIT
 #     under the in-sample replicates y_rep_res, P(y_rep < y) + P(y_rep = y) / 2, lies outside
 #     [0.025, 0.975], and the number of cells, the official count y matched by election,
 #     kjördæmi and party name, never by position. A party with no official count at an election
 #     (no list there) is left out, and its replicates there must all be 0.
-# It prints "FLAG <id>: projected to <x> minutes at 1000 + 2000, over 120 (...)" for each run
-# projected above 120 minutes, then "wrote <out> (<n> runs)". It reads no forecast quantity (no
-# eday_* or latent_* parquet) and writes none: counts, a correlation, ESS and minutes only.
-# It stops with "v2_checks: ...", writing nothing, on a bad command line or run list, a 2017
-# cell before the freeze (forecast_free(); spec section 5.7), a run with no meta.json or with one
-# of another run, a cell that is not a forecast cell, a meta.json field it reads that is missing
-# or does not parse, a parquet that is missing, lacks a column it reads or holds a missing value
-# there, a param_draws.parquet that does not hold chains x iter_sampling draws (one per chain and
-# iteration) or holds elements of sigma, L_Omega or log_phi beyond meta.json's parties and houses,
-# a ppc_results.parquet whose elections are not meta.json's closed elections, which names a
-# kjördæmi or party outside meta.json's levels, or does not hold chains x iter_sampling draws of
-# each cell, a party outside the run with an official count at a closed election, or a nonzero
-# replicate of a party with none.
+# The run list is printed with relative() (R/harness/compare_runs.R): a path under the project
+# root relative to it, one under the results root as $HARNESS_RESULTS/..., so a committed report
+# holds no home-folder path; so are the messages. It prints "FLAG <id>: projected to <x> minutes
+# at 1000 + 2000, over 120 (...)" for each run projected above 120 minutes, then "wrote <out>
+# (<n> runs)". It reads no forecast quantity (no eday_* or latent_* parquet) and writes none:
+# counts, a correlation, ESS and minutes only.
+# It stops with "v2_checks: ...", writing nothing, on:
+#   - a bad command line, a missing or empty run list, or a run line without 5 fields;
+#   - a 2017 cell before the freeze (forecast_free(); spec section 5.7);
+#   - a run with no meta.json, or with one of another run; a cell that is not a forecast cell;
+#   - a meta.json field it reads that is missing or does not parse (E, F, seed, minutes, chains,
+#     iter_warmup, iter_sampling, party_order, house_levels, kjordaemi_levels, closed_elections,
+#     stage1_sha256), or a closed election on or after E;
+#   - a missing parquet, or one that lacks a column it reads or holds a missing value there;
+#   - a param_draws.parquet that does not hold chains x iter_sampling draws, one per chain and
+#     iteration, or holds elements of sigma, L_Omega or log_phi beyond meta.json's parties and
+#     houses;
+#   - a ppc_results.parquet whose elections are not meta.json's closed elections, which names a
+#     kjördæmi or party outside meta.json's levels, or does not hold chains x iter_sampling draws
+#     of each cell; a cell with no official count; a party outside the run with an official count
+#     at a closed election; a nonzero replicate of a party with none;
+#   - a missing stage-1 record, or one of another key.
 if (!isTRUE(l10n_info()[["UTF-8"]])) stop("v2_checks.R needs a UTF-8 locale: run under LC_ALL=en_US.UTF-8", call. = FALSE)
 # WHY: the box path below is the working directory, so check it is the project root first.
 stopifnot("run from the project root (no R/harness/constants.R here)" = file.exists("R/harness/constants.R"))
 options(box.path = normalizePath("."), width = 120, warn = 1)
 box::use(
+  R / harness / compare_runs[NEAR_CAP, relative],
   R / harness / constants[harness_path],
   R / harness / freeze[forecast_free, target_cell],
-  R / harness / runs[run_id, run_dir],
+  R / harness / runs[results_root, run_id, run_dir],
+  R / harness / stage1[stage1_near_cap_of],
   R / harness / truth[fold_truth, read_truth],
-  R / harness / v2_reference[V2_LOG_CAPS]
+  R / harness / v2_reference[V2_CAP_MARGIN, V2_LOG_CAPS, V2_STAGE1_LOG_CAP]
 )
 
 PREFIX <- "v2_checks: "
@@ -52,8 +69,8 @@ USAGE <- "usage: Rscript R/harness/v2_checks.R <run_list> [out]"
 #' The mid-PIT interval outside which a past-election cell counts.
 PIT_LOW <- 0.025
 PIT_HIGH <- 0.975
-#' A draw is near a cap when its log concentration is more than cap - NEAR.
-NEAR <- 2
+#' The two margins of the cap columns: Decision 4's and the stop rule's.
+MARGINS <- c(V2_CAP_MARGIN, NEAR_CAP)
 #' Spec section 6.9's 1000 + 2000 iterations, and the projected minutes above which a fit is flagged.
 SPEC_ITERATIONS <- 3000
 FLAG_MINUTES <- 120
@@ -108,8 +125,8 @@ ess_shown <- function(x) {
 #' A count of draws as printed: "<k> of <n> (<percent>%)".
 draws_shown <- function(k, n) sprintf("%.0f of %.0f (%.1f%%)", k, n, 100 * k / n)
 
-#' The runs of a run list, each a character vector "lane arm E F seed"; an error for a malformed
-#' or empty list, and for a 2017 cell before the freeze, before any run is read.
+#' The runs of a run list, each a character vector "lane arm E F seed"; an error for a missing,
+#' malformed or empty list, and for a 2017 cell before the freeze, before any run is read.
 read_run_list <- function(path) {
   if (!file.exists(path)) fail("no run list: ", path)
   lines <- trimws(readLines(path, warn = FALSE))
@@ -173,6 +190,41 @@ flat_ess <- function(sigma, L, chains, iters) {
   c(sigma = min(ess(csc)), omega = min(ess(omega)))
 }
 
+#' A cap column's cell: the draws of a log concentration within each of MARGINS of `cap`
+#' (log c > cap - m), "<within 2>; <within 0.5>". With several columns (log_phi, one per house),
+#' each margin's largest count over the columns, and the column and house that have it when the
+#' count is not 0.
+near_cell <- function(x, cap, n, houses = NULL) {
+  shown <- vapply(MARGINS, \(m) {
+    k <- colSums(x > cap - m)
+    h <- which.max(k)
+    cell <- draws_shown(k[h], n)
+    if (!is.null(houses) && k[h] > 0) cell <- sprintf("%s in log_phi[%d] (%s)", cell, h, houses[h])
+    cell
+  }, character(1))
+  paste(shown, collapse = "; ")
+}
+
+#' The stage-1 column's cell: the counts of the run's stage-1 record (`stage1_near_cap_of()`),
+#' "<within 2>; <within 0.5>" of its own draws; "not recorded" for a record without them; "no
+#' stage 1" when meta.json's stage1_sha256 is null.
+stage1_cell <- function(meta, id) {
+  sha <- meta$stage1_sha256
+  if (is.null(sha) || (is.list(sha) && !length(sha))) {
+    return("no stage 1")
+  }
+  if (!is.character(sha) || length(sha) != 1 || !grepl("^[0-9a-f]{64}$", sha)) fail("meta.json: stage1_sha256 is not a sha256")
+  path <- file.path(results_root(), "stage1", sha, "mu_f.json")
+  if (!file.exists(path)) fail("no stage-1 record for run ", id, ": ", path, " (restore the stage-1 cache)")
+  rec <- jsonlite::read_json(path)
+  if (!identical(rec$sha256, sha)) fail("the stage-1 record ", path, " is not of run ", id, "'s key ", substr(sha, 1, 12))
+  near <- stage1_near_cap_of(rec)
+  if (is.null(near)) {
+    return("not recorded")
+  }
+  paste(draws_shown(near$within_margin, near$n_draws), draws_shown(near$within_near_cap, near$n_draws), sep = "; ")
+}
+
 #' One run's past-election cells: for each closed election, the cells of the parties with an
 #' official count there whose mid-PIT lies outside [PIT_LOW, PIT_HIGH], and the number of cells.
 #' @return a tibble (election, outside, cells) in meta.json's closed-election order
@@ -197,7 +249,7 @@ ppc_counts <- function(ppc, meta, closed, n, truth, id) {
   foreign <- listed_at$flokkur[!listed_at$flokkur %in% meta$party_order]
   if (length(foreign)) fail("parties outside run ", id, " have official counts at its closed elections: ", listed(foreign))
   y <- folded$votes[match(key, paste(format(folded$election), folded$kjordaemi, folded$flokkur, sep = "\r"))]
-  if (anyNA(y)) fail("no official count for ", listed(sub("\r", ", ", key[is.na(y)], fixed = TRUE)), " (run ", id, ")")
+  if (anyNA(y)) fail("no official count for ", listed(gsub("\r", ", ", key[is.na(y)], fixed = TRUE)), " (run ", id, ")")
   has_list <- paste(elections, ppc$flokkur) %in% paste(format(listed_at$election), listed_at$flokkur)
   stray <- !has_list & ppc$votes != 0
   if (any(stray)) {
@@ -238,8 +290,13 @@ run_checks <- function(arm, E, F, seed, truth) {
   parties <- labels_of(meta$party_order, "party_order")
   houses <- labels_of(meta$house_levels, "house_levels")
   labels_of(meta$kjordaemi_levels, "kjordaemi_levels")
-  closed <- tryCatch(as.Date(labels_of(meta$closed_elections, "closed_elections")), error = function(e) as.Date(NA))
+  closed_labels <- labels_of(meta$closed_elections, "closed_elections")
+  closed <- tryCatch(as.Date(closed_labels), error = function(e) as.Date(rep(NA, length(closed_labels))))
   if (anyNA(closed)) fail("meta.json: closed_elections are not dates")
+  # WHY: the official counts of an election on or after E are the target's result, never a past election's.
+  if (any(closed >= meta_E)) {
+    fail("meta.json: closed_elections include ", listed(format(closed[closed >= meta_E])), ", not before E = ", format(meta_E), " (run ", id, ")")
+  }
   P <- length(parties)
   n <- chains * iters
 
@@ -258,13 +315,10 @@ run_checks <- function(arm, E, F, seed, truth) {
   pd <- pd[draw_order(pd, name, chains, iters, id), ]
 
   corr <- suppressWarnings(stats::cor(pd$log_phi_K, pd[[zeta]]))
-  near <- function(cols, cap) colSums(as.matrix(pd[cols]) > V2_LOG_CAPS[[cap]] - NEAR)
-  phi <- near(phi_cols, "log_phi")
-  h <- which.max(phi)
-  phi_cell <- draws_shown(phi[h], n)
-  if (phi[h] > 0) phi_cell <- sprintf("%s in %s (%s)", phi_cell, phi_cols[h], houses[h])
+  near <- function(cols, cap, houses = NULL) near_cell(as.matrix(pd[cols]), V2_LOG_CAPS[[cap]], n, houses)
   flat <- flat_ess(as.matrix(pd[sigma_cols]), as.matrix(pd[L_cols]), chains, iters)
   projected <- minutes * SPEC_ITERATIONS / (warmup + iters)
+  stage1 <- stage1_cell(meta, id)
 
   name <- "ppc_results.parquet"
   path <- file.path(dir, name)
@@ -277,7 +331,7 @@ run_checks <- function(arm, E, F, seed, truth) {
     arm, cell, seed_text, sprintf("%.0f + %.0f", warmup, iters), sprintf("%.1f", minutes), sprintf("%.1f", projected),
     if (projected > FLAG_MINUTES) "yes" else "no",
     if (is.finite(corr)) sprintf("%.3f", corr) else "NA",
-    phi_cell, draws_shown(near("log_phi_K", "log_phi_K"), n), draws_shown(near("log_kappa", "log_kappa"), n),
+    near(phi_cols, "log_phi", houses), near("log_phi_K", "log_phi_K"), near("log_kappa", "log_kappa"), stage1,
     ess_shown(flat[["sigma"]]), ess_shown(flat[["omega"]])
   )
   ppc <- lapply(seq_len(nrow(counts)), \(i) {
@@ -286,17 +340,18 @@ run_checks <- function(arm, E, F, seed, truth) {
   list(id = id, cells = cells, ppc = ppc, projected = projected)
 }
 
-#' The cap of each bounded log concentration, as a heading prints it.
-cap_text <- function(name) {
-  cap <- V2_LOG_CAPS[[name]]
-  sprintf("> %s (cap %s \u2212 %s)", format(cap - NEAR), format(cap), format(NEAR))
+#' The margins and cap of a cap column's heading: "within 2; within 0.5 of cap <cap>".
+cap_text <- function(cap) {
+  sprintf("within %s; within %s of cap %s", format(MARGINS[1]), format(MARGINS[2]), format(cap))
 }
 
 HEADINGS <- c(
   "Arm", "Cell (E, F, tag)", "Seed", "Iterations (warmup + sampling)", "Minutes", "Minutes projected to 1000 + 2000",
   "Over 120 projected minutes (spec \u00a76.9)", "Corr(log \u03c6_K, s\u0304_\u03b6)",
-  sprintf("Draws with log \u03c6_h %s, max over houses", cap_text("log_phi")),
-  paste("Draws with log \u03c6_K", cap_text("log_phi_K")), paste("Draws with log \u03ba", cap_text("log_kappa")),
+  sprintf("Draws with log \u03c6_h %s, max over houses", cap_text(V2_LOG_CAPS[["log_phi"]])),
+  sprintf("Draws with log \u03c6_K %s", cap_text(V2_LOG_CAPS[["log_phi_K"]])),
+  sprintf("Draws with log \u03ba %s", cap_text(V2_LOG_CAPS[["log_kappa"]])),
+  sprintf("Stage 1: draws with log \u03c6_f %s", cap_text(V2_STAGE1_LOG_CAP[["log_phi_f"]])),
   "Min bulk ESS over the entries of C\u03a3C\u1d40", "Min bulk ESS over the off-diagonals of \u03a9 = L_Omega L_Omega\u1d40"
 )
 PPC_HEADINGS <- c("Arm", "Cell (E, F, tag)", "Seed", "Closed election", "Cells with PIT outside [0.025, 0.975]", "Cells")
@@ -318,13 +373,13 @@ main <- function(args) {
     "# V2 Tier 0 checks",
     "",
     paste(
-      "Written by `R/harness/v2_checks.R` from each run's `meta.json`, `param_draws.parquet` and",
-      "`ppc_results.parquet`, and the closed elections' official counts in",
+      "Written by `R/harness/v2_checks.R` from each run's `meta.json`, `param_draws.parquet`,",
+      "`ppc_results.parquet` and stage-1 record, and the closed elections' official counts in",
       "`harness/truth/elections_official.csv`: the extras of spec \u00a76.9 beside the Tier 0 report",
       "(`harness/tier0/<arm>.md`). No forecast quantity is read or printed."
     ),
     "",
-    sprintf("- Run list: `%s`", run_list),
+    sprintf("- Run list: `%s`", relative(run_list)),
     "",
     "## Parameters and compute",
     "",
@@ -339,8 +394,8 @@ main <- function(args) {
     paste(
       "- **Minutes projected to 1000 + 2000** is `meta.json`'s `minutes` \u00d7 3000 \u00f7 (`iter_warmup` +",
       "`iter_sampling`): the fit's wall time scaled linearly to spec \u00a76.9's 4 \u00d7 (1000 + 2000).",
-      "**Over 120 projected minutes** is `yes` above 120: spec \u00a76.9 asks for a report before Tier 1",
-      "when a V2 fit takes over 2 h, and iterations are never cut for one arm alone."
+      "**Over 120 projected minutes** is `yes` strictly above 120: spec \u00a76.9 asks for a report",
+      "before Tier 1 when a V2 fit takes over 2 h, and iterations are never cut for one arm alone."
     ),
     paste(
       "- **Corr(log \u03c6_K, s\u0304_\u03b6)** is the Pearson correlation of `log_phi_K` and `s_bar_zeta[1]` over",
@@ -348,11 +403,17 @@ main <- function(args) {
       "concentration and the \u03b4 walk's scale may trade off (spec \u00a76.6)."
     ),
     paste(
-      "- **Draws with log c > cap \u2212 2** count the chains \u00d7 sampling draws in which a bounded log",
-      "concentration lies within 2 of its cap, on the log scale the model uses; the caps are",
-      "`V2_LOG_CAPS` (`R/harness/v2_reference.R`). log \u03c6_h has one column per house: the cell gives",
-      "the largest count over the houses, and the house that has it (`meta.json`'s `house_levels`)",
-      "when that count is not 0."
+      "- **Draws with log c within 2; within 0.5 of its cap** count the chains \u00d7 sampling draws in",
+      "which a bounded log concentration lies within 2 (Decision 4's margin, `V2_CAP_MARGIN`) and",
+      "within 0.5 (the stop rule's, `NEAR_CAP` in `R/harness/compare_runs.R`) of its cap, on the log",
+      "scale the model uses: log c > cap \u2212 2 and log c > cap \u2212 0.5. The stop rule counts",
+      "cap \u2212 log c \u2264 0.5, which differs only for a draw exactly on the edge. The caps are",
+      "`V2_LOG_CAPS` and `V2_STAGE1_LOG_CAP` (`R/harness/v2_reference.R`). log \u03c6_h has one column per",
+      "house: for each margin the cell gives the largest count over the houses, and the house that has",
+      "it (`meta.json`'s `house_levels`) when that count is not 0. **Stage 1**'s log \u03c6_f is counted",
+      "over stage 1's own draws when it is fitted, and read from its cached record",
+      "(`results_root()/stage1/<stage1_sha256>/mu_f.json`); `not recorded` marks a record written",
+      "before the counts were, and `no stage 1` a run without a stage 1."
     ),
     paste(
       "- **Min bulk ESS over the entries of C\u03a3C\u1d40**: per draw, \u03a3 = diag(\u03c3) \u03a9 diag(\u03c3) with",
@@ -382,10 +443,10 @@ main <- function(args) {
   }
   dir.create(dirname(out), recursive = TRUE, showWarnings = FALSE)
   writeLines(report, out)
-  cat(sprintf("wrote %s (%d runs)\n", out, length(runs)))
+  cat(sprintf("wrote %s (%d runs)\n", relative(out), length(runs)))
 }
 
 tryCatch(main(commandArgs(trailingOnly = TRUE)), error = function(e) {
-  message <- conditionMessage(e)
+  message <- relative(conditionMessage(e))
   stop(if (startsWith(message, PREFIX)) "" else PREFIX, message, call. = FALSE)
 })
