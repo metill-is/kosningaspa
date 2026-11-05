@@ -32,8 +32,11 @@
 # adopt <ref_arm> <new_arm> <equivalence_csv>: the P-step adoption rule (Decision 6). The two
 # arms must differ and have runs on the same cells, and on each cell each arm has exactly two
 # fits, of two different seeds that are the other arm's (Decision 6 runs seeds 2701 and 2702,
-# but any two seeds the arms share pass); this is checked before any run or the equivalence
-# CSV is read. It prints a table of the fits (min bulk ESS per 1,000 gradients, divergences
+# but any two seeds the arms share pass), and the cells are exactly Decision 6's two, 2024 eve
+# (2024-11-30, 2024-11-29) and 2021 f180 (2021-09-25, 2021-03-29); this is checked before any
+# run or the equivalence CSV is read. Every fit of both arms must then have the same
+# iter_warmup and the same iter_sampling in its meta.json, whatever their values, since
+# condition 3 compares divergence counts. It prints a table of the fits (min bulk ESS per 1,000 gradients, divergences
 # and the stop rule's verdict), a table of the cells (each arm's median over its fits of min
 # bulk ESS per 1,000 gradients, and their ratio), the four conditions with yes or no, and a
 # last line "ADOPT <new_arm>" if all four hold, else
@@ -110,6 +113,10 @@ RHAT_MAX <- 1.10
 ESS_RATIO_MIN <- 1.25
 DIVERGENT_MARGIN <- 4
 ADOPT_FITS <- 2L
+# WHY: condition 3 compares divergence counts summed over each arm's fits, so the design is
+# pinned: these two cells (2024 eve and 2021 f180, "<E>, <F>" as arm_runs() writes a cell), and
+# equal iterations in every fit.
+ADOPT_CELLS <- c("2024-11-30, 2024-11-29", "2021-09-25, 2021-03-29")
 EQUIVALENCE_COLUMNS <- c("E", "F", "order", "verdict")
 
 #' The checks a P-step's equivalence CSV must hold a PASS row of (Decision 6's condition 1):
@@ -178,21 +185,22 @@ rhat_shown <- function(x) shown(x, 4, up = TRUE)
 #' A z-statistic as printed: rounded up to two decimals, NA for a missing or undefined one.
 z_shown <- function(x) if (is.na(x)) "NA" else shown(x, 2, up = TRUE)
 
-#' The runs of a run list, each a character vector "lane arm E F seed".
+#' The runs of a run list, each a character vector "lane arm E F seed"; an error for a 2017
+#' cell before the freeze on any line, whichever arm it names, before any run is read.
 read_run_list <- function(path) {
   if (!file.exists(path)) fail("no run list: ", path)
   lines <- trimws(readLines(path, warn = FALSE))
   fields <- strsplit(lines[nzchar(lines) & !startsWith(lines, "#")], "[[:space:]]+")
   if (any(lengths(fields) != 5)) fail(path, ": a run has 5 fields (lane arm E F seed)")
+  for (f in fields) if (forecast_free(f[3])) fail("2017 is not compared before the freeze (spec \u00a75.7)")
   fields
 }
 
 #' The runs of `arm` in a run list, in its order, each `list(arm, E, F, seed, id, cell)`; an
-#' error for an arm without a run, and for a 2017 cell before the freeze.
+#' error for an arm without a run.
 arm_runs <- function(fields, arm, path) {
   mine <- Filter(\(f) identical(f[2], arm), fields)
   if (!length(mine)) fail("no run of arm ", arm, " in ", path)
-  for (f in mine) if (forecast_free(f[3])) fail("2017 is not compared before the freeze (spec \u00a75.7)")
   lapply(mine, \(f) {
     seed <- suppressWarnings(as.numeric(f[5]))
     E <- as.Date(f[3])
@@ -348,6 +356,37 @@ check_fit_sets <- function(ref, new, ref_runs, new_runs, cells) {
   }
 }
 
+#' An error unless the arms' cells are exactly ADOPT_CELLS.
+check_adopt_cells <- function(cells) {
+  lacks <- setdiff(ADOPT_CELLS, cells)
+  extra <- setdiff(cells, ADOPT_CELLS)
+  if (length(lacks) || length(extra)) {
+    fail(
+      "adopt runs on Decision 6's two cells, ", paste(ADOPT_CELLS, collapse = " and "), ": ",
+      paste(c(
+        if (length(lacks)) paste("no runs on", paste(lacks, collapse = "; ")),
+        if (length(extra)) paste("runs on", paste(extra, collapse = "; "))
+      ), collapse = ", and ")
+    )
+  }
+}
+
+#' An error unless every fit's meta.json has the same iter_warmup, and the same iter_sampling.
+#' @param runs both arms' runs
+#' @param metas their meta.json, in the same order
+check_adopt_iterations <- function(runs, metas) {
+  for (field in c("iter_warmup", "iter_sampling")) {
+    x <- vapply(metas, \(m) number(m[[field]], field), numeric(1))
+    if (anyNA(x) || length(unique(x)) != 1) {
+      shown_x <- ifelse(is.na(x), "NA", format(x, scientific = FALSE, trim = TRUE))
+      groups <- vapply(unique(shown_x), \(v) {
+        paste0(v, " in ", paste(vapply(runs[shown_x == v], \(r) r$id, character(1)), collapse = ", "))
+      }, character(1))
+      fail("adopt compares fits of equal iterations, but their ", field, " differ: ", paste(groups, collapse = "; "))
+    }
+  }
+}
+
 run_adopt <- function(ref, new, csv, path) {
   if (identical(ref, new)) fail("adopt compares two different arms, not ", ref, " with itself")
   fields <- read_run_list(path)
@@ -362,10 +401,14 @@ run_adopt <- function(ref, new, csv, path) {
     )
   }
   check_fit_sets(ref, new, ref_runs, new_runs, cells)
+  check_adopt_cells(cells)
   equivalence <- read_equivalence(csv)
-  ref_rules <- lapply(ref_runs, stop_rule)
-  new_rules <- lapply(new_runs, stop_rule)
-  rules <- c(ref_rules, new_rules)
+  runs <- c(ref_runs, new_runs)
+  metas <- lapply(runs, read_meta)
+  check_adopt_iterations(runs, metas)
+  rules <- Map(\(r, meta) stop_rule_at(run_dir(r$id), meta, r$id, r$cell), runs, metas)
+  ref_rules <- rules[seq_along(ref_runs)]
+  new_rules <- rules[length(ref_runs) + seq_along(new_runs)]
   for (r in rules) if (!r$has_leapfrog) fail("the meta.json of ", r$id, " has no diagnostics$n_leapfrog, which the adoption rule reads")
 
   table_row <- function(cells) paste0("| ", paste(cells, collapse = " | "), " |")

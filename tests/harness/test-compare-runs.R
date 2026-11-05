@@ -504,6 +504,14 @@ test_that("compare_runs.R stops on a command line, run or table it cannot read, 
   jsonlite::write_json(meta, file.path(dir, "meta.json"), auto_unbox = TRUE, digits = NA)
   writeLines(run_lines("A", "v2s-t1", EVE, 3L), runs)
   fails_with(c("stop", "v2s-t1", runs), "is not of the run list's run v2s-t1_2024-11-30_2024-11-29_s3")
+  # WHY: each field of the ownership guard alone, with a valid value that is another run's.
+  for (case in list(list(7L, arm = "v2s-t9"), list(8L, E = F180[1]), list(9L, F = "2024-11-16"))) {
+    dir <- fake_run(results, "v2s-t1", EVE, case[[1]])
+    meta <- utils::modifyList(jsonlite::read_json(file.path(dir, "meta.json")), case[-1])
+    jsonlite::write_json(meta, file.path(dir, "meta.json"), auto_unbox = TRUE, digits = NA)
+    writeLines(run_lines("A", "v2s-t1", EVE, case[[1]]), runs)
+    fails_with(c("stop", "v2s-t1", runs), paste0("is not of the run list's run v2s-t1_2024-11-30_2024-11-29_s", case[[1]]))
+  }
   # WHY: a file arrow cannot read, so the error comes from a package, not from compare_runs.R's own checks.
   dir <- fake_run(results, "v2s-t1", EVE, 6)
   writeLines("not a parquet file", file.path(dir, "param_draws.parquet"))
@@ -533,9 +541,48 @@ test_that("compare_runs.R stops on a command line, run or table it cannot read, 
   fails_with(c("adopt", "v2s-u1", "v2s-u4", csv, runs), "the seeds of v2s-u4 on 2024-11-30, 2024-11-29, 1 and 3, are not v2s-u1's, 1 and 2")
   fails_with(c("adopt", "v2s-u1", "v2s-u5", csv, runs), "v2s-u5 has 2 fits on 2024-11-30, 2024-11-29 (seeds 1, 1), not 2 of different seeds")
   fails_with(c("adopt", "v2s-u6", "v2s-u7", csv, runs), "v2s-u7 has 3 fits on 2021-09-25, 2021-03-29 (seeds 1, 2, 3), not 2 of different seeds")
+  # WHY: the cells must be Decision 6's two, also checked from the run list alone.
+  cells_are <- "adopt runs on Decision 6's two cells, 2024-11-30, 2024-11-29 and 2021-09-25, 2021-03-29: "
+  writeLines(c(run_lines("A", "v2s-u1", EVE, 1:2), run_lines("A", "v2s-u8", EVE, 1:2)), runs)
+  fails_with(c("adopt", "v2s-u1", "v2s-u8", csv, runs), paste0(cells_are, "no runs on 2021-09-25, 2021-03-29"))
+  writeLines(c(
+    run_lines("A", "v2s-u1", EVE, 1:2), run_lines("B", "v2s-u1", c("2021-09-25", "2021-09-24"), 1:2),
+    run_lines("A", "v2s-u8", EVE, 1:2), run_lines("B", "v2s-u8", c("2021-09-25", "2021-09-24"), 1:2)
+  ), runs)
+  fails_with(
+    c("adopt", "v2s-u1", "v2s-u8", csv, runs),
+    paste0(cells_are, "no runs on 2021-09-25, 2021-03-29, and runs on 2021-09-25, 2021-09-24")
+  )
+  # WHY: every fit of both arms has the same iter_warmup and iter_sampling, read from meta.json
+  # before the stop rule, which would otherwise stop on the draw count first.
+  for (arm in c("v2s-i1", "v2s-i2", "v2s-i3")) for (cell in list(EVE, F180)) for (seed in 1:2) fake_run(results, arm, cell, seed)
+  for (case in list(list("v2s-i2", iter_sampling = 200L), list("v2s-i3", iter_warmup = 300L))) {
+    dir <- file.path(results, run_id(case[[1]], F180[1], F180[2], 2))
+    meta <- utils::modifyList(jsonlite::read_json(file.path(dir, "meta.json")), case[-1])
+    jsonlite::write_json(meta, file.path(dir, "meta.json"), auto_unbox = TRUE, digits = NA)
+  }
+  writeLines(unlist(lapply(c("v2s-i1", "v2s-i2", "v2s-i3"), \(a) c(run_lines("A", a, EVE, 1:2), run_lines("B", a, F180, 1:2)))), runs)
+  others <- function(arm) paste(c(ids("v2s-i1", EVE, 1:2), ids("v2s-i1", F180, 1:2), ids(arm, EVE, 1:2), ids(arm, F180, 1)), collapse = ", ")
+  fails_with(
+    c("adopt", "v2s-i1", "v2s-i2", csv, runs),
+    paste0(
+      "adopt compares fits of equal iterations, but their iter_sampling differ: 400 in ", others("v2s-i2"),
+      "; 200 in v2s-i2_2021-09-25_2021-03-29_s2"
+    )
+  )
+  fails_with(
+    c("adopt", "v2s-i1", "v2s-i3", csv, runs),
+    paste0(
+      "adopt compares fits of equal iterations, but their iter_warmup differ: 400 in ", others("v2s-i3"),
+      "; 300 in v2s-i3_2021-09-25_2021-03-29_s2"
+    )
+  )
 
   readr::write_csv(tibble::tibble(E = EVE[1], F = EVE[2], verdict = "PASS"), csv)
-  writeLines(c(run_lines("A", "v2s-t1", F180, 5:6), run_lines("A", "v2s-t2", F180, 5:6)), runs)
+  writeLines(c(
+    run_lines("A", "v2s-t1", EVE, 5:6), run_lines("B", "v2s-t1", F180, 5:6),
+    run_lines("A", "v2s-t2", EVE, 5:6), run_lines("B", "v2s-t2", F180, 5:6)
+  ), runs)
   fails_with(c("adopt", "v2s-t1", "v2s-t2", csv, runs), "lacks the column order")
 
   write_eday(results, "v2s-pa", EVE, 1, eday_draws(21))
@@ -558,6 +605,28 @@ test_that("compare_runs.R refuses a 2017 cell before the freeze, before it reads
   runs <- withr::local_tempfile(fileext = ".txt")
   csv <- withr::local_tempfile(fileext = ".csv")
   writeLines(c("A v2s-pa 2017-10-28 2017-10-27 1", "A v2s-pb 2017-10-28 2017-10-27 1"), runs)
+  readr::write_csv(dplyr::mutate(EQUIVALENCE_REQUIRED, verdict = "PASS"), csv)
+  for (args in list(c("stop", "v2s-pa", runs), c("adopt", "v2s-pa", "v2s-pb", csv, runs), c("perm", "v2s-pa", "v2s-pb", runs))) {
+    out <- compare(args)
+    expect_identical(attr(out, "status"), 1L, info = shown(out))
+    expect_match(out, "compare_runs: 2017 is not compared before the freeze (spec \u00a75.7)", fixed = TRUE, all = FALSE)
+    expect_false(any(grepl("meta.json|parquet", out)))
+  }
+})
+
+test_that("compare_runs.R refuses a 2017 cell on any line of the run list, a third arm's included", {
+  # WHY: this reads the repository's real freeze state; Plan 4 replaces the test once the freeze is sealed.
+  skip_if(is_frozen(), "the freeze is sealed")
+  withr::local_envvar(HARNESS_RESULTS = withr::local_tempdir())
+  runs <- withr::local_tempfile(fileext = ".txt")
+  csv <- withr::local_tempfile(fileext = ".csv")
+  # WHY: the named arms' runs are on Decision 6's cells and only a third arm's line is on 2017,
+  # so a refusal limited to the named arms' lines would go on to read their (absent) runs.
+  writeLines(c(
+    run_lines("A", "v2s-pa", EVE, 1:2), run_lines("B", "v2s-pa", F180, 1:2),
+    run_lines("A", "v2s-pb", EVE, 1:2), run_lines("B", "v2s-pb", F180, 1:2),
+    "B v2s-px 2017-10-28 2017-10-27 1"
+  ), runs)
   readr::write_csv(dplyr::mutate(EQUIVALENCE_REQUIRED, verdict = "PASS"), csv)
   for (args in list(c("stop", "v2s-pa", runs), c("adopt", "v2s-pa", "v2s-pb", csv, runs), c("perm", "v2s-pa", "v2s-pb", runs))) {
     out <- compare(args)

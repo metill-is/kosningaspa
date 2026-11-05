@@ -79,7 +79,7 @@ test_that("the queue refuses a bad command line or run list", {
   out <- queue(c(file.path(lists, "absent.txt"), "200", "200"))
   expect_identical(attr(out, "status"), 2L)
   results <- withr::local_tempdir()
-  withr::local_envvar(HARNESS_RESULTS = results, DRY_RUN = NA, HARNESS_V2_STAN = NA)
+  withr::local_envvar(HARNESS_RESULTS = results, DRY_RUN = NA, HARNESS_V2_STAN = NA, V2_STEPS = NA)
   out <- queue(c(bad, "200", "200"))
   expect_identical(attr(out, "status"), 2L)
   log <- readLines(file.path(results, "logs", "queue.log"))
@@ -92,7 +92,7 @@ test_that("the queue will not start beside a running fit_cell.R unless FORCE=1, 
   bin <- withr::local_tempdir()
   stub(bin, "Rscript", "exit 3")
   withr::local_envvar(
-    HARNESS_RESULTS = results, DRY_RUN = NA, FORCE = NA, HARNESS_V2_STAN = NA,
+    HARNESS_RESULTS = results, DRY_RUN = NA, FORCE = NA, HARNESS_V2_STAN = NA, V2_STEPS = NA,
     PATH = paste(bin, Sys.getenv("PATH"), sep = ":")
   )
   logs <- file.path(results, "logs")
@@ -125,7 +125,7 @@ test_that("the queue's guard refuses to start when pgrep fails", {
   bin <- withr::local_tempdir()
   stub(bin, "Rscript", "exit 3")
   withr::local_envvar(
-    HARNESS_RESULTS = results, DRY_RUN = NA, FORCE = NA, HARNESS_V2_STAN = NA,
+    HARNESS_RESULTS = results, DRY_RUN = NA, FORCE = NA, HARNESS_V2_STAN = NA, V2_STEPS = NA,
     PATH = paste(bin, Sys.getenv("PATH"), sep = ":")
   )
   for (rc in c(2L, 3L, 127L)) {
@@ -155,6 +155,30 @@ test_that("the queue refuses to start while HARNESS_V2_STAN is set, FORCE=1 or n
     expect_match(out, "HARNESS_V2_STAN is set (/tmp/scratch/forecast_v2.stan)", fixed = TRUE, all = FALSE)
     log <- readLines(file.path(logs, "queue.log"))
     expect_match(log[length(log)], "^QUEUE ABORTED rc=1 HARNESS_V2_STAN is set ")
+    expect_match(log[length(log)], ABORTED)
+    expect_false(any(startsWith(log, "QUEUE START")))
+    expect_false(dir.exists(file.path(logs, "queue.lock")))
+    expect_false(file.exists(file.path(logs, "preflight.log")))
+  }
+  expect_length(readLines(file.path(logs, "queue.log")), 2)
+})
+
+test_that("the queue refuses to start while V2_STEPS is set, FORCE=1 or not", {
+  results <- withr::local_tempdir()
+  bin <- withr::local_tempdir()
+  stub(bin, "Rscript", "exit 3")
+  logs <- file.path(results, "logs")
+  withr::local_envvar(
+    HARNESS_RESULTS = results, DRY_RUN = NA, HARNESS_V2_STAN = NA, V2_STEPS = "v2s-m5",
+    PATH = paste(bin, Sys.getenv("PATH"), sep = ":")
+  )
+  for (force in c(NA, "1")) {
+    withr::local_envvar(FORCE = force)
+    out <- queue(c("harness/runs/tier0.txt", "200", "200"))
+    expect_identical(attr(out, "status"), 1L)
+    expect_match(out, "V2_STEPS is set (v2s-m5)", fixed = TRUE, all = FALSE)
+    log <- readLines(file.path(logs, "queue.log"))
+    expect_match(log[length(log)], "^QUEUE ABORTED rc=1 V2_STEPS is set ")
     expect_match(log[length(log)], ABORTED)
     expect_false(any(startsWith(log, "QUEUE START")))
     expect_false(dir.exists(file.path(logs, "queue.lock")))
@@ -203,7 +227,7 @@ test_that("a second queue is refused while the first holds the lock, and a kille
   # WHY: the preflight waits for a file that never comes, so the first queue holds the lock in its preflight.
   stub(bin, "Rscript", c('echo "$*" >> "$CALLS"', 'while [ ! -f "$GO" ]; do sleep 0.1; done', "exit 0"))
   withr::local_envvar(
-    HARNESS_RESULTS = results, DRY_RUN = NA, FORCE = NA, HARNESS_V2_STAN = NA, GO = go, CALLS = calls,
+    HARNESS_RESULTS = results, DRY_RUN = NA, FORCE = NA, HARNESS_V2_STAN = NA, V2_STEPS = NA, GO = go, CALLS = calls,
     PATH = paste(bin, Sys.getenv("PATH"), sep = ":")
   )
   lock <- file.path(results, "logs", "queue.lock")
@@ -249,7 +273,7 @@ test_that("the queue runs each lane's runs in order, the lanes side by side, and
     "  A   r0 2024-11-30 2024-11-29 13"
   ), list)
   withr::local_envvar(
-    HARNESS_RESULTS = results, DRY_RUN = NA, FORCE = "1", HARNESS_SLOW = NA, HARNESS_V2_STAN = NA, CALLS = calls,
+    HARNESS_RESULTS = results, DRY_RUN = NA, FORCE = "1", HARNESS_SLOW = NA, HARNESS_V2_STAN = NA, V2_STEPS = NA, CALLS = calls,
     PATH = paste(stub, Sys.getenv("PATH"), sep = ":")
   )
   out <- queue(c(list, "200", "300"))

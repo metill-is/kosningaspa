@@ -412,6 +412,10 @@ test_that("the V2 checks stop, writing nothing, on each guard of their header", 
   run_list(both)
   fails_with("v2_checks: no meta.json for run v2_2024-11-30_2024-11-29_s1201", make = FALSE)
   fails_with("is not of the run list's run v2_2024-11-30_2024-11-29_s1201", edit_meta = \(m) utils::modifyList(m, list(seed = 1299L)))
+  # WHY: each other field of the ownership guard alone, with a valid value that is another run's.
+  for (other in list(list(arm = "v2-perm"), list(E = F180[1]), list(F = "2024-11-16"))) {
+    fails_with("is not of the run list's run v2_2024-11-30_2024-11-29_s1201", edit_meta = \(m) utils::modifyList(m, other))
+  }
   fails_with("v2_checks: meta.json: E is not a date", edit_meta = \(m) utils::modifyList(m, list(E = "soon")))
   fails_with("v2_checks: meta.json: minutes is not a number", edit_meta = \(m) m[names(m) != "minutes"])
   fails_with("v2_checks: meta.json: chains is not a positive whole number", edit_meta = \(m) utils::modifyList(m, list(chains = 0L)))

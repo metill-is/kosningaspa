@@ -11,7 +11,8 @@
 #
 # Before the lock, whatever FORCE, it refuses to start while HARNESS_V2_STAN is set, since the
 # preflight's Stan tests would then test the file it names instead of the Stan file the fits
-# use. Before any fit it takes the lock $LOGS/queue.lock (a directory holding the queue's pid),
+# use, and while V2_STEPS is non-empty, since the preflight would then run only those steps'
+# V2 Stan and equivalence tests instead of the full slow suite. Before any fit it takes the lock $LOGS/queue.lock (a directory holding the queue's pid),
 # refuses to start while another queue holds it or a fit_cell.R runs (or when pgrep cannot
 # tell), unless FORCE=1, and runs the full slow test suite as a preflight
 # ($LOGS/preflight.log), stopping if that fails. $LOGS/queue.log gets
@@ -103,6 +104,10 @@ mkdir -p $LOGS || die 1 "cannot make $LOGS"
 # WHY: the preflight must certify the Stan file the fits use, never a scratch copy.
 if [[ -n ${HARNESS_V2_STAN:-} ]]; then
   die 1 "HARNESS_V2_STAN is set ($HARNESS_V2_STAN): the preflight would test that file, not the one the fits use; unset it"
+fi
+# WHY: the preflight must be the full slow suite, and V2_STEPS skips every other step's tests.
+if [[ -n ${V2_STEPS:-} ]]; then
+  die 1 "V2_STEPS is set ($V2_STEPS): the preflight would run only those steps' tests, not the full slow suite; unset it"
 fi
 if mkdir $lock 2> /dev/null; then
   owns_lock=1

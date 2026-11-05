@@ -122,6 +122,12 @@ test_that("the Tier 0 report stops, writing nothing, on a run it cannot read", {
   fails_with("no meta.json")
   fake_run(results, "2024-11-30", "2024-11-29", 1101L, edit = \(m) utils::modifyList(m, list(seed = 1199L)))
   fails_with("is not of the run list's run r0_2024-11-30_2024-11-29_s1101")
+  # WHY: each other field of the ownership guard alone, with a valid value that is another run's.
+  for (other in list(list(arm = "v2"), list(E = "2021-09-25"), list(F = "2024-11-16"))) {
+    unlink(second, recursive = TRUE)
+    fake_run(results, "2024-11-30", "2024-11-29", 1101L, edit = \(m) utils::modifyList(m, other))
+    fails_with("is not of the run list's run r0_2024-11-30_2024-11-29_s1101")
+  }
   unlink(second, recursive = TRUE)
   fake_run(results, "2024-11-30", "2024-11-29", 1101L, edit = \(m) m[names(m) != "minutes"])
   fails_with("meta.json: minutes is not a number")

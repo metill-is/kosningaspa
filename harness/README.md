@@ -34,9 +34,10 @@ preflight never depends on the live data:
 `KOSNINGASPA_LIVE_DATA=1 LC_ALL=en_US.UTF-8 Rscript tests/run.R election-data`. The tests of
 `Stan/forecast_v2.stan` in `tests/harness/test-v2-stan.R` are slow and named by the V2 step
 they test (`v2s-m0: …`); `V2_STEPS=<step>[,<step>…]` runs only those steps' tests
-(`skip_unless_step()`), and unset it runs them all. `HARNESS_V2_STAN=<absolute path>` runs that
-file's tests on a scratch copy of the Stan file instead, for a planted fault's RED: the file
-must exist and the path be absolute, or the test file stops as it loads, and the tests announce
+(`skip_unless_step()`), and unset it runs them all. `queue.sh` refuses to start while it is
+non-empty, so the preflight is always the full slow suite. `HARNESS_V2_STAN=<absolute path>`
+runs that file's tests on a scratch copy of the Stan file instead, for a planted fault's RED:
+the file must exist and the path be absolute, or the test file stops as it loads, and the tests announce
 the path and its sha256, so every log records the switch; unset, they test
 `Stan/forecast_v2.stan` and print nothing. `queue.sh` refuses to start while it is set, so the
 preflight never certifies another file than the one the fits use. The slow `v2s-m5` tests, and
@@ -377,8 +378,8 @@ directory is `${HARNESS_RESULTS:-results/harness}/logs`. Before any fit the queu
 lock `<logs>/queue.lock`, a directory holding its pid, and refuses to start while another
 queue holds it, while a `fit_cell.R` runs (`pgrep -f -- '--file=R/harness/fit_cell.R'`), or
 when `pgrep` fails and so cannot tell (an exit other than 0 or 1), unless `FORCE=1`; whatever
-`FORCE`, it refuses to start while `HARNESS_V2_STAN` is set (Tests). It runs
-the full slow suite as a preflight (`<logs>/preflight.log`) and stops if that fails, then
+`FORCE`, it refuses to start while `HARNESS_V2_STAN` is set or `V2_STEPS` is non-empty
+(Tests). It runs the full slow suite as a preflight (`<logs>/preflight.log`) and stops if that fails, then
 runs lanes A and B side by side, each lane's runs one after another, each run's output in
 `<logs>/<id>.log`. `queue.log` there gets
 `QUEUE START <time> <list> <warmup> <sampling> (pid <pid>)`, the preflight's verdict, a `start` and an
@@ -586,9 +587,11 @@ stop. It exits 1 on any STOP.
 plan's Decision 6), compares a P-step's form (`new_arm`) with the reference form (`ref_arm`,
 the step before it). The two arms must differ and have runs on the same cells, and on each
 cell each arm has exactly two fits, of two different seeds that are the other arm's (the plan
-runs seeds 2701 and 2702, but any two seeds the arms share pass); this is checked from the run
-list before anything is read. Every `meta.json`
-must hold `n_leapfrog`. It prints a table of the fits (min bulk ESS per 1,000 gradients,
+runs seeds 2701 and 2702, but any two seeds the arms share pass), and the cells are exactly
+the plan's two, 2024 eve and 2021 f180; this is checked from the run list before anything is
+read. Every fit of both arms must have the same `iter_warmup` and the same `iter_sampling` in
+its `meta.json`, whatever their values, since condition 3 compares divergence counts, and every
+`meta.json` must hold `n_leapfrog`. It prints a table of the fits (min bulk ESS per 1,000 gradients,
 divergences, the stop rule's verdict), a table of the cells (each arm's median over its fits
 of min bulk ESS per 1,000 gradients, and their ratio), the four conditions with yes or no, and
 a last line, `ADOPT <new_arm>` when all four hold and otherwise
