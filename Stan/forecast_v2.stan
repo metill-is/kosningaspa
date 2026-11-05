@@ -604,17 +604,26 @@ transformed parameters {
   // gamma_{e,h} = mu_e + d_{e,h}, with d_{e,h} = C x_{e,h} for the house's levels x. They start
   // at sigma_gamma eps_h and stay there up to the house's first epoch; with epoch_bias = 1 they
   // walk after it, x_{e,h} = x_{e-1,h} + tau_house zeta_{e,h}, so d_{e,h} = d_{e-1,h} +
-  // C(tau_house zeta_{e,h}), and at a later entry epoch a newcomer's level restarts at
-  // sigma_gamma eps_{h,p} instead of carrying prior-only drift. With epoch_bias = 0, d_h =
-  // C(sigma_gamma eps_h) in every epoch, so a newcomer's slot is its restarted deviation.
+  // C(tau_house zeta_{e,h}). At a later entry epoch, after that epoch's step, a newcomer's level
+  // restarts at sigma_gamma eps_{h,p} plus the mean drift x_{e,h,q} - sigma_gamma eps_{h,q} of
+  // the parties q existing before it. What reaches the likelihood is its contrast with each such
+  // q, sigma_gamma (eps_{h,p} - eps_{h,q}) less q's drift from their mean (and the steps after
+  // the entry): its own pre-entry steps never do, nor does a drift common to the existing
+  // parties, which is flat in every row before the entry; and tau_house = 0 is the core. With
+  // epoch_bias = 0, d_h = C(sigma_gamma eps_h) in every epoch, so a newcomer's slot is its
+  // restarted deviation.
   for (h in 1:H) {
     row_vector[P] x = sigma_gamma * house_raw[h];
     for (e in 1:n_epoch) {
       if (epoch_bias && e > house_first_epoch[h]) {
         x += tau_house[1] * house_step_raw[h][ : , e - 1]';
-        for (i in 1:n_enter[e]) {
-          int p = enter_idx[e, i];
-          x[p] = sigma_gamma * house_raw[h, p];
+        if (n_enter[e] > 0) {
+          array[n_before[e]] int q = before_idx[e, 1:n_before[e]];
+          real drift = mean(x[q] - sigma_gamma * house_raw[h, q]);
+          for (i in 1:n_enter[e]) {
+            int p = enter_idx[e, i];
+            x[p] = sigma_gamma * house_raw[h, p] + drift;
+          }
         }
       }
       gamma[e, h] = (x - mean(x))' + mu[e];

@@ -178,7 +178,9 @@ test_that("the epoch-bias reference: each of its mutants changes the density, an
   for (name in c("eve2024", "f180_2021")) {
     d <- cells[[name]]$data
     expect_identical(as.integer(d$epoch_bias), 1L)
-    expect_true(all(c("house_walk_from_first_poll", "newcomer_mean_of_mu1", "no_mu_restart", "no_house_restart") %in% v2_mutants(d)))
+    expect_true(all(c(
+      "house_walk_from_first_poll", "newcomer_mean_of_mu1", "no_mu_restart", "no_house_restart", "house_restart_absolute"
+    ) %in% v2_mutants(d)))
     for (seed in 1:2) {
       s <- v2_simulate(d, seed = seed, observe = FALSE)
       lp <- v2_lp_ref(s$pars, d)
@@ -223,7 +225,7 @@ test_that("the epoch-bias reference walks the industry bias with Annad's own sca
   expect_equal(v2_natural(late, d)$gamma[seq_len(f), , ], a$gamma[seq_len(f), , ], tolerance = 0)
 })
 
-test_that("with every epoch scale near 0 the epoch-bias reference gives the core's biases", {
+test_that("with every epoch scale near 0 the epoch-bias reference gives the core's biases, and at 0 exactly them", {
   d <- v2_test_cells(cfg_m1())$eve2024$data
   s <- v2_simulate(d, seed = 4, observe = FALSE)$pars
   tiny <- s
@@ -238,9 +240,18 @@ test_that("with every epoch scale near 0 the epoch-bias reference gives the core
   b <- v2_natural(core, d0)
   expect_equal(a$mu, b$mu, tolerance = 1e-12)
   expect_equal(a$gamma, b$gamma, tolerance = 1e-12)
+  # WHY: at τ_house = 0 every existing party's drift is exactly 0, so a newcomer's level is its
+  # σ_γ ε draw bit for bit. core_pars() refuses a zero scale, so the zero point reaches
+  # natural() past it; the industry scales are 0 too, so μ, and with it γ, can be compared.
+  ref <- environment(v2_lp_ref)
+  zero <- ref$core_pars(s, d)
+  for (n in c("tau_mu", "tau_mu_A", "tau_house")) zero[[n]] <- 0
+  z <- ref$natural(zero, d)
+  expect_identical(z$mu, b$mu)
+  expect_identical(z$gamma, b$gamma)
 })
 
-test_that("a newcomer restarts at its entry epoch: drift before it never reaches the likelihood, a step after it does", {
+test_that("a newcomer restarts at its entry epoch: its own steps before it never reach the likelihood, a step after it does", {
   # §6.4: at e_p a newcomer's μ and its level in each house restart instead of carrying
   # prior-only drift. Moving a pre-entry step changes the density only by that step's own
   # std_normal prior, and the entry value is the mean over the parties existing before e_p
@@ -288,6 +299,59 @@ test_that("a newcomer restarts at its entry epoch: drift before it never reaches
           expect_gt(abs(lik_change("house_step_raw", pre_h, "no_house_restart")), moved, label = paste(lbl, "house", h, "no_house_restart"))
           expect_gt(abs(lik_change("house_step_raw", cbind(h, p, ep))), moved, label = paste(lbl, "house", h, "step after entry"))
           checked[["house"]] <- checked[["house"]] + 1L
+        }
+      }
+    }
+  }
+  expect_true(all(checked > 0L))
+})
+
+test_that("a newcomer's house level enters against the existing parties': a drift common to them before its entry never reaches the likelihood", {
+  # §6.4's purpose for the house walk: a shift common to the levels of the parties existing
+  # before e_p is flat in every likelihood row before e_p, so it must leave every row after e_p
+  # unchanged too. The shift here moves house h's step of epoch e0, f_h < e0 <= e_p (the entry
+  # epoch's own step comes before the restart), by 1 for every party existing at e0. A party
+  # entering at e0 or later takes the shift on through the existing parties' mean drift, so,
+  # unlike under the absolute restart, no house_raw element moves with it.
+  checked <- c(common = 0L, absolute = 0L)
+  for (name in c("eve2024", "f180_2021")) {
+    d <- v2_test_cells(cfg_m1())[[name]]$data
+    entry <- c(d$entry_epoch)
+    row_epoch <- c(d$grid_epoch)[c(d$grid_nat)]
+    row_S <- lapply(seq_len(d$N_nat), \(n) d$idx_nat[n, seq_len(d$n_rep_nat[n])])
+    s <- v2_simulate(d, seed = 3, observe = FALSE)$pars
+    lp <- c(none = v2_lp_ref(s, d), house_restart_absolute = v2_lp_ref(s, d, "house_restart_absolute"))
+    tol <- 1e-10 + 4 * .Machine$double.eps * abs(lp[["none"]])
+    # Every national poll row's house effects over its reported parties S, centred over S: all
+    # that the likelihood reads of γ, the one quantity the house steps move.
+    seen <- function(pars) {
+      g <- v2_natural(pars, d)$gamma
+      lapply(seq_len(d$N_nat), \(n) {
+        x <- g[row_epoch[n], d$house_nat[n], row_S[[n]]]
+        x - mean(x)
+      })
+    }
+    base <- seen(s)
+    # The change in the density's likelihood part: the density's change less the steps' prior change.
+    lik_change <- function(q, mutant = "none") {
+      v2_lp_ref(q, d, mutant) - lp[[mutant]] + 0.5 * sum(q$house_step_raw^2 - s$house_step_raw^2)
+    }
+    for (p in which(entry > 1L)) {
+      ep <- entry[p]
+      for (h in which(c(d$house_first_epoch) < ep)) {
+        for (e0 in seq(d$house_first_epoch[h] + 1L, ep)) {
+          lbl <- paste(name, "party", p, "entering at", ep, "house", h, "common step of epoch", e0)
+          q <- s
+          q$house_step_raw[h, entry < e0, e0 - 1L] <- q$house_step_raw[h, entry < e0, e0 - 1L] + 1
+          change <- max(abs(unlist(Map(`-`, seen(q), base))))
+          expect_lt(change, 1e-12, label = paste(lbl, "rows' centred house effects"))
+          expect_lt(abs(lik_change(q)), tol, label = paste(lbl, "likelihood"))
+          checked[["common"]] <- checked[["common"]] + 1L
+          # Where house h polls p after its entry, the absolute restart lets the shift through.
+          if (any(c(d$house_nat) == h & row_epoch >= ep & vapply(row_S, \(S) p %in% S, logical(1)))) {
+            expect_gt(abs(lik_change(q, "house_restart_absolute")), 1e-6, label = paste(lbl, "house_restart_absolute"))
+            checked[["absolute"]] <- checked[["absolute"]] + 1L
+          }
         }
       }
     }

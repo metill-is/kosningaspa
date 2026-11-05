@@ -303,12 +303,13 @@ Minutes, treedepth hits and ESS per 1,000 gradients are recorded, never a stop.
 
 **The newcomer restart.** At a newcomer's entry epoch e_p, its μ restarts at the entry mean:
 the mean over the parties existing before e_p of μ_{e_p}, plus m_new + s_new η (0 and 0.2023
-here), and then μ_{e_p} is re-centred. In each house already walking, the restart sets the
-newcomer's element of the uncentred level to σ_γ ε and then centres. Under this reading no
-prior-only drift from before e_p reaches the likelihood, not even 1/P of it through the
-centring, and τ_house = 0 gives the core. Restarting the centred deviation instead would shift
-the newcomer's contrast with every party by the house's mean uncentred level. Fast property
-tests in `tests/harness/test-v2-reference.R` pin the reading:
+here), and then μ_{e_p} is re-centred. In each house already walking, the restart set the
+newcomer's element of the uncentred level to σ_γ ε and then centred, and τ_house = 0 gave the
+core. This section said that under this reading no prior-only drift from before e_p reaches the
+likelihood. That was wrong: a drift common to the existing parties' levels, flat in every row
+before e_p, reached each of the newcomer's contrasts after it with weight 1. The post-review
+change (below, before the Exit) replaced the restart with one against the existing parties'
+mean drift. Fast property tests in `tests/harness/test-v2-reference.R` pinned the reading:
 - moving a newcomer's pre-entry industry or house steps changes the density only by their
   own std_normal prior;
 - a step after entry reaches the likelihood;
@@ -1547,6 +1548,63 @@ LC_ALL=en_US.UTF-8 Rscript R/harness/compare_runs.R stop v2s-m5
 
 M5 stands, so every component is built: `harness/configs/v2.json` holds `v2s-m5`'s config
 under the candidate role, and the Phase 2 plan's Tasks 15 and 16 fit it.
+
+## Post-review change: newcomer house level enters against the existing parties
+
+The final review of the branch found that the house walk's newcomer restart did not keep what
+`v2s-m1`'s section (The newcomer restart, above) said it kept, and Brynjólfur chose to change
+the model, not just the wording. The change is in `Stan/forecast_v2.stan` and its reference,
+`R/harness/v2_reference.R`, and acts only under `epoch_bias = 1`.
+
+**Old form.** At a newcomer p's entry epoch e_p, after that epoch's step, each house h already
+walking set p's element of its uncentred level to x_p = σ_γ ε_{h,p}, then centred.
+
+**New form.** p's element is its core draw plus the mean drift of the parties existing before
+e_p (`before_idx[e_p]`, those with entry epoch before e_p), computed before any entrant is
+reset:
+
+x_p = σ_γ ε_{h,p} + mean over q in `before_idx[e_p]` of (x_q − σ_γ ε_{h,q}).
+
+Each x_q − σ_γ ε_{h,q} is q's accumulated drift, including whatever q inherited at its own
+entry.
+
+**Why.** Every existing party's level carries all of house h's earlier steps, and a shift
+common to them is flat in every likelihood row before e_p, since γ reaches the likelihood only
+through contrasts within a national poll's reported parties. The old form left p at its absolute
+core draw, so that shift moved every one of p's contrasts after e_p with weight 1; the new form
+moves p with it, as the industry bias (a newcomer enters at the existing parties' mean) and the
+δ walk's re-centring already did.
+
+The new form keeps three properties, each pinned by a fast test in
+`tests/harness/test-v2-reference.R`:
+1. **Common drift cancels.** On 2024 eve and 2021 f180, moving house h's step of epoch e0,
+   f_h < e0 ≤ e_p, by 1 for every party existing at e0 leaves every national poll row's centred
+   house effects within 1e-12 and the likelihood within its rounding, in each of the 26 cases. A
+   party entering between e0 and e_p takes the shift on through the mean drift. Under the old
+   restart 44 of the test's 72 expectations fail.
+2. **Own pre-entry steps never reach the likelihood.** This holds as before; the test that moves
+   them now says in its title that it moves the newcomer's own steps.
+3. **τ_house = 0 gives the core exactly.** With every epoch scale at 0, μ and γ are identical,
+   bit for bit, to `epoch_bias = 0`'s.
+
+A new mutant, `house_restart_absolute`, keeps the old form, so the slow lp tests show that the
+Stan file is not the old form. `permute_v2()` needed no change: a mean over the existing parties
+does not depend on their order, and the permutation tests pass.
+
+**The prior predictive.** `harness/v2/prior_predictive.md`, regenerated with `v2s-m5.json` and
+1,000 draws, came out byte-identical: no summary reads a house level after an entry (`house_d`
+reads σ_γ C ε_h).
+
+**What is re-run.** Under the checking policy (`harness/README.md`, Checking a model change),
+this is a change to what the model computes: the lean preflight, then one short fit of `v2` on
+2021 f180, the cell whose open epoch a newcomer enters (Sósíalistaflokkurinn, in epoch 3), so
+its forecast reads that newcomer's house levels from this prior.
+
+Diagnostics of that fit: (to be filled in by the controller).
+
+**What is not re-run.** `harness/tier0/*.md` and `harness/v2/recovery.md` stay the records of
+the Stan file before this change. The change touches only the prior of newcomer house levels
+under `epoch_bias = 1`, and the exact tests above pin its algebra.
 
 ## Exit
 

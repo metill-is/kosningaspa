@@ -80,7 +80,12 @@ V2_CORE_PARS <- tibble::tibble(
 #'   prior-only drift its slot gathered before e_p (its own elements of the centred steps
 #'   of epochs 2..e_p) on top of its entry value, instead of restarting at the entry value;
 #' - `no_house_restart`: a newcomer's level in each house walking before e_p keeps that
-#'   house's prior-only drift, instead of restarting at σ_γ ε_{h,p}.
+#'   house's prior-only drift, instead of restarting at σ_γ ε_{h,p} plus the mean drift of
+#'   the parties existing before e_p;
+#' - `house_restart_absolute`: a newcomer's level in each house walking before e_p restarts
+#'   at σ_γ ε_{h,p} alone, the form `v2s-m1` built, so a drift common to the existing
+#'   parties' levels before e_p, flat in every likelihood row before it, moves each of the
+#'   newcomer's contrasts after it (`harness/v2/steps.md`, the post-review change).
 #'
 #' The newcomer pool's (`newcomer_pool`, §6.4):
 #' - `newcomer_mean_over_all`: a newcomer's entry value takes the mean of μ_{e_p} over every
@@ -124,11 +129,11 @@ V2_MUTANTS <- tibble::tibble(
   mutant = c(
     "positional_gather", "previous_w", "next_epoch_delta", "close_last_kjordaemi", "conditional_walk",
     "house_walk_from_first_poll", "newcomer_mean_of_mu1", "no_mu_restart", "no_house_restart",
-    "newcomer_mean_over_all", "shock_unscaled", "delta_years_unscaled", "no_delta_restart", "delta_entry_leak",
-    "fund_uncentred"
+    "house_restart_absolute", "newcomer_mean_over_all", "shock_unscaled", "delta_years_unscaled", "no_delta_restart",
+    "delta_entry_leak", "fund_uncentred"
   ),
-  switch = c(rep(NA_character_, 5), rep("epoch_bias", 4), "newcomer_pool", "shock", rep("delta_walk", 3), "fundamentals"),
-  min_closed = c(1L, 2L, 2L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L)
+  switch = c(rep(NA_character_, 5), rep("epoch_bias", 5), "newcomer_pool", "shock", rep("delta_walk", 3), "fundamentals"),
+  min_closed = c(1L, 2L, 2L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L)
 )
 
 #' The component switches the reference has (each 0 or 1), the switches of the components it
@@ -614,14 +619,14 @@ delta_epochs <- function(zeta, s_delta0, s_zeta, data, close_last = FALSE, years
 #' (P × G) and its innovation factor, μ_e, γ_{e,h}, δ_e, the bounded log concentrations,
 #' `phi_init`, s_δ0, s_ζ, π_nat at each national poll's date and the closed elections' shocks
 #' ε. `conditional`, `close_last`, `house_from_start`, `entry_mean_mu1`, `mu_carry`,
-#' `house_carry`, `entry_mean_all`, `unscaled`, `years_unscaled`, `delta_carry` and
-#' `entry_leak` switch to the `conditional_walk`, `close_last_kjordaemi`,
+#' `house_carry`, `house_absolute`, `entry_mean_all`, `unscaled`, `years_unscaled`,
+#' `delta_carry` and `entry_leak` switch to the `conditional_walk`, `close_last_kjordaemi`,
 #' `house_walk_from_first_poll`, `newcomer_mean_of_mu1`, `no_mu_restart`, `no_house_restart`,
-#' `newcomer_mean_over_all`, `shock_unscaled`, `delta_years_unscaled`, `no_delta_restart` and
-#' `delta_entry_leak` mutants.
+#' `house_restart_absolute`, `newcomer_mean_over_all`, `shock_unscaled`,
+#' `delta_years_unscaled`, `no_delta_restart` and `delta_entry_leak` mutants.
 natural <- function(p, data, conditional = FALSE, close_last = FALSE, house_from_start = FALSE, entry_mean_mu1 = FALSE,
-                    mu_carry = FALSE, house_carry = FALSE, entry_mean_all = FALSE, unscaled = FALSE,
-                    years_unscaled = FALSE, delta_carry = FALSE, entry_leak = FALSE) {
+                    mu_carry = FALSE, house_carry = FALSE, house_absolute = FALSE, entry_mean_all = FALSE,
+                    unscaled = FALSE, years_unscaled = FALSE, delta_carry = FALSE, entry_leak = FALSE) {
   P <- data$P
   G <- data$G
   H <- data$H
@@ -678,8 +683,9 @@ natural <- function(p, data, conditional = FALSE, close_last = FALSE, house_from
   # §6.4, the houses: γ_{e,h} = μ_e + d_{e,h}, with d_{e,h} = C x_{e,h} for the house's levels
   # x. They start at σ_γ ε_h and stay there up to the house's first epoch f_h; with
   # epoch_bias = 1 they walk after it, x_{e,h} = x_{e−1,h} + τ_house ζ_{e,h}, so that
-  # d_{e,h} = d_{e−1,h} + C(τ_house ζ_{e,h}), and at the entry epoch e_p > f_h of a newcomer p
-  # its level restarts at σ_γ ε_{h,p} instead of carrying prior-only drift. With epoch_bias = 0,
+  # d_{e,h} = d_{e−1,h} + C(τ_house ζ_{e,h}). At the entry epoch e_p > f_h of a newcomer p,
+  # after that epoch's step, its level restarts at σ_γ ε_{h,p} plus the mean drift
+  # x_{e_p,h,q} − σ_γ ε_{h,q} of the parties q existing before e_p. With epoch_bias = 0,
   # d_{e,h} = C(σ_γ ε_h) in every epoch, and a newcomer's slot already holds its σ_γ ε draw. A
   # common shift of a house's levels cancels in every softmax.
   gamma <- array(0, c(n_epoch, H, P))
@@ -690,12 +696,18 @@ natural <- function(p, data, conditional = FALSE, close_last = FALSE, house_from
       if (eb && e > start) {
         x <- x + p$tau_house * p$house_step_raw[h, , e - 1]
         entering <- which(entry == e)
-        # WHY: the restart sets the newcomer's element of the uncentred level x_h to σ_γ ε and
-        # then centres, the core's convention for its slot. Under this reading no prior-only
-        # drift reaches the likelihood, not even 1/P of it through the centring, and
-        # τ_house = 0 is the core. Restarting the centred d_{e_p,h,p} instead would shift the
-        # newcomer's contrast with every party by the house's mean uncentred level.
-        if (!house_carry) x[entering] <- p$sigma_gamma * p$house_raw[h, entering]
+        # WHY: a shift common to the existing parties' levels is flat in every likelihood row
+        # before e_p, so it must stay out of the newcomer's contrasts after e_p. Entering at its
+        # core draw plus their mean drift (each q's drift includes what q inherited at its own
+        # entry), the newcomer moves with such a shift, as its μ enters at their mean; its
+        # contrast with q is σ_γ (ε_p − ε_q) less q's drift from that mean. Its own pre-entry
+        # steps are overwritten, and τ_house = 0 makes the drift exactly 0, the core. The
+        # absolute restart at σ_γ ε (house_restart_absolute) moved every contrast by the shift.
+        if (length(entering) && !house_carry) {
+          existing <- which(entry < e)
+          drift <- if (house_absolute) 0 else mean(x[existing] - p$sigma_gamma * p$house_raw[h, existing])
+          x[entering] <- p$sigma_gamma * p$house_raw[h, entering] + drift
+        }
       }
       gamma[e, h, ] <- centre(x) + mu[e, ]
     }
@@ -930,7 +942,7 @@ v2_lp_ref <- function(pars, data, mutant = "none") {
     conditional = mutant == "conditional_walk", close_last = mutant == "close_last_kjordaemi",
     house_from_start = mutant == "house_walk_from_first_poll", entry_mean_mu1 = mutant == "newcomer_mean_of_mu1",
     mu_carry = mutant == "no_mu_restart", house_carry = mutant == "no_house_restart",
-    entry_mean_all = mutant == "newcomer_mean_over_all", unscaled = mutant == "shock_unscaled",
+    house_absolute = mutant == "house_restart_absolute", entry_mean_all = mutant == "newcomer_mean_over_all", unscaled = mutant == "shock_unscaled",
     years_unscaled = mutant == "delta_years_unscaled", delta_carry = mutant == "no_delta_restart",
     entry_leak = mutant == "delta_entry_leak"
   )
