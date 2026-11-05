@@ -288,6 +288,9 @@ test_that("the V2 checks report the hand-computed counts, correlation, ESS and m
     minutes = 16.008, reverse = TRUE, shuffle = TRUE, stage1 = SHA_EVE
   )
   fake_run(results, "v2-nofund", F180, 1202L, CLOSED_F180, f180, PLANT_F180, minutes = 10)
+  # WHY: v2-nofund's meta.json holds stage1_sha256 as an explicit null, as fit_cell.R writes it, and its cell must read "no stage 1"; a meta.json without the field stops (the guard test).
+  nofund_meta <- readLines(file.path(results, run_id("v2-nofund", F180[1], F180[2], 1202L), "meta.json"))
+  expect_true(any(grepl('"stage1_sha256": null', nofund_meta, fixed = TRUE)))
   # WHY: the run list sits under the results root, so the report must print it as $HARNESS_RESULTS/..., never as the absolute path given.
   runs <- file.path(results, "runs.txt")
   writeLines(c(
@@ -431,6 +434,11 @@ test_that("the V2 checks stop, writing nothing, on each guard of their header", 
     edit_meta = \(m) utils::modifyList(m, list(closed_elections = I(c(CLOSED_EVE, "2024-11-30"))))
   )
   fails_with("v2_checks: meta.json: stage1_sha256 is not a sha256", edit_meta = \(m) utils::modifyList(m, list(stage1_sha256 = "abc")))
+  # WHY: read_json() reads a missing field as NULL, as it reads a JSON null; only the null means a run with no stage 1.
+  fails_with(
+    "v2_checks: meta.json: stage1_sha256 is missing (a run with no stage 1 records it as null)",
+    edit_meta = \(m) m[setdiff(names(m), "stage1_sha256")]
+  )
   run_list("A v2 2021-09-25 2021-03-29 1202", "A v2 2024-11-30 2024-11-28 1201")
   unlink(second, recursive = TRUE)
   odd <- fake_run(results, "v2", c(EVE[1], "2024-11-28"), 1201L, CLOSED_EVE, p, stage1 = SHA_EVE)

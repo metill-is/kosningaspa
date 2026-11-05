@@ -98,7 +98,7 @@ test_that("a stale stage-1 record is refitted, or with fit = FALSE read as a col
   round_trip(stage1_record(key, near = NULL, parties = S_f), path)
   expect_error(
     stage1_mu_f(info, cfg, fit = FALSE),
-    "the cached record has no log phi_f near-cap counts, so it is stale", fixed = TRUE
+    "the cached record has no current log phi_f near-cap counts, so it is stale", fixed = TRUE
   )
   expect_error(stage1_mu_f(info, cfg, fit = FALSE), "stage 1: no cached fit for 2021-09-25 F 2021-03-29", fixed = TRUE)
   expect_error(stage1_mu_f(info, cfg), "compiled", fixed = TRUE)

@@ -197,7 +197,7 @@ stage1_near_cap_of <- function(rec) {
   list(n_draws = nc$n_draws, within_margin = nc$within_margin, within_near_cap = nc$within_near_cap)
 }
 
-#' Whether `path` holds a stage-1 record with the near-cap counts (`stage1_near_cap_of()`):
+#' Whether `path` holds a stage-1 record with current near-cap counts (`stage1_near_cap_of()`):
 #' FALSE for no file and for a stale record, which `stage1_mu_f()` then refits, or with
 #' `fit = FALSE` treats as a cold cache.
 #' @export
@@ -288,8 +288,8 @@ fit_stage1 <- function(stan_file, json, s1, key, info, path) {
 #'   and the S_f parties.
 #'   The fit's output lives in `results_root()/stage1/<key>/mu_f.json`, written atomically
 #'   (a temporary file, then a rename), and a later call with the same key reads it
-#'   instead of fitting, so both calls return identical values. A record without the near-cap
-#'   counts (`stage1_near_cap_of()` NULL), as one written before they were recorded, is
+#'   instead of fitting, so both calls return identical values. A record without current
+#'   near-cap counts (`stage1_near_cap_of()` NULL), as one written before they were recorded, is
 #'   stale: it is refitted under the same key, or with `fit = FALSE` treated as a cold cache.
 #'   The fit runs `SAMPLER`'s chains, init and max_treedepth with `cfg$stage1`'s seed and
 #'   iterations, and also counts the draws of log φ_f near its cap (`stage1_near_cap()`); it writes its
@@ -324,9 +324,9 @@ stage1_mu_f <- function(info, cfg, root = project_root(), fit = TRUE) {
   S_f <- info$fundamentals$S_f
   key <- stage1_key(sha256_file(stan_file), sha256_file(json), s1, S_f)
   path <- file.path(results_root(), "stage1", key, "mu_f.json")
-  # WHY: a record written before the near-cap counts were recorded is stale: refitted, or with fit = FALSE a cold cache.
+  # WHY: a record without current near-cap counts (none, as one written before they were recorded, or ones of another cap, margin or draw count) is stale: refitted, or with fit = FALSE a cold cache.
   if (!stage1_current(path)) {
-    stale <- if (file.exists(path)) "; the cached record has no log phi_f near-cap counts, so it is stale" else ""
+    stale <- if (file.exists(path)) "; the cached record has no current log phi_f near-cap counts, so it is stale" else ""
     if (!isTRUE(fit)) {
       fail("no cached fit for ", format(info$E), " F ", format(info$F), " under results_root()/stage1/ (key ", substr(key, 1, 12), ")", stale)
     }

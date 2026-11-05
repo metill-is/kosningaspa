@@ -203,7 +203,7 @@ results/harness/
     meta.json               written last by the runner: present means finished
   _stale/<id>_<YYYYmmddHHMMSS>/   a retired run, kept as it was
   stage1/<sha256>/mu_f.json  V2's stage-1 output and its log phi_f near-cap counts, cached by the sha256 of
-                            its inputs (R/harness/stage1.R; a record without the counts is stale and refitted)
+                            its inputs (R/harness/stage1.R; a record without current counts is stale and refitted)
   logs/                     the queue's logs: queue.log, preflight.log, <id>.log, and its lock, queue.lock/
 ```
 

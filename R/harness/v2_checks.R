@@ -18,7 +18,7 @@
 #     log c > cap - m: log_phi (one column per house; for each margin the largest count over the
 #     houses and the house that has it), log_phi_K and log_kappa against V2_LOG_CAPS, and stage
 #     1's log_phi_f against V2_STAGE1_LOG_CAP, as its record counts them (stage1_near_cap_of();
-#     "not recorded" for a record without the counts, "no stage 1" for a run without one); and
+#     "not recorded" for a record without current counts, "no stage 1" for a run without one); and
 #     the (sigma, Omega) flat directions, computed per draw from sigma and L_Omega: the min bulk
 #     ESS over the chains of each distinct entry of C Sigma C', and of each off-diagonal entry of
 #     Omega, where Sigma = diag(sigma) Omega diag(sigma), Omega = L_Omega L_Omega' and
@@ -40,7 +40,8 @@
 #   - a run with no meta.json, or with one of another run; a cell that is not a forecast cell;
 #   - a meta.json field it reads that is missing or does not parse (E, F, seed, minutes, chains,
 #     iter_warmup, iter_sampling, party_order, house_levels, kjordaemi_levels, closed_elections,
-#     stage1_sha256), or a closed election on or after E;
+#     stage1_sha256, which is null, not missing, for a run with no stage 1), or a closed election
+#     on or after E;
 #   - a missing parquet, or one that lacks a column it reads or holds a missing value there;
 #   - a param_draws.parquet that does not hold chains x iter_sampling draws, one per chain and
 #     iteration, or holds elements of sigma, L_Omega or log_phi beyond meta.json's parties and
@@ -206,9 +207,11 @@ near_cell <- function(x, cap, n, houses = NULL) {
 }
 
 #' The stage-1 column's cell: the counts of the run's stage-1 record (`stage1_near_cap_of()`),
-#' "<within 2>; <within 0.5>" of its own draws; "not recorded" for a record without them; "no
-#' stage 1" when meta.json's stage1_sha256 is null.
+#' "<within 2>; <within 0.5>" of its own draws; "not recorded" for a record without current
+#' counts; "no stage 1" when meta.json's stage1_sha256 is null. An error when the field is missing.
 stage1_cell <- function(meta, id) {
+  # WHY: read_json() gives NULL for a missing field and for a JSON null alike; fit_cell.R writes null for a run with no stage 1, so only a missing name tells a broken meta.json apart.
+  if (!"stage1_sha256" %in% names(meta)) fail("meta.json: stage1_sha256 is missing (a run with no stage 1 records it as null)")
   sha <- meta$stage1_sha256
   if (is.null(sha) || (is.list(sha) && !length(sha))) {
     return("no stage 1")
@@ -407,13 +410,15 @@ main <- function(args) {
       "which a bounded log concentration lies within 2 (Decision 4's margin, `V2_CAP_MARGIN`) and",
       "within 0.5 (the stop rule's, `NEAR_CAP` in `R/harness/compare_runs.R`) of its cap, on the log",
       "scale the model uses: log c > cap \u2212 2 and log c > cap \u2212 0.5. The stop rule counts",
-      "cap \u2212 log c \u2264 0.5, which differs only for a draw exactly on the edge. The caps are",
+      "cap \u2212 log c \u2264 0.5, which differs only for a draw exactly on the edge, and counts a draw",
+      "once across every house and concentration, so its `near_cap` is at least the 0.5 count of each",
+      "column but stage 1's and need not equal any of them. The caps are",
       "`V2_LOG_CAPS` and `V2_STAGE1_LOG_CAP` (`R/harness/v2_reference.R`). log \u03c6_h has one column per",
       "house: for each margin the cell gives the largest count over the houses, and the house that has",
       "it (`meta.json`'s `house_levels`) when that count is not 0. **Stage 1**'s log \u03c6_f is counted",
       "over stage 1's own draws when it is fitted, and read from its cached record",
-      "(`results_root()/stage1/<stage1_sha256>/mu_f.json`); `not recorded` marks a record written",
-      "before the counts were, and `no stage 1` a run without a stage 1."
+      "(`results_root()/stage1/<stage1_sha256>/mu_f.json`); `not recorded` marks a record without",
+      "current counts, as one written before they were, and `no stage 1` a run without a stage 1."
     ),
     paste(
       "- **Min bulk ESS over the entries of C\u03a3C\u1d40**: per draw, \u03a3 = diag(\u03c3) \u03a9 diag(\u03c3) with",
