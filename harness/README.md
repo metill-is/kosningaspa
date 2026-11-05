@@ -124,6 +124,12 @@ and the wider suite waits for a forecast that is published or frozen. From the p
   HARNESS_RESULTS="$PWD/results/harness" PREFLIGHT=lean zsh R/harness/queue.sh <run_list> <iter_warmup> <iter_sampling>
   ```
 
+  Pass `<run_list>` by absolute path: after the `cd`, a relative path resolves inside the old
+  worktree, where an untracked list does not exist. A commit before b19fb19 has no `PREFLIGHT`
+  switch, so its queue runs the full slow suite; to skip that there, run
+  `R/harness/fit_cell.R <arm> <E> <F> <seed> <iter_warmup> <iter_sampling>` directly, with the
+  same `HARNESS_RESULTS`.
+
   `results_root()` is `HARNESS_RESULTS`, or else `results/harness` under the checkout's own
   root, so setting it there keeps an exported value from sending the old fits into the new
   model's root. The two must not share one: a fit of the same arm, cell and seed in one

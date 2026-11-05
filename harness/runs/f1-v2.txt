@@ -1,0 +1,4 @@
+# lane arm E F seed
+# The one short fit after the newcomer house-level change (harness/v2/steps.md), under the lean
+# checking policy (harness/README.md): V2 on 2021 f180, the cell with a newcomer, lean preflight.
+A v2 2021-09-25 2021-03-29 1302

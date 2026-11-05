@@ -1594,8 +1594,9 @@ does not depend on their order, and the permutation tests pass.
 **The tests run against the new file.** The fast suite, `LC_ALL=en_US.UTF-8 Rscript
 tests/run.R`, and the lean preflight's slow Stan tests, `HARNESS_SLOW=1
 V2_STEPS=v2s-m5,perm LC_ALL=en_US.UTF-8 Rscript tests/run.R v2-stan`: `v2s-m5`'s tests, whose
-lp test tells `house_restart_absolute` apart from Stan, and the tests tagged `perm`, which
-since this change include `v2s-m1`'s reversed-order test, the house walk on reversed orders.
+lp test tells `house_restart_absolute` apart from Stan, and the tests tagged `perm`, which,
+since a follow-up commit on this branch, include `v2s-m1`'s reversed-order test, the house walk
+on reversed orders.
 The slow lp tests of `v2s-m1` to `v2s-m4`, whose mutant lists now hold
 `house_restart_absolute`, were not run against it: they make short fits.
 
@@ -1608,7 +1609,16 @@ this is a change to what the model computes: the lean preflight, then one short 
 2021 f180, the cell whose open epoch a newcomer enters (Sósíalistaflokkurinn, in epoch 3), so
 its forecast reads that newcomer's house levels from this prior.
 
-Diagnostics of that fit: (to be filled in by the controller).
+Diagnostics of that fit (`harness/runs/f1-v2.txt`, seed 1302, 200 + 200, after a lean preflight
+that passed in 9 min 19 s): 13.8 minutes, partly beside other sessions' four-chain fits; max
+R-hat 1.0751, min bulk ESS 43, min tail ESS 75, 0 of 800 divergent, 0 treedepth hits, min
+E-BFMI 0.443. The strict gate fails, as every 200 + 200 run here does.
+`compare_runs.R stop v2 harness/runs/f1-v2.txt` gives GO (lp R-hat 1.0381, 2 of 800 near the
+cap). `v2_checks.R` on the same list: 0 cells outside [0.025, 0.975] at the 2016 (48 cells) and
+2017 (54) results; log κ within 2 of its cap in 289 of 800 draws (36.1%) and within 0.5 in 2
+(0.2%); min bulk ESS 224 over CΣCᵀ and 314 over Ω's off-diagonals. The fit of this cell before
+the change (seed 1202, `harness/tier0/v2.md`) took 12.7 minutes, with max R-hat 1.0432 and
+min bulk ESS 95: at this length the two seeds differ by about as much as the two models.
 
 **What is not re-run.** `harness/tier0/*.md` and `harness/v2/recovery.md` stay the records of
 the Stan file before this change, and so do the fit records of this file's staircase
