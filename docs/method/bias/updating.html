@@ -17,7 +17,7 @@
   <div class="kicker">Kosningaspá · Method · Pollster bias</div>
   <h1><span class="chnum">3.1</span> How pollster bias is modelled and updated at and between elections</h1>
   <p class="sub">What “bias” means in the forecast model, Fylgisvakt v4 and v5, and v2&#x27;s M1; what tells each model the bias; what happens when a result arrives; the priors on the bias walk; and a worked example, D at the 2024 boundary.</p>
-  <div class="stamp"><b>Review state.</b> Not reviewed by the author. Drafted with Claude on 29 Oct 2026 from the code on master, the v2 branch and the project&#x27;s records; edited on 4 Nov 2026 to keep only what the public repository can cite, again that day for the fixes merged in PR #15, and again for the corrected live data file and the link to chapter 1.1. <b>Snapshot.</b> Describes the code and records as they stood on 29 Oct 2026; the forecast model&#x27;s hedge and known issues as of 4 Nov 2026 (master a54f3fe): kosningaspa <code>master</code> unless a box names a branch. Live state: kosningaspa <code>master</code>.</div>
+  <div class="stamp"><b>Review state.</b> Not reviewed by the author. Drafted with Claude on 29 Oct 2026 from the code on master, the v2 branch and the project&#x27;s records; edited on 4 Nov 2026 to keep only what the public repository can cite, again that day for the fixes merged in PR #15, and again for the corrected live data file and the link to chapter 1.1. <b>Snapshot.</b> Describes the code and records as they stood on 29 Oct 2026; the forecast model&#x27;s hedge and known issues as of 4 Nov 2026 (master a54f3fe); v5&#x27;s entry rules as of 5 Nov 2026: kosningaspa <code>master</code> unless a box names a branch. Live state: kosningaspa <code>master</code>.</div>
 </header>
 
 <div class="layout">
@@ -47,7 +47,7 @@
  "sub": "What “bias” means in the forecast model, Fylgisvakt v4 and v5, and v2's M1; what tells each model the bias; what happens when a result arrives; the priors on the bias walk; and a worked example, D at the 2024 boundary.",
  "kicker": "Pollster bias",
  "review": "Not reviewed by the author. Drafted with Claude on 29 Oct 2026 from the code on master, the v2 branch and the project's records; edited on 4 Nov 2026 to keep only what the public repository can cite, again that day for the fixes merged in PR #15, and again for the corrected live data file and the link to chapter 1.1.",
- "snapshot": "29 Oct 2026; the forecast model's hedge and known issues as of 4 Nov 2026 (master a54f3fe)",
+ "snapshot": "29 Oct 2026; the forecast model's hedge and known issues as of 4 Nov 2026 (master a54f3fe); v5's entry rules as of 5 Nov 2026",
  "sources": [
   ["Stan/polling_and_fundamentals_kjordaemi.stan", "the forecast model, master (a54f3fe); the hedge entered git in 9381677"],
   ["Stan/polling_watch_v4.stan, Stan/polling_watch_v5_epoch.stan", "Fylgisvakt v4 and v5, master"],
@@ -76,8 +76,8 @@
 <tbody>
 <tr><td>Forecast</td><td>master</td><td>one constant from 2016-01-01</td><td>no step; the result adds evidence</td><td>adds back $w\,\mu/\sqrt{n_e}$, $w\sim$ Beta(40, 60): about 72–77% corrected on the logit scale, 60% for J</td><td>drop-one: Annað 0, J closes</td></tr>
 <tr><td>Fylgisvakt v4</td><td>live on metill.is (fit of 29 Sep 2026, window from the 2021 result)</td><td>one constant</td><td>none</td><td>full</td><td>sum to zero over all ten</td></tr>
-<tr><td>Fylgisvakt v5</td><td>master since PR #11 (723b533), 29 Oct 2026; not published</td><td>constant within an epoch</td><td>industry step $\tau_\mu$, house step $\tau_{\text{house}}$</td><td>full</td><td>sum to zero</td></tr>
-<tr><td>v2 forecast, M1</td><td>branch <code>claude/epic-lichterman-e32cb6</code></td><td>constant within an epoch</td><td>as v5, plus Annað's own scale and a newcomer restart</td><td>full; no hedge</td><td>sum to zero</td></tr>
+<tr><td>Fylgisvakt v5</td><td>master since PR #11 (723b533), 29 Oct 2026; not published</td><td>constant within an epoch</td><td>industry step $\tau_\mu$, house step $\tau_{\text{house}}$; since 5 Nov 2026 a house walks from its first poll and a newcomer restarts at entry</td><td>full</td><td>sum to zero</td></tr>
+<tr><td>v2 forecast, M1</td><td>branch <code>claude/epic-lichterman-e32cb6</code></td><td>constant within an epoch</td><td>as v5, plus Annað's own scale and a pooled newcomer draw</td><td>full; no hedge</td><td>sum to zero</td></tr>
 </tbody></table></div>
 
 <div class="xref"><span class="lab">See also</span>
@@ -194,15 +194,18 @@ mu_gamma_pred *= mu_gamma_weight;         // added to beta on the forecast days 
 <p><code>Stan/polling_watch_v5_epoch.stan</code> cuts the window at its results. Each stretch that holds polls is an epoch, and both the industry bias and each house's deviation take a random-walk step from one epoch to the next ($k$ indexes houses 2..H):</p>
 $$\begin{aligned}
 \mu_1 &= \mu_0, & \mu_e &= \mu_{e-1} + \tau_\mu\, z^{\mu}_{e-1},\\
-d_{1,k} &= \sigma_\gamma\, f_k, & d_{e,k} &= d_{e-1,k} + \tau_{\text{house}}\, z^{h}_{e-1,k},\\
-\gamma_{e,h} &= \mu_e + d_{e,h-1}, & \gamma_{e,1} &= 0 .
+d_{1,k} &= \sigma_\gamma\, f_k, & d_{e,k} &= d_{e-1,k} + \tau_{\text{house}}\, z^{h}_{e-1,k} \ \text{ for } e > f_k \text{ (else } d_{e-1,k}\text{)},\\
+\gamma_{e,h} &= \mu_e + d_{e,h-1}, & \gamma_{e,1} &= 0 ,
 \end{aligned}$$
+<p>where $f_k$ is house $k$'s first epoch. At a party's entry epoch the party restarts, as described in the list below.</p>
 <ul>
+<li><strong>A house's walk starts at its first poll</strong> (since 5 Nov 2026). Until its first epoch $f_k$, the epoch of its first poll, a house keeps its epoch-1 deviation $\sigma_\gamma f_k$, so a house that starts late carries no prior-only steps into its first polls. Before this change, Maskína (first poll in E3) entered with two such steps and Prósent (E2) with one, which widened their first deviations and let $\tau_{\text{house}}$ learn from them.</li>
+<li><strong>A newcomer restarts at its entry epoch</strong> (since 5 Nov 2026). A party's entry epoch is the first epoch in which a poll reports it: M in E2 and J in E3 on this window. No poll speaks to its bias before then. Because every bias vector sums to zero, the drift shared by the parties already polled is flat in the data too. So at entry, after that epoch's step, its industry bias and each walking house's deviation are reset to its epoch-1 value plus the mean drift of the parties that entered earlier: $\mu_e[p] = \mu_0[p] + \overline{(\mu_e - \mu_0)}_B$ and $d_{e,k}[p] = d_{1,k}[p] + \overline{(d_{e,k} - d_{1,k})}_B$, with $B$ the earlier parties. Each vector is then re-centred. The newcomer's contrasts with $B$ are those of its epoch-1 draw, and it walks with the rest afterwards. This is the rule the v2 forecast's fix F1 adopts for its house deviations (under way on its branch on 5 Nov 2026). With both $\tau$ at 0 nothing drifts, so v5 is still v4. <code>R/sampler_check/exact_checks_polling_watch.R</code> checks both rules exactly; <code>R/sampler_check/RESULTS.md</code> has the fits before and after.</li>
 <li><strong>Priors.</strong> $\mu_0$, $f_k$ and every shock $z$ are <code>std_normal()</code> on <code>sum_to_zero_vector[P]</code>, with $\sigma_\gamma \sim$ Exponential(1). With <code>estimate_tau = 1</code>, the production default, $\tau_\mu$ and $\tau_{\text{house}}$ each get an independent half-normal(0, 0.1) prior (<code>prepare_polling_watch_epochs()</code>). Fixing both at 0 gives back v4, which is the model's own implementation check.</li>
 <li><strong>Constant within an epoch.</strong> The likelihood reads <code>gamma[epoch_n[n], house_n[n]]</code> and has no date term.</li>
 <li><strong>Not scaled by epoch length.</strong> The one-year epoch 2016–17 and the four-year 2017–21 take the same step size.</li>
 <li><strong>Which epoch a poll is in.</strong> <code>raw_epoch = 1 + findInterval(date, election_dates, left.open = TRUE)</code>, so a poll dated on an election day belongs to the epoch that election closes. An epoch exists only once it holds a poll; an empty epoch between two results is an error.</li>
-<li><strong>A house that skips an epoch.</strong> Its deviation still walks, but that cell carries no likelihood term: it is interpolated, extrapolated, or prior-only. <code>fit_polling_watch.R</code> writes <code>polling_watch_gamma.parquet</code> only for cells that hold a poll. <code>polling_watch_mu_gamma.parquet</code> holds every epoch.</li>
+<li><strong>A house that skips an epoch after its first.</strong> Its deviation still walks, but that cell carries no likelihood term: it is interpolated, extrapolated, or prior-only. <code>fit_polling_watch.R</code> writes <code>polling_watch_gamma.parquet</code> only for cells that hold a poll. <code>polling_watch_mu_gamma.parquet</code> holds every epoch.</li>
 <li><strong>What gets published.</strong> The curve is still $\operatorname{softmax}(\beta)$. The platform export reads neither $\gamma$ nor $\mu$, and its poll dots are the raw shares.</li>
 </ul>
 
@@ -220,6 +223,7 @@ d_{1,k} &= \sigma_\gamma\, f_k, & d_{e,k} &= d_{e-1,k} + \tau_{\text{house}}\, z
 
 <div class="measured"><span class="lab">Fit of 29 Oct 2026</span>
 <p>Polls to 2026-09-27; 0 divergences, max R-hat 1.0045. $\tau_\mu$ 0.147 (90%: 0.112–0.191), $\tau_{\text{house}}$ 0.050 (0.038–0.063), $\sigma_\gamma$ 0.065 (0.046–0.088), all logit per epoch. In E5 only Gallup and Maskína poll, so the split between industry and house there rests on the prior. The commit that introduced v5 (88b8663) therefore recommends judging each epoch by the bias of the houses active in it.</p>
+<p>With the entry rules of 5 Nov 2026, refitted to the same polls with the corrected election anchors: $\tau_\mu$ 0.150 (0.114–0.195), $\tau_{\text{house}}$ 0.054 (0.042–0.070), $\sigma_\gamma$ 0.071 (0.054–0.091), against 0.151, 0.050 and 0.065 for the model before them on the same data. The shares on 27 Sep 2026 move by at most 0.06 pp and P(S ahead) stays at 0.86 (<code>R/sampler_check/RESULTS.md</code>).</p>
 </div>
 
 <div class="decision"><span class="lab">Decision</span>
@@ -348,7 +352,7 @@ d_{1,k} &= \sigma_\gamma\, f_k, & d_{e,k} &= d_{e-1,k} + \tau_{\text{house}}\, z
 <div class="branch"><span class="lab">Branch</span>
 <p>Everything in this section is on <code>claude/epic-lichterman-e32cb6</code>, a local branch not yet pushed (it lands with the v2 pull request), forked from master at 4abc579. The component is the <code>epoch_bias</code> switch in <code>Stan/forecast_v2.stan</code>. Commits 5a53130 (component, config and arm), 3b9503a (restart tests and mutants), 6cbbb8a (sampler check and step log) and 18f4c68 (doc fixes) landed on 29 Oct 2026. This section was read at 18f4c68; M2's newcomer-pool component (b0e4a69) has landed since. Its spec is the author's design note of 23 Oct 2026 (private project notes), §6.4; its plan is <code>docs/superpowers/plans/2026-10-28-v2-harness-phase2-v2-model.md</code> on the branch, Task 9.</p>
 </div>
-<p>M1 follows v5, with these differences:</p>
+<p>M1 follows v5, with these differences. Since 5 Nov 2026 v5 also starts each house's walk at its first epoch and restarts a newcomer at its entry epoch, in the form of the fix F1 under way on the branch on 5 Nov 2026; in v5 the newcomer's industry bias restarts at its own epoch-1 draw, not at M1's $m_{\text{new}} + s_{\text{new}}\eta$.</p>
 <ul>
 <li><strong>Annað</strong> gets its own industry step scale, $\tau_{\mu,A} \sim$ half-N(0, 0.3). The spec marks this as Claude's call, since Annað is a composite of small parties.</li>
 <li><strong>Houses</strong> walk only after their first epoch, the epoch of their first <em>national</em> poll. One $\tau_{\text{house}} \sim$ half-N(0, 0.1) covers all houses, and each fyrirtæki is its own house.</li>

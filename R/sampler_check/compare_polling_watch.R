@@ -4,11 +4,14 @@
 # treedepth__ distribution, max R-hat and min bulk/tail ESS over the parameters and
 # every smoothed share (pi_smooth), ESS per wall minute and per 1,000 sampling-phase
 # gradients, and agreement of the last date's smoothed-share quantiles within MCSE:
-# z = (q_new - q_old) / sqrt(mcse_new^2 + mcse_old^2).
+# z = (q_new - q_old) / sqrt(mcse_new^2 + mcse_old^2). Also the published headline, the
+# probability that party a leads party b on the last date (--lead=a,b; the default 1,2 is
+# Samfylkingin against Sjálfstæðisflokkurinn in read_polling_watch_data()'s order), with its
+# MCSE, and the posteriors of the bias scales (tau_mu, tau_house, sigma_gamma).
 #
 # Usage, from the project root:
 #   LC_ALL=en_US.UTF-8 Rscript R/sampler_check/compare_polling_watch.R --old=<fit dir> \
-#     --new=<fit dir> --out=<dir> [--label=fit]
+#     --new=<fit dir> --out=<dir> [--label=fit] [--lead=1,2]
 Sys.setlocale("LC_ALL", "en_US.UTF-8")
 options(width = 160, warn = 1)
 suppressPackageStartupMessages({
@@ -114,3 +117,21 @@ cat(sprintf(
   "\npi_smooth[%d, ] quantiles: %d of %d with |z| > 2, max |z| %.2f; max |difference| %.2f pp\n",
   last, sum(abs(agree$z) > 2), nrow(agree), max(abs(agree$z)), 100 * max(abs(agree$new - agree$old))
 ))
+
+lead <- as.integer(strsplit(arg("lead", "1,2"), ",")[[1]])
+lead_prob <- bind_rows(lapply(list(old = old, new = new), function(f) {
+  ahead <- extract_variable_matrix(f$draws, sprintf("pi_smooth[%d,%d]", last, lead[1])) >
+    extract_variable_matrix(f$draws, sprintf("pi_smooth[%d,%d]", last, lead[2]))
+  tibble(p_ahead = mean(ahead), mcse = mcse_mean(1 * ahead))
+}), .id = "fit")
+write_csv(lead_prob, file.path(out, paste0(label, "_lead.csv")))
+cat(sprintf("\nP(party %d ahead of party %d) on date %d:\n", lead[1], lead[2], last))
+print(as.data.frame(lead_prob), digits = 4)
+
+scales <- intersect(c("tau_mu", "tau_house", "sigma_gamma"), variables(old$draws))
+scale_summ <- bind_rows(lapply(list(old = old, new = new), function(f) {
+  summarise_draws(subset_draws(f$draws, variable = scales), median, ~ quantile(.x, c(0.05, 0.95)))
+}), .id = "fit")
+write_csv(scale_summ, file.path(out, paste0(label, "_bias_scales.csv")))
+cat("\nbias scales (median, 90% interval):\n")
+print(as.data.frame(scale_summ), digits = 3)
