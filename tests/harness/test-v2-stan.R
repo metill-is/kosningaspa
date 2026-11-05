@@ -73,7 +73,7 @@ test_that("v2s-m0: positional-gather mutant is rejected", {
 })
 test_that("v2s-m0: Stan's log density is permutation-invariant up to the L_Omega Jacobian", {
   skip_unless_slow()
-  skip_unless_step("v2s-m0")
+  skip_unless_step("v2s-m0", tag = "perm")
   d <- v2_test_cells(cfg_m0())$eve2024$data
   rp <- rev(seq_len(d$P))
   rk <- rev(seq_len(d$K))

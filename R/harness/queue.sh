@@ -15,9 +15,13 @@
 # V2 Stan and equivalence tests instead of the full slow suite. Before any fit it takes the lock $LOGS/queue.lock (a directory holding the queue's pid),
 # refuses to start while another queue holds it or a fit_cell.R runs (or when pgrep cannot
 # tell), unless FORCE=1, and runs the full slow test suite as a preflight
-# ($LOGS/preflight.log), stopping if that fails. $LOGS/queue.log gets
-# "QUEUE START <time> <list> <warmup> <sampling> (pid <pid>)", "preflight PASS" (or
-# "preflight FAIL ..."), a "start <lane> <id> <time>" and an
+# ($LOGS/preflight.log), stopping if that fails. PREFLIGHT=lean runs instead the fast suite,
+# then the slow Stan tests of v2s-m5 (V2's configuration) and the Stan permutation lp test
+# (V2_STEPS=v2s-m5,perm, set for that command alone, so the refusal above reads only the
+# caller's); PREFLIGHT=full, or unset, is the full slow suite, and any other value is refused
+# as a bad command line. $LOGS/queue.log gets
+# "QUEUE START <time> <list> <warmup> <sampling> (pid <pid>)", "preflight PASS" or
+# "preflight PASS (lean)" (or "preflight FAIL ..."), a "start <lane> <id> <time>" and an
 # "end <id> rc=<rc> <first DIAG|SKIP|STALE line>" per run, and one terminal line: "QUEUE
 # FINISHED" once both lanes are done, or "QUEUE ABORTED rc=<rc> <reason> (pid <pid>)" on any
 # other exit (a bad command line, a refusal, a failed preflight, SIGTERM or SIGINT). A refused
@@ -78,6 +82,8 @@ sampling=$3
 if [[ $warmup != <-> || $sampling != <-> ]]; then
   die 2 "iter_warmup and iter_sampling must be whole numbers: $warmup $sampling"
 fi
+preflight=${PREFLIGHT:-full}
+[[ $preflight == (full|lean) ]] || die 2 "PREFLIGHT must be full or lean: $preflight"
 
 typeset -a runs fields
 n=0
@@ -127,19 +133,34 @@ if [[ ${FORCE:-0} != 1 ]]; then
   fi
 fi
 
+# One preflight command, appended to $LOGS/preflight.log; its exit status.
+# WHY: in the background, so that a SIGTERM's trap runs at once rather than after the suite.
+preflight_run() {
+  env "$@" >> $LOGS/preflight.log 2>&1 &
+  children=($!)
+  wait $children[1]
+  local rc=$?
+  children=()
+  return $rc
+}
+
 cd $root || die 1 "cannot cd to $root"
 qlog "QUEUE START $(now) $list $warmup $sampling (pid $$)"
-# WHY: in the background, so that a SIGTERM's trap runs at once rather than after the suite.
-HARNESS_SLOW=1 LC_ALL=en_US.UTF-8 Rscript tests/run.R > $LOGS/preflight.log 2>&1 &
-children=($!)
-wait $children[1]
+: > $LOGS/preflight.log
+if [[ $preflight == lean ]]; then
+  tag=" (lean)"
+  preflight_run HARNESS_SLOW= V2_STEPS= LC_ALL=en_US.UTF-8 Rscript tests/run.R &&
+    preflight_run HARNESS_SLOW=1 V2_STEPS=v2s-m5,perm LC_ALL=en_US.UTF-8 Rscript tests/run.R v2-stan
+else
+  tag=""
+  preflight_run HARNESS_SLOW=1 LC_ALL=en_US.UTF-8 Rscript tests/run.R
+fi
 rc=$?
-children=()
 if (( rc != 0 )); then
-  qlog "preflight FAIL rc=$rc ($LOGS/preflight.log)"
+  qlog "preflight FAIL$tag rc=$rc ($LOGS/preflight.log)"
   die 1 "preflight failed (rc=$rc): see $LOGS/preflight.log"
 fi
-qlog "preflight PASS"
+qlog "preflight PASS$tag"
 
 run_lane() {
   local lane=$1 failed=0 r id rc first

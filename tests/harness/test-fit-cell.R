@@ -92,7 +92,7 @@ test_that("the queue will not start beside a running fit_cell.R unless FORCE=1, 
   bin <- withr::local_tempdir()
   stub(bin, "Rscript", "exit 3")
   withr::local_envvar(
-    HARNESS_RESULTS = results, DRY_RUN = NA, FORCE = NA, HARNESS_V2_STAN = NA, V2_STEPS = NA,
+    HARNESS_RESULTS = results, DRY_RUN = NA, FORCE = NA, HARNESS_V2_STAN = NA, V2_STEPS = NA, PREFLIGHT = NA,
     PATH = paste(bin, Sys.getenv("PATH"), sep = ":")
   )
   logs <- file.path(results, "logs")
@@ -227,7 +227,7 @@ test_that("a second queue is refused while the first holds the lock, and a kille
   # WHY: the preflight waits for a file that never comes, so the first queue holds the lock in its preflight.
   stub(bin, "Rscript", c('echo "$*" >> "$CALLS"', 'while [ ! -f "$GO" ]; do sleep 0.1; done', "exit 0"))
   withr::local_envvar(
-    HARNESS_RESULTS = results, DRY_RUN = NA, FORCE = NA, HARNESS_V2_STAN = NA, V2_STEPS = NA, GO = go, CALLS = calls,
+    HARNESS_RESULTS = results, DRY_RUN = NA, FORCE = NA, HARNESS_V2_STAN = NA, V2_STEPS = NA, PREFLIGHT = NA, GO = go, CALLS = calls,
     PATH = paste(bin, Sys.getenv("PATH"), sep = ":")
   )
   lock <- file.path(results, "logs", "queue.lock")
@@ -273,7 +273,7 @@ test_that("the queue runs each lane's runs in order, the lanes side by side, and
     "  A   r0 2024-11-30 2024-11-29 13"
   ), list)
   withr::local_envvar(
-    HARNESS_RESULTS = results, DRY_RUN = NA, FORCE = "1", HARNESS_SLOW = NA, HARNESS_V2_STAN = NA, V2_STEPS = NA, CALLS = calls,
+    HARNESS_RESULTS = results, DRY_RUN = NA, FORCE = "1", HARNESS_SLOW = NA, HARNESS_V2_STAN = NA, V2_STEPS = NA, PREFLIGHT = NA, CALLS = calls,
     PATH = paste(stub, Sys.getenv("PATH"), sep = ":")
   )
   out <- queue(c(list, "200", "300"))
@@ -298,6 +298,67 @@ test_that("the queue runs each lane's runs in order, the lanes side by side, and
   ))
   expect_length(grep("^start [AB] r0_", log), 3)
   expect_identical(readLines(file.path(results, "logs", "r0_2024-11-30_2024-11-29_s11.log"))[1], "noise")
+})
+
+test_that("PREFLIGHT=lean runs the fast suite, then V2's and the permutation Stan tests, and a failure in either starts no fit", {
+  # WHY: the caller's HARNESS_SLOW=1 must not make the fast suite slow, and the lean preflight's
+  # own V2_STEPS must not trip the refusal of a caller's.
+  lean <- c("slow= steps= en_US.UTF-8 tests/run.R", "slow=1 steps=v2s-m5,perm en_US.UTF-8 tests/run.R v2-stan")
+  for (failing in c("tests/run.R", "tests/run.R v2-stan", "none")) {
+    results <- withr::local_tempdir()
+    bin <- withr::local_tempdir()
+    calls <- file.path(bin, "calls.txt")
+    stub(bin, "Rscript", c(
+      'echo "slow=${HARNESS_SLOW:-} steps=${V2_STEPS:-} $LC_ALL $*" >> "$CALLS"',
+      paste0('if [ "$*" = "', failing, '" ]; then exit 3; fi'),
+      'if [ "$1" = "tests/run.R" ]; then exit 0; fi',
+      'echo "DIAG run=$2_$3_$4_s$5 stub"'
+    ))
+    logs <- file.path(results, "logs")
+    withr::local_envvar(
+      HARNESS_RESULTS = results, DRY_RUN = NA, FORCE = "1", HARNESS_SLOW = "1", HARNESS_V2_STAN = NA, V2_STEPS = NA,
+      PREFLIGHT = "lean", CALLS = calls, PATH = paste(bin, Sys.getenv("PATH"), sep = ":")
+    )
+    out <- queue(c("harness/runs/tier0.txt", "200", "200"))
+    made <- readLines(calls)
+    log <- readLines(file.path(logs, "queue.log"))
+    expect_match(log[1], "^QUEUE START .* \\(pid [0-9]+\\)$")
+    expect_false(dir.exists(file.path(logs, "queue.lock")))
+    if (failing == "none") {
+      expect_null(attr(out, "status"))
+      expect_identical(made[1:2], lean)
+      expect_identical(log[2], "preflight PASS (lean)")
+      expect_setequal(made[-(1:2)], paste0("slow=1 steps= en_US.UTF-8 R/harness/fit_cell.R r0 ", c(
+        "2024-11-30 2024-11-29 1101", "2021-09-25 2021-03-29 1102"
+      ), " 200 200"))
+      expect_identical(log[length(log)], "QUEUE FINISHED")
+    } else {
+      expect_identical(attr(out, "status"), 1L, label = failing)
+      expect_identical(made, lean[seq_len(match(failing, c("tests/run.R", "tests/run.R v2-stan")))], label = failing)
+      expect_length(log, 3)
+      expect_match(log[2], "^preflight FAIL \\(lean\\) rc=3 ", label = failing)
+      expect_match(log[3], "^QUEUE ABORTED rc=1 preflight failed \\(rc=3\\)", label = failing)
+    }
+  }
+})
+
+test_that("the queue refuses a PREFLIGHT other than full or lean, before the lock, the guard and any preflight", {
+  results <- withr::local_tempdir()
+  bin <- withr::local_tempdir()
+  stub(bin, "Rscript", "exit 3")
+  logs <- file.path(results, "logs")
+  withr::local_envvar(
+    HARNESS_RESULTS = results, DRY_RUN = NA, FORCE = NA, HARNESS_V2_STAN = NA, V2_STEPS = NA, PREFLIGHT = "quick",
+    PATH = paste(bin, Sys.getenv("PATH"), sep = ":")
+  )
+  out <- queue(c("harness/runs/tier0.txt", "200", "200"))
+  expect_identical(attr(out, "status"), 2L)
+  expect_match(out, "PREFLIGHT must be full or lean: quick", fixed = TRUE, all = FALSE)
+  log <- readLines(file.path(logs, "queue.log"))
+  expect_length(log, 1)
+  expect_match(log, "^QUEUE ABORTED rc=2 PREFLIGHT must be full or lean: quick ")
+  expect_false(dir.exists(file.path(logs, "queue.lock")))
+  expect_false(file.exists(file.path(logs, "preflight.log")))
 })
 
 test_that("every variable the R0 extraction reads is declared in the R0 Stan file", {

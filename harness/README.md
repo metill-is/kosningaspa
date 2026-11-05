@@ -36,8 +36,10 @@ preflight never depends on the live data:
 `KOSNINGASPA_LIVE_DATA=1 LC_ALL=en_US.UTF-8 Rscript tests/run.R election-data`. The tests of
 `Stan/forecast_v2.stan` in `tests/harness/test-v2-stan.R` are slow and named by the V2 step
 they test (`v2s-m0: …`); `V2_STEPS=<step>[,<step>…]` runs only those steps' tests
-(`skip_unless_step()`), and unset it runs them all. `queue.sh` refuses to start while it is
-non-empty, so the preflight is always the full slow suite. `HARNESS_V2_STAN=<absolute path>`
+(`skip_unless_step()`), and unset it runs them all; the tag `perm` in that list runs the Stan
+permutation lp test, a `v2s-m0` test, without the rest of its step. `queue.sh` refuses to start
+while it is non-empty, so the preflight is always the full slow suite, or with `PREFLIGHT=lean`
+the lean one, which sets its own `V2_STEPS` (Runs). `HARNESS_V2_STAN=<absolute path>`
 runs that file's tests on a scratch copy of the Stan file instead, for a planted fault's RED:
 the file must exist and the path be absolute, or the test file stops as it loads, and the tests announce
 the path and its sha256, so every log records the switch; unset, they test
@@ -399,6 +401,27 @@ runs. `DRY_RUN=1` prints `would run <lane> <arm> <E> <F> <seed>` per run and doe
 else: no lock, guard, preflight, log or fit. It exits 0 when every run exits 0, 1 when a run,
 the lock, the guard or the preflight fails, 2 on a bad command line or run list, and 143 or
 130 on SIGTERM or SIGINT.
+
+`PREFLIGHT=lean` replaces the full slow suite with the lean preflight, the smallest set that
+still checks V2's Stan code against its R reference. From the project root it runs:
+
+```
+HARNESS_SLOW= V2_STEPS= LC_ALL=en_US.UTF-8 Rscript tests/run.R
+HARNESS_SLOW=1 V2_STEPS=v2s-m5,perm LC_ALL=en_US.UTF-8 Rscript tests/run.R v2-stan
+```
+
+The first is the fast suite, `tests/harness/test-v2-reference.R` among it (that file has no
+slow test). The second, run only if the first passes, is the slow Stan tests of `v2s-m5`, whose
+config is `v2.json`'s with both forms at 0 (Stan's log density against the reference's, every
+mutant rejected), and the Stan permutation lp test. Each command sets its own `HARNESS_SLOW` and
+`V2_STEPS`, so a caller's `HARNESS_SLOW=1` does not slow the fast suite and the refusal of a
+non-empty `V2_STEPS` reads only the caller's. `queue.log` then reads `preflight PASS (lean)` or
+`preflight FAIL (lean) rc=<rc> ...`. `PREFLIGHT=full`, or unset, is the full slow suite; any
+other value is refused as a bad command line. Run by hand on 5 November 2026, the lean set took
+10 min 37 s of wall time: the fast suite 3 min 42 s, then the slow part 6 min 54 s, of which 6
+min 53 s in `test-v2-stan.R` (its compile, the `v2s-m5` lp test's short fits on two cells and
+the ablations' prior points), with another worktree's four-chain fit beside it (load average 8
+to 17 on 10 cores).
 
 ## Tier 0
 
