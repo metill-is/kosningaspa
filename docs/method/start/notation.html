@@ -59,7 +59,7 @@
 <div class="picture">
 <p>This page collects what the other chapters define. It derives nothing: each row points to the chapter that does. It covers the chapters written so far, 1.1, 1.4 and 3.1, and each new chapter adds its own rows.</p>
 <ul>
-<li><strong>Indices.</strong> $p$ is a party (a list), $t$ a date on the poll-date grid, $n$ a row of data (a poll or a result), $h$ a house (a polling firm) and $e$ an epoch. In chapter 1.4, $i$ and $j$ are lists and $k$ is a kjördæmi. Section <a href="#clashes">Clashes</a> lists the letters that mean different things in different chapters.</li>
+<li><strong>Indices.</strong> $p$ is a party (a list), $t$ a date on the poll-date grid, $n$ a row of data (a poll or a result), $h$ a house (a polling firm) and $e$ an epoch. In chapters 1.3 and 1.4, $k$ is a kjördæmi; in 1.4, $i$ and $j$ are lists. Section <a href="#clashes">Clashes</a> lists the letters that mean different things in different chapters.</li>
 <li><strong>Scales.</strong> "Logit scale" and "log-ratio scale" both mean the scale of the linear predictor $\eta$. In every model here $\eta$ sums to zero over the parties, so it is the centred log-ratio (clr) of the shares it gives: each party's log share minus the mean log share (chapter <a href="../forecast/walk.html">1.1</a>). "pp" means percentage points of vote share.</li>
 <li><strong>Stan names</strong> are in code type and come from the model files on master: <code>Stan/polling_and_fundamentals_kjordaemi.stan</code> for the forecast model, and <code>Stan/polling_watch_v4.stan</code> and <code>Stan/polling_watch_v5_epoch.stan</code> for Fylgisvakt.</li>
 </ul>
@@ -96,7 +96,14 @@
 <tr><td>$\eta_n$</td><td><code>eta_n</code>, <code>eta_k</code></td><td>the linear predictor of a national row, or of a kjördæmi row</td><td><a href="../forecast/walk.html#state">1.1</a></td></tr>
 <tr><td>$\theta_n$</td><td>—</td><td>$\operatorname{softmax}(\eta_n)$: a poll's expected shares, bias included</td><td><a href="../forecast/walk.html#state">1.1</a></td></tr>
 <tr><td>$\gamma_h$</td><td><code>gamma[, h]</code></td><td>house $h$'s effect; 0 for house 1</td><td><a href="../bias/updating.html#forecast">3.1</a></td></tr>
-<tr><td>$\delta$</td><td><code>delta_free</code>, <code>sigma_delta</code></td><td>the constituency effects</td><td>1.3 (planned)</td></tr>
+<tr><td>$\delta_{p,k}$</td><td><code>delta_free</code>, <code>delta_K</code>, <code>delta_pred</code></td><td>party $p$'s constituency effect in kjördæmi $k$, on the log-ratio scale; five free, the sixth closed by the weights</td><td><a href="../forecast/constituencies.html#effects">1.3</a></td></tr>
+<tr><td>$\sigma_{\delta,p}$</td><td><code>sigma_delta</code></td><td>the scale of party $p$'s constituency effects</td><td><a href="../forecast/constituencies.html#scale">1.3</a></td></tr>
+<tr><td>$\delta^{\circ}_{p,k}$</td><td><code>delta_t</code></td><td>the coordinate the sampler sees for $\delta_{p,k}$</td><td><a href="../forecast/constituencies.html#scale">1.3</a></td></tr>
+<tr><td>$\lambda_{p,k}$, $I_{p,k}$</td><td><code>lambda_delta</code>, <code>info_delta</code></td><td>the partial-centring weight of $\delta_{p,k}$, and the data-only information proxy it is built from</td><td><a href="../forecast/constituencies.html#scale">1.3</a></td></tr>
+<tr><td>$K$, $o$</td><td><code>K</code>, <code>obs_k</code></td><td>the number of kjördæmi (6), the $K$-th being the closed one; an observation, one poll's or result's set of kjördæmi rows</td><td><a href="../forecast/constituencies.html#effects">1.3</a></td></tr>
+<tr><td>$w_{o,k}$, $w^{\text{pred}}$</td><td><code>constituency_weights</code>, <code>constituency_weights_pred</code></td><td>observation $o$'s share of its count in kjördæmi $k$; the weights that close the forecast's effects</td><td><a href="../forecast/constituencies.html#effects">1.3</a></td></tr>
+<tr><td>$n^{\text{pred}}_k$, $\tilde y_k$</td><td><code>n_pred_k</code>, <code>y_pred_constituency</code></td><td>kjördæmi $k$'s draw size on election day (its 2024 kjörskrá times an expected turnout), and its vote draws</td><td><a href="../forecast/constituencies.html#forecast">1.3</a></td></tr>
+<tr><td>$\hat\delta_{p,k}$</td><td>—</td><td>the 2021 result's own kjördæmi deviations: data, not the model's estimates</td><td><a href="../forecast/constituencies.html#data">1.3</a></td></tr>
 <tr><td>$\varphi_h$</td><td><code>phi</code></td><td>house $h$'s Dirichlet-multinomial precision, stored for houses 2..H, so <code>phi[h - 1]</code></td><td>3.2 (planned)</td></tr>
 </tbody>
 <caption>Stan names from <code>Stan/polling_and_fundamentals_kjordaemi.stan</code> on master. The planned chapters own the rows marked so; until they are written, 1.1 gives the one line each needs.</caption>
@@ -141,7 +148,7 @@
 <tr><td>$D$</td><td>the number of poll dates; "day $D$", the last fitted date (3.1); the letter of Sjálfstæðisflokkurinn</td><td>the party is written in plain type, the count in maths or code</td></tr>
 <tr><td>$P$</td><td>the number of lists; the letter of Píratar</td><td>as for $D$</td></tr>
 <tr><td>$C$</td><td>$C_t$, the running variance-time (1.1); $C$, the set of parties a poll reports (3.1); the letter of Viðreisn</td><td>subscript or brackets: $C_t$, $\pi_t[C]$</td></tr>
-<tr><td>$k$</td><td>the number of lists a date's rows report (1.1, the flat-direction box); a kjördæmi (1.4); a house among 2..H (3.1, v5)</td><td>local to each chapter</td></tr>
+<tr><td>$k$</td><td>the number of lists a date's rows report (1.1, the flat-direction box); a kjördæmi (1.3, 1.4); a house among 2..H (3.1, v5)</td><td>local to each chapter</td></tr>
 <tr><td>$d$</td><td>$d_t$, a date in days (1.1); $d_h$ and $d_{e,h}$, a house's deviation (3.1)</td><td>the subscript</td></tr>
 <tr><td>$z$</td><td>$z_0$ in 1.1 and $z$ in 3.1 are the same draws behind $\beta_T$; $z_t$, the walk's innovations (1.1); $z^\mu$, $z^h$, the bias's shocks (3.1)</td><td>subscript or superscript</td></tr>
 <tr><td>$v$, $s$</td><td>variance-time $v_t$, and $s$ into a stretch (1.1); votes $v_{ik}$ and seats $s_{ik}$ (1.4); $s_{\text{new}}$, v2's newcomer spread (3.1)</td><td>one or two subscripts</td></tr>
@@ -154,11 +161,12 @@
 <tr><td>row 1 of a party array</td><td>the forecast model's <code>beta</code>, <code>gamma</code>, <code>sigma</code> and <code>L_Omega</code> run over parties 2..P, so their row 1 is D and row 9 is J; <code>mu_gamma</code>, <code>sigma_gamma</code> and <code>gamma_raw</code> stop at M, row 8; <code>y_n</code>, <code>eta_n</code> and the replications have all P, with 1 Annað. Fylgisvakt's <code>log_sigma</code> and house effects run over all ten in its own order, where 1 is S</td><td>section <a href="#parties">Parties</a></td></tr>
 <tr><td>house arrays</td><td><code>phi</code>, and the columns of the forecast model's <code>gamma_raw</code> and Fylgisvakt's <code>gamma_free</code>, run over houses 2..H, so <code>phi[1]</code> is house 2</td><td>the model's own indexing: <code>phi[house_n[n] - 1]</code></td></tr>
 <tr><td>array shapes</td><td>the forecast model's <code>gamma</code> is <code>matrix[P - 1, H]</code>, party first; v4's is <code>array[H] vector[P]</code> and v5's <code>array[E, H] vector[P]</code>. The forecast's <code>beta</code> is <code>matrix[P - 1, T]</code>, v4's <code>array[D] vector[P]</code>; its <code>L_Omega</code> is $(P-1) \times (P-1)$, Fylgisvakt's $P \times P$</td><td>the model file</td></tr>
-<tr><td>$\lambda$</td><td>$\lambda_p$, the partial-centring weight of $\log\sigma_p$ (1.1); the shrinkage weight in a formula 3.1 quotes</td><td>the subscript</td></tr>
+<tr><td>$\lambda$</td><td>$\lambda_p$, the partial-centring weight of $\log\sigma_p$ (1.1); $\lambda_{p,k}$, that of $\delta_{p,k}$ (1.3); the shrinkage weight in a formula 3.1 quotes</td><td>the subscript</td></tr>
+<tr><td>$w$</td><td>the hedge's weight (3.1); $w_{o,k}$ and $w^{\text{pred}}$, the kjördæmi weights (1.3)</td><td>the subscript</td></tr>
 <tr><td>$b$</td><td>the next anchor, in $\beta_b$ and $C_b$ (1.1); a logit shift (3.1)</td><td>subscript or not</td></tr>
 <tr><td>$\eta$</td><td>the linear predictor (1.1, 3.1); a standard normal draw in v2's newcomer rule, $m_{\text{new}} + s_{\text{new}}\eta$ (3.1)</td><td>the context</td></tr>
 <tr><td>$p$</td><td>a party index; once, a share, in the rule of thumb $p(1-p)\,b$ (3.1)</td><td>the context</td></tr>
-<tr><td>$I$</td><td>the identity matrix in $N(0, I)$; $I_p$, the information proxy (1.1)</td><td>the subscript</td></tr>
+<tr><td>$I$</td><td>the identity matrix in $N(0, I)$; $I_p$ and $I_{p,k}$, the information proxies (1.1, 1.3)</td><td>the subscript</td></tr>
 <tr><td>$S$, $V$, $F$</td><td>$S_i$ and $V_i$, a list's seats and votes (1.4), and $F$, a cell's forecast date; the letters of Samfylkingin, Vinstri græn and Flokkur fólksins</td><td>as for $D$</td></tr>
 <tr><td>$\Delta$</td><td>a bias's effect in pp on one poll (3.1); elsewhere in 3.1, a gap between elections in years and its mean, $\overline{\Delta}$ (v2's $\delta$ walk)</td><td>the context</td></tr>
 </tbody>

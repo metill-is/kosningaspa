@@ -1,0 +1,413 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>1.3 Constituency effects · Kosningaspá method</title>
+<meta name="description" content="How the forecast model goes from national support to the six kjördæmi: one static log-ratio effect per party and kjördæmi, the sixth closed by a weighted sum whose weights change from poll to poll; the effects&#x27; scale and how they are sampled; the kjördæmi data the fit reads; the kjördæmi forecast that the seat step uses; and PR #15&#x27;s kjördæmi fixes.">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<link rel="stylesheet" href="../assets/method.css">
+</head>
+<body>
+<div class="wrap">
+
+<nav class="breadcrumb"><a href="../index.html">Kosningaspá method</a> <span class="sep">/</span> I · The forecast model <span class="sep">/</span> 1.3</nav>
+
+<header class="top">
+  <div class="kicker">Kosningaspá · Method · The forecast model</div>
+  <h1><span class="chnum">1.3</span> Constituency effects</h1>
+  <p class="sub">How the forecast model goes from national support to the six kjördæmi: one static log-ratio effect per party and kjördæmi, the sixth closed by a weighted sum whose weights change from poll to poll; the effects&#x27; scale and how they are sampled; the kjördæmi data the fit reads; the kjördæmi forecast that the seat step uses; and PR #15&#x27;s kjördæmi fixes.</p>
+  <div class="stamp"><b>Review state.</b> Not reviewed by the author. Drafted with Claude on 4 Nov 2026 from the code on master and the Stan data the fit script builds. <b>Snapshot.</b> Describes the code and records as they stood on master a66fed6, 4 Nov 2026 (the kjördæmi data as the fit script built them that day): kosningaspa <code>master</code> unless a box names a branch. Live state: kosningaspa <code>master</code>.</div>
+</header>
+
+<div class="layout">
+  <nav class="toc">
+    <div class="t">On this page</div>
+    <ol>
+      <li><a href="#picture">The plain picture</a></li>
+      <li><a href="#effects">Effects that sum to zero by weight</a></li>
+      <li><a href="#closed">The closed kjördæmi moves with each poll</a></li>
+      <li><a href="#scale">Their scale, and how they are sampled</a></li>
+      <li><a href="#data">The kjördæmi data</a></li>
+      <li><a href="#forecast">The kjördæmi forecast</a></li>
+      <li><a href="#history">History</a></li>
+      <li><a href="#open">What is open</a></li>
+      <li><a href="#sources">Sources</a></li>
+    </ol>
+    <div class="book"><a href="../index.html">Contents</a></div>
+  </nav>
+
+  <main>
+<!-- content:start -->
+<!--meta
+{"id": "1.3", "title": "Constituency effects",
+ "sub": "How the forecast model goes from national support to the six kjördæmi: one static log-ratio effect per party and kjördæmi, the sixth closed by a weighted sum whose weights change from poll to poll; the effects' scale and how they are sampled; the kjördæmi data the fit reads; the kjördæmi forecast that the seat step uses; and PR #15's kjördæmi fixes.",
+ "kicker": "The forecast model",
+ "review": "Not reviewed by the author. Drafted with Claude on 4 Nov 2026 from the code on master and the Stan data the fit script builds.",
+ "snapshot": "master a66fed6, 4 Nov 2026 (the kjördæmi data as the fit script built them that day)",
+ "sources": [
+  ["Stan/polling_and_fundamentals_kjordaemi.stan: data (K, constituency_weights, constituency_weights_pred, obs_k, n_pred_k), transformed data (info_delta), parameters (delta_t, sigma_delta), transformed parameters (lambda_delta, delta_free), model (delta_K, the kjördæmi likelihood), generated quantities (delta_pred, y_pred_constituency, y_rep_k)", "the model, master"],
+  ["R/stan_data.R prepare_polling_data(), n_pred_k_2024(), kjordaemi_obs_k(), poll_dates(); R/data.R read_constituency_data(), update_constituency_data(); R/fit_polling_and_fundamentals_kjordaemi_model.R; R/sampler_check/fit_headless.R", "the data path, master"],
+  ["tests/harness/test-kjordaemi-alignment.R, tests/harness/test-fit-script-n-pred.R, tests/harness/test-stan-replications.R", "tests, master"],
+  ["R/sampler_check/RESULTS.md (28 Oct 2026: The absent party)", "the ridge for a party no kjördæmi row reports"],
+  ["commits 3c45310, 63fb201, d14df9b, 8146e76, 9381677, 9c1ad37, 5f09c5b (PR #8), ebb3e8d (PR #5), aa2ac1a (PR #10), a8f8a85, 1e7966f, ea9ee52 and f51c3c6 (PR #15, merge 9cd12cb)", "history"],
+  ["docs/method/analysis/1.3-constituencies/", "the script behind this chapter's tables and figures, 4 Nov 2026"]
+ ]}
+-->
+
+<section id="picture"><h2>The plain picture</h2>
+<div class="picture">
+<p>Iceland votes in six kjördæmi (constituencies), and the seats are won there (chapter <a href="seats.html">1.4</a>). The forecast model's walk (chapter <a href="walk.html">1.1</a>) is national, so the model needs a way from national support to each kjördæmi. It adds one effect per party and kjördæmi, $\delta$, on the walk's log-ratio scale:</p>
+<ul>
+<li><strong>Five static, one closing.</strong> Five kjördæmi have free effects, the same on every date and for every house. In each set of kjördæmi rows a party's six effects average to zero, weighted by that set's share of its respondents (or votes) in each kjördæmi. So the sixth, Suður, gets whatever closes the sum, and its effect changes with each poll's weights.</li>
+<li><strong>Learned from one cycle.</strong> The effects are learned from the kjördæmi data since the 2021 election: the 2021 result by kjördæmi and five kjördæmi polls from autumn 2024.</li>
+<li><strong>One scale per party.</strong> A party's effects share a scale $\sigma_{\delta,p}$, which the data estimate.</li>
+</ul>
+<p>On election day each kjördæmi's votes are drawn from the walk's end plus $\delta$ plus the forecast's hedge for the industry's bias. Those draws are what the seat allocation reads.</p>
+</div>
+
+<div class="xref"><span class="lab">See also</span>
+<p>The walk and its anchors: chapter <a href="walk.html">1.1</a>. The house term $\gamma$ and the forecast's hedge (<code>mu_gamma_pred</code>): <a href="../bias/updating.html">3.1</a>. The polls' overdispersion $\varphi$: 3.2 (planned). Seats from the kjördæmi draws: <a href="seats.html">1.4</a>. v2's effects, which drift from one election to the next: 4.2 (planned). Kjördæmi codes and party letters: <a href="../start/notation.html">0.2</a>.</p>
+</div>
+</section>
+
+<section id="effects"><h2>Effects that sum to zero by weight</h2>
+<p>A kjördæmi row $n$, from house $h$ on date $t$ in kjördæmi $k$, has the predictor</p>
+$$\eta_{n,p} = \beta_{t,p} + \gamma_{h,p} + \delta_{p,k}, \quad p = 2, \dots, P, \qquad \eta_{n,1} = -\sum_{p \ge 2} \eta_{n,p},$$
+<p>which is a national row's predictor (chapter <a href="walk.html#state">1.1</a>) plus $\delta$. Annað, party 1, has no effect of its own: its effect in kjördæmi $k$ is minus the sum of the others', just as its walk level is minus the sum of theirs. The $\gamma$ is the house's national effect, and the polls' rows use the house's own $\varphi$, the same as in its national rows. A result row (house 1, <code>Kosning</code>) has $\gamma = 0$ and a plain multinomial likelihood, as the national results do.</p>
+
+<div class="def"><span class="lab">The closing constraint</span>
+<p>The kjördæmi rows come in sets, one per poll or result; the code calls each set an observation, indexed by <code>obs_k</code>. For observation $o$, let $w_{o,k}$ be its share of its total count in kjördæmi $k$ (<code>constituency_weights</code>, built in the fit script from the CSV's unrounded counts). The effects $\delta_{p,1}, \dots, \delta_{p,K-1}$ are parameters (<code>delta_free</code>), and the $K$-th is</p>
+$$\delta^{(o)}_{p,K} = -\frac{1}{w_{o,K}} \sum_{k<K} w_{o,k}\, \delta_{p,k}, \qquad\text{so that}\qquad \sum_{k=1}^{K} w_{o,k}\, \delta^{(o)}_{p,k} = 0$$
+<p>for every party and every observation (<code>delta_K</code> in the model block, one column per observation).</p>
+</div>
+<p>So $\beta_t + \gamma_h$ is the weighted mean of the poll's kjördæmi log-ratios, each kjördæmi weighted by its share of the poll's count. That is not the log-ratio of the poll's national shares, since the clr is not linear in the shares (the box in section <a href="#data">The kjördæmi data</a>). It matches the poll's national row only as far as that row aggregates the same respondents with the same weights, and the data do not say how each house weights its national figure by kjördæmi.</p>
+<p>Which kjördæmi is the $K$-th is not chosen anywhere. <code>constituency_k</code> is <code>as.numeric(factor(kjordaemi))</code>, over the levels that <code>as_factor()</code> gives in the fit script, the order in which the kjördæmi first appear in <code>data/constituency_data.csv</code>: Reykjavík Norður, Reykjavík Suður, Suðvestur, Norðvestur, Norðaustur, Suður. So Suður is closed.</p>
+
+<figure>
+<svg viewBox="0 0 720 210" role="img" aria-label="Five free kjördæmi effects and one poll's weights determine the sixth, Suður's, effect; another poll's weights give Suður a different effect" style="color:var(--ink)">
+  <g font-family="ui-sans-serif,system-ui,sans-serif" font-size="11.5" fill="currentColor">
+    <text x="20" y="22" font-weight="600">Free effects, the same in every row</text>
+    <g fill="var(--accent-soft)" stroke="var(--accent)">
+      <rect x="20" y="34" width="62" height="44" rx="5"/><rect x="90" y="34" width="62" height="44" rx="5"/><rect x="160" y="34" width="62" height="44" rx="5"/><rect x="230" y="34" width="62" height="44" rx="5"/><rect x="300" y="34" width="62" height="44" rx="5"/>
+    </g>
+    <g text-anchor="middle"><text x="51" y="53">RN</text><text x="121" y="53">RS</text><text x="191" y="53">SV</text><text x="261" y="53">NV</text><text x="331" y="53">NA</text>
+      <text x="51" y="70">δ₁</text><text x="121" y="70">δ₂</text><text x="191" y="70">δ₃</text><text x="261" y="70">δ₄</text><text x="331" y="70">δ₅</text></g>
+    <g fill="none" stroke="currentColor" stroke-width="1.4"><path d="M362,56 L452,56"/><path d="M362,56 C405,56 410,150 452,150"/></g>
+    <g fill="currentColor"><path d="M452,56 l-7,-4 l0,8 z"/><path d="M452,150 l-7,-4 l0,8 z"/></g>
+    <g fill="var(--q-bg)" stroke="var(--q-bar)"><rect x="456" y="30" width="244" height="54" rx="5"/><rect x="456" y="124" width="244" height="54" rx="5"/></g>
+    <text x="468" y="50" font-weight="600">Suður in the 2021 result's rows</text>
+    <text x="468" y="70">δ₆ = −Σ (wₖ / w₆) δₖ, w₆ = 0.149</text>
+    <text x="468" y="144" font-weight="600">Suður in Maskína's 10 Nov 2024 rows</text>
+    <text x="468" y="164">δ₆ = −Σ (wₖ / w₆) δₖ, w₆ = 0.092</text>
+    <text x="20" y="112" fill="var(--muted)" font-size="10.5">Each observation's weights wₖ are its shares of its count by kjördæmi.</text>
+    <text x="20" y="128" fill="var(--muted)" font-size="10.5">A smaller w₆ raises the ratios wₖ / w₆: with the same δ₁ … δ₅,</text>
+    <text x="20" y="144" fill="var(--muted)" font-size="10.5">δ₆ moves further from zero unless the other weights shift too.</text>
+    <text x="20" y="200" fill="var(--muted)" font-size="10.5">The forecast closes Suður with the 2021 result's weights (section The kjördæmi forecast).</text>
+  </g>
+</svg>
+<figcaption>Figure 1. The closing constraint. The five free effects are parameters. Suður's effect is computed for each observation from that observation's weights, so it differs between polls. Kjördæmi codes as in chapter 0.2.</figcaption>
+</figure>
+</section>
+
+<section id="closed"><h2>The closed kjördæmi moves with each poll</h2>
+<p>The five free effects are the same in every row, but the weights are not, so Suður's effect is not static. To see how large the change is, hold the free effects at the 2021 result's own deviations $\hat\delta$ (Figure 2 below) and compute Suður's effect under each observation's weights.</p>
+<div class="tbl"><table>
+<thead><tr><th>Observation</th><th class="num">Suður's weight</th><th class="num">Largest change in Suður's effect</th><th>For</th></tr></thead>
+<tbody>
+<tr><td>2021 result, 25 Sep 2021</td><td class="num">0.149</td><td class="num">0</td><td>—</td></tr>
+<tr><td>Gallup, 15 Sep 2024</td><td class="num">0.155</td><td class="num">0.056</td><td>C</td></tr>
+<tr><td>Maskína, 10 Oct 2024</td><td class="num">0.140</td><td class="num">0.043</td><td>V</td></tr>
+<tr><td>Gallup, 22 Oct 2024</td><td class="num">0.154</td><td class="num">0.068</td><td>C</td></tr>
+<tr><td>Maskína, 10 Nov 2024</td><td class="num">0.092</td><td class="num">0.361</td><td>V: −0.508 → −0.869</td></tr>
+<tr><td>Maskína, 17 Nov 2024</td><td class="num">0.172</td><td class="num">0.187</td><td>Annað: 0.331 → 0.144</td></tr>
+</tbody>
+<caption>Suður's effect implied by each observation's weights, with the five free effects held at the 2021 deviations $\hat\delta$. "Largest change" is the largest absolute difference, over the ten lists, from Suður's own 2021 deviation, on the log-ratio scale. Computed on 4 Nov 2026 by <code>d_data.R</code>.</caption>
+</table></div>
+<p>The Maskína poll of 10 Nov 2024 had 132 of its 1,439 respondents in Suður, 9.2%, against 14.9% of the 2021 votes. Its weight ratios $w_{o,k}/w_{o,K}$ run from 1.16 to 3.04, against 0.58 to 1.97 for the 2021 result. With the free effects at those values, the model would compare that poll's Suður row with a Suður effect for V 0.36 lower on the log-ratio scale than the one it compares the 2021 result's Suður row with. How far that pulls the fitted effects is not measured here, since that needs a fit.</p>
+<p>The construction also ties the model to the order of the CSV's rows. If another kjördæmi appeared last, it would be the closed one, and the variation would land there instead. That is a different model, not a reparameterisation of this one: only the closed kjördæmi's effect varies between observations, and its prior is wider than the others' (section <a href="#scale">Their scale</a>).</p>
+</section>
+
+<section id="scale"><h2>Their scale, and how they are sampled</h2>
+<p>Each free effect has the prior $\delta_{p,k} \sim \mathcal N(0, \sigma_{\delta,p})$, independently, with one scale per named party, $\sigma_{\delta,p} \sim \text{Exponential}(1)$. Here and below the second argument of $\mathcal N$ is the sd, as in Stan. The prior's median scale is $\ln 2 \approx 0.69$. The 2021 deviations (Figure 2) have unweighted sds across the six kjördæmi of 0.17 (J) to 0.42 (M), so the prior is wide and the data set the scale, from each party's five free effects.</p>
+<p>The closed effect has no prior of its own: its prior is implied. As a weighted sum of independent normals it is normal with sd $\sigma_{\delta,p}\big(\sum_{k<K} (w_{o,k}/w_{o,K})^2\big)^{1/2}$. That is 2.77 $\sigma_{\delta,p}$ under the 2021 weights, which the forecast also uses, and between 2.34 and 4.64 $\sigma_{\delta,p}$ under the polls'. Annað's effect, minus the sum of the nine named parties', has prior sd $\big(\sum_p \sigma_{\delta,p}^2\big)^{1/2}$ in a free kjördæmi, which would be 3 $\sigma_\delta$ if the nine scales were equal, and 2.77 times that in Suður. So the six kjördæmi are not exchangeable a priori: before any data, Suður's effects are allowed to be almost three times as large as the others'.</p>
+<p>Since aa2ac1a (28 Oct 2026, PR #10) the effects are sampled <em>partially centred</em>, cell by cell, as $\log\sigma_p$ is (chapter <a href="walk.html#sampling">1.1</a>). The sampler sees $\delta^{\circ}_{p,k} \sim \mathcal N(0, \sigma_{\delta,p}^{\lambda_{p,k}})$ (<code>delta_t</code>), and the effect is $\delta_{p,k} = \sigma_{\delta,p}^{1-\lambda_{p,k}}\, \delta^{\circ}_{p,k}$. The prior is put on $\delta^{\circ}$ itself, so no Jacobian is needed, and given $\sigma_{\delta,p}$ the map is linear. Mapped back, $\delta_{p,k} \sim \mathcal N(0, \sigma_{\delta,p})$ for any weight in $[0, 1]$, even though the weight depends on $\sigma_{\delta,p}$: the weight changes how hard the posterior is to sample, never the posterior. The weight is</p>
+$$\lambda_{p,k} = \frac{\sigma_{\delta,p}^2 I_{p,k}}{1 + \sigma_{\delta,p}^2 I_{p,k}},$$
+<p>where $I_{p,k}$ (<code>info_delta</code>) is a data-only proxy for the information the data carry about the effect, built in the model's transformed data:</p>
+<ul>
+<li>each kjördæmi row $n$ that reports party $p$ in a free kjördæmi $k$ adds $\tfrac12 \lvert y_n\rvert\, s(1-s)$, where $\lvert y_n\rvert$ is the row's total count and $s$ the party's share of it;</li>
+<li>a Suður row adds $(w_{o,k}/w_{o,K})^2$ times that to every free kjördæmi, since Suður's effect is a combination of the free ones.</li>
+</ul>
+<p>$\lambda = 1$ is the centred form, which suits a cell the data pin, and $\lambda = 0$ is the non-centred form, which suits a cell they do not. A cell with $I = 0$ gets $\lambda = 0$, which removes the funnel that a fully centred $\delta$ had for a party no kjördæmi row reports. The two parameterisations have the same posterior.</p>
+<p>The proxy is rough. Its ½ stands for the Dirichlet-multinomial's loss of information against a multinomial (the Stan file's comment), yet it is applied to the result rows too, which are multinomial and carry most of $I$. And the Suður rule credits each free effect with all of a Suður row's information, as if the other four effects were known: a Suður row of the 10 Nov poll is credited to Suðvestur with weight $(w_{o,k}/w_{o,K})^2 = 9.27$. Neither affects the posterior, only the sampler. <code>R/sampler_check/RESULTS.md</code> has the equivalence check and the sampling gains, which chapter 1.1 summarises.</p>
+<div class="measured"><span class="lab">The weights on the 2024-eve data</span>
+<p>On the fit script's 2024-eve data, all 45 cells (nine named parties × five free kjördæmi) have $I > 0$. The smallest is J in Norðvestur, 562, and the largest D in Suðvestur, 17,787. Between 85% and 98% of each cell's $I$ comes from the 2021 result's rows (median 94.5%). The weight $\lambda$ depends on $\sigma_{\delta,p}$:</p>
+<ul>
+<li>at $\sigma_\delta = 0.05$ it runs from 0.58 to 0.98 (median 0.88);</li>
+<li>at 0.10, from 0.85 to 0.99 (median 0.97);</li>
+<li>at 0.20, from 0.96 to 1.00.</li>
+</ul>
+<p>So on these data the effects are sampled almost fully centred. Computed on 4 Nov 2026 by <code>docs/method/analysis/1.3-constituencies/d_data.R</code>, which rebuilds <code>info_delta</code> in R as the Stan file does.</p>
+</div>
+<p><strong>A party with no kjördæmi row.</strong> If a party polls nationally but no kjördæmi row reports it, its effects enter the kjördæmi likelihood only through Annað's predictor. Raise its effect in a free kjördæmi by $x$ and lower each of the other eight named parties' effects there by $x/(P-1)$. Annað's predictor then falls by $x/(P-1)$ too, so every list but the absent one moves by the same amount there, and through the closing weights in Suður as well. No row that leaves the party out changes, so only the priors bound that direction. That is the same kind of flat direction chapter <a href="walk.html#entry">1.1</a> finds in the walk. <code>R/sampler_check/RESULTS.md</code> (28 Oct 2026: Generality, and The absent party) records it for Sósíalistaflokkurinn in the harness's 2021 cells 180 and 47 days before the election, where no kjördæmi row reports the party. The 2024-eve data have no such party. All nine named parties are in every kjördæmi row; Gallup's rows leave out only Annað, which has no coordinate of its own. In those rows a common shift of the nine effects in one kjördæmi changes nothing, and the rows that do report Annað fix it.</p>
+</section>
+
+<section id="data"><h2>The kjördæmi data</h2>
+<p><code>update_constituency_data()</code> writes the kjördæmi sheet of the polling spreadsheet to <code>data/constituency_data.csv</code>, one row per date, house, party and kjördæmi. The counts there can be fractional, and <code>prepare_polling_data()</code> rounds them. The fit script keeps the rows dated from 25 Sep 2021, leaves out 15 Nov 2024 and Gallup's polls after 10 Nov 2024 (as it does nationally), and drops rows with a missing value. On these data both date filters remove the same poll, Gallup's of 15 Nov 2024, and no row has a missing value. The script does not say why it leaves that poll out.</p>
+<div class="tbl"><table>
+<thead><tr><th class="num">#</th><th>Date</th><th>House</th><th class="num">Count</th><th>Left out of some rows</th><th class="num">National row, same house and date</th></tr></thead>
+<tbody>
+<tr><td class="num">1</td><td>25 Sep 2021</td><td>Result</td><td class="num">199,730</td><td>—</td><td class="num">199,730</td></tr>
+<tr><td class="num">2</td><td>15 Sep 2024</td><td>Gallup</td><td class="num">4,238</td><td>Annað, all six</td><td class="num">4,061</td></tr>
+<tr><td class="num">3</td><td>10 Oct 2024</td><td>Maskína</td><td class="num">1,768</td><td>—</td><td class="num">1,500</td></tr>
+<tr><td class="num">4</td><td>22 Oct 2024</td><td>Gallup</td><td class="num">4,243</td><td>Annað in RS, NV, NA</td><td class="num">3,000</td></tr>
+<tr><td class="num">5</td><td>10 Nov 2024</td><td>Maskína</td><td class="num">1,439</td><td>—</td><td class="num">1,463</td></tr>
+<tr><td class="num">6</td><td>17 Nov 2024</td><td>Maskína</td><td class="num">1,400</td><td>—</td><td class="num">1,400</td></tr>
+</tbody>
+<caption>The six kjördæmi observations of the fit script's 2024-eve data, six rows each: 36 rows, <code>N_obs_k</code> = 6. The count is the sum of the rows' rounded counts. Built on 4 Nov 2026 by <code>d_data.R</code> through <code>fit_headless.R --data-only</code>; the national sizes are from <code>read_polling_data()</code>.</caption>
+</table></div>
+<ul>
+<li><strong>What the fit does not read.</strong> The CSV also holds the 2016 and 2017 results by kjördæmi, a Gallup poll of 25 Oct 2017, Gallup's of 6 Aug 2021, Maskína's of 3 Sep 2021, and Gallup's of 15 Nov 2024.</li>
+<li><strong>The 2021 votes enter twice,</strong> as the national result and as its six kjördæmi rows (chapter <a href="walk.html#anchors">1.1</a>). The two sets of rows do not ask for quite the same national level (the box below).</li>
+<li><strong>The polls share house and date with national rows.</strong> Every kjördæmi poll the fit reads has a national row from the same house on the same date. In three of the five the kjördæmi count is larger than the national row's, so those kjördæmi rows are not simply a split of the national row's respondents. How far the two overlap the data do not say; where they share respondents, the likelihood counts them twice.</li>
+<li><strong>Every kjördæmi date is also a national date,</strong> so the date-order bug that PR #15 fixed did not touch these data (section <a href="#history">History</a>).</li>
+</ul>
+
+<figure>
+<svg viewBox="0 0 534 322" role="img" aria-label="Heat map of the 2021 result's kjördæmi deviations on the log-ratio scale, ten lists by six kjördæmi" style="color:var(--ink);max-width:600px">
+  <g font-family="ui-sans-serif,system-ui,sans-serif" font-size="11.5" fill="currentColor">
+    <text x="107" y="36" text-anchor="middle" font-weight="600">RN</text>
+    <text x="181" y="36" text-anchor="middle" font-weight="600">RS</text>
+    <text x="255" y="36" text-anchor="middle" font-weight="600">SV</text>
+    <text x="329" y="36" text-anchor="middle" font-weight="600">NV</text>
+    <text x="403" y="36" text-anchor="middle" font-weight="600">NA</text>
+    <text x="477" y="36" text-anchor="middle" font-weight="600">SU</text>
+    <text x="60" y="62" text-anchor="end" font-weight="600">D</text>
+    <rect x="71" y="47" width="72" height="22" fill="var(--num)" fill-opacity="0.33"/>
+    <text x="107" y="62" text-anchor="middle">−0.23</text>
+    <rect x="145" y="47" width="72" height="22" fill="var(--num)" fill-opacity="0.12"/>
+    <text x="181" y="62" text-anchor="middle">−0.09</text>
+    <rect x="219" y="47" width="72" height="22" fill="var(--accent)" fill-opacity="0.41"/>
+    <text x="255" y="62" text-anchor="middle">+0.29</text>
+    <rect x="293" y="47" width="72" height="22" fill="var(--num)" fill-opacity="0.06"/>
+    <text x="329" y="62" text-anchor="middle">−0.04</text>
+    <rect x="367" y="47" width="72" height="22" fill="var(--num)" fill-opacity="0.33"/>
+    <text x="403" y="62" text-anchor="middle">−0.23</text>
+    <rect x="441" y="47" width="72" height="22" fill="var(--accent)" fill-opacity="0.02"/>
+    <text x="477" y="62" text-anchor="middle">+0.02</text>
+    <text x="60" y="86" text-anchor="end" font-weight="600">B</text>
+    <rect x="71" y="71" width="72" height="22" fill="var(--num)" fill-opacity="0.54"/>
+    <text x="107" y="86" text-anchor="middle">−0.38</text>
+    <rect x="145" y="71" width="72" height="22" fill="var(--num)" fill-opacity="0.55"/>
+    <text x="181" y="86" text-anchor="middle">−0.39</text>
+    <rect x="219" y="71" width="72" height="22" fill="var(--num)" fill-opacity="0.09"/>
+    <text x="255" y="86" text-anchor="middle">−0.06</text>
+    <rect x="293" y="71" width="72" height="22" fill="var(--accent)" fill-opacity="0.67"/>
+    <text x="329" y="86" text-anchor="middle">+0.47</text>
+    <rect x="367" y="71" width="72" height="22" fill="var(--accent)" fill-opacity="0.67"/>
+    <text x="403" y="86" text-anchor="middle">+0.48</text>
+    <rect x="441" y="71" width="72" height="22" fill="var(--accent)" fill-opacity="0.53"/>
+    <text x="477" y="86" text-anchor="middle">+0.38</text>
+    <text x="60" y="110" text-anchor="end" font-weight="600">S</text>
+    <rect x="71" y="95" width="72" height="22" fill="var(--accent)" fill-opacity="0.25"/>
+    <text x="107" y="110" text-anchor="middle">+0.17</text>
+    <rect x="145" y="95" width="72" height="22" fill="var(--accent)" fill-opacity="0.41"/>
+    <text x="181" y="110" text-anchor="middle">+0.29</text>
+    <rect x="219" y="95" width="72" height="22" fill="var(--num)" fill-opacity="0.16"/>
+    <text x="255" y="110" text-anchor="middle">−0.11</text>
+    <rect x="293" y="95" width="72" height="22" fill="var(--num)" fill-opacity="0.44"/>
+    <text x="329" y="110" text-anchor="middle">−0.31</text>
+    <rect x="367" y="95" width="72" height="22" fill="var(--accent)" fill-opacity="0.16"/>
+    <text x="403" y="110" text-anchor="middle">+0.11</text>
+    <rect x="441" y="95" width="72" height="22" fill="var(--num)" fill-opacity="0.33"/>
+    <text x="477" y="110" text-anchor="middle">−0.24</text>
+    <text x="60" y="134" text-anchor="end" font-weight="600">V</text>
+    <rect x="71" y="119" width="72" height="22" fill="var(--accent)" fill-opacity="0.24"/>
+    <text x="107" y="134" text-anchor="middle">+0.17</text>
+    <rect x="145" y="119" width="72" height="22" fill="var(--accent)" fill-opacity="0.21"/>
+    <text x="181" y="134" text-anchor="middle">+0.15</text>
+    <rect x="219" y="119" width="72" height="22" fill="var(--accent)" fill-opacity="0.07"/>
+    <text x="255" y="134" text-anchor="middle">+0.05</text>
+    <rect x="293" y="119" width="72" height="22" fill="var(--num)" fill-opacity="0.07"/>
+    <text x="329" y="134" text-anchor="middle">−0.05</text>
+    <rect x="367" y="119" width="72" height="22" fill="var(--accent)" fill-opacity="0.12"/>
+    <text x="403" y="134" text-anchor="middle">+0.08</text>
+    <rect x="441" y="119" width="72" height="22" fill="var(--num)" fill-opacity="0.72"/>
+    <text x="477" y="134" text-anchor="middle">−0.51</text>
+    <text x="60" y="158" text-anchor="end" font-weight="600">P</text>
+    <rect x="71" y="143" width="72" height="22" fill="var(--accent)" fill-opacity="0.50"/>
+    <text x="107" y="158" text-anchor="middle">+0.35</text>
+    <rect x="145" y="143" width="72" height="22" fill="var(--accent)" fill-opacity="0.36"/>
+    <text x="181" y="158" text-anchor="middle">+0.25</text>
+    <rect x="219" y="143" width="72" height="22" fill="var(--accent)" fill-opacity="0.09"/>
+    <text x="255" y="158" text-anchor="middle">+0.07</text>
+    <rect x="293" y="143" width="72" height="22" fill="var(--num)" fill-opacity="0.35"/>
+    <text x="329" y="158" text-anchor="middle">−0.25</text>
+    <rect x="367" y="143" width="72" height="22" fill="var(--num)" fill-opacity="0.57"/>
+    <text x="403" y="158" text-anchor="middle">−0.40</text>
+    <rect x="441" y="143" width="72" height="22" fill="var(--num)" fill-opacity="0.55"/>
+    <text x="477" y="158" text-anchor="middle">−0.39</text>
+    <text x="60" y="182" text-anchor="end" font-weight="600">C</text>
+    <rect x="71" y="167" width="72" height="22" fill="var(--num)" fill-opacity="0.19"/>
+    <text x="107" y="182" text-anchor="middle">−0.14</text>
+    <rect x="145" y="167" width="72" height="22" fill="var(--accent)" fill-opacity="0.06"/>
+    <text x="181" y="182" text-anchor="middle">+0.04</text>
+    <rect x="219" y="167" width="72" height="22" fill="var(--accent)" fill-opacity="0.58"/>
+    <text x="255" y="182" text-anchor="middle">+0.41</text>
+    <rect x="293" y="167" width="72" height="22" fill="var(--num)" fill-opacity="0.35"/>
+    <text x="329" y="182" text-anchor="middle">−0.24</text>
+    <rect x="367" y="167" width="72" height="22" fill="var(--num)" fill-opacity="0.53"/>
+    <text x="403" y="182" text-anchor="middle">−0.37</text>
+    <rect x="441" y="167" width="72" height="22" fill="var(--num)" fill-opacity="0.37"/>
+    <text x="477" y="182" text-anchor="middle">−0.26</text>
+    <text x="60" y="206" text-anchor="end" font-weight="600">F</text>
+    <rect x="71" y="191" width="72" height="22" fill="var(--num)" fill-opacity="0.31"/>
+    <text x="107" y="206" text-anchor="middle">−0.22</text>
+    <rect x="145" y="191" width="72" height="22" fill="var(--num)" fill-opacity="0.01"/>
+    <text x="181" y="206" text-anchor="middle">−0.01</text>
+    <rect x="219" y="191" width="72" height="22" fill="var(--num)" fill-opacity="0.11"/>
+    <text x="255" y="206" text-anchor="middle">−0.08</text>
+    <rect x="293" y="191" width="72" height="22" fill="var(--accent)" fill-opacity="0.04"/>
+    <text x="329" y="206" text-anchor="middle">+0.03</text>
+    <rect x="367" y="191" width="72" height="22" fill="var(--accent)" fill-opacity="0.03"/>
+    <text x="403" y="206" text-anchor="middle">+0.02</text>
+    <rect x="441" y="191" width="72" height="22" fill="var(--accent)" fill-opacity="0.56"/>
+    <text x="477" y="206" text-anchor="middle">+0.39</text>
+    <text x="60" y="230" text-anchor="end" font-weight="600">M</text>
+    <rect x="71" y="215" width="72" height="22" fill="var(--num)" fill-opacity="0.67"/>
+    <text x="107" y="230" text-anchor="middle">−0.48</text>
+    <rect x="145" y="215" width="72" height="22" fill="var(--num)" fill-opacity="0.37"/>
+    <text x="181" y="230" text-anchor="middle">−0.26</text>
+    <rect x="219" y="215" width="72" height="22" fill="var(--num)" fill-opacity="0.12"/>
+    <text x="255" y="230" text-anchor="middle">−0.09</text>
+    <rect x="293" y="215" width="72" height="22" fill="var(--accent)" fill-opacity="0.54"/>
+    <text x="329" y="230" text-anchor="middle">+0.38</text>
+    <rect x="367" y="215" width="72" height="22" fill="var(--accent)" fill-opacity="0.82"/>
+    <text x="403" y="230" text-anchor="middle">+0.58</text>
+    <rect x="441" y="215" width="72" height="22" fill="var(--accent)" fill-opacity="0.51"/>
+    <text x="477" y="230" text-anchor="middle">+0.36</text>
+    <text x="60" y="254" text-anchor="end" font-weight="600">J</text>
+    <rect x="71" y="239" width="72" height="22" fill="var(--accent)" fill-opacity="0.35"/>
+    <text x="107" y="254" text-anchor="middle">+0.25</text>
+    <rect x="145" y="239" width="72" height="22" fill="var(--accent)" fill-opacity="0.21"/>
+    <text x="181" y="254" text-anchor="middle">+0.15</text>
+    <rect x="219" y="239" width="72" height="22" fill="var(--num)" fill-opacity="0.34"/>
+    <text x="255" y="254" text-anchor="middle">−0.24</text>
+    <rect x="293" y="239" width="72" height="22" fill="var(--accent)" fill-opacity="0.11"/>
+    <text x="329" y="254" text-anchor="middle">+0.08</text>
+    <rect x="367" y="239" width="72" height="22" fill="var(--accent)" fill-opacity="0.07"/>
+    <text x="403" y="254" text-anchor="middle">+0.05</text>
+    <rect x="441" y="239" width="72" height="22" fill="var(--num)" fill-opacity="0.12"/>
+    <text x="477" y="254" text-anchor="middle">−0.08</text>
+    <text x="60" y="278" text-anchor="end" font-weight="600">Annað</text>
+    <rect x="71" y="263" width="72" height="22" fill="var(--accent)" fill-opacity="0.70"/>
+    <text x="107" y="278" text-anchor="middle">+0.49</text>
+    <rect x="145" y="263" width="72" height="22" fill="var(--num)" fill-opacity="0.20"/>
+    <text x="181" y="278" text-anchor="middle">−0.14</text>
+    <rect x="219" y="263" width="72" height="22" fill="var(--num)" fill-opacity="0.33"/>
+    <text x="255" y="278" text-anchor="middle">−0.23</text>
+    <rect x="293" y="263" width="72" height="22" fill="var(--num)" fill-opacity="0.10"/>
+    <text x="329" y="278" text-anchor="middle">−0.07</text>
+    <rect x="367" y="263" width="72" height="22" fill="var(--num)" fill-opacity="0.44"/>
+    <text x="403" y="278" text-anchor="middle">−0.31</text>
+    <rect x="441" y="263" width="72" height="22" fill="var(--accent)" fill-opacity="0.47"/>
+    <text x="477" y="278" text-anchor="middle">+0.33</text>
+    <rect x="70" y="298" width="14" height="12" fill="var(--accent)" fill-opacity="0.6"/><text x="90" y="308">stronger there than nationally</text>
+    <rect x="300" y="298" width="14" height="12" fill="var(--num)" fill-opacity="0.6"/><text x="320" y="308">weaker there</text>
+  </g>
+</svg>
+<figcaption>Figure 2. The 2021 result's own kjördæmi deviations $\hat\delta_{p,k}$: the clr of the list's result in kjördæmi $k$ minus the vote-weighted mean of the six kjördæmi clrs, so that each list's row sums to zero with the 2021 weights. Log-ratio scale; Suður is SU. These are the data the effects are mostly learned from, not the model's estimates. Computed on 4 Nov 2026 by <code>d_data.R</code>.</figcaption>
+</figure>
+
+<div class="measured"><span class="lab">The 2021 result against the weighted zero sum</span>
+<p>The 2021 kjördæmi rows are fitted best when $\beta + \delta_k$ equals each kjördæmi's centred log-ratio (clr) of its result. Under the weighted zero sum, with the 2021 weights, that puts $\beta$ at the vote-weighted mean of the six clrs. The national row puts $\beta$ at the clr of the national result. The clr is not linear in the shares, so the two differ:</p>
+<div class="tbl"><table>
+<thead><tr><th>List</th><th class="num">National result</th><th class="num">From the kjördæmi rows</th><th class="num">Difference (pp)</th></tr></thead>
+<tbody>
+<tr><td>D</td><td class="num">24.39</td><td class="num">24.83</td><td class="num">+0.44</td></tr>
+<tr><td>B</td><td class="num">17.27</td><td class="num">16.91</td><td class="num">−0.36</td></tr>
+<tr><td>P</td><td class="num">8.63</td><td class="num">8.48</td><td class="num">−0.15</td></tr>
+<tr><td>M</td><td class="num">5.45</td><td class="num">5.32</td><td class="num">−0.13</td></tr>
+<tr><td>F</td><td class="num">8.85</td><td class="num">8.98</td><td class="num">+0.13</td></tr>
+</tbody>
+<caption>Shares in %. The other five lists differ by at most 0.08 pp. "From the kjördæmi rows" is the softmax of the vote-weighted mean of the kjördæmi clrs. Computed on 4 Nov 2026 by <code>d_data.R</code>.</caption>
+</table></div>
+<p>Each side has 199,730 votes behind it, enough to measure a share to about 0.1 pp (chapter <a href="walk.html#anchors">1.1</a>), so the 2021 level cannot satisfy both. How the fit splits the difference is not measured here.</p>
+</div>
+</section>
+
+<section id="forecast"><h2>The kjördæmi forecast</h2>
+<p>On election day $T$ the generated quantities close Suður with fixed prediction weights $w^{\text{pred}}$ (<code>constituency_weights_pred</code>), and draw each kjördæmi's votes:</p>
+$$\delta^{\text{pred}}_{p,K} = -\frac{1}{w^{\text{pred}}_K}\sum_{k<K} w^{\text{pred}}_k \delta_{p,k}, \qquad \eta^{\text{pred}}_{k,p} = \beta_{T,p} + \delta^{\text{pred}}_{p,k} + \text{hedge}_p, \qquad \tilde y_k \sim \text{Multinomial}\big(n^{\text{pred}}_k, \operatorname{softmax}(\eta^{\text{pred}}_k)\big),$$
+<p>where $\delta^{\text{pred}}_{p,k} = \delta_{p,k}$ in the five free kjördæmi, the hedge is <code>mu_gamma_pred</code> (chapter <a href="../bias/updating.html">3.1</a>), and Annað's $\eta$ is again minus the sum of the others' (<code>delta_pred</code>, <code>y_pred_constituency</code>).</p>
+<ul>
+<li><strong>The prediction weights</strong> are the first row of the weights, which on these data is the 2021 result's: 0.176, 0.178, 0.293, 0.086, 0.118 and 0.149 in level order.</li>
+<li><strong>The sizes $n^{\text{pred}}_k$</strong> (<code>n_pred_k</code>) are each kjördæmi's 2024 kjörskrá (electoral roll) times an expected turnout, from <code>n_pred_k_2024()</code>: Reykjavík Norður 37,418, Reykjavík Suður 37,622, Suðvestur 64,190, Norðvestur 18,325, Norðaustur 25,141 and Suður 32,303, 214,999 in all. Their shares are close to the prediction weights but not equal to them. <code>prepare_polling_data()</code> sets its own <code>n_pred_k</code>, the 2021 result's valid votes by kjördæmi, which the fit script overwrites.</li>
+<li><strong>No house effect and no overdispersion.</strong> The multinomial adds only the sampling noise of about 215,000 votes. The spread comes from $\beta_T$, $\delta$ and the hedge.</li>
+<li><strong>Separate from the national draws.</strong> The national forecast after day $D$ (<code>y_rep_national</code>) is a separate multinomial, of size <code>n_pred</code>, the 2021 result's valid votes; the kjördæmi draws do not sum to it. The two also differ in expectation, not only by sampling noise, because the vote-weighted average of the kjördæmi softmaxes is not the softmax of the national level. With the effects at the 2021 deviations, the kjördæmi draws put D 0.38–0.44 pp below the national draws and B 0.36–0.37 pp above. That holds whichever of the two 2021 levels $\beta$ is set to (the box above), and whether the kjördæmi are weighted by $n^{\text{pred}}_k$ or by the 2021 weights. So a forecast's national shares depend on which draws they are read from.</li>
+<li><strong>Where they go.</strong> The fit script writes the draws to <code>constituency_predictions.parquet</code>, labelling each kjördæmi by its level. The 2024 forecast's seat script, <code>R/archive/predict_seats.R</code>, read that file; master has no live seat step (chapter <a href="seats.html">1.4</a>). <code>y_rep_k</code> replicates each kjördæmi poll for checks, with its house's $\gamma$ and its own observation's closed effect.</li>
+</ul>
+</section>
+
+<section id="history"><h2>History</h2>
+<ul>
+<li><strong>6 Nov 2024, 3c45310:</strong> the kjördæmi effects, non-centred, with the sixth closed by the plain sum $-\sum_{k<K}\delta_{p,k}$.</li>
+<li><strong>13 Nov 2024, 63fb201:</strong> one vector of weights closes the sum.</li>
+<li><strong>13 Nov 2024, d14df9b:</strong> weights per observation (the <code>constituency_weights</code> matrix) and separate prediction weights.</li>
+<li><strong>25 Feb 2026, 9381677:</strong> the fit script's prediction weights moved from the weights' third row (whichever observation that was in the data of the day) to the first. <code>n_pred_k</code> became the 2024 kjörskrá times expected turnout, reordered by a fixed permutation.</li>
+<li><strong>2 Jul 2026, 9c1ad37:</strong> the likelihood gathers each row's reported parties by identity. Before, it read a row's first columns, as many as the parties the row reports. Its message records that the Gallup kjördæmi rows of 15 Sep and 22 Oct 2024, which leave out Annað (column 1), were read with Annað at 0 and without Sósíalistaflokkurinn. The Stan file had read the rows that way since the kjördæmi likelihood was written, its version of 24 Nov 2024 (8146e76) included. <code>y_rep_k</code> followed in 5f09c5b (24 Oct 2026, PR #8).</li>
+<li><strong>24 Oct 2026, ebb3e8d (PR #5):</strong> centred effects, <code>delta_free</code> $\sim \mathcal N(0, \sigma_{\delta,p})$.</li>
+<li><strong>28 Oct 2026, aa2ac1a (PR #10):</strong> partially centred effects (section <a href="#scale">Their scale</a>).</li>
+<li><strong>3 Nov 2026, PR #15</strong> (merged 4 Nov, 9cd12cb), an audit branch mainly about the election anchors (chapter <a href="walk.html#anchors">1.1</a>), with four kjördæmi fixes:
+  <ul>
+  <li><strong>a8f8a85, dates in order.</strong> <code>prepare_polling_data()</code> listed the national dates and then the kjördæmi dates without sorting, but indexed them through a sorted factor. A kjördæmi-only date before the last national poll therefore moved to the end of the list, so <code>time_diff</code> and the date indicators belonged to other dates than <code>date_n</code> and <code>date_k</code> pointed at, and the fit script labelled its draws by the same unsorted list. <code>prepare_polling_data()</code> and the fit script now both use <code>poll_dates()</code>, the sorted list. <code>kjordaemi_obs_k()</code> checks the four assumptions behind <code>obs_k</code>: one poll per date, one row per kjördæmi, the dates in the weights' order and the weights' columns in level order. It stops if any fails.</li>
+  <li><strong>1e7966f, sizes by name.</strong> The fixed permutation <code>slice(5, 6, 4, 1, 2, 3)</code> did not match the CSV's level order, so the two Reykjavík kjördæmi took each other's sizes: Norður 37,622 and Suður 37,418. The table is now matched to the levels by name, and the script stops on a level the table does not name.</li>
+  <li><strong>ea9ee52.</strong> <code>R/sampler_check/fit_headless.R</code> kept its own copy of the old permutation. Both scripts now call <code>n_pred_k_2024()</code>.</li>
+  <li><strong>f51c3c6, replications without the hedge.</strong> <code>y_rep_k</code>, and <code>y_rep_national</code> up to day $D$, had added <code>mu_gamma_pred</code>, a term the likelihood does not have. A replicated poll counted the industry bias twice, since its house's $\gamma$ already holds it, and a replicated result ($\gamma = 0$) carried a bias the fitted model does not give it; 253d037 gave the two loops their own reasons in the Stan file's comments. The replications now use the likelihood's terms only, and the hedge stays in the forecasts.</li>
+  </ul>
+  The swap changed only the draw sizes of the two Reykjavík kjördæmi, by 204 votes each way; its effect on seats is not measured here. The tests: <code>tests/harness/test-kjordaemi-alignment.R</code> (calendar order in <code>prepare_polling_data()</code> and in the fit script's draw dates, <code>obs_k</code>, and four cases that must stop: three misalignments and weights whose columns are out of level order), <code>tests/harness/test-stan-replications.R</code> (the replications without the hedge) and <code>tests/harness/test-fit-script-n-pred.R</code> (the levels in production's order, shuffled, and with one the table does not name).</li>
+</ul>
+</section>
+
+<section id="open"><h2>What is open</h2>
+<div class="open"><span class="lab">Open</span>
+<ul>
+<li><strong>How good are the kjördæmi forecasts?</strong> Not yet measured in the repository. The open way to get them is the harness's kjördæmi scores (<code>kd_scores()</code> in <code>R/harness/scores.R</code>) after the freeze (chapter 4.1, planned).</li>
+<li><strong>The closed kjördæmi.</strong> Suður's effect changes with each poll's weights, and Suður is closed only because of the CSV's row order (section <a href="#closed">The closed kjördæmi moves</a>). Fixed weights, such as each kjördæmi's share of the votes, would stop it varying between polls, but Suður would still have a wider prior than the other five; treating all six alike needs a different construction. Which is wanted is open.</li>
+<li><strong>Two readings of one forecast.</strong> The kjördæmi draws, which the seats are counted from, and the national draws differ in expectation by a few tenths of a point: 0.38–0.44 pp for D with the effects at the 2021 deviations and the national level at 2021's (section <a href="#forecast">The kjördæmi forecast</a>). The size depends on the effects and the level.</li>
+<li><strong>The same data twice.</strong> The 2021 result enters nationally and by kjördæmi, and the two ask for national levels up to 0.44 pp apart. The kjördæmi polls may repeat the respondents of their national rows.</li>
+<li><strong>A static $\delta$ from one cycle.</strong> The effects are learned from the 2021 result and five polls. With a static $\delta$, also reading the 2016 and 2017 results would assert that the split never moves between elections. Using them needs effects that drift from one election to the next, which is v2's design (chapter 4.2, planned).</li>
+<li><strong>No fitted effects shown.</strong> $\sigma_\delta$ and $\delta$ by party and kjördæmi need a fit, which has not been run for these notes. Figure 2 shows the 2021 result's own deviations, not the model's estimates.</li>
+<li><strong>2024 only.</strong> <code>n_pred_k_2024()</code> holds the 2024 kjörskrá and turnouts. The next forecast needs its own table.</li>
+</ul>
+</div>
+</section>
+
+<section id="sources"><h2>Sources</h2>
+<ul class="sources">
+<li><code>Stan/polling_and_fundamentals_kjordaemi.stan</code> (master a66fed6): the data block (<code>K</code>, <code>constituency_weights</code>, <code>constituency_weights_pred</code>, <code>obs_k</code>, <code>n_pred_k</code>), transformed data (<code>info_delta</code>), parameters (<code>delta_t</code>, <code>sigma_delta</code>), transformed parameters (<code>lambda_delta</code>, <code>delta_free</code>), the model block (<code>delta_K</code>, the kjördæmi likelihood) and generated quantities (<code>delta_pred</code>, <code>y_pred_constituency</code>, <code>y_rep_k</code>); <code>Stan/CLAUDE.md</code>.</li>
+<li><code>R/stan_data.R</code> (<code>prepare_polling_data()</code>, <code>n_pred_k_2024()</code>, <code>kjordaemi_obs_k()</code>, <code>poll_dates()</code>), <code>R/data.R</code> (<code>read_constituency_data()</code>, <code>update_constituency_data()</code>), <code>R/fit_polling_and_fundamentals_kjordaemi_model.R</code> and <code>R/sampler_check/fit_headless.R</code>.</li>
+<li><code>tests/harness/test-kjordaemi-alignment.R</code>, <code>tests/harness/test-fit-script-n-pred.R</code> and <code>tests/harness/test-stan-replications.R</code>.</li>
+<li><code>R/sampler_check/RESULTS.md</code>, 28 Oct 2026 (The absent party).</li>
+<li>Commits: 3c45310, 63fb201, d14df9b and 8146e76 (Nov 2024); 9381677; 9c1ad37; 5f09c5b (PR #8, merge 6e54601); ebb3e8d (PR #5, merge 78d8caa); aa2ac1a (PR #10, merge 4abc579); a8f8a85, 1e7966f, ea9ee52 and f51c3c6 (PR #15, merge 9cd12cb).</li>
+<li>Numbers computed for this page: <code>docs/method/analysis/1.3-constituencies/d_data.R</code>, 4 Nov 2026, from the live, git-ignored <code>data/</code> as the fit script reads it.</li>
+<li>Private: the author's notes on the anchored, partially centred model (28 Oct 2026).</li>
+</ul>
+</section>
+<!-- content:end -->
+    <nav class="pager"><a href="../forecast/walk.html"><span class="lbl">Previous</span>1.1 The latent support walk and its election anchors</a><a class="next" href="../forecast/seats.html"><span class="lbl">Next</span>1.4 From vote shares to seats</a></nav>
+  </main>
+</div>
+
+<footer>
+  Methodology notes · chapter 1.3 · drafted with Claude from kosningaspá's code and records ·
+  page chrome built by <code>tools/build.py</code> from <code>site.json</code> (edit the body between the content markers, then re-run it) ·
+  maths by KaTeX 0.16.9, code by highlight.js 11.9 (CDN; the page reads fine offline).
+</footer>
+</div>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
+<script defer src="../assets/method.js"></script>
+</body>
+</html>

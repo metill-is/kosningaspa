@@ -89,7 +89,7 @@
 <section id="state"><h2>The state: centred log-ratios, on the poll dates</h2>
 <p>The 2024 forecast has $P = 10$ lists: Annað as party 1, then D, B, S, V, P, C, F, M and J. The state $\beta$ is a $(P-1) \times T$ matrix. For a national poll $n$ by house $h$ on date $t$, the linear predictor is</p>
 $$\eta_{n,2:P} \;=\; \beta_t + \gamma_h, \qquad \eta_{n,1} \;=\; -\sum_{p \ge 2} \eta_{n,p}, \qquad \theta_n = \operatorname{softmax}(\eta_n),$$
-<p>and a kjördæmi poll adds the constituency effect $\delta$ (chapter 1.3 (planned)). Here $\theta_n$ is the poll's expected shares, bias included; the latent support, as in chapter 3.1, is $\pi_t = \operatorname{softmax}$ of the walk's levels alone. Because $\eta_n$ sums to zero it is the centred log-ratio of $\theta_n$, $\eta_{n,p} = \log\theta_{n,p} - \tfrac1P \sum_q \log\theta_{n,q}$, and in the same way $\beta_t$, with Annað's level $-\sum_p \beta_{t,p}$, is the clr of $\pi_t$. So $\beta_{t,p}$ is not party $p$'s log-ratio against Annað; that is $\beta_{t,p} + \sum_q \beta_{t,q}$. The Stan file's comment on <code>w_off</code> says the same. Annað has no coordinate of its own.</p>
+<p>and a kjördæmi poll adds the constituency effect $\delta$ (chapter <a href="constituencies.html">1.3</a>). Here $\theta_n$ is the poll's expected shares, bias included; the latent support, as in chapter 3.1, is $\pi_t = \operatorname{softmax}$ of the walk's levels alone. Because $\eta_n$ sums to zero it is the centred log-ratio of $\theta_n$, $\eta_{n,p} = \log\theta_{n,p} - \tfrac1P \sum_q \log\theta_{n,q}$, and in the same way $\beta_t$, with Annað's level $-\sum_p \beta_{t,p}$, is the clr of $\pi_t$. So $\beta_{t,p}$ is not party $p$'s log-ratio against Annað; that is $\beta_{t,p} + \sum_q \beta_{t,q}$. The Stan file's comment on <code>w_off</code> says the same. Annað has no coordinate of its own.</p>
 <p>Which party lacks a coordinate is more than a choice of coordinates, in three places:</p>
 <ul>
 <li><strong>The walk's priors.</strong> $\sigma$ and $\Omega$ act on the $P-1$ free coordinates, and Annað's level is minus their sum. Its step variance is $v\,\mathbf 1^\top L L^\top \mathbf 1$, with $L = \operatorname{diag}(\sigma)\, L_\Omega$ and $v$ the step's variance-time (next sections), and its prior sd on election day is $\tau_f\,(\sum_{p\ge2}\sigma_p^2)^{1/2}$: three times a typical party's when the nine $\sigma_p$ are equal.</li>
@@ -147,7 +147,7 @@ $$v_{t+1} \;=\; (d_{t+1} - d_t)\,\big(1 + \tau_s\, m_t\big)^2,$$
 </section>
 
 <section id="anchors"><h2>Results as anchors, and the bridges between them</h2>
-<p>A result is a row from house 1 (<code>Kosning</code>) with $\gamma = 0$ and a plain multinomial likelihood over the election's valid votes, with no overdispersion since 8146e76 (24 Nov 2024); chapter 3.2 (planned) has the history and what it does to the forecast's width. A multinomial with 190,000–200,000 votes measures a share to within a sampling sd of at most 0.115 pp, so the walk all but passes through each result. The 2021 votes enter twice, as the national row and as six kjördæmi rows; chapter 1.3 (planned) covers the kjördæmi side.</p>
+<p>A result is a row from house 1 (<code>Kosning</code>) with $\gamma = 0$ and a plain multinomial likelihood over the election's valid votes, with no overdispersion since 8146e76 (24 Nov 2024); chapter 3.2 (planned) has the history and what it does to the forecast's width. A multinomial with 190,000–200,000 votes measures a share to within a sampling sd of at most 0.115 pp, so the walk all but passes through each result. The 2021 votes enter twice, as the national row and as six kjördæmi rows; chapter <a href="constituencies.html#data">1.3</a> covers the kjördæmi side.</p>
 
 <div class="tbl"><table>
 <thead><tr><th>Result</th><th class="num">Votes as entered</th><th>Lists reported</th><th>Not yet running</th></tr></thead>
@@ -245,7 +245,7 @@ $$\beta_t \;=\; \beta_{t-1} + \frac{v_t}{R_t}\big(\beta_b - \beta_{t-1}\big) + \
 <ul>
 <li><strong>Polls</strong> (house $h > 1$): the reported counts are Dirichlet-multinomial with mean $\operatorname{softmax}(\eta_n[\text{reported}])$, which is $\theta_n$ renormalised over the reported lists, and concentration $\varphi_h$. Chapter 3.1 covers $\gamma_h$ and chapter 3.2 (planned) covers $\varphi_h$.</li>
 <li><strong>Results</strong> (house 1): <code>multinomial_logit</code> on the same gathered $\eta$ with $\gamma = 0$ (section <a href="#anchors">Anchors</a>).</li>
-<li><strong>Kjördæmi rows</strong> add $\delta$ for the constituency (chapter 1.3 (planned)); the one kjördæmi result, 2021's, enters as a plain multinomial like the national ones.</li>
+<li><strong>Kjördæmi rows</strong> add $\delta$ for the constituency (chapter <a href="constituencies.html">1.3</a>); the one kjördæmi result, 2021's, enters as a plain multinomial like the national ones.</li>
 </ul>
 </section>
 
@@ -302,7 +302,7 @@ $$\beta_t \;=\; \beta_{t-1} + \frac{v_t}{R_t}\big(\beta_b - \beta_{t-1}\big) + \
 </ul>
 </section>
 <!-- content:end -->
-    <nav class="pager"><a href="../start/notation.html"><span class="lbl">Previous</span>0.2 Notation and glossary</a><a class="next" href="../forecast/seats.html"><span class="lbl">Next</span>1.4 From vote shares to seats</a></nav>
+    <nav class="pager"><a href="../start/notation.html"><span class="lbl">Previous</span>0.2 Notation and glossary</a><a class="next" href="../forecast/constituencies.html"><span class="lbl">Next</span>1.3 Constituency effects</a></nav>
   </main>
 </div>
 
