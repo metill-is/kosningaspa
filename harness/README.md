@@ -748,7 +748,7 @@ section is a map: each item names the section or file that holds the detail.
   - The permutation check (the plan's Decision 8): `v2` and `v2-perm` must give the same forecast
     draws within Monte Carlo error (Step checks, `perm`). Its output, as printed, ends
     `v2_checks.md` in a fenced block under the heading `## Permutation check`. `v2_checks.R`
-    rewrites the whole file, so after a rerun the permutation output is appended again.
+    rewrites the whole file, so the last command below appends that section again after it.
 
 Each committed report is rewritten from the project root by:
 
@@ -758,13 +758,15 @@ LC_ALL=en_US.UTF-8 Rscript R/harness/recovery.R report
 LC_ALL=en_US.UTF-8 Rscript R/harness/tier0_report.R v2 harness/runs/tier0-v2.txt
 LC_ALL=en_US.UTF-8 Rscript R/harness/tier0_report.R v2-perm harness/runs/tier0-v2.txt harness/tier0/v2-perm.md
 LC_ALL=en_US.UTF-8 Rscript R/harness/v2_checks.R harness/runs/tier0-v2.txt
-LC_ALL=en_US.UTF-8 Rscript R/harness/compare_runs.R perm v2 v2-perm harness/runs/tier0-v2.txt
+{ printf '\n## Permutation check\n\nThe output of \140LC_ALL=en_US.UTF-8 Rscript R/harness/compare_runs.R perm v2 v2-perm harness/runs/tier0-v2.txt\140 (the Phase 2 plan\047s Decision 8), as it printed:\n\n\140\140\140\n'; LC_ALL=en_US.UTF-8 Rscript R/harness/compare_runs.R perm v2 v2-perm harness/runs/tier0-v2.txt; printf '\140\140\140\n'; } >> harness/tier0/v2_checks.md
 ```
 
 The first needs only the snapshot. `report` reads the recovery replicates (Recovery). The Tier 0
 commands read the finished runs of `harness/runs/tier0-v2.txt`, which
-`zsh R/harness/queue.sh harness/runs/tier0-v2.txt 200 200` fits, started as in Tier 0. Each step's
-own commands are in its section of `harness/v2/steps.md`.
+`zsh R/harness/queue.sh harness/runs/tier0-v2.txt 200 200` fits, started as in Tier 0. The last
+command runs `perm` and appends its output, with the heading and the fence, to `v2_checks.md`, so
+it runs once, right after `v2_checks.R` (each backtick is written `\140` in its `printf`, so the
+block holds none). Each step's own commands are in its section of `harness/v2/steps.md`.
 
 ## R0's inputs
 
