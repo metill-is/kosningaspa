@@ -1,0 +1,7 @@
+# lane arm E F seed
+# V2's Tier 0 (spec section 6.9): V2 and v2-perm, V2 with the party and kjordaemi orders reversed, on
+# 2024 eve and 2021 f180.
+A v2 2024-11-30 2024-11-29 1201
+B v2 2021-09-25 2021-03-29 1202
+A v2-perm 2024-11-30 2024-11-29 1201
+B v2-perm 2021-09-25 2021-03-29 1202

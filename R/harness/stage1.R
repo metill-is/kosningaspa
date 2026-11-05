@@ -128,6 +128,7 @@ stage1_data <- function(info) {
 #' @return the sha256 of the lines naming the Stan file's and the data JSON's sha256, the
 #'   seed, the iterations, the CmdStan version, the other sampler settings (`SAMPLER`'s
 #'   chains, init and max_treedepth, and `STAGE1_SIG_FIGS`) and the S_f parties
+#' @export
 stage1_key <- function(stan_sha, data_sha, s1, S_f) {
   box::use(R / harness / runs[SAMPLER])
   lines <- c(
@@ -139,6 +140,68 @@ stage1_key <- function(stan_sha, data_sha, s1, S_f) {
   )
   digest::digest(paste(lines, collapse = "\n"), algo = "sha256", serialize = FALSE)
 }
+
+#' The fields of a stage-1 record's `diagnostics$log_phi_f_near_cap`.
+NEAR_CAP_FIELDS <- c("cap", "margin", "near_cap", "n_draws", "within_margin", "within_near_cap")
+
+#' Stage 1's draws near its cap (Decision 4): log φ_f = -log(phi_f_inv) within
+#' `V2_CAP_MARGIN` and within `NEAR_CAP` (the stop rule's margin) of `V2_STAGE1_LOG_CAP`, where
+#' within m means log φ_f > cap - m.
+#' @param phi_f_inv the fit's draws of `phi_f_inv`, all chains
+#' @return `list(cap, margin, near_cap, n_draws, within_margin, within_near_cap)`, the last
+#'   three whole numbers; an error, "stage 1: ...", for no draws or a missing or non-positive one
+#' @export
+stage1_near_cap <- function(phi_f_inv) {
+  box::use(R / harness / compare_runs[NEAR_CAP], R / harness / v2_reference[V2_CAP_MARGIN, V2_STAGE1_LOG_CAP])
+  x <- as.numeric(phi_f_inv)
+  check(length(x) > 0 && !anyNA(x) && all(x > 0), "phi_f_inv has no draws, or a missing or non-positive one")
+  log_phi_f <- -log(x)
+  cap <- V2_STAGE1_LOG_CAP[["log_phi_f"]]
+  list(
+    cap = cap, margin = V2_CAP_MARGIN, near_cap = NEAR_CAP, n_draws = length(x),
+    within_margin = sum(log_phi_f > cap - V2_CAP_MARGIN), within_near_cap = sum(log_phi_f > cap - NEAR_CAP)
+  )
+}
+
+#' The log φ_f near-cap counts of a stage-1 cache record, when it holds them as the current
+#' code would write them.
+#' @param rec a record, as `jsonlite::read_json()` reads `mu_f.json`
+#' @return `list(n_draws, within_margin, within_near_cap)`, or NULL when the record has no
+#'   `diagnostics$log_phi_f_near_cap`, or has it with another cap or margin than
+#'   `stage1_near_cap()` uses, with `n_draws` other than `SAMPLER`'s chains x the record's
+#'   `iter_sampling`, or with counts that are not whole numbers, 0 <= `within_near_cap` <=
+#'   `within_margin` <= `n_draws`. Such a record is stale: `stage1_mu_f()` refits it, or with
+#'   `fit = FALSE` treats it as a cold cache
+#' @export
+stage1_near_cap_of <- function(rec) {
+  box::use(
+    R / harness / compare_runs[NEAR_CAP],
+    R / harness / runs[SAMPLER],
+    R / harness / v2_reference[V2_CAP_MARGIN, V2_STAGE1_LOG_CAP]
+  )
+  if (!is.list(rec) || !is.list(rec$diagnostics)) {
+    return(NULL)
+  }
+  nc <- rec$diagnostics$log_phi_f_near_cap
+  one <- function(x) is.numeric(x) && length(x) == 1 && is.finite(x)
+  if (!is.list(nc) || !all(vapply(NEAR_CAP_FIELDS, \(f) one(nc[[f]]), logical(1))) || !one(rec$iter_sampling)) {
+    return(NULL)
+  }
+  counts <- c(nc$within_near_cap, nc$within_margin, nc$n_draws)
+  ok <- nc$cap == V2_STAGE1_LOG_CAP[["log_phi_f"]] && nc$margin == V2_CAP_MARGIN && nc$near_cap == NEAR_CAP &&
+    nc$n_draws == SAMPLER$chains * rec$iter_sampling && all(counts == round(counts)) && counts[1] >= 0 &&
+    !is.unsorted(counts)
+  if (!ok) {
+    return(NULL)
+  }
+  list(n_draws = nc$n_draws, within_margin = nc$within_margin, within_near_cap = nc$within_near_cap)
+}
+
+#' Whether `path` holds a stage-1 record with current near-cap counts (`stage1_near_cap_of()`):
+#' FALSE for no file and for a stale record, which `stage1_mu_f()` then refits, or with
+#' `fit = FALSE` treats as a cold cache.
+#' @export
+stage1_current <- function(path) file.exists(path) && !is.null(stage1_near_cap_of(jsonlite::read_json(path)))
 
 #' A cached stage-1 fit, as `stage1_mu_f()` returns it.
 read_stage1 <- function(path, key, S_f) {
@@ -179,7 +242,8 @@ fit_stage1 <- function(stan_file, json, s1, key, info, path) {
   diagnostics <- list(
     max_rhat = max(m$rhat), min_ess_bulk = min(m$ess_bulk), min_ess_tail = min(m$ess_tail),
     num_divergent = as.integer(sum(sampler$num_divergent)), num_max_treedepth = as.integer(sum(sampler$num_max_treedepth)),
-    min_ebfmi = min(sampler$ebfmi), minutes = minutes
+    min_ebfmi = min(sampler$ebfmi), minutes = minutes,
+    log_phi_f_near_cap = stage1_near_cap(fit$draws("phi_f_inv", format = "draws_matrix"))
   )
   cat(sprintf(
     "STAGE1 E=%s F=%s %s max_rhat=%.4f min_ess_bulk=%.0f min_ess_tail=%.0f divergent=%d max_treedepth_hits=%d min_ebfmi=%.2f minutes=%.2f\n",
@@ -215,7 +279,8 @@ fit_stage1 <- function(stan_file, json, s1, key, info, path) {
 #' @return `list(mu_f, sha256, diagnostics)`: `mu_f` the posterior mean of `eta_E`, named
 #'   by `info$fundamentals$S_f` in that order; `sha256` the cache key; `diagnostics` a list
 #'   (`max_rhat` and `min_ess_bulk`, `min_ess_tail` over the parameters and `eta_E`,
-#'   `num_divergent`, `num_max_treedepth`, `min_ebfmi`, `minutes`).
+#'   `num_divergent`, `num_max_treedepth`, `min_ebfmi`, `minutes`, and
+#'   `log_phi_f_near_cap`, `stage1_near_cap()` of the fit's `phi_f_inv` draws).
 #'
 #'   The key is the sha256 over the Stan file's sha256, the sha256 of the data JSON as
 #'   `cmdstanr::write_stan_json()` writes `stage1_data(info)`, the seed, the iterations,
@@ -223,8 +288,11 @@ fit_stage1 <- function(stan_file, json, s1, key, info, path) {
 #'   and the S_f parties.
 #'   The fit's output lives in `results_root()/stage1/<key>/mu_f.json`, written atomically
 #'   (a temporary file, then a rename), and a later call with the same key reads it
-#'   instead of fitting, so both calls return identical values. The fit runs `SAMPLER`'s
-#'   chains, init and max_treedepth with `cfg$stage1`'s seed and iterations, writes its
+#'   instead of fitting, so both calls return identical values. A record without current
+#'   near-cap counts (`stage1_near_cap_of()` NULL), as one written before they were recorded, is
+#'   stale: it is refitted under the same key, or with `fit = FALSE` treated as a cold cache.
+#'   The fit runs `SAMPLER`'s chains, init and max_treedepth with `cfg$stage1`'s seed and
+#'   iterations, and also counts the draws of log φ_f near its cap (`stage1_near_cap()`); it writes its
 #'   CSVs with `STAGE1_SIG_FIGS` digits, and prints a STAGE1 line of its diagnostics.
 #'
 #'   An error, "stage 1: ...", before any fit or compile when `forecast_free(info$E,
@@ -256,8 +324,12 @@ stage1_mu_f <- function(info, cfg, root = project_root(), fit = TRUE) {
   S_f <- info$fundamentals$S_f
   key <- stage1_key(sha256_file(stan_file), sha256_file(json), s1, S_f)
   path <- file.path(results_root(), "stage1", key, "mu_f.json")
-  if (!file.exists(path)) {
-    if (!isTRUE(fit)) fail("no cached fit for ", format(info$E), " F ", format(info$F), " under results_root()/stage1/ (key ", substr(key, 1, 12), ")")
+  # WHY: a record without current near-cap counts (none, as one written before they were recorded, or ones of another cap, margin or draw count) is stale: refitted, or with fit = FALSE a cold cache.
+  if (!stage1_current(path)) {
+    stale <- if (file.exists(path)) "; the cached record has no current log phi_f near-cap counts, so it is stale" else ""
+    if (!isTRUE(fit)) {
+      fail("no cached fit for ", format(info$E), " F ", format(info$F), " under results_root()/stage1/ (key ", substr(key, 1, 12), ")", stale)
+    }
     fit_stage1(stan_file, json, s1, key, info, path)
   }
   read_stage1(path, key, S_f)

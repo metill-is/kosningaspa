@@ -41,8 +41,8 @@ sha256, so every log records the switch; unset, they test `Stan/forecast_v2.stan
 nothing. `queue.sh` refuses to start while it is set, so the preflight never certifies
 another file than the one the fits use. The slow `v2s-m5` tests, and so the queue's
 preflight, run the real `stage1_mu_f()`, which fits stage 1 into `results_root()/stage1/` on
-a cold cache or reads it there; that fit's warmup prints "Prior size parameter[5] is 0"
-notices, which are expected. The slow tests of the equivalence check in
+a cold cache or on a record written before the log φ_f near-cap counts were, or reads it
+there; that fit's warmup prints "Prior size parameter[5] is 0" notices, which are expected. The slow tests of the equivalence check in
 `tests/harness/test-v2-equivalence.R` are named and gated the same way (`v2s-p1: …`): each
 runs `R/harness/v2_equivalence.R` in a subprocess into a temporary CSV, one of them on a
 copy of the Stan file with a planted fault, which must fail for the constant's range alone. The
@@ -202,7 +202,8 @@ results/harness/
     key_diagnostics.csv     R-hat and ESS of the scored quantities, the kept parameters and lp__
     meta.json               written last by the runner: present means finished
   _stale/<id>_<YYYYmmddHHMMSS>/   a retired run, kept as it was
-  stage1/<sha256>/mu_f.json  V2's stage-1 output, cached by the sha256 of its inputs (R/harness/stage1.R)
+  stage1/<sha256>/mu_f.json  V2's stage-1 output and its log phi_f near-cap counts, cached by the sha256 of
+                            its inputs (R/harness/stage1.R; a record without current counts is stale and refitted)
   logs/                     the queue's logs: queue.log, preflight.log, <id>.log, and its lock, queue.lock/
 ```
 
@@ -294,10 +295,12 @@ builds. `ARMS` holds `r0`, `v2s-m0`, `v2s-p1`, `v2s-m1` (the epoch bias), `v2s-m
 newcomer pool), `v2s-m3` (the election-day shock), `v2s-m4` (the δ walk), `v2s-p2` (the δ walk
 held centred at the closed elections), `v2s-m5` (the fundamentals pseudo-observation), `v2`
 (`harness/configs/v2.json`, `v2s-m5`'s config: every component on, both forms at 0, as neither
-P-step's form was adopted) and its five ablations (`harness/configs/v2-*.json`, each `v2.json`
-with one component switch at 0: `epoch_bias`, `newcomer_pool`, `shock`, `delta_walk` or
-`fundamentals`; `tests/harness/test-arms.R` asserts each one's single differing field).
-`v2-perm` is registered as its config lands.
+P-step's form was adopted) and its five ablations (`harness/configs/v2-no*.json` and
+`v2-staticdelta.json`, each `v2.json` with one component switch at 0: `epoch_bias`,
+`newcomer_pool`, `shock`, `delta_walk` or `fundamentals`; `tests/harness/test-arms.R` asserts
+each one's single differing field).
+`v2-perm` (`harness/configs/v2-perm.json`, `v2.json` with `order` = `"reversed"`) is the check;
+`tests/harness/test-arms.R` asserts that it differs from `v2.json` in that field alone.
 
 **R0's extraction.** `r0_extract(draws, meta, dir)` (`R/harness/r0.R`) writes the four
 parquets of spec §5.5 from a fit's draws: `eday_kjordaemi` (`.chain`, `.iteration`,
@@ -774,11 +777,12 @@ or `snapshot_manifest.csv`.
   map, the fieldwork corrections, the publication dates, the two correction tables
   (`poll_n_corrections.csv`, `fundamentals_corrections.csv`), the economy release dates,
   the house table and the coalition events. `harness/configs/` holds each arm's settings
-  (`r0.json`, V2's candidate `v2.json` and its ablations `v2-*.json`, and V2's step configs in
-  `steps/`), `harness/runs/` the queue's run lists (`tier0.txt`, `v2-steps.txt`), and
-  `harness/tier0/` the Tier 0 reports, which `tier0_report.R` writes from local runs (no offline
-  rebuild). `harness/v2/steps.md` is V2's step log and `harness/v2/steps/` each step's
-  diagnostics table and equivalence CSV, from local runs too (Step checks).
+  (`r0.json`, V2's candidate `v2.json`, its ablations `v2-no*.json` and `v2-staticdelta.json`, its
+  check `v2-perm.json`, and V2's step configs in `steps/`), `harness/runs/` the queue's run lists
+  (`tier0.txt`, `v2-steps.txt`, `tier0-v2.txt`), and `harness/tier0/` the Tier 0 reports, which
+  `tier0_report.R` and `v2_checks.R` write from local runs (no offline rebuild).
+  `harness/v2/steps.md` is V2's step log and `harness/v2/steps/` each step's diagnostics table
+  and equivalence CSV, from local runs too (Step checks).
   `harness/v2/prior_predictive.md` is V2's prior predictive check, from prior draws on the
   snapshot with no fit, which
   `LC_ALL=en_US.UTF-8 Rscript R/harness/v2_prior_predictive.R harness/configs/steps/<step>.json`

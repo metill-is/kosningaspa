@@ -247,3 +247,16 @@ test_that("each ablation's config differs from V2's in exactly its one switch, s
     expect_identical(v2[[V2_ABLATIONS[[n]]]], 1L, label = n)
   }
 })
+
+test_that("v2-perm's config is V2's with order = \"reversed\" and nothing else, and it is a check", {
+  v2 <- jsonlite::read_json(root(arm("v2")$config))
+  perm <- jsonlite::read_json(root(arm("v2-perm")$config))
+  expect_identical(arm("v2-perm")$config, "harness/configs/v2-perm.json")
+  expect_identical(arm("v2-perm")$role, "check")
+  expect_identical(v2$order, "default")
+  expect_identical(perm$order, "reversed")
+  expect_identical(names(perm), names(v2))
+  differs <- names(v2)[!vapply(names(v2), \(k) identical(perm[[k]], v2[[k]]), logical(1))]
+  expect_identical(differs, "order")
+  expect_identical(read_v2_config(root(arm("v2-perm")$config))$order, "reversed")
+})
