@@ -82,6 +82,46 @@ in a subprocess to check that it still reads the snapshot right. `read_inputs()`
 in for the escapes: it runs when they are called, after the modules were parsed, so a
 session that loads the harness under C and then switches to UTF-8 passes it.
 
+## Checking a model change
+
+Brynjólfur set this policy on 5 November 2026: a model change gets the checks its kind needs,
+and the wider suite waits for a forecast that is published or frozen. From the project root:
+
+- **Any change:** the fast suite, plus the two-versions check on the current model: Stan's log
+  density against the R reference's on V2's configuration (`v2s-m5`'s Stan tests), and its
+  invariance when the party and kjördæmi orders are reversed (the Stan permutation lp test, on
+  the core's configuration). Together they are the queue's lean preflight (Runs):
+
+  ```
+  LC_ALL=en_US.UTF-8 Rscript tests/run.R
+  HARNESS_SLOW=1 V2_STEPS=v2s-m5,perm LC_ALL=en_US.UTF-8 Rscript tests/run.R v2-stan
+  ```
+
+- **A change to what the model computes:** add one short fit on the cell the change matters
+  for, through the queue with the lean preflight, on a run list of one line
+  (`A v2 <E> <F> <seed>`), then its diagnostics and the stop rule, written to a report of its
+  own so that `harness/tier0/` keeps its records:
+
+  ```
+  PREFLIGHT=lean zsh R/harness/queue.sh <run_list> <iter_warmup> <iter_sampling>
+  LC_ALL=en_US.UTF-8 Rscript R/harness/tier0_report.R v2 <run_list> <out>
+  LC_ALL=en_US.UTF-8 Rscript R/harness/compare_runs.R stop v2 <run_list>
+  ```
+
+- **A change meant to improve forecasts:** fit the old and the new model once each on both
+  cells, 2024 eve and 2021 f180, and compare them against the real results with
+  `score_cell(run_dir)` for each run (The freeze and the 2017 locks), which scores a target
+  cell only once the freeze is sealed.
+- **Before a published forecast, or before the freeze:** the wider suite, at a size chosen
+  then (for example as the next Alþingi election approaches):
+  - the full slow suite, the queue's default preflight:
+    `HARNESS_SLOW=1 LC_ALL=en_US.UTF-8 Rscript tests/run.R`;
+  - the permuted refits, `v2-perm` beside `v2`, compared by
+    `LC_ALL=en_US.UTF-8 Rscript R/harness/compare_runs.R perm v2 v2-perm <run_list>` (Step
+    checks, V2);
+  - the two-seed comparisons, `compare_runs.R stop` and `adopt` (Step checks);
+  - recovery, `R/harness/recovery.R` and its `report` (Recovery).
+
 ## The scorer self-test
 
 Before it scores anything new, the scorer must reproduce a run that an earlier study
