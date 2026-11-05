@@ -55,6 +55,19 @@ test_that("stage 1 refuses a 2017 cell before the freeze", {
   expect_false(any(startsWith(out, "STAGE1")))
   expect_false(file.exists(file.path(Sys.getenv("HARNESS_RESULTS"), "stage1")))
 })
+test_that("stage 1 read from its cache only stops on a cold cache, compiling, fitting and writing nothing", {
+  skip_without_snapshot()
+  withr::local_envvar(HARNESS_RESULTS = withr::local_tempdir())
+  # WHY: a cache-only read that fell through to the fit would then fail with "compiled", not pass with the right message.
+  local_mocked_bindings(cmdstan_model = function(...) stop("compiled"), .package = "cmdstanr")
+  out <- capture.output(expect_error(
+    stage1_mu_f(info_set(as.Date("2021-09-25"), as.Date("2021-03-29")), cfg_m0(), fit = FALSE),
+    "stage 1: no cached fit for 2021-09-25 F 2021-03-29 under results_root()/stage1/",
+    fixed = TRUE
+  ))
+  expect_false(any(startsWith(out, "STAGE1")))
+  expect_false(file.exists(file.path(Sys.getenv("HARNESS_RESULTS"), "stage1")))
+})
 test_that("stage 1's log density and eta_E are the R reference's at arbitrary points", {
   skip_unless_slow()
   skip_without_snapshot()

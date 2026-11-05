@@ -15,16 +15,19 @@
 #      2, ...: the parameters one draw of V2's prior, every count (y_nat, y_kd, y_res) redrawn
 #      from the model given them, each row keeping its total and its reported parties, then mu_f
 #      from its pseudo-observation's normal. The grid, the poll schedule, sample sizes, houses,
-#      entry and valid votes stay the real cell's. An attempt is rejected, and the next drawn,
-#      when a reported party's share of a closed election's national result (its kjordaemi
-#      counts summed per party), or its mean share over an epoch's national polls (the polls
-#      reporting it), leaves [0.5%, 70%] (redraw_reasons()). The rule reads the simulated data
-#      alone, so the posterior given the kept data is the model's and the ranks stay uniform. It
-#      reads national results, not each kjordaemi's: Decision 7's floor is a national-support
-#      notion, and a kjordaemi reading would also select on delta, a recovery target;
+#      entry and valid votes stay the real cell's, and so does d_shock, the shock scaling taken
+#      from the previous election's real national shares: it is design, not a count, so no real
+#      count survives, but real past shares still scale the shocks. An attempt is rejected, and
+#      the next drawn, when a reported party's share of a closed election's national result
+#      (its kjordaemi counts summed per party), or its mean share over an epoch's national
+#      polls (the polls reporting it), leaves [0.5%, 70%] (redraw_reasons()). The rule reads
+#      the simulated data alone, so the posterior given the kept data is the model's and the
+#      ranks stay uniform. It reads national results, not each kjordaemi's: Decision 7's floor
+#      is a national-support notion, and a kjordaemi reading would also select on delta, a
+#      recovery target;
 #   3. a check that each truth element is the Stan model's quantity of that name: a
 #      one-iteration fixed_param run at the true parameters must give every one to 1e-8
-#      relative (truth_check());
+#      relative, paired by name (truth_check(), which names the elements that differ);
 #   4. the fit: SAMPLER's chains, init and max_treedepth, the replicate's seed;
 #   5. the ranks: for each truth element (truth_elements()), q = mean(draws < truth), inside the
 #      90% interval when 0.05 <= q <= 0.95 and the 50% when 0.25 <= q <= 0.75.
@@ -44,15 +47,21 @@
 #                           flokkur, truth, q, in50, in90
 #   param_draws.parquet     the V2_PARAM_VARIABLES columns of a harness fit
 #   key_diagnostics.csv     R-hat and ESS of the truth elements, the param_draws columns, lp__
-#   meta.json               the provenance (git_head, git_dirty, the Stan file's, the config's
-#                           and the real design's sha256, CmdStan's version), the seeds and
-#                           attempts, the sampler settings, the minutes, the truth check's
-#                           error, each group's element count, the diagnostics and
-#                           real_cell_redraw (real_rule_text() of the real cell's own data)
+#   meta.json               the provenance of the code the replicate ran (run_provenance(),
+#                           read once when the lane starts, after its modules are loaded:
+#                           git_head, git_dirty, the snapshot manifest's sha256, CmdStan's and
+#                           cmdstanr's versions; inputs/inputs.json holds the same), git_head_end
+#                           and git_dirty_end (read again when the replicate ends; a change is
+#                           logged as PROVENANCE), the Stan file's, the config's and the real
+#                           design's sha256, the seeds and attempts, the sampler settings, the
+#                           minutes, the truth check's error, each group's element count, the
+#                           diagnostics and real_cell_redraw (real_rule_text() of the real
+#                           cell's own data)
 # A replicate's scored quantities, for summarise_diagnostics() and so for the stop rule's
 # gate-scope R-hat, are its truth elements. A replicate whose meta.json matches the run's
-# settings (expected_keys()) is skipped (SKIP); one whose meta.json does not, or that has none
-# (a fit that stopped), is moved to results_root()/_stale/ (STALE) and refitted, never mixed.
+# settings (expected_keys()) is skipped (SKIP); one whose meta.json does not, that has none (a
+# fit that stopped) or whose meta.json does not parse, is moved to results_root()/_stale/
+# (STALE) and refitted, never mixed.
 # Each replicate is claimed by a symlink <E>_<F>/.<seed>.owner naming the process, so a seed
 # that another live process is fitting is left alone (BUSY). Each lane has its own log
 # (recovery/logs/lane-<L>.log), lock and compiled copy of the Stan file
@@ -62,19 +71,22 @@
 # HARNESS_KEEP_CMDSTAN is 1.
 #
 # report reads every replicate under results_root()/recovery/ whose meta.json exists and writes
-# out (harness/v2/recovery.md by default): the provenance, each design's replicates, attempts,
-# rejection rate (rejected draws over all draws), whether the real cell's own data pass the
-# redraw rule (and its reasons if not; real past results are public, no forecast quantity) and
-# element counts, each group's 50% and 90%
-# coverage against Decision 7's band (a count of 30 truths for the scalar groups, the mean over
-# replicates of the share of the group's elements covered, within 3 standard errors, the sd
-# over replicates over sqrt(n), of 0.5 and 0.9 for the vector groups; group_checks()), the stop
+# out (harness/v2/recovery.md by default): the provenance (the commits at lane start, the
+# replicates fitted from a tree with changes, and those whose commit or tree changed while
+# their lane ran), each design's replicates, attempts, rejection rate (rejected draws over all
+# draws), whether the real cell's own data pass the redraw rule (and its reasons if not; real
+# past results are public, no forecast quantity; "not recorded" for a design with no
+# replicate yet) and element counts, each group's 50% and 90% coverage against Decision 7's
+# band (a count of 30 truths for the scalar groups, the mean over replicates of each
+# replicate's share of the group's elements covered, within 3 standard errors, the sd over
+# replicates over sqrt(n), of 0.5 and 0.9 for the vector groups; group_checks()), the stop
 # rule's line for every replicate, a replicate that trips it counted all the same, and a last
-# line RECOVERY PASS or RECOVERY FAIL. Those need Decision 7's set: 20 replicates on 2024 eve
-# and 10 on 2021 f180, each at 400 + 400, and no other; with any other set the line is
-# RECOVERY INCOMPLETE and its reasons. It refuses replicates whose Stan file or config sha256
-# differs from the others', or whose real design differs within a cell, naming them. It prints
-# the coverage lines and the verdict, never a forecast quantity.
+# line RECOVERY PASS or RECOVERY FAIL. Those need Decision 7's set, the pre-registered seeds
+# of DESIGNS (3001-3020 on 2024 eve and 3101-3110 on 2021 f180), each at 400 + 400, and no
+# other; with any other set the line is RECOVERY INCOMPLETE and its reasons, naming the seeds
+# missing or extra. It refuses replicates of another RECOVERY_VERSION, and replicates whose
+# Stan file or config sha256 differs from the others', or whose real design differs within a
+# cell, naming them. It prints the coverage lines and the verdict, never a forecast quantity.
 #
 # Every error starts "recovery: " and prints no absolute results directory (relative()).
 if (is.null(box::name())) {
@@ -145,13 +157,14 @@ INTERVALS <- list(
   `90` = list(lo = 0.05, hi = 0.95, target = 0.9)
 )
 
-#' Decision 7's set of replicates: 20 on the 2024-eve design and 10 on the 2021-f180 design,
-#' each at 400 + 400.
+#' Decision 7's set of replicates, pre-registered: seeds 3001-3020 on the 2024-eve design and
+#' 3101-3110 on the 2021-f180 design (`first_seed` to `first_seed + n - 1`), each at 400 + 400.
 #' @export
 DESIGNS <- data.frame(
   cell = c("2024-11-30_2024-11-29", "2021-09-25_2021-03-29"),
   label = c("2024 eve", "2021 f180"),
-  n = c(20L, 10L)
+  n = c(20L, 10L),
+  first_seed = c(3001L, 3101L)
 )
 DESIGN_ITER <- c(iter_warmup = 400L, iter_sampling = 400L)
 
@@ -349,16 +362,36 @@ group_checks <- function(ranks) {
   do.call(rbind, rows)
 }
 
-#' The reasons a set of replicates is not Decision 7's (DESIGNS at DESIGN_ITER, nothing else).
-#' @param reps a data frame, one row per replicate: `cell` ("<E>_<F>"), `iter_warmup`,
+#' A design's pre-registered seeds.
+#' @param i the design's row of DESIGNS
+design_seeds <- function(i) DESIGNS$first_seed[i] + seq_len(DESIGNS$n[i]) - 1L
+
+#' Whole numbers as runs: "3001\u20133003, 3005".
+seed_runs <- function(x) {
+  x <- sort(unique(as.integer(x)))
+  starts <- x[c(TRUE, diff(x) != 1L)]
+  ends <- x[c(diff(x) != 1L, TRUE)]
+  paste(ifelse(starts == ends, starts, paste0(starts, "\u2013", ends)), collapse = ", ")
+}
+
+#' The reasons a set of replicates is not Decision 7's (DESIGNS's seeds at DESIGN_ITER, nothing
+#' else).
+#' @param reps a data frame, one row per replicate: `cell` ("<E>_<F>"), `seed`, `iter_warmup`,
 #'   `iter_sampling`
-#' @return a character vector, empty for Decision 7's set
+#' @return a character vector, empty for Decision 7's set: per design, a count other than its
+#'   `n`, its seeds missing and the seeds outside its pre-registered range, and replicates at
+#'   other iterations; replicates on another cell
 #' @export
 incomplete_reasons <- function(reps) {
   out <- character(0)
   for (i in seq_len(nrow(DESIGNS))) {
     mine <- reps[reps$cell == DESIGNS$cell[i], , drop = FALSE]
+    seeds <- design_seeds(i)
     if (nrow(mine) != DESIGNS$n[i]) out <- c(out, sprintf("%s: %d of %d replicates", DESIGNS$label[i], nrow(mine), DESIGNS$n[i]))
+    missing <- setdiff(seeds, mine$seed)
+    if (length(missing)) out <- c(out, sprintf("%s: seed(s) %s missing", DESIGNS$label[i], seed_runs(missing)))
+    extra <- setdiff(mine$seed, seeds)
+    if (length(extra)) out <- c(out, sprintf("%s: seed(s) %s outside %s", DESIGNS$label[i], seed_runs(extra), seed_runs(seeds)))
     off <- mine$iter_warmup != DESIGN_ITER[["iter_warmup"]] | mine$iter_sampling != DESIGN_ITER[["iter_sampling"]]
     if (any(off)) {
       out <- c(out, sprintf(
@@ -432,9 +465,9 @@ expected_keys <- function(stan_file, config_file, design_sha, seed, iter_warmup,
 #' @param label the name a retired folder is kept under in results_root()/_stale/
 #' @return a list: `state` "skip" (meta.json matches `expected`; the claim is released), "busy"
 #'   (another running process holds the claim: `pid`), "stale" (meta.json does not match:
-#'   `keys`, the mismatched keys, and `to`, where it went), "partial" (no meta.json: a fit that
-#'   stopped; `to`) or "new"; with `owner`, the claim's path, held for "stale", "partial" and
-#'   "new"
+#'   `keys`, the mismatched keys, and `to`, where it went), "partial" (no meta.json, a fit that
+#'   stopped, or one that does not parse, its parser's message in `error`; `to`) or "new"; with
+#'   `owner`, the claim's path, held for "stale", "partial" and "new"
 #' @export
 replicate_state <- function(dir, expected, label) {
   dir.create(dirname(dir), recursive = TRUE, showWarnings = FALSE)
@@ -445,7 +478,10 @@ replicate_state <- function(dir, expected, label) {
   }
   meta_path <- file.path(dir, "meta.json")
   if (file.exists(meta_path)) {
-    finished <- tryCatch(jsonlite::read_json(meta_path), error = function(e) list())
+    finished <- tryCatch(jsonlite::read_json(meta_path), error = function(e) e)
+    if (inherits(finished, "error")) {
+      return(list(state = "partial", error = conditionMessage(finished), to = retire_run(dir, label), owner = owner))
+    }
     keys <- meta_mismatch(finished, expected)
     if (!length(keys)) {
       release_lock(owner)
@@ -474,10 +510,10 @@ lane_model <- function(lane_dir, stan_file) {
   cmdstanr::cmdstan_model(copy)
 }
 
-#' The largest error, relative to max(1, |truth|), between each truth element and the Stan
-#' model's quantity of that name at the true parameters: a one-iteration fixed_param run of
-#' `model` started at `pars`, read back at 18 significant figures, in `dir` (deleted after).
-truth_check <- function(model, data_json, pars, elements, dir) {
+#' The Stan model's quantities of the truth elements' names at the true parameters: a
+#' one-iteration fixed_param run of `model` started at `pars`, read back at 18 significant
+#' figures, in `dir` (deleted after); a named vector, for truth_check().
+truth_stan_values <- function(model, data_json, pars, elements, dir) {
   dir.create(dir)
   on.exit(unlink(dir, recursive = TRUE), add = TRUE)
   # WHY: CmdStan's init reader refuses a zero-size parameter written as [], and there is nothing to initialise in it.
@@ -488,9 +524,30 @@ truth_check <- function(model, data_json, pars, elements, dir) {
   )
   if (!all(fit$return_codes() == 0)) fail("the truth check's fixed_param run failed")
   x <- unclass(posterior::as_draws_matrix(fit$draws(variables = unique(sub("\\[.*$", "", elements$variable)))))
-  got <- x[1, elements$variable]
-  err <- abs(got - elements$truth) / pmax(1, abs(elements$truth))
-  if (!all(is.finite(err))) fail("the truth check read a non-finite value")
+  x[1, ]
+}
+
+#' The truth check: each truth element against the Stan model's quantity of the same name.
+#' @param got the Stan model's values at the true parameters, named by Stan element
+#'   (`truth_stan_values()`); paired with `elements` by name, in any order
+#' @param elements a `truth_elements()` data frame
+#' @param id the replicate's id, the error's prefix
+#' @return the largest error, relative to max(1, |truth|); an error naming the elements (up to
+#'   five, the largest first) whose error exceeds TRUTH_TOL, and one if an element is missing or
+#'   a value is not finite
+#' @export
+truth_check <- function(got, elements, id = "the truth check") {
+  lacks <- setdiff(elements$variable, names(got))
+  if (length(lacks)) fail(id, ": the fixed_param run lacks ", paste(utils::head(lacks, 5), collapse = ", "))
+  err <- abs(got[elements$variable] - elements$truth) / pmax(1, abs(elements$truth))
+  if (!all(is.finite(err))) fail(id, ": the truth check read a non-finite value")
+  bad <- order(err, decreasing = TRUE)[seq_len(min(5L, sum(err > TRUTH_TOL)))]
+  if (length(bad)) {
+    fail(
+      id, ": the Stan model's quantities at the true parameters differ from the truth by more than ", TRUTH_TOL, ": ",
+      paste(sprintf("%s by %s", elements$variable[bad], format(err[bad], digits = 3)), collapse = ", ")
+    )
+  }
   max(err)
 }
 
@@ -522,7 +579,10 @@ fit_replicate <- function(cell, seed, iters, expected, model, log) {
       return(invisible("busy"))
     },
     stale = say(log, "STALE ", id, " ", paste(state$keys, collapse = ","), "; retired to ", relative(state$to)),
-    partial = say(log, "STALE ", id, " (no meta.json); retired to ", relative(state$to))
+    partial = say(
+      log, "STALE ", id, if (is.null(state$error)) " (no meta.json)" else paste0(" (meta.json does not parse: ", state$error, ")"),
+      "; retired to ", relative(state$to)
+    )
   )
   on.exit(release_lock(state$owner), add = TRUE)
   say(log, "START ", id)
@@ -530,10 +590,13 @@ fit_replicate <- function(cell, seed, iters, expected, model, log) {
 
   sim <- draw_replicate(cell$data, seed)
   elements <- truth_elements(sim, cell$data, cell$meta)
-  inputs_meta <- list(
-    id = id, E = cell$E, F = cell$F, seed = seed, sim_seed = sim$sim_seed, attempts = sim$attempts,
-    design_sha256 = expected$design_sha256, party_order = I(cell$meta$party_order),
-    kjordaemi_levels = I(cell$meta$kjordaemi_levels), closed_elections = I(cell$meta$closed_elections)
+  inputs_meta <- c(
+    list(
+      id = id, E = cell$E, F = cell$F, seed = seed, sim_seed = sim$sim_seed, attempts = sim$attempts,
+      design_sha256 = expected$design_sha256, party_order = I(cell$meta$party_order),
+      kjordaemi_levels = I(cell$meta$kjordaemi_levels), closed_elections = I(cell$meta$closed_elections)
+    ),
+    cell$provenance
   )
   data_sha <- write_frozen_inputs(dir, sim$data, inputs_meta)
   data_json <- file.path(dir, "inputs", "stan_data.json")
@@ -546,8 +609,7 @@ fit_replicate <- function(cell, seed, iters, expected, model, log) {
     truth_path
   )
 
-  check_err <- truth_check(model, data_json, sim$pars, elements, file.path(dir, "check"))
-  if (check_err > TRUTH_TOL) fail(id, ": the Stan model's quantities at the true parameters differ from the truth by ", format(check_err))
+  check_err <- truth_check(truth_stan_values(model, data_json, sim$pars, elements, file.path(dir, "check")), elements, id)
 
   cmdstan_dir <- file.path(dir, "cmdstan")
   dir.create(cmdstan_dir)
@@ -580,6 +642,14 @@ fit_replicate <- function(cell, seed, iters, expected, model, log) {
   key <- rbind(measure_draws(scored), measure_draws(posterior::as_draws_df(pd)))
   key <- rbind(key[!duplicated(key$variable), ], measure_draws(lp))
 
+  end <- run_provenance()[c("git_head", "git_dirty")]
+  if (!identical(end$git_head, cell$provenance$git_head) || !identical(end$git_dirty, cell$provenance$git_dirty)) {
+    say(
+      log, "PROVENANCE ", id, " changed while the lane ran: git_head ", paste(cell$provenance$git_head, collapse = ""), " at lane start, ",
+      paste(end$git_head, collapse = ""), " now; git_dirty ", cell$provenance$git_dirty, " at lane start, ", end$git_dirty, " now"
+    )
+  }
+
   paths <- file.path(dir, c("ranks.csv", "param_draws.parquet", "key_diagnostics.csv"))
   readr::write_csv(ranks, paths[1])
   arrow::write_parquet(pd, paths[2])
@@ -592,7 +662,8 @@ fit_replicate <- function(cell, seed, iters, expected, model, log) {
       truth_check_error = check_err, elements = as.list(table(factor(elements$group, GROUPS$group))), minutes = minutes,
       diagnostics = d, real_cell_redraw = I(cell$real_redraw)
     ),
-    run_provenance()
+    cell$provenance,
+    list(git_head_end = end$git_head, git_dirty_end = end$git_dirty)
   )
   tmp <- tempfile("meta-", tmpdir = dir, fileext = ".json")
   write_json_file(meta, tmp)
@@ -620,6 +691,9 @@ run_replicates <- function(E, F, first_seed, n, iter_warmup, iter_sampling, lane
   if (!isTRUE(held)) fail("lane ", lane, " is running (pid ", held, "): give this one --lane=", setdiff(c("A", "B"), lane))
   on.exit(release_lock(lock), add = TRUE)
 
+  # WHY: the code a replicate runs is loaded by now (v2_reference and stage1 would otherwise load at their first call), so this is its provenance.
+  box::use(R / harness / v2_reference[v2_simulate], R / harness / stage1[stage1_mu_f])
+  provenance <- run_provenance()
   a <- arm(RECOVERY_ARM)
   stan_file <- file.path(project_root(), a$stan_file)
   config_file <- file.path(project_root(), a$config)
@@ -632,9 +706,13 @@ run_replicates <- function(E, F, first_seed, n, iter_warmup, iter_sampling, lane
   design_sha <- stan_data_sha(data)
   cell <- list(
     E = format(E), F = format(F), lane = lane, data = data, meta = built$meta, stan_file = stan_file,
-    param_variables = intersect(V2_PARAM_VARIABLES, a$variables(cfg)), real_redraw = real_rule_text(data, built$meta)
+    param_variables = intersect(V2_PARAM_VARIABLES, a$variables(cfg)), real_redraw = real_rule_text(data, built$meta),
+    provenance = provenance
   )
-  say(log, sprintf("LANE %s %s_%s seeds %d..%d at %d + %d (pid %d)", lane, cell$E, cell$F, first_seed, first_seed + n - 1, iter_warmup, iter_sampling, Sys.getpid()))
+  say(log, sprintf(
+    "LANE %s %s_%s seeds %d..%d at %d + %d (pid %d); git_head %s, git_dirty %s", lane, cell$E, cell$F, first_seed, first_seed + n - 1,
+    iter_warmup, iter_sampling, Sys.getpid(), paste(provenance$git_head, collapse = ""), provenance$git_dirty
+  ))
   say(log, "REAL ", cell$E, "_", cell$F, " under the redraw rule: ", real_text(cell$real_redraw))
   model <- lane_model(lane_dir, stan_file)
   iters <- c(iter_warmup = iter_warmup, iter_sampling = iter_sampling)
@@ -660,7 +738,9 @@ read_replicates <- function(base) {
         partial <- partial + 1L
         next
       }
-      meta <- jsonlite::read_json(file.path(dir, "meta.json"), simplifyVector = TRUE)
+      meta <- tryCatch(jsonlite::read_json(file.path(dir, "meta.json"), simplifyVector = TRUE), error = function(e) {
+        fail("the meta.json in ", dir, " does not parse (", conditionMessage(e), "): re-run its lane to retire it")
+      })
       ranks <- as.data.frame(readr::read_csv(file.path(dir, "ranks.csv"), col_types = RANKS_COLUMNS, progress = FALSE))
       if (!identical(as.character(meta$id), sprintf("recovery_%s_s%s", cell, seed))) fail("the meta.json in ", dir, " is not of replicate ", cell, " ", seed)
       reps[[length(reps) + 1]] <- list(id = meta$id, cell = cell, dir = dir, meta = meta, ranks = ranks)
@@ -698,6 +778,15 @@ run_report <- function(out) {
   read <- read_replicates(base)
   reps <- read$reps
   if (!length(reps)) fail("no finished replicate under ", relative(base))
+  ids <- vapply(reps, \(r) r$id, character(1))
+  version <- vapply(reps, \(r) if (is.null(r$meta$recovery_version)) NA_integer_ else as.integer(r$meta$recovery_version), integer(1))
+  old <- !(version %in% RECOVERY_VERSION)
+  if (any(old)) {
+    fail(
+      "replicate(s) ", paste(ids[old], collapse = ", "), " were drawn under recovery_version ", paste(unique(version[old]), collapse = ", "),
+      ", not the current ", RECOVERY_VERSION, ": retire them or refit"
+    )
+  }
   stan_sha <- same_key(reps, "stan_sha256", "Stan file")
   config_sha <- same_key(reps, "config_sha256", "config")
   for (cell in unique(vapply(reps, \(r) r$cell, character(1)))) {
@@ -721,13 +810,35 @@ run_report <- function(out) {
     i <- match(cell, DESIGNS$cell)
     if (is.na(i)) sub("_", " F ", cell) else DESIGNS$label[i]
   }
-  cells <- c(intersect(DESIGNS$cell, table_of$cell), setdiff(unique(table_of$cell), DESIGNS$cell))
+  rep_cells <- c(intersect(DESIGNS$cell, table_of$cell), setdiff(unique(table_of$cell), DESIGNS$cell))
+  cells <- c(DESIGNS$cell, setdiff(rep_cells, DESIGNS$cell))
   real <- vapply(cells, \(cell) {
-    first <- Filter(\(r) r$cell == cell, reps)[[1]]
-    if (is.null(first$meta$real_cell_redraw)) "not recorded" else real_text(first$meta$real_cell_redraw)
+    mine <- Filter(\(r) r$cell == cell, reps)
+    if (!length(mine)) {
+      "not recorded (no replicate yet)"
+    } else if (is.null(mine[[1]]$meta$real_cell_redraw)) {
+      "not recorded"
+    } else {
+      real_text(mine[[1]]$meta$real_cell_redraw)
+    }
   }, character(1))
   heads <- unique(unlist(lapply(reps, \(r) r$meta$git_head)))
-  dirty <- sum(vapply(reps, \(r) isTRUE(r$meta$git_dirty), logical(1)))
+  dirty <- ids[vapply(reps, \(r) isTRUE(r$meta$git_dirty), logical(1))]
+  moved <- unlist(lapply(reps, \(r) {
+    m <- r$meta
+    if (is.null(m$git_head_end) || is.null(m$git_dirty_end)) {
+      return(paste0(r$id, " (not recorded)"))
+    }
+    if (identical(m$git_head_end, m$git_head) && identical(m$git_dirty_end, m$git_dirty)) {
+      return(NULL)
+    }
+    sprintf(
+      "%s (git_head %s to %s, git_dirty %s to %s)", r$id, substr(paste(m$git_head, collapse = ""), 1, 12),
+      substr(paste(m$git_head_end, collapse = ""), 1, 12), m$git_dirty, m$git_dirty_end
+    )
+  }))
+  listed <- function(x, none) if (length(x)) paste0(length(x), ": ", paste(x, collapse = "; ")) else none
+  pinned <- paste(vapply(seq_len(nrow(DESIGNS)), \(i) paste("seeds", seed_runs(design_seeds(i)), "on", DESIGNS$label[i]), character(1)), collapse = " and ")
   cmdstan <- unique(vapply(reps, \(r) as.character(r$meta$cmdstan_version), character(1)))
   a <- arm(RECOVERY_ARM)
 
@@ -742,7 +853,9 @@ run_report <- function(out) {
     ),
     "",
     paste0("- Stan file `", a$stan_file, "` (sha256 `", stan_sha, "`), config `", a$config, "` (sha256 `", config_sha, "`)"),
-    paste0("- Commit(s): ", paste0("`", heads, "`", collapse = ", "), "; replicates fitted from a tree with changes: ", dirty),
+    paste0("- Commit(s) at lane start: ", paste0("`", heads, "`", collapse = ", ")),
+    paste0("- Replicates fitted from a tree with changes (at lane start): ", listed(dirty, "0")),
+    paste0("- Replicates whose commit or tree changed while their lane ran: ", listed(moved, "none")),
     paste0("- CmdStan ", paste(cmdstan, collapse = ", "), "; ", SAMPLER$chains, " chains, max_treedepth ", SAMPLER$max_treedepth, ", init ", SAMPLER$init),
     paste0(
       "- Redraw rule: a replicate is redrawn when a reported party's share of a closed election's national result ",
@@ -762,6 +875,10 @@ run_report <- function(out) {
   )
   for (cell in cells) {
     t <- table_of[table_of$cell == cell, ]
+    if (!nrow(t)) {
+      lines <- c(lines, table_row(c(label(cell), 0, rep("\u2013", 2), 0, 0, rep("\u2013", 2), 0, real[[cell]])))
+      next
+    }
     iters <- unique(paste(t$iter_warmup, "+", t$iter_sampling))
     lines <- c(lines, table_row(c(
       label(cell), nrow(t), paste0(min(t$seed), "\u2013", max(t$seed)), paste(iters, collapse = ", "), sum(t$attempts),
@@ -771,11 +888,11 @@ run_report <- function(out) {
   }
   lines <- c(
     lines, "", "Truth elements per replicate:", "",
-    table_row(c("Group", vapply(cells, label, character(1)))),
-    table_row(rep("---", 1 + length(cells)))
+    table_row(c("Group", vapply(rep_cells, label, character(1)))),
+    table_row(rep("---", 1 + length(rep_cells)))
   )
   for (g in seq_len(nrow(GROUPS))) {
-    counts <- vapply(cells, \(cell) {
+    counts <- vapply(rep_cells, \(cell) {
       per <- table(ranks$replicate[ranks$cell == cell & ranks$group == GROUPS$group[g]])
       if (length(unique(per)) > 1) fail("the replicates of ", cell, " differ in their count of ", GROUPS$group[g])
       if (length(per)) as.integer(per[1]) else 0L
@@ -825,7 +942,7 @@ run_report <- function(out) {
     "",
     "## Verdict",
     "",
-    if (length(incomplete)) paste0("Not Decision 7's set (20 replicates on 2024 eve and 10 on 2021 f180, each at 400 + 400): ", paste(incomplete, collapse = "; "), ".") else NULL,
+    if (length(incomplete)) paste0("Not Decision 7's set (", pinned, ", each at 400 + 400): ", paste(incomplete, collapse = "; "), ".") else NULL,
     if (length(incomplete)) "" else NULL,
     paste0("RECOVERY ", verdict)
   )

@@ -209,6 +209,9 @@ fit_stage1 <- function(stan_file, json, s1, key, info, path) {
 #' @param info an `info_set()` list
 #' @param cfg a `read_v2_config()` list; its `stage1` gives the seed and the iterations
 #' @param root the project root whose freeze files `forecast_free()` reads
+#' @param fit FALSE to read the cache only: on a cold cache, an error ("stage 1: no cached
+#'   fit ...") with nothing compiled, fitted or written, as a test that must not write
+#'   outside its own results root needs
 #' @return `list(mu_f, sha256, diagnostics)`: `mu_f` the posterior mean of `eta_E`, named
 #'   by `info$fundamentals$S_f` in that order; `sha256` the cache key; `diagnostics` a list
 #'   (`max_rhat` and `min_ess_bulk`, `min_ess_tail` over the parameters and `eta_E`,
@@ -230,7 +233,7 @@ fit_stage1 <- function(stan_file, json, s1, key, info, path) {
 #'   unless every chain finished with `iter_sampling` draws, the max R-hat is at most 1.01
 #'   and there is no divergent transition.
 #' @export
-stage1_mu_f <- function(info, cfg, root = project_root()) {
+stage1_mu_f <- function(info, cfg, root = project_root(), fit = TRUE) {
   # WHY: the default argument is a promise, forced after this import.
   box::use(
     R / harness / constants[project_root],
@@ -253,6 +256,9 @@ stage1_mu_f <- function(info, cfg, root = project_root()) {
   S_f <- info$fundamentals$S_f
   key <- stage1_key(sha256_file(stan_file), sha256_file(json), s1, S_f)
   path <- file.path(results_root(), "stage1", key, "mu_f.json")
-  if (!file.exists(path)) fit_stage1(stan_file, json, s1, key, info, path)
+  if (!file.exists(path)) {
+    if (!isTRUE(fit)) fail("no cached fit for ", format(info$E), " F ", format(info$F), " under results_root()/stage1/ (key ", substr(key, 1, 12), ")")
+    fit_stage1(stan_file, json, s1, key, info, path)
+  }
   read_stage1(path, key, S_f)
 }
