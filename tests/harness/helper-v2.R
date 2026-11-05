@@ -187,8 +187,9 @@ stage1_eta_E_ref <- function(d, p) {
 }
 # Skip unless the env var V2_STEPS is unset or empty, or its comma-separated list names
 # `step` or the test's `tag`, so that one step's tests of test-v2-stan.R run on their own. The
-# one tag, `perm`, marks the Stan permutation lp test, which the queue's lean preflight runs
-# without the rest of its step (`harness/README.md`, Tests).
+# one tag, `perm`, marks the Stan lp tests on reordered data, the permutation test (v2s-m0) and
+# the reversed-order test with the house walk on (v2s-m1), which the queue's lean preflight runs
+# without the rest of their steps (`harness/README.md`, Tests).
 skip_unless_step <- function(step, tag = character(0)) {
   steps <- trimws(strsplit(Sys.getenv("V2_STEPS"), ",", fixed = TRUE)[[1]])
   steps <- steps[nzchar(steps)]

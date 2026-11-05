@@ -384,7 +384,7 @@ test_that("v2s-m1: Stan's log density matches the reference up to a constant", {
 
 test_that("v2s-m1: with Annad first and prior_tau_mu at 0.37, Stan's log density matches the reference", {
   skip_unless_slow()
-  skip_unless_step("v2s-m1")
+  skip_unless_step("v2s-m1", tag = "perm")
   # WHY: the other cells put Annað last and run at §6.10's prior_tau_mu = 0.1, where Stan
   # scaling party P instead of annad_idx, or a literal 0.1 for the data scale, would pass.
   cfg <- utils::modifyList(cfg_m1(), list(order = "reversed", walk_form = 0L, delta_form = 0L, prior_tau_mu = 0.37))

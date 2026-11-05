@@ -163,7 +163,7 @@ test_that("the queue refuses to start while HARNESS_V2_STAN is set, FORCE=1 or n
   expect_length(readLines(file.path(logs, "queue.log")), 2)
 })
 
-test_that("the queue refuses to start while V2_STEPS is set, FORCE=1 or not", {
+test_that("the queue refuses to start while V2_STEPS is set, FORCE=1 or not, under either preflight", {
   results <- withr::local_tempdir()
   bin <- withr::local_tempdir()
   stub(bin, "Rscript", "exit 3")
@@ -172,19 +172,23 @@ test_that("the queue refuses to start while V2_STEPS is set, FORCE=1 or not", {
     HARNESS_RESULTS = results, DRY_RUN = NA, HARNESS_V2_STAN = NA, V2_STEPS = "v2s-m5",
     PATH = paste(bin, Sys.getenv("PATH"), sep = ":")
   )
-  for (force in c(NA, "1")) {
-    withr::local_envvar(FORCE = force)
-    out <- queue(c("harness/runs/tier0.txt", "200", "200"))
-    expect_identical(attr(out, "status"), 1L)
-    expect_match(out, "V2_STEPS is set (v2s-m5)", fixed = TRUE, all = FALSE)
-    log <- readLines(file.path(logs, "queue.log"))
-    expect_match(log[length(log)], "^QUEUE ABORTED rc=1 V2_STEPS is set ")
-    expect_match(log[length(log)], ABORTED)
-    expect_false(any(startsWith(log, "QUEUE START")))
-    expect_false(dir.exists(file.path(logs, "queue.lock")))
-    expect_false(file.exists(file.path(logs, "preflight.log")))
+  for (preflight in c(NA, "lean")) {
+    for (force in c(NA, "1")) {
+      withr::local_envvar(FORCE = force, PREFLIGHT = preflight)
+      lbl <- paste("PREFLIGHT", preflight, "FORCE", force)
+      out <- queue(c("harness/runs/tier0.txt", "200", "200"))
+      expect_identical(attr(out, "status"), 1L, label = lbl)
+      expect_match(out, "V2_STEPS is set (v2s-m5): the preflight picks its own Stan tests", fixed = TRUE, all = FALSE, label = lbl)
+      expect_false(any(grepl("full slow suite", out, fixed = TRUE)), label = lbl)
+      log <- readLines(file.path(logs, "queue.log"))
+      expect_match(log[length(log)], "^QUEUE ABORTED rc=1 V2_STEPS is set ", label = lbl)
+      expect_match(log[length(log)], ABORTED, label = lbl)
+      expect_false(any(startsWith(log, "QUEUE START")), label = lbl)
+      expect_false(dir.exists(file.path(logs, "queue.lock")), label = lbl)
+      expect_false(file.exists(file.path(logs, "preflight.log")), label = lbl)
+    }
   }
-  expect_length(readLines(file.path(logs, "queue.log")), 2)
+  expect_length(readLines(file.path(logs, "queue.log")), 4)
 })
 
 test_that("the queue's HARNESS_V2_STAN refusal comes before the lock and the guard, which it leaves as they were", {

@@ -11,15 +11,15 @@
 #
 # Before the lock, whatever FORCE, it refuses to start while HARNESS_V2_STAN is set, since the
 # preflight's Stan tests would then test the file it names instead of the Stan file the fits
-# use, and while V2_STEPS is non-empty, since the preflight would then run only those steps'
-# V2 Stan and equivalence tests instead of the full slow suite. Before any fit it takes the lock $LOGS/queue.lock (a directory holding the queue's pid),
-# refuses to start while another queue holds it or a fit_cell.R runs (or when pgrep cannot
-# tell), unless FORCE=1, and runs the full slow test suite as a preflight
-# ($LOGS/preflight.log), stopping if that fails. PREFLIGHT=lean runs instead the fast suite,
-# then the slow Stan tests of v2s-m5 (V2's configuration) and the Stan permutation lp test
-# (V2_STEPS=v2s-m5,perm, set for that command alone, so the refusal above reads only the
-# caller's); PREFLIGHT=full, or unset, is the full slow suite, and any other value is refused
-# as a bad command line. $LOGS/queue.log gets
+# use, and while V2_STEPS is non-empty, since the preflight picks its own Stan tests: the full
+# preflight all of them, the lean one its own V2_STEPS. Before any fit it takes the lock
+# $LOGS/queue.lock (a directory holding the queue's pid), refuses to start while another queue
+# holds it or a fit_cell.R runs (or when pgrep cannot tell), unless FORCE=1, and runs the full
+# slow test suite as a preflight ($LOGS/preflight.log), stopping if that fails. PREFLIGHT=lean
+# runs instead the fast suite, then the slow Stan tests of v2s-m5 (V2's configuration) and the
+# Stan lp tests tagged perm (V2_STEPS=v2s-m5,perm, set for that command alone, so the refusal
+# above reads only the caller's); PREFLIGHT=full, or unset, is the full slow suite, and any
+# other value is refused as a bad command line. $LOGS/queue.log gets
 # "QUEUE START <time> <list> <warmup> <sampling> (pid <pid>)", "preflight PASS" or
 # "preflight PASS (lean)" (or "preflight FAIL ..."), a "start <lane> <id> <time>" and an
 # "end <id> rc=<rc> <first DIAG|SKIP|STALE line>" per run, and one terminal line: "QUEUE
@@ -111,9 +111,11 @@ mkdir -p $LOGS || die 1 "cannot make $LOGS"
 if [[ -n ${HARNESS_V2_STAN:-} ]]; then
   die 1 "HARNESS_V2_STAN is set ($HARNESS_V2_STAN): the preflight would test that file, not the one the fits use; unset it"
 fi
-# WHY: the preflight must be the full slow suite, and V2_STEPS skips every other step's tests.
+# WHY: either preflight picks its own Stan tests (the full one every step's, the lean one its
+# own V2_STEPS), so a caller's V2_STEPS would narrow the full suite and only seem to narrow the
+# lean one.
 if [[ -n ${V2_STEPS:-} ]]; then
-  die 1 "V2_STEPS is set ($V2_STEPS): the preflight would run only those steps' tests, not the full slow suite; unset it"
+  die 1 "V2_STEPS is set ($V2_STEPS): the preflight picks its own Stan tests, under PREFLIGHT=full or lean; unset it"
 fi
 if mkdir $lock 2> /dev/null; then
   owns_lock=1

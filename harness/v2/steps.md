@@ -1581,7 +1581,7 @@ The new form keeps three properties, each pinned by a fast test in
    f_h < e0 ≤ e_p, by 1 for every party existing at e0 leaves every national poll row's centred
    house effects within 1e-12 and the likelihood within its rounding, in each of the 26 cases. A
    party entering between e0 and e_p takes the shift on through the mean drift. Under the old
-   restart 44 of the test's 72 expectations fail.
+   restart, at prior seed 3, 44 of the test's 72 expectations fail.
 2. **Own pre-entry steps never reach the likelihood.** This holds as before; the test that moves
    them now says in its title that it moves the newcomer's own steps.
 3. **τ_house = 0 gives the core exactly.** With every epoch scale at 0, μ and γ are identical,
@@ -1590,6 +1590,14 @@ The new form keeps three properties, each pinned by a fast test in
 A new mutant, `house_restart_absolute`, keeps the old form, so the slow lp tests show that the
 Stan file is not the old form. `permute_v2()` needed no change: a mean over the existing parties
 does not depend on their order, and the permutation tests pass.
+
+**The tests run against the new file.** The fast suite, `LC_ALL=en_US.UTF-8 Rscript
+tests/run.R`, and the lean preflight's slow Stan tests, `HARNESS_SLOW=1
+V2_STEPS=v2s-m5,perm LC_ALL=en_US.UTF-8 Rscript tests/run.R v2-stan`: `v2s-m5`'s tests, whose
+lp test tells `house_restart_absolute` apart from Stan, and the tests tagged `perm`, which
+since this change include `v2s-m1`'s reversed-order test, the house walk on reversed orders.
+The slow lp tests of `v2s-m1` to `v2s-m4`, whose mutant lists now hold
+`house_restart_absolute`, were not run against it: they make short fits.
 
 **The prior predictive.** `harness/v2/prior_predictive.md`, regenerated with `v2s-m5.json` and
 1,000 draws, came out byte-identical: no summary reads a house level after an entry (`house_d`
@@ -1603,8 +1611,9 @@ its forecast reads that newcomer's house levels from this prior.
 Diagnostics of that fit: (to be filled in by the controller).
 
 **What is not re-run.** `harness/tier0/*.md` and `harness/v2/recovery.md` stay the records of
-the Stan file before this change. The change touches only the prior of newcomer house levels
-under `epoch_bias = 1`, and the exact tests above pin its algebra.
+the Stan file before this change, and so do the fit records of this file's staircase
+sections above, with the reports in `harness/v2/steps/`. The change touches only the prior
+of newcomer house levels under `epoch_bias = 1`, and the exact tests above pin its algebra.
 
 ## Exit
 
