@@ -20,48 +20,49 @@ manifest.
 
 ## Tests
 
-From the project root: `LC_ALL=en_US.UTF-8 Rscript tests/run.R [filter]`, which runs the
-suite under testthat edition 3. Tests that need the snapshot call `skip_without_snapshot()`
-and skip without it. `tests/harness/test-generated.R` fails if a generated committed file
-that builds offline is not a fresh build. Slow tests (the sweep of every forecast day in
-`tests/harness/test-sweep.R`, the self-test's kjördæmi and seat scores, the R0 Stan tests
-and the cell runner's test fits of `r0` and `v2s-m0` on the 2024 eve, which compile with CmdStan) call `skip_unless_slow()` and
-run only with `HARNESS_SLOW=1` in the environment:
+From the project root: `LC_ALL=en_US.UTF-8 Rscript tests/run.R [filter]`, which runs the suite
+under testthat edition 3. Tests that need the snapshot call `skip_without_snapshot()` and skip
+without it. `tests/harness/test-generated.R` fails if a generated committed file that builds
+offline is not a fresh build. Slow tests (the sweep of every forecast day in
+`tests/harness/test-sweep.R`, the self-test's kjördæmi and seat scores, the R0 Stan tests and
+the cell runner's test fits of `r0` and `v2s-m0` on the 2024 eve, which compile with CmdStan)
+call `skip_unless_slow()` and run only with `HARNESS_SLOW=1` in the environment:
 `HARNESS_SLOW=1 LC_ALL=en_US.UTF-8 Rscript tests/run.R`. The one test that reads the live
 `data/` (the Kosning rows of `data/polling_data.csv`, in `tests/harness/test-election-data.R`)
 calls `skip_unless_live_data()` and runs only with `KOSNINGASPA_LIVE_DATA=1`, so the queue's
 preflight never depends on the live data:
-`KOSNINGASPA_LIVE_DATA=1 LC_ALL=en_US.UTF-8 Rscript tests/run.R election-data`. The tests of `Stan/forecast_v2.stan`
-in `tests/harness/test-v2-stan.R` are slow and named by the V2 step they test (`v2s-m0: …`);
-`V2_STEPS=<step>[,<step>…]` runs only those steps' tests (`skip_unless_step()`), and unset it
-runs them all. `HARNESS_V2_STAN=<absolute path>` runs that file's tests on a scratch copy of
-the Stan file instead, for a planted fault's RED: the file must exist and the path be
-absolute, or the test file stops as it loads, and the tests announce the path and its
-sha256, so every log records the switch; unset, they test `Stan/forecast_v2.stan` and print
-nothing. `queue.sh` refuses to start while it is set, so the preflight never certifies
-another file than the one the fits use. The slow `v2s-m5` tests, and so the queue's
-preflight, run the real `stage1_mu_f()`, which fits stage 1 into `results_root()/stage1/` on
-a cold cache or on a record written before the log φ_f near-cap counts were, or reads it
-there; that fit's warmup prints "Prior size parameter[5] is 0" notices, which are expected. The slow tests of the equivalence check in
-`tests/harness/test-v2-equivalence.R` are named and gated the same way (`v2s-p1: …`): each
-runs `R/harness/v2_equivalence.R` in a subprocess into a temporary CSV, one of them on a
-copy of the Stan file with a planted fault, which must fail for the constant's range alone. The
-slow test of `tests/harness/test-v2-recovery.R` runs `R/harness/recovery.R` in a subprocess,
-one replicate at 20 + 20 on 2021 f180 into a temporary results root, where it compiles its own
-copy of the Stan file; stage 1 is read from the real results root's cache (`stage1_mu_f(fit =
-FALSE)`, which never fits or writes) and copied into the temporary root, and the test is skipped
-on a cold cache (Recovery, below). The equivalence check's
-fast tests check the CSV writer, its provisional rows, and the command lines the script
-refuses before it compiles anything: they run it with `CMDSTAN` naming an empty directory,
-after checking that cmdstanr then finds no CmdStan, so a refusal that regressed past the
-first CmdStan call fails its message check. The model
-methods these tests use (`v2_model()`, `v2_methods()`, `short_fit_draws()`, …) are the
-module `R/harness/v2_methods.R`, which `tests/harness/helper-v2.R` imports, so the
-equivalence script runs the same heap-safe code. The fast test of the cell runner's 2017 refusal reads this repository's real
-freeze state, under a temporary `HARNESS_RESULTS`, and skips once the freeze is sealed. It
-runs the runner with `CMDSTAN` naming an empty directory, after checking that cmdstanr then
-finds no CmdStan, so a regressed refusal stops at its first cmdstanr call and can neither
-compile nor sample a 2017 cell.
+`KOSNINGASPA_LIVE_DATA=1 LC_ALL=en_US.UTF-8 Rscript tests/run.R election-data`. The tests of
+`Stan/forecast_v2.stan` in `tests/harness/test-v2-stan.R` are slow and named by the V2 step
+they test (`v2s-m0: …`); `V2_STEPS=<step>[,<step>…]` runs only those steps' tests
+(`skip_unless_step()`), and unset it runs them all. `HARNESS_V2_STAN=<absolute path>` runs that
+file's tests on a scratch copy of the Stan file instead, for a planted fault's RED: the file
+must exist and the path be absolute, or the test file stops as it loads, and the tests announce
+the path and its sha256, so every log records the switch; unset, they test
+`Stan/forecast_v2.stan` and print nothing. `queue.sh` refuses to start while it is set, so the
+preflight never certifies another file than the one the fits use. The slow `v2s-m5` tests, and
+so the queue's preflight, run the real `stage1_mu_f()`, which fits stage 1 into
+`results_root()/stage1/` on a cold cache or on a record written before the log φ_f near-cap
+counts were, or reads it there; that fit's warmup prints "Prior size parameter[5] is 0"
+notices, which are expected. The slow tests of the equivalence check in
+`tests/harness/test-v2-equivalence.R` are named and gated the same way (`v2s-p1: …`): each runs
+`R/harness/v2_equivalence.R` in a subprocess into a temporary CSV, one of them on a copy of the
+Stan file with a planted fault, which must fail for the constant's range alone. The slow test
+of `tests/harness/test-v2-recovery.R` runs `R/harness/recovery.R` in a subprocess, one
+replicate at 20 + 20 on 2021 f180 into a temporary results root, where it compiles its own copy
+of the Stan file; stage 1 is read from the real results root's cache
+(`stage1_mu_f(fit = FALSE)`, which never fits or writes) and copied into the temporary root,
+and the test is skipped on a cold cache (Recovery, below). The equivalence check's fast tests
+check the CSV writer, its provisional rows, and the command lines the script refuses before it
+compiles anything: they run it with `CMDSTAN` naming an empty directory, after checking that
+cmdstanr then finds no CmdStan, so a refusal that regressed past the first CmdStan call fails
+its message check. The model methods these tests use (`v2_model()`, `v2_methods()`,
+`short_fit_draws()`, …) are the module `R/harness/v2_methods.R`, which
+`tests/harness/helper-v2.R` imports, so the equivalence script runs the same heap-safe code.
+The fast test of the cell runner's 2017 refusal reads this repository's real freeze state,
+under a temporary `HARNESS_RESULTS`, and skips once the freeze is sealed. It runs the runner
+with `CMDSTAN` naming an empty directory, after checking that cmdstanr then finds no CmdStan,
+so a regressed refusal stops at its first cmdstanr call and can neither compile nor sample a
+2017 cell.
 
 The R code in `R/harness/` and `R/election_utils.R` writes every non-ASCII character as a
 `\uXXXX` escape and gives a non-ASCII name with `stats::setNames()`, never as a name tag;

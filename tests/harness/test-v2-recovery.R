@@ -383,7 +383,8 @@ test_that("a replicate's folder is reused when its meta.json matches, retired wh
 # A finished replicate folder under `base` with made-up outputs: its meta.json (the keys the
 # report and the stop rule read), ranks.csv from the rows of `ranks` whose replicate is `replicate`, a
 # key_diagnostics.csv with an lp__ row and a param_draws.parquet of 4 x 400 draws far from the caps;
-# `real` is the real cell's redraw reasons it records, `version` its recovery_version.
+# `real` is the real cell's redraw reasons it records, `version` its recovery_version (NULL: none
+# recorded).
 fake_replicate <- function(base, cell, seed, ranks, stan_sha = "s", replicate = paste0("r", seed), real = character(0),
                            version = rec$RECOVERY_VERSION) {
   id <- sprintf("recovery_%s_s%d", cell, seed)
@@ -396,6 +397,7 @@ fake_replicate <- function(base, cell, seed, ranks, stan_sha = "s", replicate = 
     cmdstan_version = "2.37.0", real_cell_redraw = I(real),
     diagnostics = list(divergent = 0L, max_rhat = 1.001, treedepth_hits = 0L, min_ess_bulk = 500, n_leapfrog = 1e5)
   )
+  meta <- meta[!vapply(meta, is.null, logical(1))]
   jsonlite::write_json(meta, file.path(dir, "meta.json"), auto_unbox = TRUE, digits = NA)
   mine <- ranks[ranks$replicate == replicate, ]
   readr::write_csv(
@@ -483,6 +485,15 @@ test_that("the report gives Decision 7's set its verdict, counts a replicate tha
   expect_error(
     rec$run_report(out),
     paste0("recovery_2021-09-25_2021-03-29_s200 were drawn under recovery_version ", rec$RECOVERY_VERSION - 1L, ", not the current ", rec$RECOVERY_VERSION),
+    fixed = TRUE
+  )
+  unlink(odd, recursive = TRUE)
+  # One whose meta.json records no version at all is refused and named too.
+  odd <- fake_replicate(results, DESIGNS$cell[2], 200L, ranks, replicate = "r3101", version = NULL)
+  expect_false("recovery_version" %in% names(jsonlite::read_json(file.path(odd, "meta.json"))))
+  expect_error(
+    rec$run_report(out),
+    paste0("recovery_2021-09-25_2021-03-29_s200 were drawn under recovery_version NA, not the current ", rec$RECOVERY_VERSION),
     fixed = TRUE
   )
   unlink(odd, recursive = TRUE)
@@ -635,6 +646,50 @@ test_that("one replicate at 20 + 20 on 2021 f180 runs end to end: its counts and
   expect_true(any(startsWith(text, "| 2021 f180 | 1 | 3101\u20133101 | 20 + 20 |") & endsWith(text, "| kept |")), label = shown(text))
   expect_true("REAL 2021 f180 under the redraw rule: kept" %in% report, label = shown(report))
   expect_true(file.exists(file.path(results, "recovery", "logs", "lane-B.log")))
+
+  # The provenance in meta.json is the lane's at its start. A git shim first on PATH answers
+  # `git rev-parse HEAD`, the one call of that form (run_provenance(), at lane start and again as
+  # the replicate ends; freeze.R's calls all start with -C), with one commit and from its second
+  # call on another, and passes every other call to the real git. A second replicate, seed 3102
+  # at 20 + 20, then records the first commit as git_head and the later one as git_head_end.
+  shim <- withr::local_tempdir("git-shim-")
+  calls <- file.path(shim, "calls")
+  first <- strrep("1", 40)
+  later <- strrep("2", 40)
+  real_git <- unname(Sys.which("git"))
+  expect_true(nzchar(real_git))
+  writeLines(c(
+    "#!/bin/sh",
+    "if [ \"$#\" -eq 2 ] && [ \"$1\" = rev-parse ] && [ \"$2\" = HEAD ]; then",
+    sprintf("  n=$(cat '%s' 2>/dev/null || echo 0); n=$((n + 1)); echo \"$n\" > '%s'", calls, calls),
+    sprintf("  if [ \"$n\" -eq 1 ]; then echo %s; else echo %s; fi", first, later),
+    "  exit 0",
+    "fi",
+    sprintf("exec '%s' \"$@\"", real_git)
+  ), file.path(shim, "git"))
+  Sys.chmod(file.path(shim, "git"), "0755")
+  withr::local_envvar(PATH = paste(shim, Sys.getenv("PATH"), sep = .Platform$path.sep))
+  expect_identical(unname(Sys.which("git")), file.path(shim, "git"))
+  shimmed <- run_recovery(c("2021-09-25", "2021-03-29", "3102", "1", "20", "20", "--lane=B"), results)
+  expect_null(attr(shimmed, "status"), label = shown(shimmed))
+  expect_identical(readLines(calls), "2")
+  rep2 <- file.path(results, "recovery", "2021-09-25_2021-03-29", "3102")
+  meta2 <- jsonlite::read_json(file.path(rep2, "meta.json"), simplifyVector = TRUE)
+  expect_identical(c(meta2$git_head, meta2$git_head_end), c(first, later))
+  expect_identical(jsonlite::read_json(file.path(rep2, "inputs", "inputs.json"), simplifyVector = TRUE)$git_head, first)
+  lane2 <- grep("^LANE B 2021-09-25_2021-03-29 seeds 3102..3102 ", shimmed, value = TRUE)
+  expect_length(lane2, 1)
+  expect_true(endsWith(lane2, paste0("git_head ", first, ", git_dirty ", meta2$git_dirty)), label = lane2)
+  expect_true(any(startsWith(shimmed, paste0(
+    "PROVENANCE recovery_2021-09-25_2021-03-29_s3102 changed while the lane ran: git_head ", first, " at lane start, ", later, " now; "
+  ))), label = shown(shimmed))
+  report2 <- run_recovery(c("report", md), results)
+  expect_null(attr(report2, "status"), label = shown(report2))
+  expect_true(paste0(
+    "- Replicates whose commit or tree changed while their lane ran: 1: recovery_2021-09-25_2021-03-29_s3102 (git_head ",
+    substr(first, 1, 12), " to ", substr(later, 1, 12), ", git_dirty ", meta2$git_dirty, " to ", meta2$git_dirty_end, ")"
+  ) %in% readLines(md, encoding = "UTF-8"), label = shown(readLines(md, encoding = "UTF-8")))
+
   # Nothing was written to the real results root's stage-1 cache.
   expect_identical(list.files(real_stage1, recursive = TRUE, all.files = TRUE), before)
 })
