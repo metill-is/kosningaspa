@@ -21,7 +21,9 @@ manifest.
 ## Tests
 
 From the project root: `LC_ALL=en_US.UTF-8 Rscript tests/run.R [filter]`, which runs the suite
-under testthat edition 3. Tests that need the snapshot call `skip_without_snapshot()` and skip
+under testthat edition 3. After testthat's summary, a run that passes prints each test file's
+real seconds, summed from `test_dir()`'s results, slowest first; a failing run stops before the
+table, with the exit status it always had. Tests that need the snapshot call `skip_without_snapshot()` and skip
 without it. `tests/harness/test-generated.R` fails if a generated committed file that builds
 offline is not a fresh build. Slow tests (the sweep of every forecast day in
 `tests/harness/test-sweep.R`, the self-test's kjördæmi and seat scores, the R0 Stan tests and
