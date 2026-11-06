@@ -2,7 +2,8 @@
 # built so far (step v2s-m1's epoch bias, §6.4, switch epoch_bias; step v2s-m2's newcomer
 # pooling, §6.4, switch newcomer_pool; step v2s-m3's election-day shock, §6.6, switch shock;
 # step v2s-m4's δ walk across elections, §6.7, switch delta_walk; step v2s-m5's fundamentals
-# pseudo-observation, §6.5, switch fundamentals), written from the spec and
+# pseudo-observation, §6.5, switch fundamentals; step v2s-m6's post-election multiplier, §6.2,
+# switch post_flex), written from the spec and
 # never from Stan/forecast_v2.stan, so that the Stan file is tested against an independent
 # oracle: the log density that log_prob(u, jacobian = FALSE) evaluates, a prior simulator, the
 # kjördæmi map M_e, the failure modes the tests use as mutants, and the map of a point and its
@@ -33,16 +34,18 @@ box::use(
 #' holding closed election e's z_e, and `s_bar_E`, the shock's scale s̄_E, an array of one.
 #' The δ walk's (§6.7, `delta_walk` = 1) come next, each size 0 with `delta_walk` = 0:
 #' `s_zeta_raw`, the walk's per-party scales over s̄_ζ (s_ζ = s̄_ζ `s_zeta_raw`), and
-#' `s_bar_zeta`, s̄_ζ, an array of one. `delta_coord` is last, the δ walk held centred at the
+#' `s_bar_zeta`, s̄_ζ, an array of one. `delta_coord` comes next, the δ walk held centred at the
 #' closed elections (`delta_form` = 1, §6.7): n_closed × (K − 1) × (P − 1), each closed
-#' election's coordinates of δ_e[2:K, 2:P]; size 0 in the reference forms.
+#' election's coordinates of δ_e[2:K, 2:P]; size 0 in the reference forms. `tau_post` is last,
+#' the post-election multiplier τ_post (§6.2, `post_flex` = 1), an array of one, size 0 with
+#' `post_flex` = 0.
 #' @export
 V2_CORE_PARS <- tibble::tibble(
   name = c(
     "theta1", "anchor_w", "z_walk", "sigma", "L_Omega", "tau_camp", "mu1", "house_raw", "sigma_gamma", "new_raw",
     "log_phi_u", "mu_phi", "sigma_phi", "log_phi_K_u", "log_kappa_u", "delta_raw", "s_delta0_raw", "mu_sd",
     "tau_sd", "nu", "mu_step_raw", "house_step_raw", "tau_mu", "tau_mu_A", "tau_house", "m_new", "s_new", "z_shock",
-    "s_bar_E", "s_zeta_raw", "s_bar_zeta", "delta_coord"
+    "s_bar_E", "s_zeta_raw", "s_bar_zeta", "delta_coord", "tau_post"
   ),
   type = c(
     "sum_to_zero_vector[P]", "array[walk_form * n_closed] vector[P - 1]", "matrix[P - 1, G - 1 - walk_form * n_closed]",
@@ -55,7 +58,8 @@ V2_CORE_PARS <- tibble::tibble(
     "array[H] matrix[P, epoch_bias * (n_epoch - 1)]", "array[epoch_bias] real<lower=0>",
     "array[epoch_bias] real<lower=0>", "array[epoch_bias] real<lower=0>", "array[newcomer_pool] real",
     "array[newcomer_pool] real<lower=0>", "matrix[P, shock * n_closed]", "array[shock] real<lower=0>",
-    "vector<lower=0>[delta_walk * P]", "array[delta_walk] real<lower=0>", "array[delta_form * n_closed] matrix[K - 1, P - 1]"
+    "vector<lower=0>[delta_walk * P]", "array[delta_walk] real<lower=0>", "array[delta_form * n_closed] matrix[K - 1, P - 1]",
+    "array[post_flex] real<lower=0>"
   )
 )
 
@@ -124,22 +128,31 @@ V2_CORE_PARS <- tibble::tibble(
 #' - `fund_uncentred`: μ_f's mean is log π_nat,E[S_f] itself, not centred over S_f. The mean
 #'   of the log of shares below 1 is negative, so every cell exercises it, the 2017 cells'
 #'   (whose μ_f is the placeholder's zeros) included.
+#'
+#' The post-election multiplier's (`post_flex`, §6.2):
+#' - `post_unscaled`: the walk's steps in a post window scale by √Δ (1 + τ_camp c) alone, τ_post
+#'   left out of the walk while its prior stays. Any closed election whose post window holds a
+#'   grid step exercises it, and the builder puts the window's end on the grid, so every cell
+#'   with a closed election in its window does, the 2017 cells' included.
 #' @export
 V2_MUTANTS <- tibble::tibble(
   mutant = c(
     "positional_gather", "previous_w", "next_epoch_delta", "close_last_kjordaemi", "conditional_walk",
     "house_walk_from_first_poll", "newcomer_mean_of_mu1", "no_mu_restart", "no_house_restart",
     "house_restart_absolute", "newcomer_mean_over_all", "shock_unscaled", "delta_years_unscaled", "no_delta_restart",
-    "delta_entry_leak", "fund_uncentred"
+    "delta_entry_leak", "fund_uncentred", "post_unscaled"
   ),
-  switch = c(rep(NA_character_, 5), rep("epoch_bias", 5), "newcomer_pool", "shock", rep("delta_walk", 3), "fundamentals"),
-  min_closed = c(1L, 2L, 2L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L)
+  switch = c(
+    rep(NA_character_, 5), rep("epoch_bias", 5), "newcomer_pool", "shock", rep("delta_walk", 3), "fundamentals",
+    "post_flex"
+  ),
+  min_closed = c(1L, 2L, 2L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L)
 )
 
 #' The component switches the reference has (each 0 or 1), the switches of the components it
-#' does not have yet (none: step v2s-m5 built the last), and the parameterisation switches
+#' does not have yet (none: step v2s-m6 built the last), and the parameterisation switches
 #' whose reference form is 0.
-BUILT_SWITCHES <- c("epoch_bias", "newcomer_pool", "shock", "delta_walk", "fundamentals")
+BUILT_SWITCHES <- c("epoch_bias", "newcomer_pool", "shock", "delta_walk", "fundamentals", "post_flex")
 FORM_SWITCHES <- c("walk_form", "delta_form")
 COMPONENT_SWITCHES <- setdiff(V2_SWITCHES, c(FORM_SWITCHES, BUILT_SWITCHES))
 
@@ -149,6 +162,7 @@ SIGMA_DF <- 3
 SIGMA_SCALE <- 0.02
 LKJ_ETA <- 10
 TAU_CAMP_RATE <- 1
+TAU_POST_RATE <- 1
 NU_SD <- 2
 #' The newcomer contrast with `newcomer_pool` = 0: m_new = 0 and s_new = 0.2023, the median
 #' of half-N(0, 0.3) to four digits; with `newcomer_pool` = 1, m_new ~ N(0, 0.3) and
@@ -272,12 +286,18 @@ chol_of_gram <- function(B) {
 #' The walk's steps in coordinates 2:P, sqrt(Δ_i) s_i L_walk z_i, one column per grid step.
 walk_steps <- function(L_walk, z, scale) (L_walk %*% z) * rep(scale, each = nrow(L_walk))
 
-#' The walk's per-step scale sqrt(Δ_i) s_i, with s_i = 1 + τ_camp c_i (§6.2).
+#' The walk's per-step scale sqrt(Δ_i) s_i, with s_i = 1 + τ_camp c_i, plus τ_post q_i with
+#' `post_flex` = 1, q_i the step's post-window flag `data$post` (§6.2).
 #' @param tau_camp the campaign multiplier τ_camp
 #' @param data a `v2_stan_data()` data list
+#' @param tau_post the post-election multiplier τ_post, read only with `data$post_flex` = 1
 #' @return the G − 1 scales, one per grid step
 #' @export
-walk_scale <- function(tau_camp, data) sqrt(c(data$delta_days)) * (1 + tau_camp * c(data$campaign))
+walk_scale <- function(tau_camp, data, tau_post = 0) {
+  s <- 1 + tau_camp * c(data$campaign)
+  if (identical(as.integer(data$post_flex), 1L)) s <- s + as.numeric(tau_post) * c(data$post)
+  sqrt(c(data$delta_days)) * s
+}
 
 #' The rows 2:P of C diag(σ) L, C = I − 11ᵀ/P: their Gram matrix is (CΣC)[2:P, 2:P] for
 #' Σ = diag(σ) Ω diag(σ), Ω = LLᵀ.
@@ -299,22 +319,31 @@ walk_factor <- function(sigma, L_Omega) chol_of_gram(walk_rows(sigma, L_Omega))
 #' variance of a walk step per unit Δ s² (§6.2), with Σ = diag(σ) Ω diag(σ), Ω = L_Ω L_Ωᵀ and
 #' C = I − 11ᵀ/P over all P parties, formed here as the matrix product; the walk's variance
 #' over `weight_time` days whose last `campaign_days` are in the campaign, V_w,p =
-#' v_p [(weight_time − campaign_days) + campaign_days (1 + τ_camp)²]; and
+#' v_p [(weight_time − campaign_days) + campaign_days (1 + τ_camp)²], and with `post_flex` = 1
+#' v_p [(weight_time − campaign_days − d) + d (1 + τ_post)² + campaign_days (1 + τ_camp)²], d =
+#' `weight_post_days`, the window's days in a post window; and
 #' τ_f,p = √(V_w,p (1 − w) / w), w = `desired_weight`, the sd that gives the pseudo-observation
 #' the weight w against V_w: (1/τ_f²) / (1/τ_f² + 1/V_w) = w.
 #' @param sigma the P walk scales σ
 #' @param L_Omega the Cholesky factor of Ω (P × P, or its P² elements column-major)
 #' @param tau_camp the campaign multiplier τ_camp
-#' @param data a `v2_stan_data()` data list: `P`, `sf_idx`, `weight_time`, `campaign_days` and
-#'   `desired_weight` are read
+#' @param data a `v2_stan_data()` data list: `P`, `sf_idx`, `weight_time`, `campaign_days`,
+#'   `desired_weight`, `post_flex` and, with `post_flex` = 1, `weight_post_days` are read
+#' @param tau_post the post-election multiplier τ_post, read only with `data$post_flex` = 1
 #' @return `list(v, V_w, tau_f)`, each as long as `data$sf_idx`
 #' @export
-fund_scales <- function(sigma, L_Omega, tau_camp, data) {
+fund_scales <- function(sigma, L_Omega, tau_camp, data, tau_post = 0) {
   P <- data$P
   Sigma <- tcrossprod(as.numeric(sigma) * matrix(as.numeric(L_Omega), P, P))
   C <- diag(P) - 1 / P
   v <- diag(C %*% Sigma %*% C)[as.integer(c(data$sf_idx))]
-  V_w <- v * ((data$weight_time - data$campaign_days) + data$campaign_days * (1 + as.numeric(tau_camp))^2)
+  V_w <- if (identical(as.integer(data$post_flex), 1L)) {
+    d <- data$weight_post_days
+    v * ((data$weight_time - data$campaign_days - d) + d * (1 + as.numeric(tau_post))^2 +
+      data$campaign_days * (1 + as.numeric(tau_camp))^2)
+  } else {
+    v * ((data$weight_time - data$campaign_days) + data$campaign_days * (1 + as.numeric(tau_camp))^2)
+  }
   w <- data$desired_weight
   list(v = v, V_w = V_w, tau_f = sqrt(V_w * (1 - w) / w))
 }
@@ -442,7 +471,8 @@ lkj_corr_cholesky_rng <- function(P, eta) {
 #' `delta_raw` is n_epoch × K × P, `s_zeta_raw` P and `s_bar_zeta` 1; with 0, `delta_raw` is
 #' 1 × K × P and the other two 0. With `delta_form` = 1 (which needs `delta_walk` = 1),
 #' `delta_coord` is n_closed × (K − 1) × (P − 1) and `delta_raw` 1 × K × P, the open epoch's ζ;
-#' with 0, `delta_coord` is 0 × (K − 1) × (P − 1).
+#' with 0, `delta_coord` is 0 × (K − 1) × (P − 1). With `post_flex` = 1, `tau_post` is 1; with
+#' 0, 0.
 #' @param data a `v2_stan_data()` data list
 #' @return a named list of integer vectors
 #' @export
@@ -463,6 +493,8 @@ v2_par_dims <- function(data) {
   df <- as.integer(data$delta_form)
   check(length(df) == 1 && df %in% 0:1, "data$delta_form must be 0 or 1")
   check(df <= dw, "data$delta_form = 1 needs delta_walk = 1")
+  pf <- as.integer(data$post_flex)
+  check(length(pf) == 1 && pf %in% 0:1, "data$post_flex must be 0 or 1")
   list(
     theta1 = P, anchor_w = c(n_anchor, P - 1L), z_walk = c(P - 1L, data$G - 1L - n_anchor), sigma = P,
     L_Omega = c(P, P), tau_camp = 1L, mu1 = P,
@@ -472,7 +504,7 @@ v2_par_dims <- function(data) {
     s_delta0_raw = P, mu_sd = 1L, tau_sd = 1L, nu = c(data$J, P), mu_step_raw = c(P, n_step),
     house_step_raw = c(data$H, P, n_step), tau_mu = eb, tau_mu_A = eb, tau_house = eb, m_new = np, s_new = np,
     z_shock = c(P, sh * as.integer(data$n_closed)), s_bar_E = sh, s_zeta_raw = dw * P, s_bar_zeta = dw,
-    delta_coord = c(df * as.integer(data$n_closed), data$K - 1L, P - 1L)
+    delta_coord = c(df * as.integer(data$n_closed), data$K - 1L, P - 1L), tau_post = pf
   )
 }
 
@@ -512,6 +544,18 @@ check_core <- function(data, mutant = "none") {
       "data$weight_time must be at least data$campaign_days, itself at least 1"
     )
   }
+  if (identical(as.integer(data$post_flex), 1L)) {
+    q <- c(data$post)
+    check(length(q) == data$G - 1L && all(q %in% 0:1), "data$post must be G - 1 flags, each 0 or 1")
+    check(!any(q == 1L & c(data$campaign) == 1L), "no step may be in both a campaign and a post window (data$post, data$campaign)")
+    if (identical(as.integer(data$fundamentals), 1L)) {
+      d <- data$weight_post_days
+      check(
+        length(d) == 1 && is.finite(d) && d >= 0 && d <= data$weight_time - data$campaign_days,
+        "data$weight_post_days must be one number in [0, weight_time - campaign_days]"
+      )
+    }
+  }
   check(
     is.character(mutant) && length(mutant) == 1 && mutant %in% c("none", v2_mutants(data)),
     paste0("mutant ", mutant, " is not one of none, ", paste(v2_mutants(data), collapse = ", "))
@@ -549,7 +593,7 @@ core_pars <- function(pars, data) {
   check(all(apply(p$nu, 1, zero_sum)), "a row of nu does not sum to 0")
   positive <- c(
     "sigma", "tau_camp", "sigma_gamma", "sigma_phi", "tau_sd", "tau_mu", "tau_mu_A", "tau_house", "s_new", "s_bar_E",
-    "s_zeta_raw", "s_bar_zeta"
+    "s_zeta_raw", "s_bar_zeta", "tau_post"
   )
   for (n in positive) {
     check(all(p[[n]] > 0), paste(n, "must be positive"))
@@ -620,13 +664,15 @@ delta_epochs <- function(zeta, s_delta0, s_zeta, data, close_last = FALSE, years
 #' `phi_init`, s_δ0, s_ζ, π_nat at each national poll's date and the closed elections' shocks
 #' ε. `conditional`, `close_last`, `house_from_start`, `entry_mean_mu1`, `mu_carry`,
 #' `house_carry`, `house_absolute`, `entry_mean_all`, `unscaled`, `years_unscaled`,
-#' `delta_carry` and `entry_leak` switch to the `conditional_walk`, `close_last_kjordaemi`,
-#' `house_walk_from_first_poll`, `newcomer_mean_of_mu1`, `no_mu_restart`, `no_house_restart`,
-#' `house_restart_absolute`, `newcomer_mean_over_all`, `shock_unscaled`,
-#' `delta_years_unscaled`, `no_delta_restart` and `delta_entry_leak` mutants.
+#' `delta_carry`, `entry_leak` and `post_unscaled` switch to the `conditional_walk`,
+#' `close_last_kjordaemi`, `house_walk_from_first_poll`, `newcomer_mean_of_mu1`,
+#' `no_mu_restart`, `no_house_restart`, `house_restart_absolute`, `newcomer_mean_over_all`,
+#' `shock_unscaled`, `delta_years_unscaled`, `no_delta_restart`, `delta_entry_leak` and
+#' `post_unscaled` mutants.
 natural <- function(p, data, conditional = FALSE, close_last = FALSE, house_from_start = FALSE, entry_mean_mu1 = FALSE,
                     mu_carry = FALSE, house_carry = FALSE, house_absolute = FALSE, entry_mean_all = FALSE,
-                    unscaled = FALSE, years_unscaled = FALSE, delta_carry = FALSE, entry_leak = FALSE) {
+                    unscaled = FALSE, years_unscaled = FALSE, delta_carry = FALSE, entry_leak = FALSE,
+                    post_unscaled = FALSE) {
   P <- data$P
   G <- data$G
   H <- data$H
@@ -636,7 +682,7 @@ natural <- function(p, data, conditional = FALSE, close_last = FALSE, house_from
 
   # §6.2: coordinates 2:P step by sqrt(Δ_i) s_i L_walk z_i, L_walk = chol((CΣC)[2:P, 2:P]),
   # and party 1 by minus their sum, so every θ_t sums to 0 and each step's covariance is
-  # Δ_i s_i² CΣC.
+  # Δ_i s_i² CΣC; s_i = 1 + τ_camp c_i, plus τ_post q_i with post_flex = 1.
   # The sums are compensated, so θ does not depend on the party order beyond a rounding.
   L_walk <- if (conditional) {
     Sigma <- tcrossprod(p$sigma * p$L_Omega)
@@ -645,7 +691,7 @@ natural <- function(p, data, conditional = FALSE, close_last = FALSE, house_from
   } else {
     walk_factor(p$sigma, p$L_Omega)
   }
-  step <- walk_steps(L_walk, p$z_walk, walk_scale(p$tau_camp, data))
+  step <- walk_steps(L_walk, p$z_walk, walk_scale(p$tau_camp, data, if (post_unscaled) 0 else p$tau_post))
   step <- rbind(-colsums_exact(step), step)
   theta <- cumsum_rows(p$theta1, step)
 
@@ -848,7 +894,7 @@ fund_normal <- function(p, nat, data, uncentred = FALSE) {
   share <- numeric(data$P)
   for (k in seq_len(data$K)) share[A] <- share[A] + data$w[e, k] * softmax(nat$theta[A, G] + nat$delta[e, k, A])
   x <- log(share[as.integer(c(data$sf_idx))])
-  list(mean = if (uncentred) x else x - mean(x), tau_f = fund_scales(p$sigma, p$L_Omega, p$tau_camp, data)$tau_f)
+  list(mean = if (uncentred) x else x - mean(x), tau_f = fund_scales(p$sigma, p$L_Omega, p$tau_camp, data, p$tau_post)$tau_f)
 }
 
 #' The fundamentals pseudo-observation's log density, Σ_p log N(μ_f,p | x_c,p, τ_f,p) over S_f
@@ -865,7 +911,7 @@ fund_lp <- function(p, nat, data, uncentred = FALSE) {
 #' log-Jacobians log(cap − init) + u, which the model block adds by hand.
 prior_terms <- function(p, nat, data) {
   ld <- function(x, mean = 0, sd = 1) sum(stats::dnorm(x, mean, sd, log = TRUE))
-  c(
+  out <- c(
     theta1 = ld(p$theta1, 0, THETA1_SD),
     z_walk = ld(p$z_walk),
     sigma = sum(log(2) + stats::dt(p$sigma / SIGMA_SCALE, SIGMA_DF, log = TRUE) - log(SIGMA_SCALE)),
@@ -900,6 +946,9 @@ prior_terms <- function(p, nat, data) {
     s_zeta_raw = sum(log(2) + stats::dnorm(p$s_zeta_raw, 0, 1, log = TRUE)),
     s_bar_zeta = sum(log(2) + stats::dnorm(p$s_bar_zeta, 0, data$prior_s_bar_zeta, log = TRUE))
   )
+  # WHY: with post_flex = 0 the term is left out, so every earlier step sums the same terms as before.
+  if (identical(as.integer(data$post_flex), 1L)) out <- c(out, tau_post = stats::dexp(p$tau_post, TAU_POST_RATE, log = TRUE))
+  out
 }
 
 #' The reference log density of the V2 core (spec §6.2–§6.7) and its built components (the
@@ -910,7 +959,8 @@ prior_terms <- function(p, nat, data) {
 #' `s_zeta_raw` ~ half-N(0, 1) and s̄_ζ ~ half-N(0, `prior_s_bar_zeta`); the fundamentals
 #' pseudo-observation, §6.5, with `fundamentals` = 1: μ_f ~ N(x_c, τ_f) over S_f, x_c the
 #' centred log π_nat,E[S_f], a likelihood term on data with no new parameter, `fund_normal()`
-#' and `fund_scales()`): what Stan's
+#' and `fund_scales()`; the post-election multiplier, §6.2, with `post_flex` = 1: each step in
+#' a post window scaled by 1 + τ_camp c + τ_post, τ_post ~ exponential(1)): what Stan's
 #' `log_prob(u, jacobian = FALSE)`
 #' evaluates in the reference forms, up to a constant. It is the density of the parameters
 #' on their constrained values (the §6.10
@@ -925,8 +975,8 @@ prior_terms <- function(p, nat, data) {
 #' @param pars a named list as `constrain_variables(..., transformed_parameters = FALSE)`
 #'   returns it: the `V2_CORE_PARS`, each in cmdstanr's column-major order
 #' @param data a `v2_stan_data()` data list with `walk_form` and `delta_form` 0 and each
-#'   component switch (`epoch_bias`, `newcomer_pool`, `shock`, `delta_walk`, `fundamentals`)
-#'   0 or 1; with `fundamentals` = 1, at least two distinct parties in `sf_idx`, each existing
+#'   component switch (`epoch_bias`, `newcomer_pool`, `shock`, `delta_walk`, `fundamentals`,
+#'   `post_flex`) 0 or 1; with `fundamentals` = 1, at least two distinct parties in `sf_idx`, each existing
 #'   at E, and `mu_f` as long, finite
 #' @param mutant "none", or a mutant of `v2_mutants(data)` (`V2_MUTANTS`)
 #' @return numeric(1). An error, "v2 reference: ...", for another form or switch, another
@@ -944,7 +994,7 @@ v2_lp_ref <- function(pars, data, mutant = "none") {
     mu_carry = mutant == "no_mu_restart", house_carry = mutant == "no_house_restart",
     house_absolute = mutant == "house_restart_absolute", entry_mean_all = mutant == "newcomer_mean_over_all", unscaled = mutant == "shock_unscaled",
     years_unscaled = mutant == "delta_years_unscaled", delta_carry = mutant == "no_delta_restart",
-    entry_leak = mutant == "delta_entry_leak"
+    entry_leak = mutant == "delta_entry_leak", post_unscaled = mutant == "post_unscaled"
   )
   rows <- dm_rows(p, nat, data, positional = mutant == "positional_gather", next_delta = mutant == "next_epoch_delta")
   lik <- vapply(rows, \(r) dirmult_lpmf(row_counts(data, r), r$alpha), numeric(1))
@@ -1055,6 +1105,10 @@ draw_prior <- function(data) {
   out$s_bar_zeta <- array(abs(stats::rnorm(dw, 0, data$prior_s_bar_zeta)), dw)
   # WHY: size 0 in the reference forms, the only ones drawn here; it draws nothing.
   out$delta_coord <- array(numeric(0), c(0L, K - 1L, P - 1L))
+  # WHY: drawn last, so that with post_flex = 0 (nothing drawn) every other parameter's draw is
+  # the same as before the post-election multiplier existed.
+  pf <- as.integer(data$post_flex)
+  out$tau_post <- array(stats::rexp(pf, TAU_POST_RATE), pf)
   out
 }
 
@@ -1071,8 +1125,8 @@ draw_prior <- function(data) {
 #'     Ω ~ LKJ(10) by the C-vine, and each bounded concentration from its normal below its
 #'     cap (the model's prior), the epoch bias's τ_μ, τ_μ,A and τ_house half-normal, the
 #'     newcomer pool's m_new normal and s_new half-normal, the shock's z_shock standard
-#'     normal and s̄_E half-normal, and the δ walk's ζ standard normal and `s_zeta_raw` and
-#'     s̄_ζ half-normal;
+#'     normal and s̄_E half-normal, the δ walk's ζ standard normal and `s_zeta_raw` and
+#'     s̄_ζ half-normal, and the post-election multiplier's τ_post exponential(1);
 #'   - `truth`, `v2_natural(pars, data)`;
 #'   - `data`, the input with `y_nat`, `y_kd` and `y_res` replaced (when `observe`): each
 #'     row keeps its total and its reported parties (`idx_*`, `n_rep_*`), its other cells
@@ -1187,7 +1241,7 @@ permute_v2 <- function(pars, data, party_perm, kd_perm) {
   # point, then refined, so that the reference's walk reproduces the permuted steps to a
   # rounding; a separately computed factor would leave errors of order eps cond(L_walk).
   L_walk <- walk_factor(sigma, L)
-  scale <- walk_scale(p$tau_camp, data)
+  scale <- walk_scale(p$tau_camp, data, p$tau_post)
   target <- nat$step[pp, , drop = FALSE][-1, , drop = FALSE]
   z_walk <- forwardsolve(L_walk, target / rep(scale, each = P - 1))
   for (i in 1:3) z_walk <- z_walk - forwardsolve(L_walk, (walk_steps(L_walk, z_walk, scale) - target) / rep(scale, each = P - 1))
@@ -1208,7 +1262,7 @@ permute_v2 <- function(pars, data, party_perm, kd_perm) {
     z_shock = p$z_shock[pp, , drop = FALSE], s_bar_E = pars$s_bar_E,
     # WHY: numeric(0)[pp] would be P NAs.
     s_zeta_raw = if (length(p$s_zeta_raw)) p$s_zeta_raw[pp] else p$s_zeta_raw, s_bar_zeta = pars$s_bar_zeta,
-    delta_coord = array(numeric(0), c(0L, K - 1L, P - 1L))
+    delta_coord = array(numeric(0), c(0L, K - 1L, P - 1L)), tau_post = pars$tau_post
   )
   ljac <- function(L) sum((P - 2:P) * log(diag(L)[2:P]))
   structure(list(pars = out_pars, data = out_data), ljac_L_Omega = ljac(L) - ljac(p$L_Omega))

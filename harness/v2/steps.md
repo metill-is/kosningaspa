@@ -1817,3 +1817,75 @@ the project root:
 LC_ALL=en_US.UTF-8 Rscript R/harness/tier0_report.R v2s-p4 harness/runs/v2s-p4.txt harness/v2/steps/v2s-p4.md
 LC_ALL=en_US.UTF-8 Rscript R/harness/compare_runs.R stop v2s-p4 harness/runs/v2s-p4.txt
 ```
+
+## v2s-m6: the post-election multiplier (M-step, lean; built, not yet fitted)
+
+**Why.** Scored against the 2024 model on 2024 eve (`harness/v2/scoring.md`), V2's MAE is 1.36
+over all parties against R0's 1.03, mostly from Miðflokkurinn, Flokkur fólksins and Viðreisn.
+V2's open-epoch industry bias follows how the polls moved just after the previous election more
+than how they missed it: across parties its 2021 epoch bias correlates 0.91 with the 90-day
+post-election gap (the mean poll in the 90 days after the election against the result) and 0.67
+with the 2021 final-poll error, and its 2017 epoch bias 0.88 and 0.73. Support moves fast after
+an Icelandic election, during government formation, while the campaign multiplier leaves the
+walk stiff there, so those moves were read as bias. The fix lets the walk move there as it does
+in a campaign (spec §6.2, added to the design note on 6 Nov 2026).
+
+**What was built.** `post_flex`, an eighth switch of `V2_SWITCHES`, and `post_days`, a config
+key every V2 config carries (90). With `post_flex = 1`:
+- the builder flags each grid step within `post_days` after a closed election (`post`), puts each
+  window's end on the grid (`grid_dates(info, campaign_days, post_days)`; the end may lie after
+  F, as the campaign start may), and refuses a window that reaches the next election's
+  campaign, so no step is in both;
+- each flagged step scales by 1 + τ_post, as a campaign step by 1 + τ_camp, with τ_post ~
+  exponential(1), through `step_scale()`, which both walk forms use;
+- the fundamentals term's V_w counts the window's `weight_post_days` days in a post window at
+  (1 + τ_post)²; that is 0 on every harness cell;
+- `tau_post` is the last parameter, drawn last by `v2_simulate()`, extracted into
+  `param_draws.parquet`, and added to `OFF_SCALES`;
+- the reference adds the same multiplier and the mutant `post_unscaled` (τ_post left out of the
+  walk, its prior kept), which every cell with a closed election exercises;
+- the prior predictive check adds `post_window`, a 20% party's walk change over one post window.
+
+`v2s-m6` (`harness/configs/steps/v2s-m6.json`) is `v2.json` with `post_flex = 1` and nothing
+else; every other V2 config sets `post_flex = 0`. With `post_flex = 0` the flags are all 0, the
+grid gains no date, the reference sums the same terms as before, and Stan's scale is computed
+by the same operations as before.
+
+**Checks at build time.**
+- **Fast suite:** `LC_ALL=en_US.UTF-8 Rscript tests/run.R`, 0 failures, 6,725 passes, 73
+  skipped (the slow tests). Eight existing tests pinned the lists this step extends (the switch
+  count, the data fields' order and types, the extracted variables and their switches, the last
+  core parameter, a hand-built fixture); each got the new entries only, with the owner's yes.
+- **Stan against the reference:** `HARNESS_SLOW=1 V2_STEPS=v2s-m6 LC_ALL=en_US.UTF-8 Rscript
+  tests/run.R v2-stan`, 0 failures, 89 passes, 6 min 21 s. The points are 20 posterior and 10
+  off-posterior draws of a 50 + 20 short fit per cell, plus 10 prior draws; 2017 eve gets the
+  prior draws alone.
+
+  | Cell | Points | lp_stan − lp_ref range | Tolerance | `post_unscaled`, range / (100 tol) |
+  |---|---|---|---|---|
+  | 2024 eve | 40 | 8.73e-10 | 1.61e-3 | 4.48e5 |
+  | 2021 f180 | 40 | 5.53e-10 | 4.38e-4 | 2.81e5 |
+  | 2017 eve | 10 | 6.55e-11 | 1.38e-4 | 1.36e5 |
+
+  Every earlier mutant is exercised and rejected on the 2024 and 2021 cells; on 2017 eve every
+  one but `house_walk_from_first_poll`, as before. At `weight_post_days` = 30 on 2024 eve, Stan
+  matches the reference (range 8.73e-10), and a term that ignored the post days would miss by
+  700 × (100 tol). Stan adds exactly one unconstrained parameter, and on `post_flex = 0`'s data
+  it matches the reference without the switch. Transformed data refuses a post flag with the
+  switch off or inside a campaign, and more post days than weight_time − campaign_days.
+- **Prior predictive:** re-run on `v2s-m6.json` (`harness/v2/prior_predictive.md`). Every
+  config row passes as before. `post_window`'s 95% quantile is 13.96 pp on 2024 eve and 13.53
+  on 2021 f180, inside [2, 30], against `walk_180`'s 10.72 and 9.75. The report's other
+  numbers moved since v2s-m5's run because the snapshot now holds the public kjördæmi polls
+  (J 22 and 6, against 9 and 1).
+
+**Not done at build time.**
+- The fits. `harness/runs/v2s-m6.txt` lists v2s-m6 and V2 at 400 + 400, seed 2701, on 2024 eve
+  and 2021 f180. Changing `Stan/forecast_v2.stan` and `v2.json` makes every finished V2-family
+  run stale for the queue, so it refits V2 too, moving the old fits to `results/harness/_stale/`
+  (the scorer can still read them). A refitted V2 whose draws match its stale fit would also
+  show that `post_flex = 0` reproduces V2.
+- The scoring of v2s-m6 against V2 and R0 on MAE (`R/harness/score_report.R`).
+- The anchored walk with `post_flex = 1`: it uses the same `step_scale()`, but no config
+  combines the two and the equivalence check has not been run on it.
+- The earlier steps' slow lp tests: only v2s-m6's were run.

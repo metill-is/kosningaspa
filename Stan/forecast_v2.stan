@@ -27,8 +27,20 @@
 // Step v2s-m5 builds fundamentals = 1 (§6.5): stage 1's mu_f enters as data, mu_f ~ N(x_c,
 // tau_f) over S_f, x_c the log of the latent national share at E (no shock) centred over S_f,
 // tau_f = sqrt(V_w (1 - w) / w) and V_w the walk's variance over weight_time days, the last
-// campaign_days of them in the campaign. It adds no parameter.
+// campaign_days of them in the campaign. It adds no parameter. Step v2s-m6 builds post_flex =
+// 1 (§6.2): the walk's steps in the post_days after each closed election (the data's post
+// flags) scale by 1 + tau_post, as the campaign's by 1 + tau_camp, tau_post ~ exponential(1),
+// so that real moves just after an election go to the walk and not to the next epoch's bias;
+// V_w counts the post days of its window (weight_post_days). It adds one parameter, tau_post.
 functions {
+  // The walk's per-step scale sqrt(Delta_i) s_i (§6.2): s_i = 1 + tau_camp c_i, plus tau_post q_i
+  // with post_flex = 1, where tau_post is an array of size post_flex and q the post flags.
+  vector step_scale(vector sqrt_delta, real tau_camp, vector campaign_v, array[] real tau_post, vector post_v) {
+    vector[rows(sqrt_delta)] s = 1 + tau_camp * campaign_v;
+    if (size(tau_post) > 0) s += tau_post[1] * post_v;
+    return sqrt_delta .* s;
+  }
+
   // The map M_e of §6.7 on a K x P matrix: subtract each party's w-weighted mean over the
   // kjordaemi, then centre each kjordaemi over the parties. The result's rows sum to 0 and
   // its w-weighted column sums are 0, and it closes on no kjordaemi and no party.
@@ -137,6 +149,7 @@ data {
   int<lower=2> n_epoch;                               // epochs; epoch n_epoch is open and holds F
   vector<lower=0>[G - 1] delta_days;                  // [G - 1] days of each grid step
   array[G - 1] int<lower=0, upper=1> campaign;        // [G - 1] 1 on a step inside an election's campaign
+  array[G - 1] int<lower=0, upper=1> post;            // [G - 1] 1 on a step inside a closed election's post window (post_flex = 1)
   array[G] int<lower=1, upper=n_epoch> grid_epoch;    // [G] each date's epoch; an election day closes its epoch
   array[G, P] int<lower=0, upper=1> exists;           // [G, P] 1 from a party's first non-zero poll on
   matrix<lower=0>[n_epoch, K] w;                      // [n_epoch, K] kjordaemi vote weights; the open epoch's are the previous election's
@@ -186,6 +199,7 @@ data {
   real<lower=0, upper=1> desired_weight;              // w
   real<lower=0> weight_time;                          // days
   int<lower=1> campaign_days;                         // days
+  real<lower=0> weight_post_days;                     // days of the fundamentals window before the campaign in a post window
   real<lower=0> delta_years_bar;                      // years
 
   // Prior locations and scales (Tier 3b's and Decision 1's)
@@ -197,12 +211,13 @@ data {
   real<lower=0> prior_sd_mu1;
   real<lower=0> prior_rate_sigma_gamma;
 
-  // Switches: five components, then two parameterisations (V2_SWITCHES)
+  // Switches: six components, then two parameterisations (V2_SWITCHES)
   int<lower=0, upper=1> epoch_bias;
   int<lower=0, upper=1> newcomer_pool;
   int<lower=0, upper=1> shock;
   int<lower=0, upper=1> delta_walk;
   int<lower=0, upper=1> fundamentals;
+  int<lower=0, upper=1> post_flex;
   int<lower=0, upper=1> walk_form;
   int<lower=0, upper=1> delta_form;
 }
@@ -263,6 +278,25 @@ transformed data {
 
   vector[G - 1] sqrt_delta = sqrt(delta_days);
   vector[G - 1] campaign_v = to_vector(campaign);
+  vector[G - 1] post_v = to_vector(post);
+  // The post-election multiplier (post_flex = 1, §6.2): with post_flex = 0 every post flag is
+  // 0, so the walk is the one before; no step is in both a campaign and a post window; and the
+  // fundamentals window's post days fit in its stretch off the campaign.
+  for (i in 1:(G - 1)) {
+    if (post[i] == 1 && post_flex == 0) {
+      reject("forecast_v2: post_flex = 0 needs every post flag to be 0, but post[", i, "] = 1");
+    }
+    if (post[i] == 1 && campaign[i] == 1) {
+      reject("forecast_v2: no step may be in both a campaign and a post window, but step ", i, " is");
+    }
+  }
+  if (post_flex == 0 && weight_post_days != 0) {
+    reject("forecast_v2: post_flex = 0 needs weight_post_days = 0, but it is ", weight_post_days);
+  }
+  if (fundamentals && weight_post_days > weight_time - campaign_days) {
+    reject("forecast_v2: weight_post_days must be at most weight_time - campaign_days, but weight_post_days = ",
+           weight_post_days, ", weight_time = ", weight_time, " and campaign_days = ", campaign_days);
+  }
   real n_pred = sum(N_open);
 
   // The anchored walk (walk_form = 1, §6.9): its anchors are the closed elections' dates. At
@@ -491,6 +525,8 @@ parameters {
   // The delta walk held centred (delta_form = 1, §6.7), size 0 with delta_form = 0: each closed
   // election's coordinates, W_B in the absent parties' columns and R in the present ones'.
   array[delta_form * n_closed] matrix[K - 1, P - 1] delta_coord;
+  // The post-election multiplier (post_flex = 1, §6.2), size 0 with post_flex = 0.
+  array[post_flex] real<lower=0> tau_post;
 }
 
 transformed parameters {
@@ -514,7 +550,7 @@ transformed parameters {
   {
     matrix[P - 1, P] B = walk_rows(sigma, L_Omega);
     matrix[P - 1, P - 1] L_walk = qr_thin_R(B')';
-    vector[G - 1] scale = sqrt_delta .* (1 + tau_camp * campaign_v);
+    vector[G - 1] scale = step_scale(sqrt_delta, tau_camp, campaign_v, tau_post, post_v);
     if (walk_form == 0) {
       matrix[P - 1, G - 1] step = diag_post_multiply(L_walk * z_walk, scale);
       theta[ : , 1] = theta1;
@@ -736,11 +772,18 @@ model {
   // the walk's variance over weight_time days, the last campaign_days in the campaign: the
   // weight w at weight_time days is relative to that variance alone. A likelihood term on data,
   // so no Jacobian; tau_f depends on sigma, Omega and tau_camp, so the sampling statement keeps
-  // its -log tau_f.
+  // its -log tau_f. With post_flex = 1 the window's weight_post_days days in a post window count
+  // (1 + tau_post)^2 each: ((weight_time - campaign_days - weight_post_days) + weight_post_days
+  // (1 + tau_post)^2 + campaign_days (1 + tau_camp)^2).
   if (fundamentals) {
     vector[P] pi_E = national_share(theta[ : , G], delta[n_epoch], w[n_epoch], exist_idx[G, 1:n_exist[G]]);
     vector[n_sf] x = log(pi_E[sf_idx]);
-    vector[n_sf] V_w = walk_var(sigma, L_Omega)[sf_idx] * ((weight_time - campaign_days) + campaign_days * square(1 + tau_camp));
+    real days = (weight_time - campaign_days) + campaign_days * square(1 + tau_camp);
+    if (post_flex) {
+      days = (weight_time - campaign_days - weight_post_days) + weight_post_days * square(1 + tau_post[1])
+             + campaign_days * square(1 + tau_camp);
+    }
+    vector[n_sf] V_w = walk_var(sigma, L_Omega)[sf_idx] * days;
     mu_f ~ normal(x - mean(x), sqrt(V_w * (1 - desired_weight) / desired_weight));
   }
 
@@ -754,7 +797,7 @@ model {
   // theta_a ~ N(theta_prev, V Q). The bridges and the forward steps are N(0, 1) on z_walk.
   if (walk_form) {
     matrix[P - 1, P] B = walk_rows(sigma, L_Omega);
-    vector[G] cv = cumulative_sum(append_row(0, square(sqrt_delta .* (1 + tau_camp * campaign_v))));
+    vector[G] cv = cumulative_sum(append_row(0, square(step_scale(sqrt_delta, tau_camp, campaign_v, tau_post, post_v))));
     matrix[P - 1, G] th = theta[2:P, : ];
     int prev = 1;
     for (j in 1:n_anchor) {
@@ -777,6 +820,8 @@ model {
   sigma ~ student_t(3, 0, 0.02);
   L_Omega ~ lkj_corr_cholesky(10);
   tau_camp ~ exponential(1);
+  // The post-election multiplier (post_flex = 1): exponential(1), as tau_camp; size 0 with 0.
+  tau_post ~ exponential(1);
   mu1 ~ normal(0, prior_sd_mu1);
   to_vector(house_raw) ~ std_normal();
   sigma_gamma ~ exponential(prior_rate_sigma_gamma);

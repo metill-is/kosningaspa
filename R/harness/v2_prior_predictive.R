@@ -88,6 +88,11 @@
 #     bias uncertainty that §6.5's 0.22 target leaves out. V_w stays centred over all P
 #     parties, as §6.5 writes it, so the two variances differ in centring. It needs every draw,
 #     so its per-draw values are combined by SUMMARY_POOLED.
+#   - post_window (step v2s-m6, switch post_flex): x = √D (1 + τ_post) C(σ ⊙ L_Ω z), z as in
+#     walk_180 (the same seed), with D the mean length in days of the closed elections' post
+#     windows on the grid (the data's post flags; `post_days` when each window lies on the
+#     grid): a 20% party's walk change over one post window (§6.2). The change is signed, so its
+#     band reads the upper tail, as walk_180's does.
 #
 # The bands, each built by its constructor and checked by in_band():
 #   band_inside(lo, hi)                      the 5% quantile at least lo, the 95% at most hi
@@ -226,7 +231,7 @@ fund_draw_scales <- function(sim, data) {
   if (!identical(as.integer(data$fundamentals), 1L) || length(data$sf_idx) < 2) {
     stop("prior predictive: the fundamentals rows need fundamentals = 1 and at least two parties of S_f", call. = FALSE)
   }
-  fund_scales(sim$pars$sigma, sim$pars$L_Omega, sim$pars$tau_camp, data)
+  fund_scales(sim$pars$sigma, sim$pars$L_Omega, sim$pars$tau_camp, data, sim$pars$tau_post)
 }
 
 #' The summaries, each a function of a `v2_simulate()` draw `sim`, its `data` and a `seed`
@@ -248,6 +253,15 @@ SUMMARY_FUNS <- list(
     z <- withr::with_seed(seed, stats::rnorm(data$P))
     v <- sim$pars$sigma * drop(matrix(sim$pars$L_Omega, data$P, data$P) %*% z)
     share_change(sqrt(WALK_DAYS) * (v - mean(v)))
+  },
+  post_window = function(sim, data, seed) {
+    if (length(sim$pars$tau_post) != 1 || !any(c(data$post) == 1L)) {
+      stop("prior predictive: post_window needs tau_post and a post step, which post_flex = 1 puts in the model", call. = FALSE)
+    }
+    days <- sum(c(data$delta_days)[c(data$post) == 1L]) / data$n_closed
+    z <- withr::with_seed(seed, stats::rnorm(data$P))
+    v <- sim$pars$sigma * drop(matrix(sim$pars$L_Omega, data$P, data$P) %*% z)
+    share_change(sqrt(days) * (1 + as.numeric(sim$pars$tau_post)) * (v - mean(v)))
   },
   industry_step = function(sim, data, seed) {
     if (identical(as.integer(data$annad_idx), 1L)) {
@@ -547,6 +561,14 @@ ROWS <- check_rows(dplyr::bind_rows(
       "writes it, and V_bias over S_f"
     ),
     "prior_tau_mu", band_report()
+  ),
+  summary_rows(
+    "post_window", "v2s-m6", "post_flex",
+    paste0(
+      "A 20% party's walk change over one post-election window (covariance D (1 + \u03c4_post)\u00b2 C\u03a3C\u1d40, ",
+      "D the window's days on the grid, `post_days` = 90 in V2; \u03c4_post ~ exponential(1))"
+    ),
+    character(0), band_q95(2, 30)
   )
 ))
 

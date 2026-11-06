@@ -452,7 +452,7 @@ test_that("Stan declares the parameters V2_CORE_PARS names, with its types, boun
   # §6.7 held centred (delta_form = 1): each closed election's coordinates delta_e[2:K, 2:P],
   # plain unconstrained matrices, and delta_raw then only the open epoch's zeta.
   expect_identical(V2_CORE_PARS$type[V2_CORE_PARS$name == "delta_coord"], "array[delta_form * n_closed] matrix[K - 1, P - 1]")
-  expect_identical(utils::tail(V2_CORE_PARS$name, 1), "delta_coord")
+  expect_identical(utils::tail(V2_CORE_PARS$name, 1), "tau_post")
 })
 
 test_that("v2_par_dims() refuses a delta_form other than 0 or 1, and delta_form = 1 without the delta walk", {
@@ -460,7 +460,7 @@ test_that("v2_par_dims() refuses a delta_form other than 0 or 1, and delta_form 
   # at 1 - n_closed matrices instead of stopping: a static delta has no centred form.
   d <- list(
     P = 4L, K = 3L, G = 9L, H = 2L, J = 1L, n_closed = 2L, n_epoch = 3L, entry_epoch = c(0L, 0L, 0L, 2L),
-    walk_form = 0L, epoch_bias = 0L, newcomer_pool = 0L, shock = 0L, delta_walk = 1L, delta_form = 1L
+    walk_form = 0L, epoch_bias = 0L, newcomer_pool = 0L, shock = 0L, delta_walk = 1L, delta_form = 1L, post_flex = 0L
   )
   expect_identical(
     lapply(v2_par_dims(d)[c("delta_raw", "delta_coord")], as.integer),
@@ -993,4 +993,103 @@ test_that("v2_simulate() with observe redraws mu_f after every count, from N(x_c
   f <- ref$fund_normal(p, ref$natural(p, d), d)
   z <- (c(s$data$mu_f) - f$mean) / f$tau_f
   expect_true(all(is.finite(z)) && all(abs(z) < 6) && all(z != (c(d$mu_f) - f$mean) / f$tau_f))
+})
+
+# The post-election multiplier (step v2s-m6, §6.2, switch post_flex): each walk step in the
+# post_days after a closed election scales by 1 + tau_post, as a campaign step by 1 + tau_camp,
+# tau_post ~ exponential(1); V_w counts the fundamentals window's days in a post window.
+
+test_that("the post-election reference: its mutant changes the density on every cell, and the identity under permutation holds", {
+  cells <- v2_test_cells(cfg_m6(), stage1_stub)
+  for (name in names(cells)) {
+    d <- cells[[name]]$data
+    expect_identical(as.integer(d$post_flex), 1L, label = name)
+    expect_true("post_unscaled" %in% v2_mutants(d), label = name)
+    expect_identical(as.integer(v2_par_dims(d)$tau_post), 1L, label = name)
+    for (seed in 1:2) {
+      s <- v2_simulate(d, seed = seed, observe = FALSE)
+      lp <- v2_lp_ref(s$pars, d)
+      expect_gt(abs(v2_lp_ref(s$pars, d, "post_unscaled") - lp), 1e-6, label = name)
+      rp <- rev(seq_len(d$P))
+      p <- permute_v2(s$pars, d, rp, rev(seq_len(d$K)))
+      expect_identical(p$pars$tau_post, s$pars$tau_post)
+      expect_lt(abs(v2_lp_ref(p$pars, p$data) - lp - attr(p, "ljac_L_Omega")), 1e-10 + 4 * .Machine$double.eps * abs(lp), label = name)
+    }
+  }
+  expect_identical(V2_MUTANTS$switch[V2_MUTANTS$mutant == "post_unscaled"], "post_flex")
+  expect_identical(V2_MUTANTS$min_closed[V2_MUTANTS$mutant == "post_unscaled"], 1L)
+})
+
+test_that("each step's scale is sqrt(Delta) (1 + tau_camp c + tau_post q), and with post_flex = 0 tau_post is never read", {
+  d <- v2_test_cells(cfg_m6(), stage1_stub)$eve2024$data
+  q <- c(d$post)
+  expect_true(any(q == 1L) && any(q == 0L))
+  want <- sqrt(c(d$delta_days)) * (1 + 0.7 * c(d$campaign) + 1.9 * q)
+  expect_equal(walk_scale(0.7, d, 1.9), want, tolerance = 1e-15)
+  d0 <- d
+  d0$post_flex <- 0L
+  expect_identical(walk_scale(0.7, d0, 1.9), walk_scale(0.7, d0))
+  expect_equal(walk_scale(0.7, d0), sqrt(c(d$delta_days)) * (1 + 0.7 * c(d$campaign)), tolerance = 1e-15)
+})
+
+test_that("the multiplier rescales only the walk's post steps: its density is post_flex = 0's at the matching innovations, plus the z_walk change and exponential(1)", {
+  for (name in c("eve2024", "eve2017")) {
+    d <- v2_test_cells(cfg_m6(), stage1_stub)[[name]]$data
+    d0 <- d
+    d0$post_flex <- 0L
+    s <- v2_simulate(d, seed = 11, observe = FALSE)$pars
+    tp <- as.numeric(s$tau_post)
+    q <- c(d$post) == 1L
+    off <- s
+    off$tau_post <- array(numeric(0), 0)
+    off$z_walk[, q] <- s$z_walk[, q] * (1 + tp)
+    expect_equal(v2_natural(off, d0)$theta, v2_natural(s, d)$theta, tolerance = 1e-12, label = name)
+    want <- sum(stats::dnorm(s$z_walk, log = TRUE)) - sum(stats::dnorm(off$z_walk, log = TRUE)) + stats::dexp(tp, 1, log = TRUE)
+    lp <- v2_lp_ref(s, d)
+    expect_lt(abs(lp - v2_lp_ref(off, d0) - want), 1e-8 * max(1, abs(lp)), label = name)
+  }
+})
+
+test_that("fund_scales() counts the fundamentals window's post days at (1 + tau_post)^2, and only with post_flex = 1", {
+  d <- v2_test_cells(cfg_m6(), stage1_stub)$eve2024$data
+  sigma <- seq(0.01, 0.03, length.out = d$P)
+  L <- diag(d$P)
+  base <- fund_scales(sigma, L, 0.8, d, 1.5)
+  expect_identical(d$weight_post_days, 0)
+  expect_equal(base$V_w, base$v * ((180 - 47) + 47 * 1.8^2), tolerance = 1e-14)
+  d$weight_post_days <- 30
+  sc <- fund_scales(sigma, L, 0.8, d, 1.5)
+  expect_equal(sc$V_w, sc$v * ((180 - 47 - 30) + 30 * 2.5^2 + 47 * 1.8^2), tolerance = 1e-14)
+  w <- d$desired_weight
+  expect_equal((1 / sc$tau_f^2) / (1 / sc$tau_f^2 + 1 / sc$V_w), rep(w, length(sc$V_w)), tolerance = 1e-12)
+  d$post_flex <- 0L
+  expect_equal(fund_scales(sigma, L, 0.8, d, 1.5)$V_w, base$V_w, tolerance = 0)
+})
+
+test_that("the post-election reference refuses post flags in a campaign, malformed flags and too many post days in the fundamentals window", {
+  d <- v2_test_cells(cfg_m6(), stage1_stub)$eve2024$data
+  s <- v2_simulate(d, seed = 3, observe = FALSE)$pars
+  both <- d
+  both$post[which(c(d$campaign) == 1L)[1]] <- 1L
+  expect_error(v2_lp_ref(s, both), "no step may be in both a campaign and a post window")
+  short <- d
+  short$post <- d$post[-1]
+  expect_error(v2_lp_ref(s, short), "data\\$post must be G - 1 flags, each 0 or 1")
+  many <- d
+  many$weight_post_days <- d$weight_time - d$campaign_days + 1
+  expect_error(v2_lp_ref(s, many), "data\\$weight_post_days must be one number in \\[0, weight_time - campaign_days\\]")
+})
+
+test_that("v2_simulate() with post_flex = 1 draws tau_post last, so every other parameter is post_flex = 0's draw", {
+  d <- v2_test_cells(cfg_m6(), stage1_stub)$eve2024$data
+  d0 <- d
+  d0$post_flex <- 0L
+  d0$post[] <- 0L
+  a <- v2_simulate(d, seed = 21, observe = FALSE)$pars
+  b <- v2_simulate(d0, seed = 21, observe = FALSE)$pars
+  expect_identical(length(a$tau_post), 1L)
+  expect_identical(length(b$tau_post), 0L)
+  expect_gt(as.numeric(a$tau_post), 0)
+  expect_identical(a[setdiff(names(a), "tau_post")], b[setdiff(names(b), "tau_post")])
+  expect_identical(names(a), V2_CORE_PARS$name)
 })

@@ -2,10 +2,10 @@
 # of Stan/forecast_v2.stan, with the meta its extractor and the scorer read; and its
 # extraction (spec §5.5): the variables a fit's draws must hold, and their parquets.
 
-#' V2's data switches, in the order of the Stan data: five model components, then two
+#' V2's data switches, in the order of the Stan data: six model components, then two
 #' parameterisations.
 #' @export
-V2_SWITCHES <- c("epoch_bias", "newcomer_pool", "shock", "delta_walk", "fundamentals", "walk_form", "delta_form")
+V2_SWITCHES <- c("epoch_bias", "newcomer_pool", "shock", "delta_walk", "fundamentals", "post_flex", "walk_form", "delta_form")
 
 #' The prior locations and scales V2 takes as data (Tier 3b's and Decision 1's), in data
 #' order.
@@ -15,7 +15,7 @@ V2_PRIORS <- c(
 )
 
 #' The keys of a V2 config, in order.
-V2_CONFIG_KEYS <- c("campaign_days", "desired_weight", "weight_time", "delta_years_bar", V2_SWITCHES, "order", V2_PRIORS, "stage1")
+V2_CONFIG_KEYS <- c("campaign_days", "post_days", "desired_weight", "weight_time", "delta_years_bar", V2_SWITCHES, "order", V2_PRIORS, "stage1")
 
 #' The optional keys of a V2 config: `adapt_delta`, the sampler's target acceptance rate in the
 #' arm's fits by `R/harness/fit_cell.R` (absent: CmdStan's default, 0.8).
@@ -31,7 +31,7 @@ V2_ORDERS <- c("default", "reversed")
 #' arrays, so `cmdstanr::write_stan_json()` writes a length-1 field as `[x]`, not as the
 #' scalar that CmdStan's JSON reader refuses for an `array[1]`.
 V2_VECTOR_FIELDS <- c(
-  "delta_days", "campaign", "grid_epoch", "delta_years", "grid_nat", "house_nat", "n_rep_nat",
+  "delta_days", "campaign", "post", "grid_epoch", "delta_years", "grid_nat", "house_nat", "n_rep_nat",
   "poll_kd", "kd_kd", "grid_kd", "house_kd", "n_rep_kd", "grid_res", "n_rep_res",
   "house_first_epoch", "entry_epoch", "N_open", "sf_idx", "mu_f"
 )
@@ -62,7 +62,8 @@ listed <- function(x) if (length(x)) paste(unique(x), collapse = "; ") else "non
 #' V2's configuration.
 #' @param path the JSON file
 #' @return a list in `V2_CONFIG_KEYS` order: `campaign_days` (an integer, at least 1),
-#'   `desired_weight` (in (0, 1)), `weight_time` (days, at least `campaign_days`),
+#'   `post_days` (an integer, at least 1: the post window after each closed election, read
+#'   with `post_flex` = 1, §6.2), `desired_weight` (in (0, 1)), `weight_time` (days, at least `campaign_days`),
 #'   `delta_years_bar` (positive), the `V2_SWITCHES` (integers, each 0 or 1), `order`
 #'   (`"default"`: `POLL_PARTIES` and `KJORDAEMI$kjordaemi`, restricted to the cell;
 #'   `"reversed"`: both reversed), the `V2_PRIORS` (`prior_mu_phi` finite, the others
@@ -86,6 +87,7 @@ read_v2_config <- function(path) {
   if (!is.list(cfg) || is.null(names(cfg))) bad("not a JSON object")
   keys(cfg, V2_CONFIG_KEYS, "", V2_OPTIONAL_KEYS)
   if (!whole(cfg$campaign_days, 1)) bad("campaign_days must be a whole number of days, at least 1")
+  if (!whole(cfg$post_days, 1)) bad("post_days must be a whole number of days, at least 1")
   if (!(number(cfg$desired_weight) && cfg$desired_weight > 0 && cfg$desired_weight < 1)) {
     bad("desired_weight must be one number in (0, 1)")
   }
@@ -106,6 +108,7 @@ read_v2_config <- function(path) {
   for (k in c("iter_warmup", "iter_sampling")) if (!whole(s1[[k]], 1)) bad("stage1: ", k, " must be a whole number, at least 1")
   out <- list(
     campaign_days = as.integer(cfg$campaign_days),
+    post_days = as.integer(cfg$post_days),
     desired_weight = as.numeric(cfg$desired_weight),
     weight_time = as.numeric(cfg$weight_time),
     delta_years_bar = as.numeric(cfg$delta_years_bar)
@@ -175,7 +178,9 @@ reported <- function(y) {
 #'   - sizes and the grid: `P`, `K`, `H`, `G`, `n_epoch` (`epoch_of(E)`), `delta_days`
 #'     (the G - 1 steps of `grid_dates()`), `campaign` (1 for a step starting on or after
 #'     an election - `campaign_days` and ending on or before it, for an election before E
-#'     or E itself), `grid_epoch` (`epoch_of()` of each grid date: an election day belongs
+#'     or E itself), `post` (with `cfg$post_flex` = 1, 1 for a step starting on or after a
+#'     closed election and ending on or before it + `post_days`, §6.2; all 0 with
+#'     `post_flex` = 0), `grid_epoch` (`epoch_of()` of each grid date: an election day belongs
 #'     to the epoch it closes), `exists` (G × P, 1 from a party's first non-zero poll in
 #'     the entry table on), `w` (n_epoch × K: each closed epoch's closing election's valid
 #'     vote shares, the open epoch's from `info$valid_votes_open`, the previous election's)
@@ -201,7 +206,9 @@ reported <- function(y) {
 #'     `N_open` (`info$valid_votes_open`'s votes), `draw_forecast` and `latent_path`;
 #'   - `n_sf`, `sf_idx` (each `mu_f` party's index in the party order) and `mu_f`, from
 #'     stage 1 (n_sf = 0 when `cfg$fundamentals` is 0); `desired_weight`, `weight_time`,
-#'     `campaign_days`, `delta_years_bar`, the `V2_PRIORS` and the `V2_SWITCHES`, from `cfg`.
+#'     `campaign_days`, `weight_post_days` (the days of (E - weight_time, E - campaign_days]
+#'     inside a closed election's post window with `post_flex` = 1, else 0; §6.5),
+#'     `delta_years_bar`, the `V2_PRIORS` and the `V2_SWITCHES`, from `cfg`.
 #'
 #'   `draw_forecast` is 1 and `latent_path` 0, except on a 2017 cell before the freeze
 #'   (`forecast_free(E, root)`: E = 2017-10-28, the confirmatory target of `TARGETS`, while
@@ -224,8 +231,10 @@ reported <- function(y) {
 #'   house or a party no entry row; a closed election lacks kjördæmi results, gives votes
 #'   to a party outside the cell, or gives a party with national votes no votes in some
 #'   kjördæmi; the coordinate party has no votes at some closed election; the grid has a
-#'   non-positive step or does not end at E; an observation (poll or closed election) is
-#'   dated after F, or a grid date after F is neither E - `campaign_days` nor E; a poll
+#'   non-positive step or does not end at E; with `post_flex` = 1, a closed election's post
+#'   window ends after the next election's campaign starts (the next closed election or E);
+#'   an observation (poll or closed election) is dated after F, or a grid date after F is
+#'   none of E - `campaign_days`, E and (with `post_flex` = 1) a post window's end; a poll
 #'   reports fewer than two parties, or a poll or result reports a party before its entry;
 #'   the open epoch's valid votes are not positive whole numbers or not the previous
 #'   election's; a share is missing from `info$prev_shares`; stage 1's `mu_f` is not
@@ -239,7 +248,7 @@ v2_stan_data <- function(info, cfg, stage1 = stage1_mu_f, party_order = NULL, ro
     R / harness / stage1[stage1_mu_f],
     R / harness / tables[epoch_of, grid_dates, valid_votes]
   )
-  check(all(c(V2_SWITCHES, "order", "campaign_days") %in% names(cfg)) && cfg$order %in% V2_ORDERS, "cfg is not a read_v2_config() list")
+  check(all(c(V2_SWITCHES, "order", "campaign_days", "post_days") %in% names(cfg)) && cfg$order %in% V2_ORDERS, "cfg is not a read_v2_config() list")
   E <- as.Date(info$E)
   F <- as.Date(info$F)
   reversed <- identical(cfg$order, "reversed")
@@ -308,17 +317,28 @@ v2_stan_data <- function(info, cfg, stage1 = stage1_mu_f, party_order = NULL, ro
   absent <- closed[nat_res[, 1] == 0]
   if (length(absent)) fail("coordinate party ", party_order[1], " has no votes at ", listed(format(absent)))
 
-  g <- grid_dates(info, cd)
+  pd <- if (identical(as.integer(cfg$post_flex), 1L)) as.integer(cfg$post_days) else 0L
+  if (pd > 0L) {
+    over <- closed + pd > c(closed[-1], E) - cd
+    if (any(over)) fail("the post window of ", listed(format(closed[over])), " (", pd, " days) reaches the next election's campaign")
+  }
+  g <- grid_dates(info, cd, pd)
   G <- length(g)
   steps <- as.numeric(diff(g))
   if (any(steps <= 0)) fail("non-positive grid step after ", listed(format(g[-G][steps <= 0])))
   check(G >= 2 && g[G] == E, "the grid does not end at E")
   obs <- as.Date(c(nat$date, kd$date, closed))
-  late <- c(obs[obs > F], g[g > F & !g %in% c(E - cd, E)])
+  late <- c(obs[obs > F], g[g > F & !g %in% c(E - cd, E, if (pd > 0L) closed + pd)])
   if (length(late)) fail("observation after F: ", listed(format(sort(late))))
 
   elections <- c(closed, E)
   campaign <- vapply(seq_len(G - 1), \(i) as.integer(any(g[i] >= elections - cd & g[i + 1] <= elections)), integer(1))
+  post <- vapply(seq_len(G - 1), \(i) as.integer(pd > 0L && any(g[i] >= closed & g[i + 1] <= closed + pd)), integer(1))
+  weight_post_days <- if (pd > 0L) {
+    sum(pmax(0, pmin(as.numeric(E) - cd, as.numeric(closed) + pd) - pmax(as.numeric(E) - cfg$weight_time, as.numeric(closed))))
+  } else {
+    0
+  }
   exists <- matrix(as.integer(outer(as.numeric(g), as.numeric(entry_date), ">=")), G, P)
 
   firsts <- dplyr::summarise(
@@ -407,7 +427,7 @@ v2_stan_data <- function(info, cfg, stage1 = stage1_mu_f, party_order = NULL, ro
   check(all(entry_epoch >= 0L & entry_epoch <= n_epoch), "a party enters after E's epoch")
   data <- list(
     P = P, K = K, H = length(house_levels), G = G, n_epoch = n_epoch,
-    delta_days = steps, campaign = campaign, grid_epoch = epoch_of(g), exists = exists, w = w,
+    delta_days = steps, campaign = campaign, post = post, grid_epoch = epoch_of(g), exists = exists, w = w,
     delta_years = c(0, as.numeric(diff(elections)) / 365.25),
     N_nat = nrow(units_nat), grid_nat = grid_nat, house_nat = match(house_of(units_nat$fyrirtaeki), house_levels),
     y_nat = y_nat, n_rep_nat = as.integer(rowSums(y_nat > 0)), idx_nat = reported(y_nat),
@@ -421,7 +441,7 @@ v2_stan_data <- function(info, cfg, stage1 = stage1_mu_f, party_order = NULL, ro
     d_shock = d_shock, N_open = as.integer(N_open), draw_forecast = if (free) 0L else 1L, latent_path = 0L,
     n_sf = n_sf, sf_idx = sf_idx, mu_f = mu_f,
     desired_weight = cfg$desired_weight, weight_time = cfg$weight_time, campaign_days = cd,
-    delta_years_bar = cfg$delta_years_bar
+    weight_post_days = weight_post_days, delta_years_bar = cfg$delta_years_bar
   )
   data[V2_PRIORS] <- cfg[V2_PRIORS]
   data[V2_SWITCHES] <- lapply(cfg[V2_SWITCHES], as.integer)
@@ -465,19 +485,20 @@ V2_DRAW_VARIABLES <- c("votes_kd", "pi_nat_eday", "pi_latent_E", "y_rep_res")
 V2_PARAM_VARIABLES <- c(
   "sigma", "L_Omega", "tau_camp", "mu_phi", "sigma_phi", "log_phi", "log_phi_K", "log_kappa", "sigma_gamma", "mu",
   "tau_mu", "tau_mu_A", "tau_house", "m_new", "s_new", "s_bar_E", "mu_sd", "tau_sd", "s_delta0", "s_bar_zeta", "s_zeta",
-  "anchor_w", "delta_coord"
+  "anchor_w", "delta_coord", "tau_post"
 )
 
 #' The switch that puts each switch-dependent variable of `V2_PARAM_VARIABLES` in the model:
 #' the epoch walk's scales (§6.4), the newcomer pool's mean and scale (§6.4), the shock's
 #' scale (§6.6), the δ walk's scales (§6.7), the anchored walk's anchors (`walk_form = 1`,
-#' §6.9) and the centred δ walk's coordinates at the closed elections (`delta_form = 1`, §6.7).
+#' §6.9), the centred δ walk's coordinates at the closed elections (`delta_form = 1`, §6.7) and
+#' the post-election multiplier (`post_flex = 1`, §6.2).
 #' Each is size 0, or absent, with its switch at 0.
 #' @export
 V2_PARAM_SWITCH <- c(
   tau_mu = "epoch_bias", tau_mu_A = "epoch_bias", tau_house = "epoch_bias", m_new = "newcomer_pool",
   s_new = "newcomer_pool", s_bar_E = "shock", s_bar_zeta = "delta_walk", s_zeta = "delta_walk", anchor_w = "walk_form",
-  delta_coord = "delta_form"
+  delta_coord = "delta_form", tau_post = "post_flex"
 )
 
 #' The variables of `V2_PARAM_VARIABLES` in the model under `switches`.

@@ -16,17 +16,22 @@ epoch_of <- function(date, elections = ELECTIONS) {
 }
 
 #' The time grid of a cell's latent walk (spec §6.2): every admitted national and
-#' kjördæmi poll date, the window elections before E, the campaign starts, F and E.
+#' kjördæmi poll date, the window elections before E, the campaign starts, the post-window
+#' ends (with `post_days` > 0), F and E.
 #' @param info an `info_set()` list
 #' @param campaign_days the campaign length in days
+#' @param post_days the post window after each election before E in days (§6.2); 0, the
+#'   default, adds no date
 #' @return a sorted Date vector without repeats, starting at the first admitted poll date.
 #'   The campaign starts are election - `campaign_days` for the elections before E and for
-#'   E, kept when on or after the first poll date. For a valid `info` every observation
-#'   date is on or before F, so the only dates after F are E - `campaign_days` (when after
-#'   F) and E, which is last. `v2_stan_data()` checks that; this only builds. An error if
-#'   `info` has no admitted poll
+#'   E, kept when on or after the first poll date; with `post_days` > 0 the post-window ends,
+#'   election + `post_days` for the elections before E, are kept on the same terms. For a
+#'   valid `info` every observation date is on or before F, so the only dates after F are
+#'   E - `campaign_days` (when after F), a post window's end (when after F) and E, which is
+#'   last. `v2_stan_data()` checks that; this only builds. An error if `info` has no admitted
+#'   poll
 #' @export
-grid_dates <- function(info, campaign_days = 47L) {
+grid_dates <- function(info, campaign_days = 47L, post_days = 0L) {
   box::use(R / harness / constants[ELECTIONS])
   E <- as.Date(info$E)
   obs <- as.Date(c(info$polls_nat$date, info$polls_kd$date))
@@ -34,7 +39,9 @@ grid_dates <- function(info, campaign_days = 47L) {
   closed <- ELECTIONS[ELECTIONS < E]
   starts <- c(closed, E) - campaign_days
   starts <- starts[starts >= min(obs)]
-  sort(unique(c(obs, closed, starts, as.Date(info$F), E)))
+  ends <- if (post_days > 0) closed + post_days else as.Date(character(0))
+  ends <- ends[ends >= min(obs)]
+  sort(unique(c(obs, closed, starts, ends, as.Date(info$F), E)))
 }
 
 #' The house table: each pollster's house and house lineage.

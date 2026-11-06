@@ -79,7 +79,7 @@ test_that("the guards fire", {
 
 test_that("the m0 config has every switch off, the default orders and Decision 1's values, and its keys are checked", {
   cfg <- cfg_m0()
-  expect_identical(unlist(cfg[V2_SWITCHES]), stats::setNames(integer(7), V2_SWITCHES))
+  expect_identical(unlist(cfg[V2_SWITCHES]), stats::setNames(integer(8), V2_SWITCHES))
   expect_identical(cfg$order, "default")
   expect_identical(cfg$prior_mu_phi, log(1000))
   expect_identical(cfg[c("prior_sd_mu1", "prior_rate_sigma_gamma")], list(prior_sd_mu1 = 1, prior_rate_sigma_gamma = 1))
@@ -94,17 +94,17 @@ test_that("the m0 config has every switch off, the default orders and Decision 1
 test_that("the data fields come in the contract's order, with integer counts and indices and the declared dims", {
   d <- d_2024eve()
   expect_identical(names(d), c(
-    "P", "K", "H", "G", "n_epoch", "delta_days", "campaign", "grid_epoch", "exists", "w", "delta_years",
+    "P", "K", "H", "G", "n_epoch", "delta_days", "campaign", "post", "grid_epoch", "exists", "w", "delta_years",
     "N_nat", "grid_nat", "house_nat", "y_nat", "n_rep_nat", "idx_nat",
     "J", "N_kd", "poll_kd", "kd_kd", "grid_kd", "house_kd", "y_kd", "n_rep_kd", "idx_kd",
     "n_closed", "grid_res", "y_res", "n_rep_res", "idx_res",
     "house_first_epoch", "entry_epoch", "annad_idx",
     "d_shock", "N_open", "draw_forecast", "latent_path",
-    "n_sf", "sf_idx", "mu_f", "desired_weight", "weight_time", "campaign_days", "delta_years_bar",
+    "n_sf", "sf_idx", "mu_f", "desired_weight", "weight_time", "campaign_days", "weight_post_days", "delta_years_bar",
     "prior_tau_mu", "prior_s_bar_E", "prior_s_bar_zeta", "prior_sd_log_kappa", "prior_mu_phi", "prior_sd_mu1",
     "prior_rate_sigma_gamma", V2_SWITCHES
   ))
-  reals <- c("delta_days", "w", "delta_years", "d_shock", "mu_f", "desired_weight", "weight_time", "delta_years_bar")
+  reals <- c("delta_days", "w", "delta_years", "d_shock", "mu_f", "desired_weight", "weight_time", "weight_post_days", "delta_years_bar")
   reals <- c(reals, grep("^prior_", names(d), value = TRUE))
   for (f in setdiff(names(d), reals)) expect_true(is.integer(d[[f]]), label = f)
   for (f in reals) expect_true(is.double(d[[f]]), label = f)
@@ -271,4 +271,80 @@ test_that("delta_years is each epoch's gap in years from the previous election, 
     expect_identical(round(c(d$delta_years), 2), c(0, 1.00, 3.91, 3.18), label = cells$tag[i])
     expect_equal(c(d$delta_years)[4], as.numeric(as.Date("2024-11-30") - as.Date("2021-09-25")) / 365.25, tolerance = 1e-15)
   }
+})
+
+test_that("post_days is a required V2 config key, a whole number of days of at least 1", {
+  expect_identical(cfg_m0()$post_days, 90L)
+  expect_error(read_v2_config(config_with(post_days = NULL)), "missing key\\(s\\): post_days")
+  for (bad in list(0, 1.5, "90")) {
+    expect_error(read_v2_config(config_with(post_days = bad)), "post_days must be a whole number of days, at least 1", label = format(bad))
+  }
+})
+
+test_that("with post_flex = 0 every post flag is 0, weight_post_days is 0 and the grid gains no post-window end", {
+  d <- d_2024eve()
+  expect_identical(d$post_flex, 0L)
+  expect_identical(length(d$post), d$G - 1L)
+  expect_true(all(c(d$post) == 0L))
+  expect_identical(d$weight_post_days, 0)
+  expect_identical(d$G, length(grid_dates(info_2024eve())))
+})
+
+test_that("with post_flex = 1 the post flags cover exactly the steps within post_days after each closed election, whose window ends are on the grid", {
+  skip_without_snapshot()
+  cfg <- utils::modifyList(cfg_m6(), list(fundamentals = 0L))
+  expect_identical(c(cfg$post_flex, cfg$post_days), c(1L, 90L))
+  for (cell in list(c("2024-11-30", "2024-11-29"), c("2021-09-25", "2021-03-29"), c("2017-10-28", "2017-10-27"))) {
+    E <- as.Date(cell[1])
+    info <- info_set(E, as.Date(cell[2]), v2_inputs())
+    d <- v2_stan_data(info, cfg, root = withr::local_tempdir())$data
+    g <- grid_dates(info, 47L, 90L)
+    closed <- ELECTIONS[ELECTIONS < E]
+    expect_identical(length(g), d$G, label = cell[1])
+    expect_true(all((closed + 90) %in% g), label = cell[1])
+    inside <- vapply(seq_len(d$G - 1), \(i) any(g[i] >= closed & g[i + 1] <= closed + 90), logical(1))
+    expect_identical(c(d$post) == 1L, inside, label = cell[1])
+    # WHY: each window lies on the grid, so its steps add up to post_days.
+    expect_equal(sum(d$post * d$delta_days), 90 * length(closed), label = cell[1])
+    expect_false(any(d$post == 1L & d$campaign == 1L), label = cell[1])
+    expect_identical(d$weight_post_days, 0, label = cell[1])
+    expect_identical(d$post_flex, 1L, label = cell[1])
+  }
+})
+
+test_that("a post window that reaches the next election's campaign is refused, and one that ends where it starts is not", {
+  skip_without_snapshot()
+  info <- info_set(as.Date("2017-10-28"), as.Date("2017-10-27"), v2_inputs())
+  # WHY: 2016-10-29 + 317 days is 2017-09-11, 47 days before 2017-10-28.
+  expect_identical(as.Date("2016-10-29") + 317, as.Date("2017-10-28") - 47)
+  ok <- utils::modifyList(cfg_m0(), list(post_flex = 1L, post_days = 317L))
+  expect_no_error(v2_stan_data(info, ok, root = withr::local_tempdir()))
+  expect_error(
+    v2_stan_data(info, utils::modifyList(ok, list(post_days = 318L)), root = withr::local_tempdir()),
+    "v2 input: the post window of 2016-10-29 \\(318 days\\) reaches the next election's campaign"
+  )
+})
+
+test_that("a post window's end may lie after F, as the campaign start may", {
+  skip_without_snapshot()
+  # WHY: F cannot come before the economy covariates' release (March of E's year), so the window
+  # is stretched to 200 days, ending on 2017-05-17, after F.
+  info <- info_set(as.Date("2017-10-28"), as.Date("2017-04-01"), v2_inputs())
+  d <- v2_stan_data(info, utils::modifyList(cfg_m0(), list(post_flex = 1L, post_days = 200L)), root = withr::local_tempdir())$data
+  g <- grid_dates(info, 47L, 200L)
+  expect_true(as.Date("2017-05-17") %in% g)
+  expect_true(as.Date("2017-05-17") > as.Date(info$F))
+  expect_identical(length(g), d$G)
+  expect_identical(sum(d$post * d$delta_days), 200)
+})
+
+test_that("weight_post_days counts the days of the fundamentals window before the campaign that lie in a post window", {
+  skip_without_snapshot()
+  info <- info_set(as.Date("2017-10-28"), as.Date("2017-10-27"), v2_inputs())
+  cfg <- utils::modifyList(cfg_m0(), list(post_flex = 1L, weight_time = 320))
+  # WHY: (2017-10-28 - 320, 2017-10-28 - 47] = (2016-12-12, 2017-09-11] meets 2016's window
+  # (2016-10-29, 2017-01-27] in (2016-12-12, 2017-01-27], 46 days.
+  expect_identical(v2_stan_data(info, cfg, root = withr::local_tempdir())$data$weight_post_days, 46)
+  expect_identical(v2_stan_data(info, utils::modifyList(cfg, list(weight_time = 180)), root = withr::local_tempdir())$data$weight_post_days, 0)
+  expect_identical(v2_stan_data(info, utils::modifyList(cfg, list(post_flex = 0L)), root = withr::local_tempdir())$data$weight_post_days, 0)
 })

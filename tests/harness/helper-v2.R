@@ -25,6 +25,7 @@ V2_M2_CONFIG <- file.path(project_root(), "harness", "configs", "steps", "v2s-m2
 V2_M3_CONFIG <- file.path(project_root(), "harness", "configs", "steps", "v2s-m3.json")
 V2_M4_CONFIG <- file.path(project_root(), "harness", "configs", "steps", "v2s-m4.json")
 V2_M5_CONFIG <- file.path(project_root(), "harness", "configs", "steps", "v2s-m5.json")
+V2_M6_CONFIG <- file.path(project_root(), "harness", "configs", "steps", "v2s-m6.json")
 
 # WHY: read_inputs() and v2_stan_data() take seconds, and the 2024-eve fixtures serve many tests.
 v2_cache <- new.env(parent = emptyenv())
@@ -66,6 +67,12 @@ cfg_m4 <- function() {
 cfg_m5 <- function() {
   box::use(R / harness / v2[read_v2_config])
   read_v2_config(V2_M5_CONFIG)
+}
+
+# Step v2s-m6's config: V2's with the post-election multiplier (§6.2).
+cfg_m6 <- function() {
+  box::use(R / harness / v2[read_v2_config])
+  read_v2_config(V2_M6_CONFIG)
 }
 
 # A temporary copy of the m0 config with the named keys changed (NULL drops a key, a new

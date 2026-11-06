@@ -312,28 +312,32 @@ walk_layout <- function(data) {
   list(anchors = anchors, present = present, absent = absent, w_off = w_off, zcol = zcol)
 }
 
-#' The walk's parameters of the point `p` as plain numbers: sigma (P), L_Omega (P x P) and
-#' tau_camp, whatever shapes constrain_variables() gave them.
+#' The walk's parameters of the point `p` as plain numbers: sigma (P), L_Omega (P x P),
+#' tau_camp and tau_post (empty with post_flex = 0), whatever shapes constrain_variables() gave
+#' them.
 walk_point <- function(p) {
   sigma <- as.numeric(p$sigma)
-  list(sigma = sigma, L_Omega = matrix(as.numeric(p$L_Omega), length(sigma)), tau_camp = as.numeric(p$tau_camp))
+  list(
+    sigma = sigma, L_Omega = matrix(as.numeric(p$L_Omega), length(sigma)), tau_camp = as.numeric(p$tau_camp),
+    tau_post = as.numeric(p$tau_post)
+  )
 }
 
-#' The walk's variance multipliers on `data` at `tau_camp`: v[t] of the step from t - 1 to t
-#' (v[1] = 0) and their running total cv.
-walk_var <- function(tau_camp, data) {
-  v <- c(0, walk_scale(tau_camp, data)^2)
+#' The walk's variance multipliers on `data` at `tau_camp` (and `tau_post`, read with
+#' post_flex = 1): v[t] of the step from t - 1 to t (v[1] = 0) and their running total cv.
+walk_var <- function(tau_camp, data, tau_post = 0) {
+  v <- c(0, walk_scale(tau_camp, data, tau_post)^2)
   list(v = v, cv = cumsum(v))
 }
 
 #' The reference walk's z_walk ((P - 1) x (G - 1)) that reproduces `theta` (P x G) at the
-#' point `p` (its sigma, L_Omega and tau_camp).
+#' point `p` (its sigma, L_Omega, tau_camp and tau_post).
 to_reference <- function(theta, p, data) {
   p <- walk_point(p)
   L <- chol_of_gram(walk_rows(p$sigma, p$L_Omega))
   X <- theta[-1, , drop = FALSE]
   step <- X[, -1, drop = FALSE] - X[, -ncol(X), drop = FALSE]
-  forwardsolve(L, step / rep(walk_scale(p$tau_camp, data), each = nrow(X)))
+  forwardsolve(L, step / rep(walk_scale(p$tau_camp, data, p$tau_post), each = nrow(X)))
 }
 
 #' The anchored walk's anchor_w (n_closed x (P - 1)) and z_walk ((P - 1) x (G - 1 - n_closed))
@@ -344,7 +348,7 @@ to_anchored <- function(theta, p, data, lay) {
   G <- data$G
   B <- walk_rows(p$sigma, p$L_Omega)
   L <- chol_of_gram(B)
-  w <- walk_var(p$tau_camp, data)
+  w <- walk_var(p$tau_camp, data, p$tau_post)
   v <- w$v
   cv <- w$cv
   X <- theta[-1, , drop = FALSE]
@@ -381,7 +385,7 @@ walk_ljac <- function(p, data, lay) {
   G <- data$G
   B <- walk_rows(p$sigma, p$L_Omega)
   ldL <- sum(log(diag(chol_of_gram(B))))
-  w <- walk_var(p$tau_camp, data)
+  w <- walk_var(p$tau_camp, data, p$tau_post)
   v <- w$v
   cv <- w$cv
   out <- c(ref_walk = (G - 1) * ldL + P1 / 2 * sum(log(v[-1])), new_anchor = 0, new_bridge = 0, new_forward = 0)

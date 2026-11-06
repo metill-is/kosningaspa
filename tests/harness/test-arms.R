@@ -101,7 +101,7 @@ test_that("v2_variables() names the forecast, the replicates and the parameters 
   expect_identical(v2_variables(switched(delta_form = 1L)), c(V2_GQ, CORE, "delta_coord"))
   expect_identical(v2_variables(switched(fundamentals = 1L)), c(V2_GQ, CORE))
   all_on <- do.call(switched, as.list(stats::setNames(rep(1L, length(V2_SWITCHES)), V2_SWITCHES)))
-  expect_length(v2_variables(all_on), length(V2_GQ) + 23)
+  expect_length(v2_variables(all_on), length(V2_GQ) + 24)
   expect_error(v2_variables(cfg_m0()[setdiff(names(cfg_m0()), "shock")]), "switches")
   expect_error(v2_variables(switched(shock = 2L)), "switches")
 })
@@ -295,4 +295,31 @@ test_that("v2-perm's config is V2's with order = \"reversed\" and nothing else, 
   differs <- names(v2)[!vapply(names(v2), \(k) identical(perm[[k]], v2[[k]]), logical(1))]
   expect_identical(differs, "order")
   expect_identical(read_v2_config(root(arm("v2-perm")$config))$order, "reversed")
+})
+
+test_that("v2s-m6's config is V2's with post_flex = 1 and nothing else, and it is a dev arm", {
+  v2 <- read_v2_config(root(arm("v2")$config))
+  m6 <- read_v2_config(root(arm("v2s-m6")$config))
+  expect_identical(arm("v2s-m6")$config, "harness/configs/steps/v2s-m6.json")
+  expect_identical(arm("v2s-m6")$role, "dev")
+  expect_identical(c(v2$post_flex, m6$post_flex), c(0L, 1L))
+  expect_identical(names(m6), names(v2))
+  expect_identical(utils::modifyList(m6, list(post_flex = 0L)), v2)
+})
+
+test_that("every V2 config but v2s-m6's sets post_flex = 0, and every one post_days = 90", {
+  files <- c(Sys.glob(root("harness", "configs", "steps", "v2s-*.json")), Sys.glob(root("harness", "configs", "v2*.json")))
+  expect_true(root("harness", "configs", "steps", "v2s-m6.json") %in% files)
+  for (f in files) {
+    j <- jsonlite::read_json(f)
+    expect_identical(j$post_flex, if (basename(f) == "v2s-m6.json") 1L else 0L, label = basename(f))
+    expect_identical(j$post_days, 90L, label = basename(f))
+  }
+})
+
+test_that("v2s-m6's extractor reads tau_post, and no other V2 arm's does", {
+  expect_true("tau_post" %in% v2_variables(read_v2_config(root(arm("v2s-m6")$config))))
+  for (a in setdiff(grep("^v2", names(ARMS), value = TRUE), "v2s-m6")) {
+    expect_false("tau_post" %in% v2_variables(read_v2_config(root(arm(a)$config))), label = a)
+  }
 })

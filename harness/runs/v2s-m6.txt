@@ -1,0 +1,9 @@
+# lane arm E F seed
+# The post-election multiplier on V2 (harness/v2/steps.md, v2s-m6): v2s-m6 at 400 + 400, seed
+# 2701, on 2024 eve (lane A) and 2021 f180 (lane B), beside V2's reference fits on the same
+# snapshot, so that both arms are in one list for compare_runs.R and the scoring report. Not run
+# when the step was built: run it with zsh R/harness/queue.sh harness/runs/v2s-m6.txt 400 400.
+A v2 2024-11-30 2024-11-29 2701
+A v2s-m6 2024-11-30 2024-11-29 2701
+B v2 2021-09-25 2021-03-29 2701
+B v2s-m6 2021-09-25 2021-03-29 2701

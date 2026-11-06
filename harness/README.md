@@ -399,7 +399,11 @@ each one's single differing field).
 `v2s-p3` (`harness/configs/steps/v2s-p3.json`, `v2.json` with `walk_form = 1` and
 `adapt_delta = 0.95`) is P1 re-tried on V2, a dev arm, and `v2s-p4`
 (`harness/configs/steps/v2s-p4.json`, `v2.json` with `walk_form = 1`) the same at CmdStan's
-default `adapt_delta` (`harness/v2/steps.md`).
+default `adapt_delta` (`harness/v2/steps.md`). `v2s-m6` (`harness/configs/steps/v2s-m6.json`,
+`v2.json` with `post_flex = 1`) is a dev arm: the post-election multiplier (spec §6.2), each
+walk step within `post_days` after a closed election scaled by 1 + τ_post, built as the first
+fix for V2's 2024 MAE. Every other V2 config sets `post_flex = 0`, and every one carries
+`post_days = 90`; its fits are listed in `harness/runs/v2s-m6.txt`.
 
 **R0's extraction.** `r0_extract(draws, meta, dir)` (`R/harness/r0.R`) writes the four
 parquets of spec §5.5 from a fit's draws: `eday_kjordaemi` (`.chain`, `.iteration`,

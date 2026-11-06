@@ -1,5 +1,6 @@
 {
   "campaign_days": 47,
+  "post_days": 90,
   "desired_weight": 0.22,
   "weight_time": 180,
   "delta_years_bar": 4,
@@ -8,6 +9,7 @@
   "shock": 1,
   "delta_walk": 1,
   "fundamentals": 1,
+  "post_flex": 0,
   "walk_form": 0,
   "delta_form": 0,
   "order": "reversed",

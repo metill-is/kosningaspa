@@ -1279,3 +1279,92 @@ test_that("v2s-m5: at a prior point the pseudo-observation's mean is the centred
     expect_false(isTRUE(all.equal(x - mean(x), x, tolerance = 1e-3)), label = name)
   }
 })
+
+# Step v2s-m6, the post-election multiplier (§6.2, switch post_flex): each walk step in the
+# post_days after a closed election scales by 1 + tau_post, as a campaign step by 1 +
+# tau_camp, tau_post ~ exponential(1); V_w counts the fundamentals window's days in a post
+# window (weight_post_days, 0 on every cell). On V2's config.
+
+test_that("v2s-m6: the cells carry post flags after every closed election, none in a campaign", {
+  skip_unless_slow()
+  skip_unless_step("v2s-m6")
+  cells <- v2_test_cells(cfg_m6())
+  for (name in names(cells)) {
+    d <- cells[[name]]$data
+    expect_identical(as.integer(d$post_flex), 1L, label = name)
+    expect_equal(sum(d$post * d$delta_days), 90 * d$n_closed, label = name)
+    expect_false(any(d$post == 1L & d$campaign == 1L), label = name)
+    expect_identical(d$weight_post_days, 0, label = name)
+  }
+})
+
+test_that("v2s-m6: Stan's log density matches the reference up to a constant", {
+  skip_unless_slow()
+  skip_unless_step("v2s-m6")
+  hit <- expect_step_lp("v2s-m6", cfg_m6())
+  by_cell <- attr(hit, "by_cell")
+  expect_identical(names(by_cell), c("eve2024", "f180_2021", "eve2017"))
+  for (name in names(by_cell)) expect_true("post_unscaled" %in% by_cell[[name]], label = name)
+  expect_true(all(c(
+    "fund_uncentred", "delta_years_unscaled", "delta_entry_leak", "no_delta_restart", "shock_unscaled",
+    "newcomer_mean_over_all", "house_walk_from_first_poll", "newcomer_mean_of_mu1", "no_mu_restart", "no_house_restart"
+  ) %in% hit))
+})
+
+test_that("v2s-m6: with weight_post_days 30 Stan's log density matches the reference, and the term without the post days would not", {
+  skip_unless_slow()
+  skip_unless_step("v2s-m6")
+  # WHY: every cell has weight_post_days 0, where Stan ignoring it would pass. Stan reads it in
+  # the fundamentals term alone, so the data can change it here without rebuilding.
+  d <- v2_test_cells(cfg_m6())$eve2024$data
+  d$weight_post_days <- 30
+  m <- v2_methods(V2_STAN, d)
+  pts <- lp_points(m, d, n_post = 0, n_off = 0, n_prior = 10)
+  ok <- expect_lp_matches(m, d, pts)
+  slip <- lp_range(lp_gap(m, utils::modifyList(d, list(weight_post_days = 0)), pts)$gap)
+  expect_gt(slip, 100 * ok$tol)
+  message(sprintf(
+    "v2s-m6 eve2024 at weight_post_days 30: %d prior points, lp constant range %.3g (tol %.3g); without the post days, range / (100 tol) %.3g",
+    length(pts), ok$range, ok$tol, slip / (100 * ok$tol)
+  ))
+})
+
+test_that("v2s-m6: the switch adds tau_post and nothing else, and post_flex = 0 is the model before it", {
+  skip_unless_slow()
+  skip_unless_step("v2s-m6")
+  d <- v2_test_cells(cfg_m6())$eve2024$data
+  d0 <- d
+  d0$post_flex <- 0L
+  d0$post[] <- 0L
+  m <- v2_methods(V2_STAN, d)
+  m0 <- v2_methods(V2_STAN, d0)
+  expect_equal(n_unc(m), n_unc(m0) + 1)
+  sizes <- m$metadata()$stan_variable_sizes
+  sizes0 <- m0$metadata()$stan_variable_sizes
+  # WHY: the metadata leaves out a variable of size 0, so tau_post is absent at post_flex = 0.
+  expect_identical(setdiff(names(sizes), names(sizes0)), "tau_post")
+  expect_identical(as.integer(sizes$tau_post), 1L)
+  expect_null(sizes0$tau_post)
+  expect_identical(sizes[setdiff(names(sizes), "tau_post")], sizes0[setdiff(names(sizes0), "tau_post")])
+  # WHY: on post_flex = 0's data the multiplier's flags are all 0, so a point's density is the
+  # reference's without the switch.
+  pts <- lp_points(m0, d0, n_post = 0, n_off = 0, n_prior = 5)
+  expect_lp_matches(m0, d0, pts)
+})
+
+test_that("v2s-m6: transformed data refuses post flags without the switch or inside a campaign, and too many post days", {
+  skip_unless_slow()
+  skip_unless_step("v2s-m6")
+  d <- v2_test_cells(cfg_m6())$eve2024$data
+  off <- d
+  off$post_flex <- 0L
+  i <- which(c(d$post) == 1L)[1]
+  expect_error(v2_methods(V2_STAN, off), paste0("forecast_v2: post_flex = 0 needs every post flag to be 0, but post[", i, "] = 1"), fixed = TRUE)
+  both <- d
+  j <- which(c(d$campaign) == 1L)[1]
+  both$post[j] <- 1L
+  expect_error(v2_methods(V2_STAN, both), paste0("forecast_v2: no step may be in both a campaign and a post window, but step ", j, " is"), fixed = TRUE)
+  many <- d
+  many$weight_post_days <- d$weight_time - d$campaign_days + 1
+  expect_error(v2_methods(V2_STAN, many), "forecast_v2: weight_post_days must be at most weight_time - campaign_days", fixed = TRUE)
+})
