@@ -17,9 +17,9 @@ The first publication is a floor: `available_from` is the later of that date and
 | national | published | 25 |
 | national | house_max | 126 |
 | national | election | 3 |
-| kjordaemi | correction | 1 |
-| kjordaemi | twin | 8 |
-| kjordaemi | published | 0 |
+| kjordaemi | correction | 0 |
+| kjordaemi | twin | 12 |
+| kjordaemi | published | 11 |
 | kjordaemi | house_max | 0 |
 
 ## Longest fieldwork per house
@@ -87,6 +87,7 @@ None.
 | level | date | fyrirtaeki | fieldwork_end | available_from | rule | fallback_near_F |
 |---|---|---|---|---|---|---|
 | national | 2021-08-06 | Gallup | 2021-08-15 | 2021-08-17 | published |  |
+| kjordaemi | 2021-07-24 | MMR | NA | 2021-08-27 | published |  |
 | kjordaemi | 2021-08-06 | Gallup | 2021-08-15 | 2021-08-17 | twin |  |
 
 ### E 2021-09-25, F 2021-09-11 (f14)
@@ -103,6 +104,7 @@ None.
 |---|---|---|---|---|---|---|
 | national | 2021-09-22 | Gallup | 2021-09-24 | 2021-09-25 | wikipedia |  |
 | national | 2021-09-23 | Maskína | 2021-09-24 | 2021-09-25 | wikipedia |  |
+| kjordaemi | 2021-09-23 | Maskína | 2021-09-24 | 2021-09-25 | twin |  |
 
 ### E 2024-11-30, F 2024-06-03 (f180)
 
@@ -116,6 +118,7 @@ None.
 | national | 2024-10-07 | Gallup | 2024-10-13 | 2024-11-01 | published |  |
 | national | 2024-10-10 | Maskína | 2024-10-18 | 2024-10-19 | lokadagur |  |
 | national | 2024-10-10 | Prósent | 2024-10-13 | 2024-10-25 | published |  |
+| kjordaemi | 2024-09-24 | Maskína | 2024-09-24 | 2024-11-11 | published |  |
 | kjordaemi | 2024-10-10 | Maskína | 2024-10-18 | 2024-10-19 | twin |  |
 
 ### E 2024-11-30, F 2024-11-16 (f14)
@@ -123,7 +126,7 @@ None.
 | level | date | fyrirtaeki | fieldwork_end | available_from | rule | fallback_near_F |
 |---|---|---|---|---|---|---|
 | national | 2024-11-15 | Gallup | 2024-11-21 | 2024-11-22 | correction |  |
-| kjordaemi | 2024-11-15 | Gallup | 2024-11-21 | 2024-11-22 | correction |  |
+| kjordaemi | 2024-11-07 | Gallup | 2024-11-14 | 2024-11-18 | published |  |
 
 ### E 2024-11-30, F 2024-11-29 (eve)
 
@@ -132,6 +135,7 @@ None.
 | national | 2024-11-26 | Gallup | 2024-11-29 | 2024-11-30 | lokadagur |  |
 | national | 2024-11-28 | Félagsvísindastofnun | 2024-11-29 | 2024-11-30 | lokadagur |  |
 | national | 2024-11-28 | Maskína | 2024-11-29 | 2024-11-30 | lokadagur |  |
+| kjordaemi | 2024-11-26 | Gallup | 2024-11-29 | 2024-11-30 | twin |  |
 
 ## Overlapping fieldwork
 
@@ -178,3 +182,4 @@ Same-house polls at one level whose known spans overlap. A span is known where `
 | national | Maskína | 2021-09-19 | 2021-09-16 | 2021-09-22 | wikipedia | 2021-09-23 | 2021-09-22 | 2021-09-24 | wikipedia |
 | national | Maskína | 2024-11-25 | 2024-11-22 | 2024-11-28 | lokadagur | 2024-11-28 | 2024-11-27 | 2024-11-29 | lokadagur |
 | national | Prósent | 2024-10-10 | 2024-10-07 | 2024-10-13 | published | 2024-10-15 | 2024-10-13 | 2024-10-17 | lokadagur |
+| kjordaemi | Maskína | 2021-09-19 | 2021-09-16 | 2021-09-22 | twin | 2021-09-23 | 2021-09-22 | 2021-09-24 | twin |

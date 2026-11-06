@@ -45,7 +45,7 @@ dir.create(file.path(out, "cmdstan"), recursive = TRUE, showWarnings = FALSE)
 build_stan_data <- function(cutoff) {
   box::use(
     R / data[read_polling_data, read_fundamentals_data, read_constituency_data],
-    R / stan_data[prepare_stan_data, n_pred_k_2024, kjordaemi_obs_k]
+    R / stan_data[prepare_stan_data, n_pred_k_2024, kjordaemi_full_polls, kjordaemi_obs_k]
   )
   keep_date <- function(date) if (is.null(cutoff)) rep(TRUE, length(date)) else date <= as.Date(cutoff)
 
@@ -74,6 +74,7 @@ build_stan_data <- function(cutoff) {
       keep_date(date)
     ) |>
     drop_na() |>
+    kjordaemi_full_polls(polling_data) |>
     mutate(
       fyrirtaeki = factor(fyrirtaeki, levels = levels(polling_data$fyrirtaeki)),
       flokkur = factor(flokkur, levels = levels(polling_data$flokkur)),

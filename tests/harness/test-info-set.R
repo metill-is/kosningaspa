@@ -10,18 +10,19 @@ test_that("every design cell builds and validates", {
   skip_without_snapshot()
   for (i in seq_len(nrow(TARGETS))) expect_no_error(validate_inputs(info_set(TARGETS$E[i], TARGETS$F[i], inp)))
 })
-test_that("2017 has nine parties; Gallup 15 Nov is out on 16 Nov and in on the eve", {
+test_that("2017 has nine parties; Gallup's national 15 Nov and kjördæmi 7 Nov polls are out on 16 Nov and in on the eve", {
   skip_without_snapshot()
   expect_false("Sósíalistaflokkurinn" %in% cell("2017-10-28", "2017-10-14")$parties)
-  g <- function(x) any(x$date == as.Date("2024-11-15") & x$fyrirtaeki == "Gallup")
+  g <- function(x, d) any(x$date == as.Date(d) & x$fyrirtaeki == "Gallup")
   a <- cell("2024-11-30", "2024-11-16"); b <- cell("2024-11-30", "2024-11-29")
-  expect_false(g(a$polls_nat) || g(a$polls_kd)); expect_true(g(b$polls_nat) && g(b$polls_kd))
+  expect_false(g(a$polls_nat, "2024-11-15") || g(a$polls_kd, "2024-11-07"))
+  expect_true(g(b$polls_nat, "2024-11-15") && g(b$polls_kd, "2024-11-07"))
 })
 test_that("a poll available exactly on F is admitted", {
   skip_without_snapshot()
-  F <- as.Date("2024-11-22")
-  expect_true(any(cell("2024-11-30", F)$polls_kd$date == as.Date("2024-11-15")))
-  expect_false(any(cell("2024-11-30", F - 1)$polls_kd$date == as.Date("2024-11-15")))
+  F <- as.Date("2024-11-18")
+  expect_true(any(cell("2024-11-30", F)$polls_kd$date == as.Date("2024-11-07")))
+  expect_false(any(cell("2024-11-30", F - 1)$polls_kd$date == as.Date("2024-11-07")))
 })
 test_that("planted leaks are refused", {
   skip_without_snapshot(); ok <- cell("2024-11-30", "2024-11-16")

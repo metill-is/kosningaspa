@@ -500,27 +500,49 @@ get_electorate_byage <- function() {
     count(aldur, kjordaemi, name = "n_kjosendur", wt = n)
 }
 
+#' Writes the sheet's kjördæmi tab to `data/constituency_data.csv`
+#' (`tidy_constituency_sheet()`).
 #' @export
 update_constituency_data <- function() {
   box::use(
     googlesheets4[read_sheet, gs4_auth],
-    janitor[clean_names],
-    dplyr[mutate, select, coalesce],
-    clock[date_build],
     here[here],
-    tidyr[pivot_longer],
     readr[write_csv]
   )
   gs4_auth(email = Sys.getenv("GOOGLE_MAIL"))
-  d <- read_sheet(
+  read_sheet(
     Sys.getenv("POLLING_SHEET_URL"),
     sheet = "kjordaemi"
+  ) |>
+    tidy_constituency_sheet() |>
+    write_csv(here("data", "constituency_data.csv"))
+}
+
+#' The sheet's kjördæmi tab in the long form of `data/constituency_data.csv`: one row
+#' per poll, party and kjördæmi (date, fyrirtaeki, flokkur, kjordaemi, n). A blank cell is
+#' a kjördæmi the poll does not cover, and its row is dropped; a party the poll covers
+#' but does not print is a 0, which the model builders read as unreported. The tab spells
+#' two parties in sentence case ("Flokkur fólksins", "Vinstri græn"); they get the labels
+#' the rest of the code uses.
+#' @param d the tab as `googlesheets4::read_sheet()` returns it: Ár, Mánuður, Dagur,
+#'   Fyrirtæki, Flokkur, then one column per kjördæmi
+#' @export
+tidy_constituency_sheet <- function(d) {
+  box::use(
+    janitor[clean_names],
+    dplyr[mutate, select, filter, recode],
+    clock[date_build],
+    tidyr[pivot_longer],
+    forcats[fct_relevel, as_factor]
   )
   d |>
     pivot_longer(-c(1:5), names_to = "kjordaemi", values_to = "n") |>
-    janitor::clean_names() |>
+    clean_names() |>
+    filter(!is.na(n)) |>
     mutate(
-      date = date_build(ar, manudur, dagur)
+      date = date_build(as.integer(ar), as.integer(manudur), as.integer(dagur)),
+      n = as.numeric(n),
+      flokkur = recode(flokkur, "Flokkur fólksins" = "Flokkur Fólksins", "Vinstri græn" = "Vinstri Græn")
     ) |>
     select(date, fyrirtaeki, flokkur, kjordaemi, n) |>
     mutate(
@@ -542,8 +564,7 @@ update_constituency_data <- function() {
         "Miðflokkurinn",
         "Sósíalistaflokkurinn"
       )
-    ) |>
-    write_csv(here("data", "constituency_data.csv"))
+    )
 }
 
 #' @export

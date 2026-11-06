@@ -45,7 +45,8 @@ test_that("real snapshot: every poll has one row, none at its midpoint", {
   nonel <- av[av$rule != "election", ]
   expect_true(all(nonel$available_from > nonel$date))
   g <- av[av$date == as.Date("2024-11-15") & av$fyrirtaeki == "Gallup", ]
-  expect_equal(g$available_from, as.Date(c("2024-11-22", "2024-11-22"))) # national and kjördæmi
+  expect_equal(g$level, "national")
+  expect_equal(g$available_from, as.Date("2024-11-22"))
   p <- av[av$date == as.Date("2024-09-26") & av$fyrirtaeki == "Prósent", ]
   expect_gt(p$available_from, as.Date("2024-10-14"))
 })
@@ -212,7 +213,9 @@ test_that("real snapshot: the first publication floors the polls that leaked", {
   expect_equal(from("national", "2024-10-07", "Gallup"), as.Date("2024-11-01"))
   expect_equal(from("national", "2024-10-10", "Prósent"), as.Date("2024-10-25"))
   expect_equal(from("national", "2024-11-15", "Gallup"), as.Date("2024-11-22"))
-  expect_equal(from("kjordaemi", "2024-11-15", "Gallup"), as.Date("2024-11-22"))
+  expect_equal(from("kjordaemi", "2024-11-07", "Gallup"), as.Date("2024-11-18"))
+  # A chart with no fieldwork date of its own, published by Gallup on 14 Nov 2024.
+  expect_equal(from("kjordaemi", "2024-10-16", "Gallup"), as.Date("2024-11-14"))
   # Published on its last fieldwork day (Wikipedia's 17–18 Oct 2017): still end + 1.
   m <- av[av$level == "national" & av$date == as.Date("2017-10-17") & av$fyrirtaeki == "MMR", ]
   expect_equal(paste(m$rule, format(m$available_from)), "wikipedia 2017-10-19")

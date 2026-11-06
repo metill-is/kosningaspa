@@ -302,6 +302,28 @@ poll_dates <- function(polling_data, constituency_data) {
 }
 
 
+#' The kjördæmi polls production's model can read: those that cover all K kjördæmi and
+#' whose house has a national poll on the same date. The model defines the last
+#' kjördæmi's effect through each poll's weights over all K kjördæmi (`delta_K`) and
+#' indexes kjördæmi polls by date, one poll per date (`kjordaemi_obs_k()`), so a poll that
+#' covers fewer kjördæmi, or that has no national twin on its date (a pooled table, a
+#' monthly aggregate), cannot enter it. Arm R0 applies the same rule (`R/harness/r0.R`);
+#' V2 reads every kjördæmi poll.
+#'
+#' @param constituency_data kjördæmi rows (date, fyrirtaeki, kjordaemi, ...): one row per
+#'   party for each kjördæmi a poll covers.
+#' @param polling_data national rows (date, fyrirtaeki, ...).
+#' @param K the number of kjördæmi.
+#' @return the rows of `constituency_data` whose poll passes, in their order.
+#' @export
+kjordaemi_full_polls <- function(constituency_data, polling_data, K = 6L) {
+  poll <- paste(constituency_data$date, constituency_data$fyrirtaeki)
+  n_kd <- tapply(as.character(constituency_data$kjordaemi), poll, \(k) length(unique(k)))
+  twin <- poll %in% paste(polling_data$date, polling_data$fyrirtaeki)
+  constituency_data[as.vector(n_kd[poll]) == K & twin, , drop = FALSE]
+}
+
+
 #' `obs_k`, the row of `constituency_weights` for each row of `y_k`, read as K consecutive
 #' rows of y_k per kjördæmi poll date, dates in the weights' row order, and the checks
 #' that this reading is right.

@@ -386,21 +386,28 @@ test_that("a house's walk starts at its first national poll's epoch, even after 
 
 test_that("on every forecast cell no house's kjordaemi poll comes before its national ones, so the walk's start is unchanged", {
   # WHY: the walk's start was the first poll of either kind before it was tied to the first
-  # national poll; on the snapshot the two agree for every house of the ten cells, so no
-  # cell's data changed. A 2017 cell is built under a root with no freeze (no forecast).
+  # national poll; on the snapshot the two agree for every house of the ten cells that has a
+  # national poll. The one house without, Maskína at 2021 f180 (kjördæmi polls in December
+  # 2020 and January 2021, its first national poll on 19 July 2021), now starts at n_epoch:
+  # a kjördæmi poll reads phi_h but never gamma, so its deviations never reach the
+  # likelihood. A 2017 cell is built under a root with no freeze (no forecast).
   box::use(R / harness / constants[TARGETS])
   root <- withr::local_tempdir("v2-cells-root-")
+  no_nat <- character(0)
   for (i in seq_len(nrow(TARGETS))) {
-    d <- v2_stan_data(info_set(TARGETS$E[i], TARGETS$F[i], v2_inputs()), cfg_m1(), root = root)$data
+    b <- v2_stan_data(info_set(TARGETS$E[i], TARGETS$F[i], v2_inputs()), cfg_m1(), root = root)
+    d <- b$data
     ge <- c(d$grid_epoch)
     for (h in seq_len(d$H)) {
-      lbl <- paste(TARGETS$E[i], TARGETS$tag[i], "house", h)
+      lbl <- paste(TARGETS$E[i], TARGETS$tag[i], b$meta$house_levels[h])
       nat <- ge[c(d$grid_nat)[c(d$house_nat) == h]]
       kd <- ge[c(d$grid_kd)[c(d$house_kd) == h]]
-      expect_gt(length(nat), 0, label = paste(lbl, "national polls"))
-      expect_identical(as.integer(d$house_first_epoch[h]), as.integer(min(c(nat, kd))), label = lbl)
+      if (length(nat) == 0) no_nat <- c(no_nat, lbl)
+      start <- if (length(nat)) min(c(nat, kd)) else d$n_epoch
+      expect_identical(as.integer(d$house_first_epoch[h]), as.integer(start), label = lbl)
     }
   }
+  expect_identical(no_nat, "2021-09-25 f180 Maskína")
 })
 
 # The newcomer pool (step v2s-m2, §6.4, switch newcomer_pool): the newcomer contrast's mean

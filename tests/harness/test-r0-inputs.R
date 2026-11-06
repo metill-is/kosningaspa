@@ -123,15 +123,32 @@ test_that("the newcomers get the median debut share, centred like the others", {
 
 test_that("only polls dated after the previous election enter the kjördæmi rows", {
   skip_without_snapshot()
-  for (i in c(cell("2021-09-25", "2021-03-29"), cell("2017-10-28", "2017-10-14"), cell("2017-10-28", "2017-10-27"), cell("2024-11-30", "2024-06-03"))) {
+  for (i in c(cell("2021-09-25", "2021-03-29"), cell("2017-10-28", "2017-10-14"), cell("2024-11-30", "2024-06-03"))) {
     expect_equal(r0[[i]]$data$N_k, 6, label = format(TARGETS$F[i]))
     expect_equal(r0[[i]]$data$N_obs_k, 1)
     expect_true(all(r0[[i]]$data$house_k == 1))
   }
+  # The 2017 eve reads the 2016 result and Félagsvísindastofnun's 18 Oct 2017 poll (out on 23 Oct),
+  # not its 24 Oct 2016 poll, which predates the 2016 election.
+  e17 <- r0[[cell("2017-10-28", "2017-10-27")]]
+  expect_equal(e17$data$N_obs_k, 2)
+  expect_equal(e17$data$N_k, 12)
+  expect_equal(e17$meta$n_polls_kd, 1)
+})
+
+test_that("R0 reads only the kjördæmi polls that cover all six kjördæmi and have a same-house national poll", {
+  skip_without_snapshot()
   eve <- cell("2024-11-30", "2024-11-29")
   kd <- infos[[eve]]$polls_kd
-  polls <- nrow(dplyr::distinct(kd[kd$date > as.Date("2021-09-25"), ], date, fyrirtaeki))
+  kd <- kd[kd$date > as.Date("2021-09-25"), ]
+  admitted <- nrow(dplyr::distinct(kd, date, fyrirtaeki))
+  full <- kd |>
+    dplyr::summarise(n_kd = dplyr::n_distinct(kjordaemi), .by = c(date, fyrirtaeki)) |>
+    dplyr::filter(n_kd == 6) |>
+    dplyr::semi_join(dplyr::distinct(infos[[eve]]$polls_nat, date, fyrirtaeki), by = c("date", "fyrirtaeki"))
+  polls <- nrow(full)
   expect_gt(polls, 0)
+  expect_lt(polls, admitted)
   expect_equal(r0[[eve]]$data$N_k, 6 * (1 + polls))
   expect_equal(r0[[eve]]$meta$n_polls_kd, polls)
 })
@@ -248,13 +265,20 @@ test_that("an input the builder cannot map is an error", {
   x$results$votes[which(hit)[1]] <- 10L
   expect_error(r0_stan_data(x), "R0 input: a dropped party has votes")
 
-  eve <- infos[[cell("2024-11-30", "2024-11-29")]]
+  i <- cell("2024-11-30", "2024-11-29")
+  eve <- infos[[i]]
+  # Maskína 17 Nov is the eve's latest full poll; no national poll is dated 28 Nov, so it drops out.
   x <- eve
-  x$polls_kd$date[x$polls_kd$date == max(x$polls_kd$date)] <- as.Date("2024-11-28")
-  expect_error(r0_stan_data(x), "R0 input: a kjördæmi date is not a national date")
+  x$polls_kd$date[x$polls_kd$date == as.Date("2024-11-17")] <- as.Date("2024-11-28")
+  expect_equal(r0_stan_data(x)$meta$n_polls_kd, r0[[i]]$meta$n_polls_kd - 1)
   x <- eve
-  last <- x$polls_kd$date == max(x$polls_kd$date)
-  x$polls_kd$fyrirtaeki[which(last)[1]] <- "Kosning2"
+  kd2 <- x$polls_kd[x$polls_kd$date == as.Date("2024-11-17"), ]
+  nat2 <- x$polls_nat[x$polls_nat$date == as.Date("2024-11-17") & x$polls_nat$fyrirtaeki == "Maskína", ]
+  expect_gt(nrow(nat2), 0)
+  kd2$fyrirtaeki <- "Kosning2"
+  nat2$fyrirtaeki <- "Kosning2"
+  x$polls_kd <- rbind(x$polls_kd, kd2)
+  x$polls_nat <- rbind(x$polls_nat, nat2)
   expect_error(r0_stan_data(x), "R0 input: a kjördæmi date has more than one house")
   x <- eve
   x$F <- max(x$polls_nat$date) - 1

@@ -875,10 +875,17 @@ block holds none). Each step's own commands are in its section of `harness/v2/st
 `r0_production_inputs(info)` puts a cell's `info_set()` into the format production's fit
 script hands to `prepare_stan_data()` (`R/stan_data.R`): the `Kosning` rows and admitted
 national polls; the previous election's kjördæmi results and the admitted kjördæmi polls
-dated after it; the training rows, E's target rows and an Annað target row. The party order
+dated after it that production's fit script can read, those covering all six kjördæmi with a
+national poll by the same house on the same date (`kjordaemi_full_polls()`, `R/stan_data.R`;
+V2 reads every kjördæmi poll); the training rows, E's target rows and an Annað target row. The party order
 is Annað, then the cell's parties in `POLL_PARTIES` order; the houses are `Kosning`, then
 each house by its first admitted poll; the kjördæmi follow `R0_KJORDAEMI`, production's 2024
 order, so Suður closes δ in every cell. No house is filtered out.
+
+A known issue, kept so that R0 stays a faithful copy of production (ruled 2026-11-06): a
+kjördæmi poll is a split of its national twin's sample, and R0, like production, reads its
+respondents into the national level a second time through the kjördæmi rows. V2 does not:
+its free per-poll level ν_j leaves a split only its kjördæmi contrasts.
 
 `r0_stan_data(info)` runs production's `prepare_stan_data()` on those inputs and then applies
 a fixed table of overrides, and only those (Task 8 of

@@ -95,7 +95,9 @@ party_order_of <- function(parties) {
 #'     houses by their first admitted poll date (ties by name, radix order). Rows are
 #'     sorted by date, fyrirtaeki and flokkur.
 #'   - `constituency`: the `results` of `previous_election(E)` as `Kosning` rows (votes as
-#'     n) and the `polls_kd` rows dated after it (date, fyrirtaeki, kjordaemi, flokkur, n).
+#'     n) and the `polls_kd` rows dated after it (date, fyrirtaeki, kjordaemi, flokkur, n)
+#'     of the polls production's model can read: all six kjördæmi covered and a national
+#'     poll by the same house on the same date (`kjordaemi_full_polls()`).
 #'     `kjordaemi` is a factor in `R0_KJORDAEMI` order, `flokkur` and `fyrirtaeki` have
 #'     polling's levels, and rows are sorted by flokkur, date and kjordaemi.
 #'   - `fundamentals`: the training rows (flokkur := the α label `party`), E's target rows
@@ -112,7 +114,10 @@ party_order_of <- function(parties) {
 #'   growth among them, or no single previous share for Annað).
 #' @export
 r0_production_inputs <- function(info) {
-  box::use(R / harness / constants[ELECTION_HOUSE, previous_election])
+  box::use(
+    R / harness / constants[ELECTION_HOUSE, previous_election],
+    R / stan_data[kjordaemi_full_polls]
+  )
   party_order <- party_order_of(info$parties)
 
   first <- dplyr::summarise(info$polls_nat, first = min(date), .by = fyrirtaeki)
@@ -133,7 +138,7 @@ r0_production_inputs <- function(info) {
       date = rep(prev, nrow(res)), fyrirtaeki = rep(ELECTION_HOUSE, nrow(res)), kjordaemi = res$kjordaemi,
       flokkur = res$flokkur, n = as.numeric(res$votes)
     ),
-    info$polls_kd[info$polls_kd$date > prev, KD_COLS]
+    kjordaemi_full_polls(info$polls_kd[info$polls_kd$date > prev, KD_COLS], info$polls_nat)
   )
   if (anyNA(kd$n)) fail("a kj\u00f6rd\u00e6mi n is missing: ", listed(paste(format(kd$date), kd$fyrirtaeki)[is.na(kd$n)]))
   dropped <- !kd$flokkur %in% party_order & kd$n > 0

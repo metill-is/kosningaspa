@@ -6,9 +6,11 @@ each, polls are listed chronologically per pollster with the canonical
 source URL and any notes on sample frame, fielding window, or attribution.
 
 **Scope.** This file documents `data/post_election_polls.csv` (Dec 2024
-onward) and `data/post_election_polls_kjordaemi.csv` (election results
-only, as of 2026-05-20). Pre-election polls (≤ 2024-11-30) flow through the
-`POLLING_SHEET_URL` Google Sheet and carry their own provenance there.
+onward) and `data/post_election_polls_kjordaemi.csv` (the 2024 kjördæmi
+result and Gallup's post-election kjördæmi breakdowns, from 2026-11-06). Pre-election polls (≤ 2024-11-30) flow through the
+`POLLING_SHEET_URL` Google Sheet and carry their own provenance there, except the
+kjördæmi polls added to its `kjordaemi` tab on 2026-11-06, which are listed
+below (Pre-election kjördæmi polls).
 
 **Conventions**:
 
@@ -117,14 +119,90 @@ Five sources, in order of preference:
 
 ## `data/post_election_polls_kjordaemi.csv`
 
-Currently contains only the 2024 election results (60 rows: 6 kjördæmi × 10
-parties incl. Annað). No post-election kjördæmi-level polls have been
-ingested as of 2026-05-20 — adding them is the subject of the kjördæmi
-research strand discussed separately.
+Written by `R/scrape_polls.R` from `get_hardcoded_kjordaemi_polls()`, beside
+`data/post_election_polls.csv`, in the same columns plus `n_basis`. It holds the 2024
+result (60 rows: 6 kjördæmi × 10 parties incl. Annað, n = the official share to 0.1 pp ×
+the kjördæmi's valid votes) and, from 2026-11-06, 19 Gallup Þjóðarpúls kjördæmi
+breakdowns (340 rows) found by the search of public sources that fed the pre-election
+ingest below. Nothing reads the file yet.
 
-| Date | Pollster | Source | Notes |
-|---|---|---|---|
-| 2024-11-30 | Kosning | [kosning.is — Alþingiskosningar 2024 (kjördæmi)](https://www.kosning.is/althingiskosningar-2024/urslit-kosninga/) | Per-kjördæmi gild atkvæði from the official tally |
+- **Dates**: each breakdown takes the date of the national Gallup poll it splits.
+- **Unprinted parties** are 0, as in the sheet: outlets print Suður's top six, and
+  mbl.is omits Píratar and VG outside Reykjavík in June 2025. Both model builders drop
+  a 0 from that poll's likelihood.
+- **n** (`n_basis`): `printed` is the share × the printed kjördæmi n; `estimated` (no n
+  printed) is the national poll's n × the kjördæmi's share of the 2024 valid votes ×
+  0.334, the median ratio of printed to that estimate over Gallup's post-2024 kjördæmi
+  breakdowns that print an n.
+- Gallup's April 2025 breakdown printed only two Suður shares and is not in the file.
+
+| Date | Pollster | Kjördæmi | Source | Notes |
+|---|---|---|---|---|
+| 2024-11-30 | Kosning | all six | [kosning.is — Alþingiskosningar 2024 (kjördæmi)](https://www.kosning.is/althingiskosningar-2024/urslit-kosninga/) | Per-kjördæmi gild atkvæði from the official tally |
+| 2025-01-17 | Gallup | S | [www.sunnlenska.is](https://www.sunnlenska.is/frettir/sjalfstaedisflokkurinn-staerstur-i-sudurkjordaemi/) | fieldwork 2025-01-02 to 2025-02-02; first kjördæmi publication 2025-02-04 |
+| 2025-02-16 | Gallup | S | [www.sunnlenska.is](https://www.sunnlenska.is/frettir/sjalfstaedisflokkurinn-tekur-stokk-i-sudurkjordaemi/) | fieldwork 2025-02-03 to 2025-03-02; first kjördæmi publication 2025-03-03; S n 483 estimated (1446 × 0.334) |
+| 2025-03-17 | Gallup | NA, S | [www.sunnlenska.is](https://www.sunnlenska.is/frettir/samfylkingin-a-miklu-flugi-i-sudurkjordaemi/) [austurfrett.is](https://austurfrett.is/frettir/samfylkingin-staerst-i-nordhausturkjoerdaemi-i-nyrri-koennun) | fieldwork 2025-03-03 to 2025-03-31; first kjördæmi publication Suður 2025-04-01; Norðaustur 2025-04-02; NA n 395 estimated (1182 × 0.334) |
+| 2025-05-16 | Gallup | S | [www.sunnlenska.is](https://www.sunnlenska.is/frettir/sjalfstaedisflokkurinn-staerstur-i-sudurkjordaemi-2/) | fieldwork 2025-05-01 to 2025-06-01; first kjördæmi publication 2025-06-02 |
+| 2025-06-16 | Gallup | all six | [www.mbl.is](https://www.mbl.is/frettir/innlent/2025/07/03/samfylkingin_sterkust_i_ollum_kjordaemum_landsins/) | fieldwork 2025-06-02 to 2025-06-30; first kjördæmi publication Reykjavík Suður 2025-07-03; Reykjavík Norður 2025-07-03; Suðvestur 2025-07-03; Norðvestur 2025-07-03; Norðaustur 2025-07-03; Suður 2025-07-03; RN n 594 estimated (1780 × 0.334); RS n 598 estimated (1791 × 0.334); SV n 1027 estimated (3075 × 0.334); NV n 290 estimated (869 × 0.334); NA n 391 estimated (1170 × 0.334); S n 511 estimated (1530 × 0.334)|
+| 2025-07-16 | Gallup | NA, S | [www.sunnlenska.is](https://www.sunnlenska.is/frettir/samfylkingin-staerst-i-sudurkjordaemi-2/) [austurfrett.is](https://austurfrett.is/frettir/samfylkingin-sopar-afram-til-sin-fylgi) | fieldwork 2025-07-01 to 2025-07-31; first kjördæmi publication Suður 2025-08-05; Norðaustur 2025-08-07|
+| 2025-09-15 | Gallup | S | [www.sunnlenska.is](https://www.sunnlenska.is/frettir/samfylkingin-afram-staerst-i-sudurkjordaemi/) | fieldwork 2025-09-01 to 2025-09-30; first kjördæmi publication 2025-10-06|
+| 2025-10-17 | Gallup | S | [www.sunnlenska.is](https://www.sunnlenska.is/frettir/midflokkurinn-upp-um-101-prosent-i-sudurkjordaemi/) | fieldwork 2025-10-01 to 2025-11-02; first kjördæmi publication 2025-11-04|
+| 2025-11-16 | Gallup | S | [www.sunnlenska.is](https://www.sunnlenska.is/frettir/midflokkurinn-fengi-fjora-thingmenn-i-sudurkjordaemi/) | fieldwork 2025-11-03 to 2025-11-30; first kjördæmi publication 2025-12-02|
+| 2025-12-15 | Gallup | NA, S | [austurfrett.is](https://austurfrett.is/frettir/flokkur-folksins-baetir-mest-vidh-sig-milli-manadha-i-nordhausturkjoerdaemi) [www.sunnlenska.is](https://www.sunnlenska.is/frettir/samfylkingin-staerst-i-sudurkjordaemi-3/) | fieldwork 2025-12-01 to 2025-12-28; first kjördæmi publication Suður 2026-01-05; Norðaustur 2026-01-02; NA n 348 estimated (1041 × 0.334)|
+| 2026-01-20 | Gallup | NA, S | [www.sunnlenska.is](https://www.sunnlenska.is/frettir/samfylkingin-staerst-en-sviptingar-a-odrum-vigstodvum/) [austurfrett.is](https://austurfrett.is/frettir/midhflokkurinn-ordhinn-staerstur-i-nordhausturkjoerdaemi) | fieldwork 2026-01-09 to 2026-02-01; first kjördæmi publication Suður 2026-02-03; Norðaustur 2026-02-18; NA n 372 estimated (1112 × 0.334)|
+| 2026-02-15 | Gallup | S | [www.sunnlenska.is](https://www.sunnlenska.is/frettir/midflokkurinn-og-sjalfstaedisflokkurinn-upp-fyrir-samfylkinguna/) [austurfrett.is](https://austurfrett.is/frettir/samfylkingin-staerst-a-ny-a-medhan-framsokn-brotlendir) | fieldwork 2026-02-02 to 2026-03-01; first kjördæmi publication Suður 2026-03-04; Norðaustur 2026-04-20|
+| 2026-03-16 | Gallup | NA, S | [www.sunnlenska.is](https://www.sunnlenska.is/frettir/midflokkurinn-staerstur-i-sudurkjordaemi/) [austurfrett.is](https://austurfrett.is/frettir/samfylkingin-staerst-a-ny-a-medhan-framsokn-brotlendir) | fieldwork 2026-03-02 to 2026-03-31; first kjördæmi publication Suður 2026-04-07; Norðaustur 2026-04-20 |
+| 2026-04-15 | Gallup | NA, S | [www.sunnlenska.is](https://www.sunnlenska.is/frettir/sjalfstaedisflokkurinn-staerstur-i-sudurkjordaemi-3/) [austurfrett.is](https://austurfrett.is/frettir/samfylkingin-afram-staerst-en-midhflokkurinn-minnkar) | fieldwork 2026-04-01 to 2026-04-29; first kjördæmi publication Suður 2026-05-01; Norðaustur 2026-05-07; S n 524 estimated (1570 × 0.334)|
+| 2026-05-15 | Gallup | NA, S | [www.sunnlenska.is](https://www.sunnlenska.is/frettir/sjalfstaedisflokkurinn-afram-staerstur-i-sudurkjordaemi/) [austurfrett.is](https://austurfrett.is/frettir/midhflokkurinn-baetir-vidh-sig-a-medhan-flokkur-folksins-tapar) | fieldwork 2026-04-30 to 2026-05-31; first kjördæmi publication Suður 2026-06-02; Norðaustur 2026-06-23 |
+| 2026-06-15 | Gallup | NA, S | [www.sunnlenska.is](https://www.sunnlenska.is/frettir/sjalfstaedisflokkurinn-med-fjora-thingmenn-i-sudurkjordaemi/) [austurfrett.is](https://austurfrett.is/frettir/litlar-breytingar-a-fylgi-i-nordhausturkjoerdaemi) | fieldwork 2026-06-01 to 2026-06-30; first kjördæmi publication Suður 2026-07-03; Norðaustur 2026-07-15 |
+| 2026-07-17 | Gallup | S | [www.vf.is](https://www.vf.is/frettir/sjalfstaedisflokkurinn-staerstur-i-sudurkjordaemi-4) | fieldwork 2026-07-01 to 2026-08-03; first kjördæmi publication 2026-08-10 |
+| 2026-08-17 | Gallup | NA, S | [www.sunnlenska.is](https://www.sunnlenska.is/frettir/sjalfstaedisflokkur-og-samfylking-baeta-vid-sig-fylgi/) [austurfrett.is](https://austurfrett.is/frettir/sjalfstaedhisflokkurinn-saekir-a-i-nordhausturkjoerdaemi) | fieldwork 2026-08-04 to 2026-08-31; first kjördæmi publication Suður 2026-09-02; Norðaustur 2026-09-15|
+| 2026-09-14 | Gallup | NA, S | [www.sunnlenska.is](https://www.sunnlenska.is/frettir/samfylkingin-dalar-en-midflokkurinn-tekur-stokk/) [austurfrett.is](https://austurfrett.is/frettir/risastoekk-samfylkingarinnar-a-milli-manadha) | fieldwork 2026-09-01 to 2026-09-28; first kjördæmi publication Suður 2026-09-30; Norðaustur 2026-10-22 |
+
+---
+
+## Pre-election kjördæmi polls (sheet tab `kjordaemi`)
+
+Added on 2026-11-06 from a search of public sources for kjördæmi breakdowns
+2016–2024. Each row below is one poll in the tab; `update_constituency_data()`
+writes the tab to `data/constituency_data.csv`. The harness takes each poll's
+first kjördæmi publication from `harness/sources/poll_publication.csv`.
+
+- **Unprinted parties** are 0: a party on the ballot that a source does not print
+  (Gallup Suður prints the top six) is unreported, and both model builders drop a
+  0 from that poll's likelihood. A blank cell is a kjördæmi the poll does not cover.
+- **n** is the published count where the source prints one, else the share × the
+  published kjördæmi n. Where neither is printed, n is the national twin's
+  respondents (summed over the national polls a table pools) × the kjördæmi's share
+  of the previous election's valid votes × the firm's median ratio of printed to
+  estimated kjördæmi n over the polls that print both (MMR 1.03, Maskína 2024 1.18).
+- **Dates** follow the tab's convention: a kjördæmi poll takes its national twin's
+  date where the two are one sample.
+- **Which model reads which poll.** V2 reads every row. Production's model and arm
+  R0 read only the polls that cover all six kjördæmi and have a national poll by the
+  same house on the same date (`kjordaemi_full_polls()`).
+- **Fixes to existing rows (2026-11-06).** Maskína 2021-09-03, Suður, Vinstri græn:
+  n 33 → 21, as the source PDF prints 7,5% (21). Gallup 2024-10-22 is Gallup's
+  whole-October chart (gallup.is, 14 Nov 2024), re-dated to 2024-10-16. Gallup
+  2024-11-15 matched no known source and was replaced by the RÚV 1–14 Nov figures
+  (Gallup 2024-11-07 below).
+
+| Date | Pollster | Kjördæmi | Source | Notes |
+|---|---|---|---|---|
+| 2016-10-24 | Félagsvísindastofnun | all six | [timarit.is](https://timarit.is/page/6793381) | fieldwork 2016-10-20 to 2016-10-27; first kjördæmi publication 2016-10-29; dated on its national twin (2016-10-24), fieldwork midpoint 10-23 |
+| 2017-10-18 | Félagsvísindastofnun | all six | [timarit.is](https://timarit.is/page/6958991) | fieldwork 2017-10-16 to 2017-10-19; first kjördæmi publication 2017-10-23; dated on its national twin (2017-10-18), fieldwork midpoint 10-17 |
+| 2020-01-08 | MMR | SV, NV, S | [web.archive.org](https://web.archive.org/web/20220119040405/http://www.bb.is/2020/01/nordvesturkjordaemi-fylgid-hrunid-af-vinstri-graenum/) | fieldwork 2020-01-03 to 2020-01-13; first kjördæmi publication 2020-01-25 |
+| 2020-12-28 | Maskína | RN, RS, SV | [www.visir.is](https://www.visir.is/g/20212065495d/framsokn-naedi-ekki-inn-manni-i-reykjavik) | fieldwork 2020-12-01 to 2021-01-25; first kjördæmi publication 2021-01-26 |
+| 2021-01-12 | Maskína | NV, NA, S | [www.visir.is](https://www.visir.is/g/20212077265d/midflokkurinn-i-vanda-a-landsbyggdinni-en-vidreisn-og-piratar-saekja-a) | fieldwork 2020-12-01 to 2021-02-23; first kjördæmi publication 2021-02-24 |
+| 2021-08-18 | Maskína | all six | [maskina.is](https://maskina.is/wp-content/uploads/2021/08/Heimasíða_Fylgiflokka_Ágúst.pdf) | fieldwork 2021-08-13 to 2021-08-23; first kjördæmi publication 2021-08-25 |
+| 2021-07-24 | MMR | all six | [www.mbl.is](https://www.mbl.is/frettir/innlent/2021/08/31/misvaegi_fylgis_flokka/) | fieldwork 2021-06-24 to 2021-08-24; first kjördæmi publication 2021-08-27; RN n 736 estimated (716 × 1.03); RS n 732 estimated (713 × 1.03); SV n 1143 estimated (1113 × 1.03); NV n 354 estimated (344 × 1.03); NA n 484 estimated (471 × 1.03); S n 575 estimated (560 × 1.03) |
+| 2021-09-19 | Maskína | all six | [maskina.is](https://maskina.is/wp-content/uploads/2021/09/23_09_2021_Fylgi.pdf) | fieldwork 2021-09-15 to 2021-09-22; first kjördæmi publication 2021-09-23; dated on its national twin (2021-09-19), fieldwork midpoint 09-18 |
+| 2021-09-23 | Maskína | NA | [austurfrett.is](https://austurfrett.is/frettir/ny-koennun-tveir-flokkar-medh-tvo-thingmenn) | fieldwork 2021-09-22 to 2021-09-24; first kjördæmi publication 2021-09-24 |
+| 2021-09-19 | MMR | all six | [timarit.is](https://timarit.is/page/7579544) | fieldwork 2021-09-15 to 2021-09-23; first kjördæmi publication 2021-09-24; RN n 657 estimated (640 × 1.03); RS n 654 estimated (637 × 1.03); SV n 1021 estimated (994 × 1.03); NV n 316 estimated (308 × 1.03); NA n 432 estimated (421 × 1.03); S n 514 estimated (500 × 1.03) |
+| 2024-10-25 | Maskína | all six | [www.visir.is](https://www.visir.is/g/20242641385d/ny-konnun-vid-reisn-og-flokkur-folksins-i-haestu-haedum) | fieldwork 2024-10-22 to 2024-10-28; first kjördæmi publication 2024-10-28 |
+| 2024-09-24 | Maskína | NV | [web.archive.org](https://web.archive.org/web/20241204052504/https://www.bb.is/2024/11/maskina-fimm-flokkar-fengju-kjordaemakjorinn-thingmann-i-nordvesturkjordaemi/) | fieldwork not published; first kjördæmi publication 2024-11-11; NV n 102 estimated (86 × 1.18) |
+| 2024-11-03 | Maskína | NV | [web.archive.org](https://web.archive.org/web/20241204052504/https://www.bb.is/2024/11/maskina-fimm-flokkar-fengju-kjordaemakjorinn-thingmann-i-nordvesturkjordaemi/) | fieldwork 2024-11-01 to 2024-11-06; first kjördæmi publication 2024-11-11; NV n 144 estimated (122 × 1.18) |
+| 2024-11-07 | Gallup | NA, S | [www.sunnlenska.is](https://www.sunnlenska.is/frettir/flokkur-folksins-staerstur-i-sudurkjordaemi/) | fieldwork 2024-11-01 to 2024-11-14; first kjördæmi publication 2024-11-18 |
 
 ---
 

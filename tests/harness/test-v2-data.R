@@ -26,14 +26,22 @@ test_that("epochs and weights follow the closing election", {
   expect_equal(d$w[4, ], d$w[3, ])
   expect_equal(unname(d$w[3, ]), unname(valid_votes(read_truth(), as.Date("2021-09-25"))$w))
 })
-test_that("2021 f180 keeps J with no kjordaemi row, entering in the open epoch", {
+test_that("2021 f180 keeps J with or without a kjordaemi row, entering in the open epoch", {
   skip_without_snapshot()
-  b <- v2_stan_data(info_set(as.Date("2021-09-25"), as.Date("2021-03-29")), cfg_m0())
-  j <- match("S\u00f3s\u00edalistaflokkurinn", b$meta$party_order)
-  expect_false(is.na(j))
-  expect_false(any(b$data$y_kd[, j] > 0))
-  expect_equal(b$data$entry_epoch[j], b$data$n_epoch)
-  expect_identical(b$meta$closed_elections, c("2016-10-29", "2017-10-28"))
+  J <- "Sósíalistaflokkurinn"
+  info <- info_set(as.Date("2021-09-25"), as.Date("2021-03-29"))
+  # MMR's January 2020 and Maskína's December 2020 and January 2021 kjördæmi polls print J.
+  # Zeroing J's rows rebuilds the cell as it was before they were admitted.
+  none <- info
+  none$polls_kd$n[none$polls_kd$flokkur == J] <- 0
+  for (x in list(list(info = info, rows = TRUE), list(info = none, rows = FALSE))) {
+    b <- v2_stan_data(x$info, cfg_m0())
+    j <- match(J, b$meta$party_order)
+    expect_false(is.na(j))
+    expect_identical(any(b$data$y_kd[, j] > 0), x$rows)
+    expect_equal(b$data$entry_epoch[j], b$data$n_epoch)
+    expect_identical(b$meta$closed_elections, c("2016-10-29", "2017-10-28"))
+  }
 })
 test_that("the 2017 cells have nine parties, one closed epoch, M entering in the open one, and no forecast", {
   skip_without_snapshot()

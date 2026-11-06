@@ -24,6 +24,7 @@ box::use(
     prepare_stan_data,
     n_pred_k_2024,
     poll_dates,
+    kjordaemi_full_polls,
     kjordaemi_obs_k
   ]
 )
@@ -58,6 +59,7 @@ constituency_data <- read_constituency_data() |>
     (fyrirtaeki != "Gallup") | (date <= clock::date_build(2024, 11, 10))
   ) |>
   drop_na() |>
+  kjordaemi_full_polls(polling_data) |>
   mutate(
     fyrirtaeki = factor(fyrirtaeki, levels = levels(polling_data$fyrirtaeki)),
     flokkur = factor(flokkur, levels = levels(polling_data$flokkur)),
