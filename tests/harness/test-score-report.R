@@ -1,7 +1,7 @@
 # score_report.R's rule, on made-up scores: the tie rule (read_diff()), the d2 p-value and
 # the adoption rule's four criteria (adoption_criteria()). The script part, which scores real
 # runs, is not run here.
-box::use(R / harness / score_report[read_diff, d2_p, adoption_criteria, MARGINS, GATE_P])
+box::use(R / harness / score_report[read_diff, d2_p, adoption_criteria, mae_summary, MARGINS, GATE_P])
 
 test_that("read_diff calls a difference under 2 x SE_diff a tie, and otherwise better or worse (lower is better)", {
   d <- read_diff(1.00, 1.05, 0.03, 0.04)
@@ -64,4 +64,25 @@ test_that("distribution needs mDSS lower beyond a tie, unless ref fails the gate
   expect_false(adoption_criteria(base, with_scores(mdss = -7))[["distribution"]])
   ref_uncalibrated <- with_scores(d2 = 40)
   expect_true(adoption_criteria(ref_uncalibrated, with_scores(mdss = -7))[["distribution"]])
+})
+
+test_that("mae_summary takes each run's MAEs from the scored reading and reads MAE8 by the tie rule", {
+  fake <- function(mae8, se, mae_all, kd, seat) {
+    list(
+      national = tibble::tibble(
+        reading = c("eday_national", "kd_aggregate"), mae8 = c(99, mae8), se_mae8 = c(9, se), mae_all = c(99, mae_all)
+      ),
+      kjordaemi = tibble::tibble(kd_mae_named = kd),
+      seats = tibble::tibble(seat_abs_err = seat)
+    )
+  }
+  m <- mae_summary(fake(1.2, 0.01, 1.1, 1.6, 7), fake(1.5, 0.02, 1.4, 1.7, 12))
+  expect_equal(m$mae8, c(ref = 1.2, new = 1.5))
+  expect_equal(m$se_mae8, c(ref = 0.01, new = 0.02))
+  expect_equal(m$mae8_diff$diff, 0.3)
+  expect_identical(m$mae8_diff$reading, "worse")
+  expect_equal(m$mae_all, c(ref = 1.1, new = 1.4))
+  expect_equal(m$kd_mae, c(ref = 1.6, new = 1.7))
+  expect_equal(m$seat_err, c(ref = 7, new = 12))
+  expect_identical(mae_summary(fake(1.2, 0.1, 1, 1, 1), fake(1.25, 0.1, 1, 1, 1))$mae8_diff$reading, "tie")
 })

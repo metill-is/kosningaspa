@@ -73,6 +73,16 @@ test_that("party_scores reorders the truth to the columns and scores each party"
   expect_error(party_scores(X, c(A = 0.2, C = 0.45)), "truth and draws name different parties")
 })
 
+test_that("party_scores records each party's result and the absolute error of its median, the per-party MAE terms", {
+  X <- cbind(A = c(0.1, 0.2, 0.2, 0.4, 0.6), B = c(0.5, 0.4, 0.3, 0.3, 0.2))
+  ps <- party_scores(X, c(B = 0.45, A = 0.2))
+  expect_equal(ps$actual, c(0.2, 0.45))
+  expect_equal(ps$abs_err, c(0, 0.15))
+  # WHY: national_scores()'s mae_all is 100 x the mean of these terms over every party.
+  y <- c(A = 0.2, B = 0.45)
+  expect_equal(national_scores(X, y, 1e-6)$mae_all, 100 * mean(ps$abs_err))
+})
+
 test_that("d2 and mdss do not depend on which party is the alr reference", {
   set.seed(1)
   X <- dirichlet_like(2000, c(A = 20, B = 10, C = 5, D = 2))

@@ -73,8 +73,9 @@ wide_draws <- function(long, value) {
 #'   error if the names differ from `colnames(X)`
 #' @return a tibble with one row per column of `X`: `flokkur`, `mean`, `sd` (n − 1),
 #'   `median`, `q05`, `q25`, `q75`, `q95` (type 7), `crps`, `dss` = log((100·sd)²) +
-#'   ((y − mean)/sd)², `pit` = mean(X < y) + ½·mean(X = y), and `in50`, `in90` (y within
-#'   [q25, q75] and [q05, q95])
+#'   ((y − mean)/sd)², `pit` = mean(X < y) + ½·mean(X = y), `in50`, `in90` (y within
+#'   [q25, q75] and [q05, q95]), `actual` (y) and `abs_err` = |median − y|, the per-party
+#'   terms of `national_scores()`'s MAEs
 #' @export
 party_scores <- function(X, y) {
   y <- unname(align_truth(X, y))
@@ -92,7 +93,9 @@ party_scores <- function(X, y) {
     dss = log((100 * s)^2) + ((y - mu) / s)^2,
     pit = vapply(cols, \(j) mean(X[, j] < y[j]) + 0.5 * mean(X[, j] == y[j]), 0),
     in50 = y >= q[2, ] & y <= q[3, ],
-    in90 = y >= q[1, ] & y <= q[4, ]
+    in90 = y >= q[1, ] & y <= q[4, ],
+    actual = y,
+    abs_err = abs(median - y)
   )
 }
 

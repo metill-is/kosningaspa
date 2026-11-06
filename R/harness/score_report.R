@@ -21,7 +21,10 @@
 #     beyond a tie, or ref failing the gate) and no regional loss (kjordaemi CRPS at most
 #     MARGINS["kd_crps"] pp worse and seat CRPS per party at most MARGINS["seat_crps_pp"]
 #     worse, each or a tie);
-#   - each party's national CRPS under both arms, and the number of parties new improves.
+#   - each party's result, both arms' medians, absolute errors and CRPS, and the number of
+#     parties on which new's median is closer and its CRPS lower.
+# Above the cells, a table of the MAEs (mae_summary()): MAE8 with its SE and the tie rule's
+# reading, the MAE over all parties, the kjordaemi MAE and the summed seat error.
 # It reads each run's meta.json for its iterations, seed and gate, and stops, writing nothing,
 # on a run list with no run of an arm, a cell missing one arm's run or holding two, a run with
 # no meta.json, and on whatever score_cell() refuses (a 2017 cell, a dev or check arm).
@@ -115,6 +118,27 @@ adoption_criteria <- function(ref, new) {
   )
 }
 
+#' The MAEs of two runs on one cell, the headline the report opens with.
+#' @param s_ref,s_new score_cell()'s values for the two runs
+#' @return a list: `mae8` (100 x the mean |median - result| over the eight named parties,
+#'   `NAMED8`) of each run with its MCSE and `read_diff()` of the two; `mae_all` (the same
+#'   over every party) of each; `kd_mae` (over the named parties' kj\u00f6rd\u00e6mi cells) of each;
+#'   `seat_err` (the sum over parties of |median seats - seats won|) of each. Only `mae8`
+#'   has a Monte Carlo SE.
+#' @export
+mae_summary <- function(s_ref, s_new) {
+  nat <- function(s) s$national[s$national$reading == "kd_aggregate", ]
+  a <- nat(s_ref)
+  b <- nat(s_new)
+  list(
+    mae8 = c(ref = a$mae8, new = b$mae8), se_mae8 = c(ref = a$se_mae8, new = b$se_mae8),
+    mae8_diff = read_diff(a$mae8, b$mae8, a$se_mae8, b$se_mae8),
+    mae_all = c(ref = a$mae_all, new = b$mae_all),
+    kd_mae = c(ref = s_ref$kjordaemi$kd_mae_named, new = s_new$kjordaemi$kd_mae_named),
+    seat_err = c(ref = s_ref$seats$seat_abs_err, new = s_new$seats$seat_abs_err)
+  )
+}
+
 read_run_list <- function(path) {
   if (!file.exists(path)) fail("no run list ", relative(path))
   lines <- trimws(readLines(path, warn = FALSE))
@@ -160,7 +184,8 @@ cell_section <- function(cell, ref, new, s_ref, s_new) {
     scored("CRPS10, pp (co-primary)", a$crps10, b$crps10, a$se_crps10, b$se_crps10, 3),
     scored("mDSS (co-primary)", a$mdss, b$mdss, a$se_mdss, b$se_mdss, 2),
     scored(sprintf("d@SUP2@ (p: %s, %s)", num(p_a, 3), num(p_b, 3)), a$d2, b$d2, a$se_d2, b$se_d2, 2),
-    scored("MAE8, pp", nat_a$mae8, nat_b$mae8, nat_a$se_mae8, nat_b$se_mae8, 3),
+    scored("MAE8, pp (the eight named parties)", nat_a$mae8, nat_b$mae8, nat_a$se_mae8, nat_b$se_mae8, 3),
+    reported("MAE over all parties, pp", nat_a$mae_all, nat_b$mae_all, 3),
     scored("IS90", nat_a$is90, nat_b$is90, nat_a$se_is90, nat_b$se_is90, 2),
     count("National 50% coverage (higher is better)", nat_a$cov50, nat_b$cov50, nat_a$n_parties, nat_b$n_parties, nat_a$se_cov50, nat_b$se_cov50),
     count("National 90% coverage (higher is better)", nat_a$cov90, nat_b$cov90, nat_a$n_parties, nat_b$n_parties, nat_a$se_cov90, nat_b$se_cov90),
@@ -206,19 +231,26 @@ cell_section <- function(cell, ref, new, s_ref, s_new) {
       format(MARGINS[["seat_crps_pp"]]), yes(crit[["regional"]])
     )
   )
-  pa <- s_ref$per_party[, c("flokkur", "crps")]
-  pb <- s_new$per_party[, c("flokkur", "crps")]
-  pp <- merge(pa, pb, by = "flokkur", all = TRUE, suffixes = c("_ref", "_new"), sort = FALSE)
-  pp <- pp[order(-pmax(pp$crps_ref, pp$crps_new, na.rm = TRUE)), ]
+  cols <- c("flokkur", "actual", "median", "abs_err", "crps")
+  pp <- merge(s_ref$per_party[, cols], s_new$per_party[, cols], by = "flokkur", all = TRUE, suffixes = c("_ref", "_new"), sort = FALSE)
+  pp$actual <- ifelse(is.na(pp$actual_ref), pp$actual_new, pp$actual_ref)
+  pp <- pp[order(-pp$actual), ]
   both <- !is.na(pp$crps_ref) & !is.na(pp$crps_new)
+  pct <- function(x) num(100 * x, 2)
   parties <- c(
-    row("Party", paste0(ref, ": CRPS, pp"), paste0(new, ": CRPS, pp"), paste0(new, " @MINUS@ ", ref)),
-    row(rep("---", 4)),
-    vapply(seq_len(nrow(pp)), \(i) row(pp$flokkur[i], num(100 * pp$crps_ref[i], 3), num(100 * pp$crps_new[i], 3), num(100 * (pp$crps_new[i] - pp$crps_ref[i]), 3)), ""),
+    row(
+      "Party", "Result, %", paste0(ref, ": median, %"), paste0(new, ": median, %"), paste0(ref, ": absolute error, pp"),
+      paste0(new, ": absolute error, pp"), paste0(ref, ": CRPS, pp"), paste0(new, ": CRPS, pp")
+    ),
+    row(rep("---", 8)),
+    vapply(seq_len(nrow(pp)), \(i) row(
+      pp$flokkur[i], pct(pp$actual[i]), pct(pp$median_ref[i]), pct(pp$median_new[i]), pct(pp$abs_err_ref[i]),
+      pct(pp$abs_err_new[i]), num(100 * pp$crps_ref[i], 3), num(100 * pp$crps_new[i], 3)
+    ), ""),
     "",
     sprintf(
-      "%s's national CRPS is lower on %d of the %d parties both arms forecast (no MC error per party; consistency evidence only).%s",
-      new, sum(pp$crps_new[both] < pp$crps_ref[both]), sum(both),
+      "Of the %d parties both arms forecast, %s's median is closer to the result on %d and its CRPS lower on %d (no MC error per party; consistency evidence only).%s",
+      sum(both), new, sum(pp$abs_err_new[both] < pp$abs_err_ref[both]), sum(pp$crps_new[both] < pp$crps_ref[both]),
       if (all(both)) "" else paste0(" Forecast by one arm only: ", paste(pp$flokkur[!both], collapse = ", "), ".")
     )
   )
@@ -250,6 +282,7 @@ main <- function(args) {
   cells <- unique(runs[, c("E", "F")])
   sections <- character(0)
   run_rows <- character(0)
+  mae_rows <- character(0)
   for (i in seq_len(nrow(cells))) {
     on <- runs[runs$E == cells$E[i] & runs$F == cells$F[i], ]
     for (a in c(ref, new)) {
@@ -269,6 +302,14 @@ main <- function(args) {
     s_ref <- score_cell(run_dir(ids[[1]]))
     s_new <- score_cell(run_dir(ids[[2]]))
     sections <- c(sections, cell_section(s_new$cell, ref, new, s_ref, s_new))
+    m <- mae_summary(s_ref, s_new)
+    mae_rows <- c(mae_rows, row(
+      paste(format(s_new$cell$E, "%Y"), s_new$cell$tag),
+      paste0(num(m$mae8[["ref"]], 2), " (", num(m$se_mae8[["ref"]], 2), ")"),
+      paste0(num(m$mae8[["new"]], 2), " (", num(m$se_mae8[["new"]], 2), ")"),
+      num(m$mae8_diff$diff, 2), m$mae8_diff$reading, num(m$mae_all[["ref"]], 2), num(m$mae_all[["new"]], 2),
+      num(m$kd_mae[["ref"]], 2), num(m$kd_mae[["new"]], 2), num(m$seat_err[["ref"]], 0), num(m$seat_err[["new"]], 0)
+    ))
   }
   text <- c(
     sprintf("# Scores: %s against %s", new, ref), "",
@@ -285,11 +326,29 @@ main <- function(args) {
     row("Cell (E, F)", "Arm", "Run", "Iterations (warmup + sampling)", "Seed", "Commit", "Gate (section 5.7)"),
     row(rep("---", 7)),
     run_rows, "",
+    "## MAE",
+    "",
+    "The mean absolute error of each model's median vote share against the result, in points. MAE8 is over the",
+    "eight named parties (Anna@ETH@ and S@OACUTE@s@IACUTE@alistaflokkurinn left out, as in the project's earlier backtests), with",
+    "the Monte Carlo SE of the medians; MAE over all parties includes them. Kj\u00f6rd\u00e6mi MAE is over the named",
+    "parties' kj\u00f6rd\u00e6mi cells; seat error is the sum over parties of |median seats @MINUS@ seats won|. MAE is",
+    "reported, not part of the adoption rule (spec section 5.6).",
+    "",
+    row(
+      "Cell", paste0(ref, ": MAE8, pp (SE)"), paste0(new, ": MAE8, pp (SE)"), paste0(new, " @MINUS@ ", ref), "Reading",
+      paste0(ref, ": MAE, all parties"), paste0(new, ": MAE, all parties"), paste0(ref, ": kj\u00f6rd\u00e6mi MAE"),
+      paste0(new, ": kj\u00f6rd\u00e6mi MAE"), paste0(ref, ": seat error"), paste0(new, ": seat error")
+    ),
+    row(rep("---", 11)),
+    mae_rows, "",
     sections
   )
   text <- gsub("@MINUS@", "\u2212", text, fixed = TRUE)
   text <- gsub("@TIMES@", "\u00d7", text, fixed = TRUE)
   text <- gsub("@SUP2@", "\u00b2", text, fixed = TRUE)
+  text <- gsub("@ETH@", "\u00f0", text, fixed = TRUE)
+  text <- gsub("@OACUTE@", "\u00f3", text, fixed = TRUE)
+  text <- gsub("@IACUTE@", "\u00ed", text, fixed = TRUE)
   text <- gsub("@CHI@", "\u03c7", text, fixed = TRUE)
   writeLines(text, out)
   cat("wrote ", relative(out), " (", nrow(cells), " cells)\n", sep = "")

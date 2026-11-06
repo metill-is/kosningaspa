@@ -102,7 +102,9 @@ draws_se <- function(long, score) {
 #'   `SE_SCORES`, so coverage comes with its Monte Carlo error;
 #'   - `gap_pp`: 100 × the largest absolute difference between the two readings'
 #'   posterior means;
-#'   - `per_party`: `party_scores()` of the scored reading, with `pit_se` from `batch_se()`;
+#'   - `per_party`: `party_scores()` of the scored reading (with each party's result,
+#'   `actual`, and the absolute error of its median, `abs_err`), with `pit_se` from
+#'   `batch_se()`;
 #'   - `kjordaemi`: `kd_scores()`, with the batch SEs `se_kd_crps` and `se_kd_cov90`;
 #'   - `seats` and `seats_per_party`: `seat_scores()` of
 #'   `seat_draws(eday_kjordaemi, layout_for(E), ineligible = "Annað")`, for the coalition

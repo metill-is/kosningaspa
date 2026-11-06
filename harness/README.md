@@ -133,7 +133,9 @@ and the wider suite waits for a forecast that is published or frozen. From the p
   To compare two arms, not two commits (V2 against R0, say), fit both in this checkout, since
   their run ids differ. `R/harness/score_report.R` then scores both runs on each cell with
   `score_cell()` and reads the spec's adoption rule (section 5.7) on each cell alone, with the
-  tie rule on every score that carries a batch SE:
+  tie rule on every score that carries a batch SE. It opens with the MAEs, the mean absolute
+  error of each model's median vote share in points (MAE8 over the eight named parties, with
+  its SE, and the MAE over all parties), and lists each party's result, medians and errors:
 
   ```
   LC_ALL=en_US.UTF-8 Rscript R/harness/score_report.R <ref_arm> <new_arm> <run_list> [out]
@@ -244,7 +246,8 @@ What `score_cell()` returns, per cell:
   beside it, and `gap_pp` is the largest gap between the two readings' posterior means,
   in points. Each row carries batch-means SEs over 16 blocks (`batch_of()`, four per
   chain) of CRPS10, IS90, DSS10, mDSS, d², MAE8 and the 50% and 90% coverage counts.
-- `per_party` (with the PIT's batch SE), `kjordaemi` (`kd_scores()`, with the batch SEs
+- `per_party` (with the PIT's batch SE, and each party's result and the absolute error of
+  its median, the terms of the MAEs), `kjordaemi` (`kd_scores()`, with the batch SEs
   `se_kd_crps` and `se_kd_cov90`), and `seats` and `seats_per_party`: the seats of each
   draw allocated with Annað ineligible, scored for the Brier coalition recorded in
   `meta.json`, with the majority probability of the coalition that formed after E
