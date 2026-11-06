@@ -20,18 +20,55 @@ manifest.
 
 ## Tests
 
-From the project root: `LC_ALL=en_US.UTF-8 Rscript tests/run.R [filter]`, which runs the
-suite under testthat edition 3. Tests that need the snapshot call `skip_without_snapshot()`
-and skip without it. `tests/harness/test-generated.R` fails if a generated committed file
-that builds offline is not a fresh build. Slow tests (the sweep of every forecast day in
-`tests/harness/test-sweep.R`, the self-test's kjördæmi and seat scores, the R0 Stan tests
-and the cell runner's test fit, which compile with CmdStan) call `skip_unless_slow()` and
-run only with `HARNESS_SLOW=1` in the environment:
+From the project root: `LC_ALL=en_US.UTF-8 Rscript tests/run.R [filter]`, which runs the suite
+under testthat edition 3. After testthat's summary, a run that passes prints each test file's
+real seconds, summed from `test_dir()`'s results, slowest first; a failing run stops before the
+table, with the exit status it always had. Tests that need the snapshot call `skip_without_snapshot()` and skip
+without it. `tests/harness/test-generated.R` fails if a generated committed file that builds
+offline is not a fresh build. Slow tests (the sweep of every forecast day in
+`tests/harness/test-sweep.R`, the self-test's kjördæmi and seat scores, the R0 Stan tests and
+the cell runner's test fits of `r0` and `v2s-m0` on the 2024 eve, which compile with CmdStan)
+call `skip_unless_slow()` and run only with `HARNESS_SLOW=1` in the environment:
 `HARNESS_SLOW=1 LC_ALL=en_US.UTF-8 Rscript tests/run.R`. The one test that reads the live
 `data/` (the Kosning rows of `data/polling_data.csv`, in `tests/harness/test-election-data.R`)
 calls `skip_unless_live_data()` and runs only with `KOSNINGASPA_LIVE_DATA=1`, so the queue's
 preflight never depends on the live data:
-`KOSNINGASPA_LIVE_DATA=1 LC_ALL=en_US.UTF-8 Rscript tests/run.R election-data`.
+`KOSNINGASPA_LIVE_DATA=1 LC_ALL=en_US.UTF-8 Rscript tests/run.R election-data`. The tests of
+`Stan/forecast_v2.stan` in `tests/harness/test-v2-stan.R` are slow and named by the V2 step
+they test (`v2s-m0: …`); `V2_STEPS=<step>[,<step>…]` runs only those steps' tests
+(`skip_unless_step()`), and unset it runs them all; the tag `perm` in that list runs the Stan
+lp tests on reordered data without the rest of their steps: the permutation test, a `v2s-m0`
+test, and `v2s-m1`'s reversed-order test, with the house walk on. `queue.sh` refuses to start
+while it is non-empty, so the preflight is always the full slow suite, or with `PREFLIGHT=lean`
+the lean one, which sets its own `V2_STEPS` (Runs). `HARNESS_V2_STAN=<absolute path>`
+runs that file's tests on a scratch copy of the Stan file instead, for a planted fault's RED:
+the file must exist and the path be absolute, or the test file stops as it loads, and the tests announce
+the path and its sha256, so every log records the switch; unset, they test
+`Stan/forecast_v2.stan` and print nothing. `queue.sh` refuses to start while it is set, so the
+preflight never certifies another file than the one the fits use. The slow `v2s-m5` tests, and
+so the queue's preflight, run the real `stage1_mu_f()`, which fits stage 1 into
+`results_root()/stage1/` on a cold cache or on a record written before the log φ_f near-cap
+counts were, or reads it there; that fit's warmup prints "Prior size parameter[5] is 0"
+notices, which are expected. The slow tests of the equivalence check in
+`tests/harness/test-v2-equivalence.R` are named and gated the same way (`v2s-p1: …`): each runs
+`R/harness/v2_equivalence.R` in a subprocess into a temporary CSV, one of them on a copy of the
+Stan file with a planted fault, which must fail for the constant's range alone. The slow test
+of `tests/harness/test-v2-recovery.R` runs `R/harness/recovery.R` in a subprocess, one
+replicate at 20 + 20 on 2021 f180 into a temporary results root, where it compiles its own copy
+of the Stan file; stage 1 is read from the real results root's cache
+(`stage1_mu_f(fit = FALSE)`, which never fits or writes) and copied into the temporary root,
+and the test is skipped on a cold cache (Recovery, below). The equivalence check's fast tests
+check the CSV writer, its provisional rows, and the command lines the script refuses before it
+compiles anything: they run it with `CMDSTAN` naming an empty directory, after checking that
+cmdstanr then finds no CmdStan, so a refusal that regressed past the first CmdStan call fails
+its message check. The model methods these tests use (`v2_model()`, `v2_methods()`,
+`short_fit_draws()`, …) are the module `R/harness/v2_methods.R`, which
+`tests/harness/helper-v2.R` imports, so the equivalence script runs the same heap-safe code.
+The fast test of the cell runner's 2017 refusal reads this repository's real freeze state,
+under a temporary `HARNESS_RESULTS`, and skips once the freeze is sealed. It runs the runner
+with `CMDSTAN` naming an empty directory, after checking that cmdstanr then finds no CmdStan,
+so a regressed refusal stops at its first cmdstanr call and can neither compile nor sample a
+2017 cell.
 
 The R code in `R/harness/` and `R/election_utils.R` writes every non-ASCII character as a
 `\uXXXX` escape and gives a non-ASCII name with `stats::setNames()`, never as a name tag;
@@ -45,6 +82,70 @@ in a subprocess to check that it still reads the snapshot right. `read_inputs()`
 `build_phase0.R` still stop under a locale that is not UTF-8, but that check cannot stand
 in for the escapes: it runs when they are called, after the modules were parsed, so a
 session that loads the harness under C and then switches to UTF-8 passes it.
+
+## Checking a model change
+
+Brynjólfur set this policy on 5 November 2026: a model change gets the checks its kind needs,
+and the wider suite waits for a forecast that is published or frozen. From the project root:
+
+- **Any change:** the fast suite, plus the two-versions check on the current model: Stan's log
+  density against the R reference's on V2's configuration (`v2s-m5`'s Stan tests), and its
+  invariance when the party and kjördæmi orders are reversed (the Stan permutation lp test, on
+  the core's configuration), and the log density against the reference's on reversed orders
+  with the house walk on (`v2s-m1`'s reversed-order test); the last two are the Stan lp tests
+  tagged `perm`. Together they are the queue's lean preflight (Runs):
+
+  ```
+  LC_ALL=en_US.UTF-8 Rscript tests/run.R
+  HARNESS_SLOW=1 V2_STEPS=v2s-m5,perm LC_ALL=en_US.UTF-8 Rscript tests/run.R v2-stan
+  ```
+
+- **A change to what the model computes:** add one short fit on the cell the change matters
+  for, through the queue with the lean preflight, on a run list of one line
+  (`A v2 <E> <F> <seed>`), then its diagnostics and the stop rule, written to a report of its
+  own so that `harness/tier0/` keeps its records:
+
+  ```
+  PREFLIGHT=lean zsh R/harness/queue.sh <run_list> <iter_warmup> <iter_sampling>
+  LC_ALL=en_US.UTF-8 Rscript R/harness/tier0_report.R v2 <run_list> <out>
+  LC_ALL=en_US.UTF-8 Rscript R/harness/compare_runs.R stop v2 <run_list>
+  ```
+
+- **A change meant to improve forecasts:** fit the old and the new model once each on both
+  cells, 2024 eve and 2021 f180, and compare them against the real results with
+  `score_cell(run_dir)` for each run, which scores a 2021 or 2024 cell with no freeze (The
+  freeze and the 2017 locks). Fit the old model from the previous commit, in a worktree of its
+  own with a copy of the snapshot, into a results root of its own:
+
+  ```
+  git worktree add ../kosningaspa-old <previous commit>
+  cp -R harness/snapshot ../kosningaspa-old/harness/
+  cd ../kosningaspa-old
+  HARNESS_RESULTS="$PWD/results/harness" PREFLIGHT=lean zsh R/harness/queue.sh <run_list> <iter_warmup> <iter_sampling>
+  ```
+
+  Pass `<run_list>` by absolute path: after the `cd`, a relative path resolves inside the old
+  worktree, where an untracked list does not exist. A commit before b19fb19 has no `PREFLIGHT`
+  switch, so its queue runs the full slow suite; to skip that there, run
+  `R/harness/fit_cell.R <arm> <E> <F> <seed> <iter_warmup> <iter_sampling>` directly, with the
+  same `HARNESS_RESULTS`.
+
+  `results_root()` is `HARNESS_RESULTS`, or else `results/harness` under the checkout's own
+  root, so setting it there keeps an exported value from sending the old fits into the new
+  model's root. The two must not share one: a fit of the same arm, cell and seed in one
+  results root finds the other's `meta.json` with another Stan sha256 and retires it to
+  `_stale/` as STALE. Run the two queues one after the other, since each queue's guard refuses
+  to start while any `fit_cell.R` runs, and score both runs from the current checkout, by
+  their directories.
+- **Before a published forecast, or before the freeze:** the wider suite, at a size chosen
+  then (for example as the next Alþingi election approaches):
+  - the full slow suite, the queue's default preflight:
+    `HARNESS_SLOW=1 LC_ALL=en_US.UTF-8 Rscript tests/run.R`;
+  - the permuted refits, `v2-perm` beside `v2`, compared by
+    `LC_ALL=en_US.UTF-8 Rscript R/harness/compare_runs.R perm v2 v2-perm <run_list>` (Step
+    checks, V2);
+  - the two-seed comparisons, `compare_runs.R stop` and `adopt` (Step checks);
+  - recovery, `R/harness/recovery.R` and its `report` (Recovery).
 
 ## The scorer self-test
 
@@ -76,19 +177,25 @@ changed: a miss means the scorer is wrong. The national test runs whenever
 (allocating seats for the run's 8000 draws took 107 s on 24 Oct 2026). Without the folder
 they skip, but the test of the committed manifest still runs.
 
-It is the phase's one scoring of a known result. No harness forecast is compared with its
-result before the freeze (spec §8), and the self-test keeps that rule: it re-scores draws
-the earlier study had already scored and published, not a harness arm's, so no harness arm
-meets a result.
+It was Phase 1's one scoring of a known result. Spec §8 kept every harness forecast from its
+result until the freeze; since 5 November 2026 only a 2017 cell is held back (The freeze and
+the 2017 locks). The self-test re-scores draws the earlier study had already scored and
+published, not a harness arm's.
 
 ## The freeze and the 2017 locks
 
 `score_cell(run_dir)` (`R/harness/scorer.R`) is the only function that scores a forecast
-cell against its result (spec §5.6–§5.7). It reads the run's `meta.json`, calls
-`freeze_guard(E, F)` (`R/harness/freeze.R`), and only once the guard passes reads the
+cell against its result (spec §5.6–§5.7). It reads the run's `meta.json`, refuses an arm
+whose role is `check` or `dev` and a run whose `meta.json` records a role other than its
+arm's (Runs, Arms), calls `freeze_guard(E, F)` (`R/harness/freeze.R`), and only once the guard passes reads the
 result (`cell_truth()`) and then the draws. With the default result reader, which reads
 this project's results, it refuses a `root` other than the project's, since the guard
-would otherwise check another repository's freeze. The guard stops at the first failure:
+would otherwise check another repository's freeze.
+
+The guard refuses a cell that is not in `TARGETS` (check 1). A 2021 or 2024 cell passes it
+with no freeze: Brynjólfur decided on 5 November 2026 that the model is developed without
+such locks, so no freeze file is read for those cells. A 2017 cell, the held-out confirmatory
+target, stops at the first of these failures:
 
 1. (E, F) is not a cell of `TARGETS`;
 2. `harness/FREEZE.md` or `harness/FREEZE.sha256` does not exist;
@@ -99,8 +206,8 @@ would otherwise check another repository's freeze. The guard stops at the first 
    so an edit the index is told to ignore, by `--assume-unchanged` or `--skip-worktree`,
    still counts).
 
-A 2017 cell, the confirmatory target, is locked until `harness/DECISION.md` and
-`harness/DECISION.sha256` pass checks 2–5 as well (the refusal names the check that
+A 2017 cell is also locked until `harness/DECISION.md` and
+`harness/DECISION.sha256` pass checks 2–5 (the refusal names the check that
 failed), and locked for good once `harness/CONFIRM.md` exists. Past both locks, `score_cell()` still refuses it: 2017 is
 scored once, by the Tier C runbook, which writes `CONFIRM.md`. Phase 1 has no such writer.
 
@@ -140,10 +247,11 @@ Past the guard and the 2017 refusal, it recomputes the Brier event,
 fit: refit <run>" unless its parties are those `meta.json` recorded: the sha-skip keys do
 not cover the event, so a reused run could otherwise be scored against an outdated one. It
 stops with "no list at E" if a party the run forecasts has a national result of 0, as a
-party with no list would, since the alr scores would take the log of that zero. Until Phase
-3 commits `FREEZE.md`, it refuses every target cell of this repository;
-`tests/harness/test-scorer.R` checks that with a result reader that fails if it is called.
-The tests that pass the guard run in temporary git repositories.
+party with no list would, since the alr scores would take the log of that zero. With this
+repository unfrozen, it reads the result for every 2021 and 2024 cell and refuses every 2017
+one before any result is read; `tests/harness/test-scorer.R` checks both with a result
+reader that fails if it is called, and scores a 2021 cell with no freeze. The tests of a
+sealed freeze and decision run in temporary git repositories.
 
 ## Runs
 
@@ -167,9 +275,12 @@ results/harness/
     eday_national.parquet
     latent_national.parquet
     param_draws.parquet
-    key_diagnostics.csv     R-hat and ESS of the scored quantities and the kept parameters
+    ppc_results.parquet     V2 only: the closed elections' in-sample replicates
+    key_diagnostics.csv     R-hat and ESS of the scored quantities, the kept parameters and lp__
     meta.json               written last by the runner: present means finished
   _stale/<id>_<YYYYmmddHHMMSS>/   a retired run, kept as it was
+  stage1/<sha256>/mu_f.json  V2's stage-1 output and its log phi_f near-cap counts, cached by the sha256 of
+                            its inputs (R/harness/stage1.R; a record without current counts is stale and refitted)
   logs/                     the queue's logs: queue.log, preflight.log, <id>.log, and its lock, queue.lock/
 ```
 
@@ -200,10 +311,14 @@ extraction changes, so that every finished run is refitted.
 
 **Diagnostics.** `summarise_diagnostics(params, scored, sampler)` takes the draws of every
 `parameters`-block variable, the draws of the scored quantities, and the sampler's
-per-chain divergences, treedepth hits, E-BFMI and deepest tree. It reports the max R-hat
+per-chain divergences, treedepth hits, E-BFMI, deepest tree and post-warmup leapfrog steps
+(the last two from `chain_sampler()` of `fit$sampler_diagnostics()`).
+It reports the max R-hat
 and the min bulk and tail ESS over parameters and scored quantities together (the plan's
 Decision 3) and over the scored quantities alone, the divergences and treedepth hits
-summed over chains, the deepest tree and the min E-BFMI. A parameter with no R-hat or ESS,
+summed over chains, the deepest tree, the min E-BFMI and `n_leapfrog`, the post-warmup
+leapfrog steps (gradients) summed over chains, which puts ESS per gradient within reach of
+`meta.json` alone. A parameter with no R-hat or ESS,
 such as a constant entry of a Cholesky factor, is left out of the extremes. A scored
 quantity with none (a constant, or a draw that is NA) is not: it makes every extreme it
 enters NA, and `na_scored` counts such quantities. The deepest tree shows whether
@@ -233,8 +348,36 @@ extremes), and the gate's reasons are in `meta.json`.
 **Arms.** `R/harness/arms.R` holds `ARMS`, one entry per arm, and `arm(name)` returns one
 (an error for an unknown name). An entry names the arm's Stan file and config (paths under
 the project root), the config's reader, the builder from a cell's `info_set()` and the
-config to `list(data, meta)`, the extractor from a fit's draws to the parquets, and the
-variables the extractor reads. Phase 1 has one arm, `r0`.
+config to `list(data, meta)`, the extractor from a fit's draws to the parquets, the
+variables the extractor reads (a vector, or a function of the config), and the arm's role,
+one of `ARM_ROLES`:
+
+| Role | Arms | Scored |
+|---|---|---|
+| `reference` | `r0` | yes; a 2017 cell only after the freeze and the decision |
+| `candidate` | `v2` | yes; a 2017 cell only after the freeze and the decision |
+| `ablation` | `v2-noepoch`, `v2-nonew`, `v2-noshock`, `v2-staticdelta`, `v2-nofund` | yes; a 2017 cell only after the freeze and the decision |
+| `check` | `v2-perm`, V2 with both orders reversed, which must reproduce `v2` | never |
+| `dev` | `v2s-m0` and the rest of V2's staircase, one component or form per step | never |
+
+`score_cell()` refuses a `check` or `dev` arm before the freeze guard, and a run whose
+`meta.json` records a role other than its arm's; a `meta.json` without `role`, as R0's
+Phase 1 runs have, takes its arm's. The role is not a sha-skip key (`expected_meta()`), so
+those runs still SKIP. If an arm's role changes in `ARMS`, its finished runs still SKIP.
+`score_cell()` refuses each one that records the old role with "run role <old> differs from
+arm <arm>'s role <new>"; retire such a run (`retire_run()`) and refit it. A run with no
+recorded role takes its arm's current role and is not refused. Plan 4 may add roles for the arms it scores. Every arm
+but `r0` runs `Stan/forecast_v2.stan` with its own config, an entry `v2_arm(config, role)`
+builds. `ARMS` holds `r0`, `v2s-m0`, `v2s-p1`, `v2s-m1` (the epoch bias), `v2s-m2` (the
+newcomer pool), `v2s-m3` (the election-day shock), `v2s-m4` (the δ walk), `v2s-p2` (the δ walk
+held centred at the closed elections), `v2s-m5` (the fundamentals pseudo-observation), `v2`
+(`harness/configs/v2.json`, `v2s-m5`'s config: every component on, both forms at 0, as neither
+P-step's form was adopted) and its five ablations (`harness/configs/v2-no*.json` and
+`v2-staticdelta.json`, each `v2.json` with one component switch at 0: `epoch_bias`,
+`newcomer_pool`, `shock`, `delta_walk` or `fundamentals`; `tests/harness/test-arms.R` asserts
+each one's single differing field).
+`v2-perm` (`harness/configs/v2-perm.json`, `v2.json` with `order` = `"reversed"`) is the check;
+`tests/harness/test-arms.R` asserts that it differs from `v2.json` in that field alone.
 
 **R0's extraction.** `r0_extract(draws, meta, dir)` (`R/harness/r0.R`) writes the four
 parquets of spec §5.5 from a fit's draws: `eday_kjordaemi` (`.chain`, `.iteration`,
@@ -246,6 +389,20 @@ k and party p are `meta$kjordaemi_levels[k]` and `meta$party_order[p]`, read fro
 indices in each element's name and never from a column's position, so a reordered draws
 table cannot relabel a cell. It writes nothing unless all four tables build.
 
+**V2's extraction.** `v2_variables(cfg)` (`R/harness/v2.R`) names what a V2 fit's draws must
+hold: `votes_kd`, `pi_nat_eday`, `pi_latent_E`, `y_rep_res`, and the parameters and
+transformed parameters of `V2_PARAM_VARIABLES` that the config's switches put in the model
+(`V2_PARAM_SWITCH` names the switch of each that one adds; a parameter of size 0 has no
+column in the CSVs). `v2_extract(draws, meta, dir)` writes the four parquets in R0's format,
+`eday_kjordaemi` from `votes_kd[k, p]`, `eday_national` from `pi_nat_eday` (the
+vote-weighted aggregate of `votes_kd`, so its gap to the scored kjördæmi aggregate is zero),
+`latent_national` from `pi_latent_E` and `param_draws` from those parameters, plus
+`ppc_results.parquet` (`.chain`, `.iteration`, `.draw`, `election`, `kjordaemi`, `flokkur`,
+`votes`) from `y_rep_res[e, k, p]`, the in-sample replicates of each closed election's
+kjördæmi counts (0 for a party with no national votes there), which only the past-election
+checks read. The election label is the builder's `closed_elections[e]`, and every label
+comes from the element names' indices, as in R0's extraction.
+
 **The cell runner.** From the project root:
 
 ```
@@ -253,7 +410,9 @@ LC_ALL=en_US.UTF-8 Rscript R/harness/fit_cell.R <arm> <E> <F> <seed> <iter_warmu
 ```
 
 `R/harness/fit_cell.R` is a plain script. It stops unless the locale is UTF-8 and the
-working directory is the project root. It builds the cell's data from `info_set(E, F)`
+working directory is the project root. Right after reading its arguments it stops on a 2017
+cell while the freeze is not sealed (`forecast_free(E)`: "fit_cell: 2017 is not fitted before
+the freeze (spec §5.7)"), for every arm, before it builds or writes anything. It builds the cell's data from `info_set(E, F)`
 after `validate_inputs()`, and compares the expected meta (with `stan_data_sha()` of the
 freshly built data) with the run's `meta.json`. On a match it prints
 `SKIP <id> (meta.json matches)` and exits 0. A run directory that does not match, or has no
@@ -261,19 +420,26 @@ freshly built data) with the run's `meta.json`. On a match it prints
 meta.json)`) and refitted. It then freezes the inputs; `inputs.json` records the arm, E, F,
 the expected keys, the builder's meta, the git HEAD (and whether the tree was dirty), the
 sha256 of `snapshot_manifest.csv` and the CmdStan and cmdstanr versions. It fits with
-`SAMPLER`, the seed and the iterations (`refresh = 50`), and stops with no `meta.json`
+`SAMPLER`, the seed and the iterations (`refresh = 50`), on the Stan executable alone (never
+with the model methods compiled, which would build the model on the data inside R), and stops with no `meta.json`
 unless the fit holds 4 chains of `iter_sampling` draws and the Stan file and the frozen
-data still hash as expected. After the extractor it summarises the diagnostics over every
-`parameters`-block variable and the scored quantities, the national shares of
+data still hash as expected. The extractor reads the arm's variables (for V2,
+`v2_variables()` of the config). It then summarises the diagnostics over every
+`parameters`-block variable present in the fit (a zero-size one has no draws) and the scored quantities, the national shares of
 `kd_to_nat(eday_kjordaemi)` (`scored_nat[<flokkur>]`) and every kjördæmi cell's share
 (`scored_kd[<kjordaemi>,<flokkur>]`), writes `key_diagnostics.csv` (`variable`, `rhat`,
-`ess_bulk`, `ess_tail`) for those and the `param_draws` columns, and applies the gate.
-`meta.json` comes last: the expected keys, `arm`, `E`, `F`, `id`, the builder's meta
+`ess_bulk`, `ess_tail`) for those, the `param_draws` columns and `lp__`, and applies the gate.
+The stop rule (Step checks, below) reads the `lp__` row; a run fitted before the row was
+written has none, and `compare_runs.R` stops on it rather than guess.
+`meta.json` comes last: the expected keys, `arm`, `role` (the arm's), `E`, `F`, `id`, the builder's meta
 (`n_pred_k` and `n_e` as objects named by kjördæmi and party), `minutes` (the fit's wall
 time, warmup and sampling), `diagnostics`, `gate` (`pass`, `reasons`) and the provenance of `inputs.json`.
 A non-finite number in `meta.json` is written as a string (`"Inf"`, `"NA"`), so an infinite
-R-hat stays distinct from a missing one; the gate fails on either. It prints the DIAG line
-and `DONE <dir>`, then deletes the CmdStan CSVs.
+R-hat stays distinct from a missing one; the gate fails on either. A NULL, such as V2's
+`stage1_sha256` with no stage 1, is written as `null` in both `meta.json` and `inputs.json`,
+and reads back as NULL. It prints the DIAG line
+and `DONE <dir>`, then deletes the CmdStan CSVs, unless `HARNESS_KEEP_CMDSTAN` is `1`: the
+slow V2 test keeps them to check `n_leapfrog` against their `n_leapfrog__` column.
 
 **The queue.** From the project root:
 
@@ -286,8 +452,9 @@ A or B; lines starting with `#` are comments. `harness/runs/tier0.txt` is Tier 0
 directory is `${HARNESS_RESULTS:-results/harness}/logs`. Before any fit the queue takes the
 lock `<logs>/queue.lock`, a directory holding its pid, and refuses to start while another
 queue holds it, while a `fit_cell.R` runs (`pgrep -f -- '--file=R/harness/fit_cell.R'`), or
-when `pgrep` fails and so cannot tell (an exit other than 0 or 1), unless `FORCE=1`. It runs
-the full slow suite as a preflight (`<logs>/preflight.log`) and stops if that fails, then
+when `pgrep` fails and so cannot tell (an exit other than 0 or 1), unless `FORCE=1`; whatever
+`FORCE`, it refuses to start while `HARNESS_V2_STAN` is set or `V2_STEPS` is non-empty
+(Tests). It runs the full slow suite as a preflight (`<logs>/preflight.log`) and stops if that fails, then
 runs lanes A and B side by side, each lane's runs one after another, each run's output in
 `<logs>/<id>.log`. `queue.log` there gets
 `QUEUE START <time> <list> <warmup> <sampling> (pid <pid>)`, the preflight's verdict, a `start` and an
@@ -305,6 +472,29 @@ runs. `DRY_RUN=1` prints `would run <lane> <arm> <E> <F> <seed>` per run and doe
 else: no lock, guard, preflight, log or fit. It exits 0 when every run exits 0, 1 when a run,
 the lock, the guard or the preflight fails, 2 on a bad command line or run list, and 143 or
 130 on SIGTERM or SIGINT.
+
+`PREFLIGHT=lean` replaces the full slow suite with the lean preflight, the smallest set that
+still checks V2's Stan code against its R reference. From the project root it runs:
+
+```
+HARNESS_SLOW= V2_STEPS= LC_ALL=en_US.UTF-8 Rscript tests/run.R
+HARNESS_SLOW=1 V2_STEPS=v2s-m5,perm LC_ALL=en_US.UTF-8 Rscript tests/run.R v2-stan
+```
+
+The first is the fast suite, `tests/harness/test-v2-reference.R` among it (that file has no
+slow test). The second, run only if the first passes, is the slow Stan tests of `v2s-m5`, whose
+config is `v2.json`'s with both forms at 0 (Stan's log density against the reference's, every
+mutant rejected), and the Stan lp tests tagged `perm` (the permutation test and `v2s-m1`'s
+reversed-order test, both at prior draws, with no fit). Each command sets its own `HARNESS_SLOW` and
+`V2_STEPS`, so a caller's `HARNESS_SLOW=1` does not slow the fast suite and the refusal of a
+non-empty `V2_STEPS` reads only the caller's. `queue.log` then reads `preflight PASS (lean)` or
+`preflight FAIL (lean) rc=<rc> ...`. `PREFLIGHT=full`, or unset, is the full slow suite; any
+other value is refused as a bad command line. Run by hand on 5 November 2026, the lean set took
+10 min 37 s of wall time: the fast suite 3 min 42 s, then the slow part 6 min 54 s, of which 6
+min 53 s in `test-v2-stan.R` (its compile, the `v2s-m5` lp test's short fits on two cells and
+the ablations' prior points), with another worktree's four-chain fit beside it (load average 8
+to 17 on 10 cores). With `v2s-m1`'s reversed-order test tagged `perm` as well, the slow part
+alone took 5 min 59 s later that day, beside other sessions' jobs (load average 5 to 10).
 
 ## Tier 0
 
@@ -335,6 +525,10 @@ of the arm in the run list it reads only the run's `meta.json`, and writes one t
 - both min bulk ESS per minute, and both scaled linearly to 2000 sampling iterations
   (× 2000 / `iter_sampling`). That projection informs the plan's Decision 5 (the centring),
   not the gate;
+- the gate-scope min bulk ESS per 1,000 gradients, 1000 × `min_ess_bulk` ÷ `n_leapfrog` (the
+  post-warmup leapfrog steps summed over chains, `diagnostics$n_leapfrog`), rounded down, or
+  `–` for a `meta.json` without `n_leapfrog`, such as R0's Tier 0 runs, fitted before it was
+  recorded. The Phase 2 plan's adoption rule (its Decision 6) compares it between two forms;
 - the gate's verdict and reasons, which are informational: Tier 0 is not gated;
 - the modification time of `meta.json`, the date of the measurement.
 
@@ -348,6 +542,332 @@ decoy field in its fixture, does. It stops, writing nothing, on a run list with 
 arm, a run without `meta.json`, a `meta.json` of another run, a cell that is not a forecast
 cell (naming the run), or a field it reads that is missing or does not parse, the gate's
 among them: `pass` must be true or false and `reasons` a list of strings, possibly empty.
+
+## Step checks
+
+V2 is built as a staircase of steps (the Phase 2 plan's step protocol): an M-step adds a
+component and so changes the posterior, and a P-step reparameterises the model and must not.
+Each step's sampler-check fits are lines of `harness/runs/v2-steps.txt`, at 400 + 400 on 2024
+eve (lane A) and 2021 f180 (lane B), seed 2701, and seed 2702 as well when the next step is a
+P-step. Each step appends its lines to this record, and its queue runs a list of only those
+lines, because a Stan edit makes the earlier steps' runs STALE: the runner would retire and
+refit them. From the project root, in a normal shell so that the queue outlives the session:
+
+```
+mkdir -p results/harness/logs
+grep -E '^[AB] <step> ' harness/runs/v2-steps.txt > results/harness/logs/<step>-runs.txt
+nohup zsh R/harness/queue.sh results/harness/logs/<step>-runs.txt 400 400 > results/harness/logs/<step>_nohup.log 2>&1 &
+LC_ALL=en_US.UTF-8 Rscript R/harness/tier0_report.R <step> harness/runs/v2-steps.txt harness/v2/steps/<step>.md
+LC_ALL=en_US.UTF-8 Rscript R/harness/compare_runs.R stop <step>
+```
+
+The last two, run once `queue.log` ends in `QUEUE FINISHED`, write the step's diagnostics table
+(committed) and print the stop rule's verdicts, which go into the step log,
+`harness/v2/steps.md`, one section per step.
+
+P1 (`v2s-p1`), the walk anchored at the closed elections, passed its four equivalence checks
+and was not adopted: `adopt` printed `KEEP v2s-m0`, condition 3 failing on its 10 divergences
+against `v2s-m0`'s none. The anchored form stays built behind `walk_form`, and every later
+step's config sets `walk_form = 0`.
+
+M1 (`v2s-m1`), the epoch bias (`epoch_bias = 1`), passed the stop rule: `GO` on both fits
+(`harness/v2/steps.md`). Each step's config is the config of the last step whose form
+stands (the previous M-step, or a P-step only when it is adopted) with the step's own switch
+on. M1's is therefore `v2s-m0`'s with `epoch_bias = 1`, since P1 was kept, not adopted, and
+every later step keeps `epoch_bias = 1`.
+
+M2 (`v2s-m2`), the newcomer pool (`newcomer_pool = 1`), passed the stop rule as well: `GO` on
+both fits (`harness/v2/steps.md`). Its config is `v2s-m1`'s with `newcomer_pool = 1`, as the
+rule gives, and every later step keeps `newcomer_pool = 1`.
+
+M3 (`v2s-m3`), the election-day shock (`shock = 1`), passed the stop rule too: `GO` on both
+fits, with no divergence and no draw near a cap (`harness/v2/steps.md`). Its config is
+`v2s-m2`'s with `shock = 1`, as the rule gives, and every later step keeps `shock = 1`.
+
+M4 (`v2s-m4`), the δ walk (`delta_walk = 1`), passed the stop rule as well: `GO` on all four
+fits, both seeds on each cell since P2 follows, with no divergence and one draw near a cap, 1
+of 1,600 on 2021 f180 seed 2701 (`harness/v2/steps.md`). Its config is `v2s-m3`'s with
+`delta_walk = 1`, as the rule gives, and every later step keeps `delta_walk = 1`.
+
+P2 (`v2s-p2`), the δ walk held centred at the closed elections (`delta_form = 1`), passed its
+four equivalence checks and was not adopted: `adopt` printed `KEEP v2s-m4`, condition 3
+failing on its 8 divergences (all on 2021 f180) against `v2s-m4`'s none. The centred form
+stays built behind `delta_form`, and every later step's config sets `delta_form = 0`; M5's is
+therefore `v2s-m4`'s with its own switch on (`harness/v2/steps.md`).
+
+M5 (`v2s-m5`), the fundamentals pseudo-observation (`fundamentals = 1`), passed the stop rule:
+`GO` on both fits, with no divergence and no draw near a cap (`harness/v2/steps.md`). Every
+component is now built, and V2's candidate config, `harness/configs/v2.json`, is `v2s-m5`'s.
+
+A P-step's form is first checked against the reference form, point by point, by
+`R/harness/v2_equivalence.R` (the plan's Decision 6, condition 1), once for each check of
+`EQUIVALENCE_REQUIRED` (below), all into the step's equivalence CSV:
+
+```
+LC_ALL=en_US.UTF-8 Rscript R/harness/v2_equivalence.R --config=harness/configs/steps/<step>.json --form=walk|delta --cell=<E>,<F> --out=harness/v2/steps/<step>-equivalence.csv [--n=30] [--n-off=15] [--stan=Stan/forecast_v2.stan] [--reverse]
+```
+
+The new side is the config as written and the reference side the same config with the form
+at 0; a config whose form is 0 is refused. On a fitted cell the points are `--n` posterior and
+`--n-off` off-posterior draws (each scale of `OFF_SCALES` multiplied by exp(N(0, 0.5))) of a
+4 × (100 + 40) fit of the new side at seed 5100 and max_treedepth 10 that draws no forecast;
+on a 2017 cell they are `--n` prior draws of the reference side (`v2_simulate()`, seeds 5101,
+5102, …), nothing is fitted, and the check stops if either side's generated quantities hold
+a forecast variable. Each point maps to the other side through the quantity the form
+changes, θ for `walk_form` and δ for `delta_form`, every other parameter copied, and
+(lp_new − J_new) − (lp_ref − J_ref) must be one constant within 1e-12 × max(1, |lp_new|), lp
+being `log_prob(jacobian = TRUE)` and J each side's terms: its log-Jacobian from its standard
+normals to θ or δ and, for `delta_form`, the reference's density of the K + P − 1 directions
+of each closed election's ζ that M_e removes, which the centred form does not hold (the
+script's header lists the terms). Under `--form=delta` a posterior point's ζ is the
+minimum-norm preimage of its δ plus an N(0, I) draw in M_e's null space at seed 5200 + the
+point's number, and a 2017 prior point's coordinates come from its δ. Each term left out
+alone, a negative control, must break it; under `--form=walk` every control must be
+exercised, so a term constant over the points fails the check as not exercised, while under
+`--form=delta` such a term is tolerated. Of the delta form's terms only `new_delta_absent` can
+be constant over the points: it is 0 on a cell where no closed election lacks a party. A cell
+with one closed election (2017 eve) varies all three; what it leaves untested is the δ step
+from the second closed election on (the walk's mean, an entrant's scale, which election's c
+and w it reads). Both sides' generated quantities at the posterior (or prior) points, by
+standalone `generate_quantities` at seed 1 and `sig_figs = 18`, must agree within 1e-9 relative, and θ
+(or δ at every epoch) within 1e-8. A point
+with a bounded log concentration at its cap is excluded and counted; one whose log density is
+not finite on both sides is dropped and counted, and a dropped posterior point fails the
+check, as does one finite on one side only; each kind needs at least 5 kept points; with
+fewer of the main kind no generated quantities are compared and the check fails on that
+count (`gq_points_compared()`, the one gate on the comparison). `check_reasons()` gives the
+failed conditions and `control_verdicts()` the controls' verdicts. Besides its own stops (the
+script's header lists them), the data can fail `v2_stan_data()`'s guards or the Stan file's
+transformed-data rejects, which come back as "the fixed_param run failed; CmdStan said: ...".
+It prints the coordinate party (`coordinate party: <label>`; it stops if the two
+sides' differ), each point's constant and path error, the controls and the generated
+quantities' largest relative difference, never a forecast value, then `EQUIV PASS` or
+`EQUIV FAIL` (exit 1). `--out` must be a file in an existing directory. Once the command line
+is accepted, the script first writes a provisional `FAIL` row for its cell and order (reasons
+`incomplete`, the current `stan_sha256`), which its own row replaces at the end, so a check
+that stops leaves no earlier verdict standing. `--form=both` stops: P1 kept `walk_form = 0`,
+so no step config sets both forms. A check
+of 10 + 5 points on 2021 f180 took 5 min 6 s (`time`, 29 Oct 2026); 2024 eve's grid has 274
+dates to 2021 f180's 160.
+
+`R/harness/compare_runs.R` is a plain script with three subcommands, whose definitions also
+load as a box module (its test imports `perm_z()`, `perm_verdict()`, `relative()` and
+`EQUIVALENCE_REQUIRED`). Each reads the runs of a run list, `harness/runs/v2-steps.txt` by
+default, from `results_root()`: a run only once its `meta.json` exists and names it. A 2017
+cell of the run list is refused before the freeze (`forecast_free()`), before any run is read.
+Any other failure stops with `compare_runs: ...`, a path under the project root printed
+relative to it and one under the results root as `$HARNESS_RESULTS/...`, never an absolute run
+directory.
+
+**`stop <arm> [run_list]`**, the M-step stop rule (the plan's Decision 5), prints one line per
+run of the arm, in the run list's order:
+
+```
+GO|STOP <id> lp_rhat=<x> divergent=<n>/<N> near_cap=<n>/<N> max_rhat=<x>; recorded: minutes=<x> treedepth_hits=<n> ess_bulk_per_1k_grad=<x>[; stop: <reason>; ...]
+```
+
+with N = chains × `iter_sampling`. A run STOPs on any of these signals, and on one that is
+NA or absent:
+
+| Signal | Read from | STOP when |
+|---|---|---|
+| `lp_rhat`, the R-hat of `lp__` (a stuck chain) | `key_diagnostics.csv`'s `lp__` row | above 1.1 |
+| `divergent`, the divergent transitions | `meta.json`'s diagnostics | more than 1% of N (more than 16 of 1,600) |
+| `near_cap`, the draws in which a bounded log concentration is within 0.5 of its cap | `param_draws.parquet`'s `log_phi` (one column per house), `log_phi_K` and `log_kappa`, against `V2_LOG_CAPS` (`R/harness/v2_reference.R`: 20, 20 and 2) | more than 1% of N; a draw counts once however many are near |
+| `max_rhat`, the gate-scope max R-hat | `meta.json`'s diagnostics | above 1.10 |
+
+R-hat is printed rounded up to four decimals, so a value printed at or below its limit is at
+or below it. The minutes, the treedepth hits and the gate-scope min bulk ESS per 1,000
+gradients (1000 × `min_ess_bulk` ÷ `n_leapfrog`, NA without `n_leapfrog`) are recorded, never a
+stop. It exits 1 on any STOP.
+
+**`adopt <ref_arm> <new_arm> <equivalence_csv> [run_list]`**, the P-step adoption rule (the
+plan's Decision 6), compares a P-step's form (`new_arm`) with the reference form (`ref_arm`,
+the step before it). The two arms must differ and have runs on the same cells, and on each
+cell each arm has exactly two fits, of two different seeds that are the other arm's (the plan
+runs seeds 2701 and 2702, but any two seeds the arms share pass), and the cells are exactly
+the plan's two, 2024 eve and 2021 f180; this is checked from the run list before anything is
+read. Every fit of both arms must have the same `iter_warmup` and the same `iter_sampling` in
+its `meta.json`, whatever their values, since condition 3 compares divergence counts, and every
+`meta.json` must hold `n_leapfrog`. It prints a table of the fits (min bulk ESS per 1,000 gradients,
+divergences, the stop rule's verdict), a table of the cells (each arm's median over its fits
+of min bulk ESS per 1,000 gradients, and their ratio), the four conditions with yes or no, and
+a last line, `ADOPT <new_arm>` when all four hold and otherwise
+`KEEP <ref_arm>: <new_arm> fails condition(s) <i>, ...`:
+
+1. the equivalence check passes: the equivalence CSV has no `FAIL` row, and a `PASS` row for
+   each check of `EQUIVALENCE_REQUIRED`, the four that P1's check writes (the plan's Task 8):
+   2024 eve, 2021 f180 and 2017 eve (prior points only) in the default order, and 2024 eve in
+   the reversed order. A 2017 row is only a verdict, so the 2017 refusal, which is about the
+   runs read, does not apply to it;
+2. on each cell, `new_arm`'s median is at least 1.25 × `ref_arm`'s;
+3. `new_arm`'s divergences, summed over its fits, are at most `ref_arm`'s plus 4;
+4. no fit of either arm trips the stop rule.
+
+Both forms have the same posterior, so no forecast quantity is read. It exits 0 on `ADOPT` and
+on `KEEP`. The equivalence CSV (`harness/v2/steps/<step>-equivalence.csv`) has one row per
+check `R/harness/v2_equivalence.R` ran, with at least these columns; any others are ignored:
+
+| Column | Value |
+|---|---|
+| `E`, `F` | the cell, ISO dates |
+| `order` | `default` or `reversed`: the party and kjördæmi order of both sides (`--reverse`) |
+| `verdict` | `PASS` or `FAIL`: the check's `EQUIV` verdict, its negative controls included; a `FAIL` with reasons `incomplete` is the provisional row of a check that has not finished |
+
+`v2_equivalence.R` writes these first, then `form`, `config`, `stan_sha256`, the kept points
+by kind (`n_posterior`, `n_off`, `n_prior`), the dropped, excluded and one-sided counts
+(`n_rejected`, `n_outside`, `n_one_sided`), `const_range`, `tol`, `path_err`, `gq_points`
+(0 when no generated quantities were compared, `gq_max_rel` then empty), `gq_max_rel`, one
+`control_<term>` per log-Jacobian term (`fails`, `PASSES` or `not exercised`) and `reasons`,
+the failed conditions; reasons `incomplete` mark the provisional `FAIL` row of a check that
+has not finished, one that stopped or is still running.
+
+**`perm <arm_a> <arm_b> [run_list]`**, the permutation rule (the plan's Decision 8), compares two
+different arms that must give the same forecast draws within Monte Carlo error, such as `v2` and
+`v2-perm`. Their runs are paired by cell, in the run list's order, and each arm must have as
+many runs on each cell. Of each pair it reads only `eday_national.parquet` and
+`eday_kjordaemi.parquet`, and matches by name every national share (`eday_national[<flokkur>]`)
+and every kjördæmi share, a cell's votes over its kjördæmi's votes in the draw
+(`eday_kjordaemi[<kjordaemi>,<flokkur>]`); the two runs must have the same names. For the mean
+and the 5%, 50% and 95% quantiles of each, z = (a − b) / √(MCSE_a² + MCSE_b²), with posterior's
+`mcse_mean()` and `mcse_quantile()` (0 when a = b; `perm_z()`). A pair passes when at most
+3 |z| exceed 3, none exceeds 5 and the sd of the mean z's is at most 1.5 (`perm_verdict()`).
+A missing z, from a missing draw or an undefined MCSE, exceeds both: it is counted above 3
+and makes the max |z| Inf. It prints only those statistics, rounded up to two decimals, and
+the names of the variables whose |z| exceeds 3, never a share:
+
+```
+PERM PASS|FAIL <id_a> vs <id_b>: <n> z's, <k> with |z| > 3, max |z| <x>, sd of the mean z's <x>
+  |z| > 3: <variable> <mean|q05|q50|q95>, ...
+```
+
+It exits 1 on any `PERM FAIL`. `tests/harness/test-compare-runs.R` runs all three on synthetic
+run directories, made-up draws only, and checks that every line `perm` prints is a verdict or
+a list of names. It also tests `perm_z()` against a hand computation with posterior's MCSEs,
+and `perm_verdict()` on made-up z's that break each of its three conditions alone.
+
+## Recovery
+
+Simulation-based recovery (spec §8, the Phase 2 plan's Decision 7) asks whether a fit of V2
+covers the parameters that simulated its data. `R/harness/recovery.R` keeps a cell's real
+design (arm `v2`'s config, `draw_forecast = 0`: no forecast is drawn) and replaces every count
+(`y_nat`, `y_kd`, `y_res`) and μ_f with a draw from the model at one draw of V2's prior
+(`v2_simulate()`), so the grid, poll schedule, sample sizes, houses, entry and valid votes stay
+real and no real count survives. `d_shock`, the shock scaling taken from the previous
+election's real national shares, stays real too: it is design, not a count, so real past shares
+still scale the simulated shocks. A replicate is redrawn, attempt a at seed 100000 × seed + a,
+while a reported party's share of a closed election's national result (its kjördæmi counts
+summed per party), or its mean share over an epoch's national polls, leaves [0.5%, 70%]; the
+rule reads the simulated data alone, so the ranks stay uniform. It reads national results, not
+each kjördæmi's: the 0.5% floor is a national-support notion, and a kjördæmi reading would also
+select on δ, a recovery target. Before the fit, a one-iteration fixed_param run at the truth
+must give each truth element (τ_μ, s̄_E, the open epoch's μ, δ at the closed and the open
+epochs) to 1e-8, paired by name, so each truth is paired with the Stan quantity of its name;
+`truth_check()` names any element that differs. Each lane runs its seeds one after another,
+four chains each; from the project root, in a normal shell so that the lanes outlive the
+session:
+
+```
+mkdir -p results/harness/recovery/logs
+nohup env LC_ALL=en_US.UTF-8 Rscript R/harness/recovery.R 2024-11-30 2024-11-29 3001 20 400 400 --lane=A > results/harness/recovery/logs/nohup-A.log 2>&1 &
+nohup env LC_ALL=en_US.UTF-8 Rscript R/harness/recovery.R 2021-09-25 2021-03-29 3101 10 400 400 --lane=B > results/harness/recovery/logs/nohup-B.log 2>&1 &
+LC_ALL=en_US.UTF-8 Rscript R/harness/recovery.R report
+```
+
+A lane re-run skips a finished replicate (`SKIP`), retires to `_stale/` one whose `meta.json`
+names other settings, is missing or does not parse (`STALE`), and leaves alone one that a
+running process holds (`BUSY`), so a seed range resumes where it stopped, and a second lane
+given the same range takes the seeds the first has not reached. A lane already running refuses
+a second process. A lane reads its provenance (`run_provenance()`: commit, dirty tree, snapshot
+manifest sha256, CmdStan's and cmdstanr's versions) once, when it starts and its modules are
+loaded, and every replicate records it in `meta.json` and `inputs/inputs.json` as the
+provenance of the code it ran. The commit and the dirty flag are read again when each replicate
+ends (`git_head_end`, `git_dirty_end`), and a change is logged as `PROVENANCE`.
+
+```
+results/harness/recovery/
+  <E>_<F>/<seed>/     one replicate, read-only: inputs/stan_data.json (the simulated data),
+                      truth.json (the seeds, attempts, true parameters and natural quantities),
+                      ranks.csv (per truth element: its posterior quantile q = mean(draws <
+                      truth), in50 for q in [0.25, 0.75], in90 for q in [0.05, 0.95]),
+                      param_draws.parquet, key_diagnostics.csv, meta.json (written last)
+  logs/lane-<L>.log   each lane's log
+  _lanes/<L>/         each lane's lock and its own compiled copy of Stan/forecast_v2.stan
+```
+
+`report` writes `harness/v2/recovery.md` (committed). It refuses replicates of another
+`RECOVERY_VERSION`, and replicates whose Stan file or config sha256 differs from the others' or
+whose real design differs within a cell, naming them. It gives the Stan file's and config's
+sha256; the commits at lane start, the replicates fitted from a tree with changes and those
+whose commit or tree changed while their lane ran; each pre-registered design's replicates,
+draws, rejection rate and whether the real cell's own data pass the redraw rule (`kept`, or
+`redrawn:` and each failing result's date, party and national share, a public past result;
+each replicate records it in `meta.json` as `real_cell_redraw`; a design with no replicate yet
+reads "not recorded"); the truth elements per group; each group's 50% and 90% coverage against
+Decision 7's band (τ_μ and s̄_E: at least 22 of 30 truths inside the 90% interval and 8 to 22
+inside the 50%; open-epoch μ, closed δ and open δ: the mean over replicates of each replicate's
+share covered within 3 standard errors of 0.9 and of 0.5); and the stop rule's line for every
+replicate (`compare_runs.R`'s `stop_rule_at()`, its gate-scope R-hat over the parameters and
+the truth elements); a replicate that trips it stays in every count. It ends `RECOVERY PASS` or
+`RECOVERY FAIL` only on Decision 7's set, the pre-registered seeds 3001–3020 on 2024 eve and
+3101–3110 on 2021 f180 (`DESIGNS`), each at 400 + 400, and `RECOVERY INCOMPLETE` with its
+reasons, naming the seeds missing or extra, on any other. `tests/harness/test-v2-recovery.R`
+checks the redraw rule, the ranks, the truth check, the bands, the folder states and the report
+on made-up replicates, and runs one replicate at 20 + 20 on 2021 f180 into a temporary results
+root (slow; skipped while the real results root's stage-1 cache for that cell is cold).
+
+## V2
+
+V2 is the candidate arm, `Stan/forecast_v2.stan` under `harness/configs/v2.json` (spec §6). This
+section is a map: each item names the section or file that holds the detail.
+
+- **Arms and roles.** `v2` is the candidate, `v2-no*` and `v2-staticdelta` its five ablations,
+  `v2-perm` its check and the `v2s-*` arms the staircase's `dev` steps (Runs, the role table under
+  Arms). The model's switches, and the forms V2 runs, are in `Stan/CLAUDE.md` (forecast_v2.stan's
+  switches).
+- **The staircase.** V2 was built one step at a time: an M-step adds a component and a P-step
+  reparameterises the model, checked first by `R/harness/v2_equivalence.R` (Step checks).
+  Neither P-step was adopted, so `v2.json` is `v2s-m5`'s config, with `walk_form` and
+  `delta_form` at 0.
+- **The step log**, `harness/v2/steps.md`: every step's verdict, the command that rewrites its
+  diagnostics table `harness/v2/steps/<step>.md`, and the exit. A P-step's equivalence CSV is
+  `harness/v2/steps/<step>-equivalence.csv` (Step checks).
+- **The checks.**
+  - The prior predictive check, `harness/v2/prior_predictive.md`: prior draws on the snapshot,
+    with no fit (Committed versus generated).
+  - Recovery, `harness/v2/recovery.md`: simulation-based recovery of V2's parameters (Recovery).
+  - Tier 0, the runs of `harness/runs/tier0-v2.txt`: `v2` and `v2-perm` at the 2024 eve cell
+    (seed 1201, lane A) and the 2021 f180 cell (seed 1202, lane B), at 200 + 200 iterations, as
+    R0's Tier 0 (Tier 0). `harness/tier0/v2.md` and `harness/tier0/v2-perm.md` are each arm's
+    sampler diagnostics (`tier0_report.R`).
+  - `harness/tier0/v2_checks.md`, spec §6.9's extras, by `R/harness/v2_checks.R`, whose header
+    lists what it reads and computes: per run the minutes projected to 1000 + 2000, flagged above
+    120; corr(log φ_K, s̄_ζ); each bounded concentration's draws within 2 and within 0.5 of its
+    cap, stage 1's log φ_f included; the min bulk ESS of the (σ, Ω) flat directions; and per
+    closed election the count of kjördæmi × party cells whose in-sample PIT under `y_rep_res`
+    lies outside [0.025, 0.975]. Counts only: no forecast quantity is read or printed.
+  - The permutation check (the plan's Decision 8): `v2` and `v2-perm` must give the same forecast
+    draws within Monte Carlo error (Step checks, `perm`). Its output, as printed, ends
+    `v2_checks.md` in a fenced block under the heading `## Permutation check`. `v2_checks.R`
+    rewrites the whole file, so the last command below appends that section again after it.
+
+Each committed report is rewritten from the project root by:
+
+```
+LC_ALL=en_US.UTF-8 Rscript R/harness/v2_prior_predictive.R harness/configs/steps/v2s-m5.json
+LC_ALL=en_US.UTF-8 Rscript R/harness/recovery.R report
+LC_ALL=en_US.UTF-8 Rscript R/harness/tier0_report.R v2 harness/runs/tier0-v2.txt
+LC_ALL=en_US.UTF-8 Rscript R/harness/tier0_report.R v2-perm harness/runs/tier0-v2.txt harness/tier0/v2-perm.md
+LC_ALL=en_US.UTF-8 Rscript R/harness/v2_checks.R harness/runs/tier0-v2.txt
+{ printf '\n## Permutation check\n\nThe output of \140LC_ALL=en_US.UTF-8 Rscript R/harness/compare_runs.R perm v2 v2-perm harness/runs/tier0-v2.txt\140 (the Phase 2 plan\047s Decision 8), as it printed:\n\n\140\140\140\n'; LC_ALL=en_US.UTF-8 Rscript R/harness/compare_runs.R perm v2 v2-perm harness/runs/tier0-v2.txt; printf '\140\140\140\n'; } >> harness/tier0/v2_checks.md
+```
+
+The first needs only the snapshot. `report` reads the recovery replicates (Recovery). The Tier 0
+commands read the finished runs of `harness/runs/tier0-v2.txt`, which
+`zsh R/harness/queue.sh harness/runs/tier0-v2.txt 200 200` fits, started as in Tier 0. The last
+command runs `perm` and appends its output, with the heading and the fence, to `v2_checks.md`, so
+it runs once, right after `v2_checks.R` (each backtick is written `\140` in its `printf`, so the
+block holds none). Each step's own commands are in its section of `harness/v2/steps.md`.
 
 ## R0's inputs
 
@@ -412,8 +932,16 @@ or `snapshot_manifest.csv`.
   map, the fieldwork corrections, the publication dates, the two correction tables
   (`poll_n_corrections.csv`, `fundamentals_corrections.csv`), the economy release dates,
   the house table and the coalition events. `harness/configs/` holds each arm's settings
-  (`r0.json`), `harness/runs/` the queue's run lists (`tier0.txt`), and `harness/tier0/` the
-  Tier 0 reports, which `tier0_report.R` writes from local runs (no offline rebuild).
+  (`r0.json`, V2's candidate `v2.json`, its ablations `v2-no*.json` and `v2-staticdelta.json`, its
+  check `v2-perm.json`, and V2's step configs in `steps/`), `harness/runs/` the queue's run lists
+  (`tier0.txt`, `v2-steps.txt`, `tier0-v2.txt`), and `harness/tier0/` the Tier 0 reports, which
+  `tier0_report.R` and `v2_checks.R` write from local runs (no offline rebuild).
+  `harness/v2/steps.md` is V2's step log and `harness/v2/steps/` each step's diagnostics table
+  and equivalence CSV, from local runs too (Step checks).
+  `harness/v2/prior_predictive.md` is V2's prior predictive check, from prior draws on the
+  snapshot with no fit, which
+  `LC_ALL=en_US.UTF-8 Rscript R/harness/v2_prior_predictive.R harness/configs/steps/<step>.json`
+  rewrites deterministically.
 - Generated and gitignored: `harness/snapshot/` and `harness/selftest/`.
 
 ## Target rows: the economy and the carried columns

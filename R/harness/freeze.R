@@ -1,6 +1,8 @@
-# The freeze guard (spec §5.7): no target cell is scored before harness/FREEZE.md is
-# committed with its sha256 list, no 2017 cell before harness/DECISION.md is too, and no
-# 2017 cell once harness/CONFIRM.md records its one scoring.
+# The freeze guard (spec §5.7): a 2021 or 2024 target cell may be scored at any time during
+# development (Brynjólfur, 5 November 2026: no arbitrary locks while the model is being
+# developed); a 2017 cell, the held-out confirmatory target, not before harness/FREEZE.md and
+# harness/DECISION.md are each committed with their sha256 lists, and never once
+# harness/CONFIRM.md records its one scoring.
 
 SHA_LINE <- "^([0-9a-f]{64})  (.+)$"
 
@@ -105,16 +107,54 @@ check_sealed <- function(name, root, none, not_committed) {
   invisible(TRUE)
 }
 
-#' The freeze guard: whether forecast cell (E, F) may be scored under `root`.
+#' Whether the freeze is sealed under `root`.
+#' @param root the project root whose `harness/` holds the freeze files
+#' @return logical(1): TRUE when `harness/FREEZE.md` and `harness/FREEZE.sha256` pass
+#'   checks 2–5 of `freeze_guard()` (both exist, the list covers FREEZE.md, every listed
+#'   sha256 matches, and both files are committed), else FALSE
+#' @export
+is_frozen <- function(root = project_root()) {
+  # WHY: the default argument is a promise, forced after this import.
+  box::use(R / harness / constants[project_root])
+  tryCatch(
+    {
+      check_sealed("FREEZE", root, none = "no freeze", not_committed = "the freeze is not committed")
+      TRUE
+    },
+    error = function(e) FALSE
+  )
+}
+
+#' Whether a cell of election E must stay forecast-free (Decision 9): E is the confirmatory
+#' 2017 target and the freeze is not sealed. V2's builder, stage 1 and the cell runner all
+#' decide "a 2017 cell before the freeze" here.
+#' @param E the cell's election (Date or ISO string), one
+#' @param root the project root whose freeze files `is_frozen()` reads
+#' @return logical(1): TRUE when E is the E of a confirmatory `TARGETS` row and
+#'   `is_frozen(root)` is FALSE, else FALSE (the freeze files are not read for any other
+#'   E); an error, "E must be one date, not …", unless E is one date
+#' @export
+forecast_free <- function(E, root = project_root()) {
+  # WHY: the default argument is a promise, forced after this import.
+  box::use(R / harness / constants[TARGETS, project_root])
+  e <- tryCatch(as.Date(E), error = function(err) as.Date(NA))
+  if (length(e) != 1 || is.na(e)) stop("E must be one date, not ", paste(format(E), collapse = ", "))
+  any(TARGETS$confirmatory & TARGETS$E == e) && !is_frozen(root)
+}
+
+#' The freeze guard: whether forecast cell (E, F) may be scored under `root`. A cell that is
+#' not confirmatory (2021 or 2024) passes once check 1 does, and no freeze file is read for
+#' it; checks 2–7 hold back a confirmatory (2017) cell only.
 #' @param E,F the cell's election and forecast date (Date or ISO string)
 #' @param root the project root whose `harness/` holds the freeze files
 #' @return `invisible(TRUE)`; otherwise an error at the first failure, in this order:
 #'   1. "not a forecast cell: E = …, F = …" if (E, F) is not a `TARGETS` row;
-#'   2. "no freeze: harness/FREEZE.md and harness/FREEZE.sha256 must exist before a
-#'   target cell is scored";
-#'   3. "harness/FREEZE.sha256 does not cover harness/FREEZE.md";
-#'   4. `verify_sha_list()`'s error for `harness/FREEZE.sha256`;
-#'   5. "the freeze is not committed" unless `is_committed()` holds for both files;
+#'   2. for a confirmatory cell, "no freeze: harness/FREEZE.md and harness/FREEZE.sha256
+#'   must exist before a 2017 cell is scored";
+#'   3. for a confirmatory cell, "harness/FREEZE.sha256 does not cover harness/FREEZE.md";
+#'   4. for a confirmatory cell, `verify_sha_list()`'s error for `harness/FREEZE.sha256`;
+#'   5. for a confirmatory cell, "the freeze is not committed" unless `is_committed()`
+#'   holds for both files;
 #'   6. for a confirmatory cell, "2017 is locked until harness/DECISION.md is committed
 #'   with its sha256 (<the check that failed>)" unless `harness/DECISION.md` and
 #'   `harness/DECISION.sha256` pass checks 2–5;
@@ -125,12 +165,12 @@ freeze_guard <- function(E, F, root = project_root()) {
   # WHY: the default argument is a promise, forced after this import.
   box::use(R / harness / constants[project_root])
   cell <- target_cell(E, F)
-  check_sealed(
-    "FREEZE", root,
-    none = "no freeze: harness/FREEZE.md and harness/FREEZE.sha256 must exist before a target cell is scored",
-    not_committed = "the freeze is not committed"
-  )
   if (cell$confirmatory) {
+    check_sealed(
+      "FREEZE", root,
+      none = "no freeze: harness/FREEZE.md and harness/FREEZE.sha256 must exist before a 2017 cell is scored",
+      not_committed = "the freeze is not committed"
+    )
     why <- tryCatch(
       {
         check_sealed(

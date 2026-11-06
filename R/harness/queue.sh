@@ -9,12 +9,19 @@
 # from the project root, its output in $LOGS/<id>.log. LOGS is
 # ${HARNESS_RESULTS:-<project root>/results/harness}/logs, as the runner's results_root().
 #
-# Before any fit it takes the lock $LOGS/queue.lock (a directory holding the queue's pid),
-# refuses to start while another queue holds it or a fit_cell.R runs (or when pgrep cannot
-# tell), unless FORCE=1, and runs the full slow test suite as a preflight
-# ($LOGS/preflight.log), stopping if that fails. $LOGS/queue.log gets
-# "QUEUE START <time> <list> <warmup> <sampling> (pid <pid>)", "preflight PASS" (or
-# "preflight FAIL ..."), a "start <lane> <id> <time>" and an
+# Before the lock, whatever FORCE, it refuses to start while HARNESS_V2_STAN is set, since the
+# preflight's Stan tests would then test the file it names instead of the Stan file the fits
+# use, and while V2_STEPS is non-empty, since the preflight picks its own Stan tests: the full
+# preflight all of them, the lean one its own V2_STEPS. Before any fit it takes the lock
+# $LOGS/queue.lock (a directory holding the queue's pid), refuses to start while another queue
+# holds it or a fit_cell.R runs (or when pgrep cannot tell), unless FORCE=1, and runs the full
+# slow test suite as a preflight ($LOGS/preflight.log), stopping if that fails. PREFLIGHT=lean
+# runs instead the fast suite, then the slow Stan tests of v2s-m5 (V2's configuration) and the
+# Stan lp tests tagged perm (V2_STEPS=v2s-m5,perm, set for that command alone, so the refusal
+# above reads only the caller's); PREFLIGHT=full, or unset, is the full slow suite, and any
+# other value is refused as a bad command line. $LOGS/queue.log gets
+# "QUEUE START <time> <list> <warmup> <sampling> (pid <pid>)", "preflight PASS" or
+# "preflight PASS (lean)" (or "preflight FAIL ..."), a "start <lane> <id> <time>" and an
 # "end <id> rc=<rc> <first DIAG|SKIP|STALE line>" per run, and one terminal line: "QUEUE
 # FINISHED" once both lanes are done, or "QUEUE ABORTED rc=<rc> <reason> (pid <pid>)" on any
 # other exit (a bad command line, a refusal, a failed preflight, SIGTERM or SIGINT). A refused
@@ -75,6 +82,8 @@ sampling=$3
 if [[ $warmup != <-> || $sampling != <-> ]]; then
   die 2 "iter_warmup and iter_sampling must be whole numbers: $warmup $sampling"
 fi
+preflight=${PREFLIGHT:-full}
+[[ $preflight == (full|lean) ]] || die 2 "PREFLIGHT must be full or lean: $preflight"
 
 typeset -a runs fields
 n=0
@@ -98,6 +107,16 @@ if [[ ${DRY_RUN:-0} == 1 ]]; then
 fi
 
 mkdir -p $LOGS || die 1 "cannot make $LOGS"
+# WHY: the preflight must certify the Stan file the fits use, never a scratch copy.
+if [[ -n ${HARNESS_V2_STAN:-} ]]; then
+  die 1 "HARNESS_V2_STAN is set ($HARNESS_V2_STAN): the preflight would test that file, not the one the fits use; unset it"
+fi
+# WHY: either preflight picks its own Stan tests (the full one every step's, the lean one its
+# own V2_STEPS), so a caller's V2_STEPS would narrow the full suite and only seem to narrow the
+# lean one.
+if [[ -n ${V2_STEPS:-} ]]; then
+  die 1 "V2_STEPS is set ($V2_STEPS): the preflight picks its own Stan tests, under PREFLIGHT=full or lean; unset it"
+fi
 if mkdir $lock 2> /dev/null; then
   owns_lock=1
   print -r -- $$ > $lock/pid
@@ -116,19 +135,34 @@ if [[ ${FORCE:-0} != 1 ]]; then
   fi
 fi
 
+# One preflight command, appended to $LOGS/preflight.log; its exit status.
+# WHY: in the background, so that a SIGTERM's trap runs at once rather than after the suite.
+preflight_run() {
+  env "$@" >> $LOGS/preflight.log 2>&1 &
+  children=($!)
+  wait $children[1]
+  local rc=$?
+  children=()
+  return $rc
+}
+
 cd $root || die 1 "cannot cd to $root"
 qlog "QUEUE START $(now) $list $warmup $sampling (pid $$)"
-# WHY: in the background, so that a SIGTERM's trap runs at once rather than after the suite.
-HARNESS_SLOW=1 LC_ALL=en_US.UTF-8 Rscript tests/run.R > $LOGS/preflight.log 2>&1 &
-children=($!)
-wait $children[1]
+: > $LOGS/preflight.log
+if [[ $preflight == lean ]]; then
+  tag=" (lean)"
+  preflight_run HARNESS_SLOW= V2_STEPS= LC_ALL=en_US.UTF-8 Rscript tests/run.R &&
+    preflight_run HARNESS_SLOW=1 V2_STEPS=v2s-m5,perm LC_ALL=en_US.UTF-8 Rscript tests/run.R v2-stan
+else
+  tag=""
+  preflight_run HARNESS_SLOW=1 LC_ALL=en_US.UTF-8 Rscript tests/run.R
+fi
 rc=$?
-children=()
 if (( rc != 0 )); then
-  qlog "preflight FAIL rc=$rc ($LOGS/preflight.log)"
+  qlog "preflight FAIL$tag rc=$rc ($LOGS/preflight.log)"
   die 1 "preflight failed (rc=$rc): see $LOGS/preflight.log"
 fi
-qlog "preflight PASS"
+qlog "preflight PASS$tag"
 
 run_lane() {
   local lane=$1 failed=0 r id rc first

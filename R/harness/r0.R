@@ -166,7 +166,9 @@ r0_production_inputs <- function(info) {
 }
 
 #' The fundamentals table of a cell, as production's `read_fundamentals_data()` and the fit
-#' script's economy join give it; see `r0_production_inputs()`.
+#' script's economy join give it; see `r0_production_inputs()`. V2's stage 1
+#' (`R/harness/stage1.R`) reads the same table.
+#' @export
 fundamentals_rows <- function(info, party_order) {
   train <- info$fundamentals$train
   target <- info$fundamentals$target
@@ -430,24 +432,28 @@ EXTRACT_META <- c("party_order", "kjordaemi_levels", "eday_index", "n_pred")
 #' Stop with "r0_extract: " and `...`.
 extract_fail <- function(...) stop("r0_extract: ", ..., call. = FALSE)
 
-#' The elements of one variable in a draws_df, by the indices in their names.
+#' The elements of one variable in a draws_df, by the indices in their names (the
+#' extractors' shared reader; `v2_extract()` uses it too).
 #' @param draws a `posterior::draws_df`
 #' @param variable the variable's name
+#' @param fail the error function, called with the message's parts
 #' @return `list(columns, index, values)`: the element names, an integer matrix of their
 #'   indices (one row per element, one column per dimension, none for a scalar) and the
-#'   draws x elements matrix of their values, all in the order of `draws`; an error if
-#'   `draws` holds no element of `variable` or an element name does not parse
-indexed <- function(draws, variable) {
+#'   draws x elements matrix of their values, all in the order of `draws`; an error, through
+#'   `fail`, "the draws hold no <variable>" if `draws` holds no element of `variable`, or one
+#'   if an element name does not parse
+#' @export
+indexed <- function(draws, variable, fail = extract_fail) {
   vars <- posterior::variables(draws)
   columns <- vars[sub("\\[.*$", "", vars) == variable]
-  if (!length(columns)) extract_fail("the draws hold no ", variable)
+  if (!length(columns)) fail("the draws hold no ", variable)
   scalar <- identical(columns, variable)
   if (!scalar && !all(grepl("^[^[]+\\[[0-9]+(,[0-9]+)*\\]$", columns))) {
-    extract_fail("cannot parse the indices of ", paste(columns, collapse = ", "))
+    fail("cannot parse the indices of ", paste(columns, collapse = ", "))
   }
   parts <- strsplit(sub("^[^[]*\\[(.*)\\]$", "\\1", columns), ",", fixed = TRUE)
   ndim <- if (scalar) 0L else unique(lengths(parts))
-  if (length(ndim) != 1) extract_fail(variable, " has elements of different dimensions")
+  if (length(ndim) != 1) fail(variable, " has elements of different dimensions")
   index <- matrix(as.integer(unlist(if (scalar) list() else parts)), nrow = length(columns), ncol = ndim, byrow = TRUE)
   values <- matrix(unlist(lapply(columns, \(col) as.numeric(.subset2(draws, col))), use.names = FALSE), nrow = nrow(draws))
   list(columns = columns, index = index, values = values)
@@ -457,21 +463,30 @@ indexed <- function(draws, variable) {
 #' @param x `indexed()`
 #' @param variable the variable's name, for messages
 #' @param dims the grid's size in each dimension
+#' @param fail the error function, called with the message's parts
 #' @return the draws x cells matrix, its columns ordered by the first index, then the second
-#'   (the last fastest); an error unless the elements are exactly the cells of the grid
-grid_values <- function(x, variable, dims) {
+#'   (the last fastest); an error, through `fail`, unless the elements are exactly the cells
+#'   of the grid
+#' @export
+grid_values <- function(x, variable, dims, fail = extract_fail) {
   idx <- x$index
   full <- ncol(idx) == length(dims) && nrow(idx) == prod(dims) &&
     all(vapply(seq_along(dims), \(j) all(idx[, j] %in% seq_len(dims[j])), logical(1))) &&
     !anyDuplicated(apply(idx, 1, paste, collapse = ","))
   if (!full) {
-    extract_fail(variable, " does not hold exactly the cells [", paste(dims, collapse = " x "), "] of the meta's levels")
+    fail(variable, " does not hold exactly the cells [", paste(dims, collapse = " x "), "] of the meta's levels")
   }
   x$values[, do.call(order, lapply(seq_len(ncol(idx)), \(j) idx[, j])), drop = FALSE]
 }
 
 #' A long draws table: one row per draw and cell, the draws in the order of `ids` and, within
 #' each, the cells in the order of `labels`.
+#' @param ids `list(.chain, .iteration, .draw)`, one value per draw
+#' @param labels a data frame, one row per cell, whose columns label the cells
+#' @param values the draws x cells matrix
+#' @param value the name of the values' column
+#' @return a tibble: `.chain`, `.iteration`, `.draw`, the columns of `labels`, then `value`
+#' @export
 long_draws <- function(ids, labels, values, value) {
   m <- nrow(labels)
   out <- tibble::tibble(

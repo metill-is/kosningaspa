@@ -1,7 +1,7 @@
 box::use(
   R / harness / runs[
     EXTRACT_VERSION, SAMPLER, results_root, run_id, run_dir, sha256_file, stan_data_sha, write_frozen_inputs,
-    expected_meta, meta_mismatch, retire_run, summarise_diagnostics, diagnostics_gate, diag_line
+    expected_meta, meta_mismatch, retire_run, chain_sampler, summarise_diagnostics, diagnostics_gate, diag_line
   ]
 )
 
@@ -33,7 +33,10 @@ normal_draws <- function(vars, shift = 0, shift_chain = 4L) {
 }
 
 clean_sampler <- function() {
-  list(num_divergent = rep(0L, 4), num_max_treedepth = rep(0L, 4), ebfmi = c(0.9, 1.1, 0.8, 1), max_depth = rep(9L, 4))
+  list(
+    num_divergent = rep(0L, 4), num_max_treedepth = rep(0L, 4), ebfmi = c(0.9, 1.1, 0.8, 1), max_depth = rep(9L, 4),
+    n_leapfrog = c(1000, 2000, 3000, 4000)
+  )
 }
 
 test_that("the sampler settings and the extract version are the harness's (spec section 5.8)", {
@@ -77,6 +80,16 @@ test_that("write_frozen_inputs() writes the Stan data and the inputs meta read-o
   expect_error(write_frozen_inputs(dir, stan_data, inputs_meta), "inputs")
   expect_identical(sha256_file(data_json), sha)
   expect_identical(list.files(dir, all.files = TRUE, no.. = TRUE), "inputs")
+})
+
+test_that("write_frozen_inputs() writes a NULL meta field as JSON null, which reads back as NULL", {
+  dir <- file.path(withr::local_tempdir(), "v2_run")
+  write_frozen_inputs(dir, list(N = 1L), list(arm = "v2s-m0", stage1_sha256 = NULL, n = 2L))
+  meta_json <- file.path(dir, "inputs", "inputs.json")
+  expect_true(any(grepl('^\\s*"stage1_sha256": null,?$', readLines(meta_json))))
+  back <- jsonlite::read_json(meta_json, simplifyVector = TRUE)
+  expect_named(back, c("arm", "stage1_sha256", "n"))
+  expect_null(back$stage1_sha256)
 })
 
 test_that("a failed write_frozen_inputs() leaves no inputs/ behind, so a retry succeeds", {
@@ -192,7 +205,7 @@ test_that("summarise_diagnostics() reads R-hat and ESS over parameters and score
   d <- summarise_diagnostics(normal_draws(c("a", "b[1]", "b[2]")), normal_draws(c("s[1]", "s[2]")), clean_sampler())
   expect_named(d, c(
     "max_rhat", "max_rhat_scored", "min_ess_bulk", "min_ess_tail", "min_ess_bulk_scored",
-    "min_ess_tail_scored", "na_scored", "divergent", "treedepth_hits", "max_depth", "min_ebfmi"
+    "min_ess_tail_scored", "na_scored", "divergent", "treedepth_hits", "max_depth", "min_ebfmi", "n_leapfrog"
   ))
   expect_identical(d$na_scored, 0L)
   expect_lt(d$max_rhat, 1.01)
@@ -219,14 +232,45 @@ test_that("a parameter chain shifted by 3 sd fails the gate on R-hat", {
 
 test_that("summarise_diagnostics() sums divergences and treedepth hits and keeps the deepest tree", {
   withr::local_seed(1)
-  sampler <- list(num_divergent = c(0L, 1L, 0L, 0L), num_max_treedepth = c(2L, 0L, 3L, 0L), ebfmi = c(0.4, 0.3, 0.5, 0.6), max_depth = c(11L, 12L, 10L, 11L))
+  sampler <- list(
+    num_divergent = c(0L, 1L, 0L, 0L), num_max_treedepth = c(2L, 0L, 3L, 0L), ebfmi = c(0.4, 0.3, 0.5, 0.6),
+    max_depth = c(11L, 12L, 10L, 11L), n_leapfrog = c(51200, 63000, 40961, 70000)
+  )
   d <- summarise_diagnostics(normal_draws("a"), normal_draws("s"), sampler)
   expect_identical(d[c("divergent", "treedepth_hits", "max_depth")], list(divergent = 1L, treedepth_hits = 5L, max_depth = 12L))
+  expect_identical(d$n_leapfrog, 225161)
   expect_identical(d$min_ebfmi, 0.3)
   g <- diagnostics_gate(d)
   expect_false(g$pass)
   expect_identical(g$reasons, "divergent 1 > 0")
   expect_error(summarise_diagnostics(normal_draws("a"), normal_draws("s"), sampler[1:3]), "max_depth")
+  expect_error(summarise_diagnostics(normal_draws("a"), normal_draws("s"), sampler[-5]), "lacks: n_leapfrog")
+  expect_error(
+    summarise_diagnostics(normal_draws("a"), normal_draws("s"), utils::modifyList(sampler, list(n_leapfrog = 1:3))),
+    "one value per chain"
+  )
+  expect_error(
+    summarise_diagnostics(normal_draws("a"), normal_draws("s"), utils::modifyList(sampler, list(n_leapfrog = c(1, 2, 3.5, 4)))),
+    "n_leapfrog"
+  )
+})
+
+test_that("n_leapfrog is the sum over chains of each chain's post-warmup leapfrog steps, not their max or mean", {
+  withr::local_seed(1)
+  steps <- cbind(c(3, 5, 7), c(31, 31, 31), c(1, 1, 1), c(127, 63, 15))
+  depth <- cbind(c(2, 3, 3), c(5, 5, 5), c(1, 1, 1), c(7, 6, 4))
+  x <- array(c(depth, steps), dim = c(3, 4, 2), dimnames = list(NULL, NULL, c("treedepth__", "n_leapfrog__")))
+  by_chain <- chain_sampler(posterior::as_draws_array(x))
+  expect_named(by_chain, c("max_depth", "n_leapfrog"))
+  expect_equal(unname(by_chain$max_depth), c(3, 5, 1, 7))
+  expect_equal(unname(by_chain$n_leapfrog), c(15, 93, 3, 205))
+  sampler <- c(list(num_divergent = rep(0L, 4), num_max_treedepth = rep(0L, 4), ebfmi = rep(1, 4)), by_chain)
+  d <- summarise_diagnostics(normal_draws("a"), normal_draws("s"), sampler)
+  expect_identical(d$n_leapfrog, 316)
+  expect_identical(d$max_depth, 7L)
+  # WHY: a per-chain max or mean, of the draws or of the chain sums, would pass a range check; none equals the sum.
+  expect_false(any(d$n_leapfrog == c(max(steps), mean(steps), max(colSums(steps)), mean(colSums(steps)))))
+  expect_error(chain_sampler(posterior::as_draws_array(x[, , "treedepth__", drop = FALSE])), "lack: n_leapfrog__")
 })
 
 NA_REASON <- "scored quantities with NA R-hat or ESS: "

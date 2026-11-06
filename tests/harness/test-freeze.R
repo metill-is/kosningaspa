@@ -1,10 +1,10 @@
-box::use(R / harness / freeze[read_sha_list, verify_sha_list, is_committed, freeze_guard, target_cell])
+box::use(R / harness / freeze[read_sha_list, verify_sha_list, is_committed, freeze_guard, is_frozen, forecast_free, target_cell])
 
 E24 <- "2024-11-30"
 F24 <- "2024-11-29"
 E17 <- "2017-10-28"
 F17 <- "2017-10-27"
-NO_FREEZE <- "no freeze: harness/FREEZE.md and harness/FREEZE.sha256 must exist before a target cell is scored"
+NO_FREEZE <- "no freeze: harness/FREEZE.md and harness/FREEZE.sha256 must exist before a 2017 cell is scored"
 NOT_COMMITTED <- "the freeze is not committed"
 LOCKED_2017 <- "2017 is locked until harness/DECISION.md is committed with its sha256"
 CONFIRMED_2017 <- "2017 has been scored (harness/CONFIRM.md): no second look"
@@ -96,11 +96,17 @@ test_that("target_cell returns the TARGETS row of a forecast cell", {
   expect_true(target_cell(as.Date(E17), as.Date(F17))$confirmatory)
 })
 
-test_that("the guard passes every non-confirmatory target cell under a committed freeze", {
-  fr <- frozen_root()
-  expect_invisible(freeze_guard(E24, F24, fr))
+test_that("the guard passes every 2021 and 2024 cell with no freeze, a broken one or a committed one", {
+  # WHY: Brynjólfur, 5 Nov 2026: no arbitrary locks while the model is developed; only 2017 stays held out.
+  expect_setequal(format(unique(TARGETS$E[!TARGETS$confirmatory])), c("2021-09-25", "2024-11-30"))
+  none <- withr::local_tempdir()
+  broken <- frozen_root()
+  cat("edited\n", file = file.path(broken, "harness", "FREEZE.md"), append = TRUE)
+  expect_invisible(freeze_guard(E24, F24, none))
   for (i in which(!TARGETS$confirmatory)) {
-    expect_true(freeze_guard(TARGETS$E[i], TARGETS$F[i], fr), label = paste(TARGETS$E[i], TARGETS$F[i]))
+    for (root in list(none, broken, frozen_root())) {
+      expect_true(freeze_guard(TARGETS$E[i], TARGETS$F[i], root), label = paste(TARGETS$E[i], TARGETS$F[i], root))
+    }
   }
 })
 
@@ -119,12 +125,14 @@ test_that("1: a cell outside TARGETS is refused before any freeze file is looked
   expect_error(freeze_guard("not a date", F24, fr), "not a forecast cell")
 })
 
-test_that("2: without FREEZE.md or FREEZE.sha256 there is no freeze", {
-  expect_error(freeze_guard(E24, F24, withr::local_tempdir()), NO_FREEZE, fixed = TRUE)
+test_that("2: without FREEZE.md or FREEZE.sha256 there is no freeze, and a 2017 cell is refused", {
+  for (F in c("2017-10-14", "2017-10-27")) {
+    expect_error(freeze_guard(E17, F, withr::local_tempdir()), NO_FREEZE, fixed = TRUE, label = F)
+  }
   for (f in c("FREEZE.md", "FREEZE.sha256")) {
     fr <- frozen_root()
     file.remove(file.path(fr, "harness", f))
-    expect_error(freeze_guard(E24, F24, fr), NO_FREEZE, fixed = TRUE, label = f)
+    expect_error(freeze_guard(E17, F17, fr), NO_FREEZE, fixed = TRUE, label = f)
   }
   fr <- frozen_root()
   file.remove(file.path(fr, "harness", "FREEZE.md"))
@@ -137,43 +145,43 @@ test_that("3: a sha256 list that does not name FREEZE.md does not cover it", {
   writeLines("other", file.path(fr, "harness", "other.txt"))
   writeLines(sha256_line(fr, "harness/other.txt"), file.path(fr, "harness", "FREEZE.sha256"))
   commit_all(fr, "list another file")
-  expect_error(freeze_guard(E24, F24, fr), "harness/FREEZE.sha256 does not cover harness/FREEZE.md", fixed = TRUE)
+  expect_error(freeze_guard(E17, F17, fr), "harness/FREEZE.sha256 does not cover harness/FREEZE.md", fixed = TRUE)
   writeLines("# nothing listed", file.path(fr, "harness", "FREEZE.sha256"))
   commit_all(fr, "list nothing")
-  expect_error(freeze_guard(E24, F24, fr), "harness/FREEZE.sha256 does not cover harness/FREEZE.md", fixed = TRUE)
+  expect_error(freeze_guard(E17, F17, fr), "harness/FREEZE.sha256 does not cover harness/FREEZE.md", fixed = TRUE)
 })
 
 test_that("4: an edited FREEZE.md, or a listed file gone, fails the sha256 check", {
   fr <- frozen_root()
   cat("edited\n", file = file.path(fr, "harness", "FREEZE.md"), append = TRUE)
-  expect_error(freeze_guard(E24, F24, fr), "sha256 mismatch: harness/FREEZE.md", fixed = TRUE)
+  expect_error(freeze_guard(E17, F17, fr), "sha256 mismatch: harness/FREEZE.md", fixed = TRUE)
   fr <- frozen_root()
   write(paste0(strrep("0", 64), "  harness/gone.csv"), file.path(fr, "harness", "FREEZE.sha256"), append = TRUE)
   commit_all(fr, "list a file that does not exist")
-  expect_error(freeze_guard(E24, F24, fr), "missing: harness/gone.csv", fixed = TRUE)
+  expect_error(freeze_guard(E17, F17, fr), "missing: harness/gone.csv", fixed = TRUE)
   fr <- frozen_root()
   write("not a sha256 line", file.path(fr, "harness", "FREEZE.sha256"), append = TRUE)
   commit_all(fr, "a malformed line")
-  expect_error(freeze_guard(E24, F24, fr), "malformed sha256 line 2", fixed = TRUE)
+  expect_error(freeze_guard(E17, F17, fr), "malformed sha256 line 2", fixed = TRUE)
 })
 
 test_that("5: a freeze never committed, only staged or changed since is not committed", {
   fr <- withr::local_tempdir()
   git_in(fr, "init", "-q")
   seal(fr, "FREEZE")
-  expect_error(freeze_guard(E24, F24, fr), NOT_COMMITTED, fixed = TRUE)
+  expect_error(freeze_guard(E17, F17, fr), NOT_COMMITTED, fixed = TRUE)
   fr <- withr::local_tempdir()
   git_in(fr, "init", "-q")
   writeLines("readme", file.path(fr, "README"))
   commit_all(fr, "first")
   seal(fr, "FREEZE")
-  expect_error(freeze_guard(E24, F24, fr), NOT_COMMITTED, fixed = TRUE)
+  expect_error(freeze_guard(E17, F17, fr), NOT_COMMITTED, fixed = TRUE)
   git_in(fr, "add", "-A")
-  expect_error(freeze_guard(E24, F24, fr), NOT_COMMITTED, fixed = TRUE)
+  expect_error(freeze_guard(E17, F17, fr), NOT_COMMITTED, fixed = TRUE)
   fr <- frozen_root()
   write("# a comment keeps the list valid", file.path(fr, "harness", "FREEZE.sha256"), append = TRUE)
-  expect_error(freeze_guard(E24, F24, fr), NOT_COMMITTED, fixed = TRUE)
-  expect_error(freeze_guard(E24, F24, seal(withr::local_tempdir(), "FREEZE")), NOT_COMMITTED, fixed = TRUE)
+  expect_error(freeze_guard(E17, F17, fr), NOT_COMMITTED, fixed = TRUE)
+  expect_error(freeze_guard(E17, F17, seal(withr::local_tempdir(), "FREEZE")), NOT_COMMITTED, fixed = TRUE)
 })
 
 test_that("6: 2017 is locked until DECISION.md and its sha256 list pass the freeze's checks, the failed check named", {
@@ -209,4 +217,33 @@ test_that("7: once CONFIRM.md exists, 2017 is never scored again", {
   commit_all(fr, "confirm")
   expect_error(freeze_guard(E17, F17, fr), CONFIRMED_2017, fixed = TRUE)
   expect_true(freeze_guard(E24, F24, fr))
+})
+
+test_that("is_frozen is FALSE without a sealed freeze and TRUE with one", {
+  expect_false(is_frozen(withr::local_tempdir()))
+  fr <- frozen_root()
+  expect_true(is_frozen(fr))
+  expect_true(is_frozen(frozen_root(decision = TRUE)))
+  cat("edited\n", file = file.path(fr, "harness", "FREEZE.md"), append = TRUE)
+  expect_false(is_frozen(fr))
+  unsealed <- withr::local_tempdir()
+  git_in(unsealed, "init", "-q")
+  seal(unsealed, "FREEZE")
+  expect_false(is_frozen(unsealed))
+  commit_all(unsealed, "freeze")
+  expect_true(is_frozen(unsealed))
+  writeLines("# nothing listed", file.path(unsealed, "harness", "FREEZE.sha256"))
+  commit_all(unsealed, "a list that does not cover FREEZE.md")
+  expect_false(is_frozen(unsealed))
+})
+
+test_that("forecast_free holds for the 2017 target until the freeze is sealed, and for no other election", {
+  none <- withr::local_tempdir()
+  expect_true(forecast_free(as.Date(E17), none))
+  expect_true(forecast_free(E17, none))
+  expect_false(forecast_free(as.Date("2021-09-25"), none))
+  expect_false(forecast_free(E24, none))
+  expect_false(forecast_free(E17, frozen_root()))
+  expect_error(forecast_free(c(E17, E24), none), "E must be one date")
+  expect_error(forecast_free(NA, none), "E must be one date")
 })

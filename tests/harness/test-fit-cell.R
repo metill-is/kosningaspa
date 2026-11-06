@@ -3,11 +3,14 @@ box::use(
   R / harness / r0[r0_stan_data, R0_EXTRACT_VARIABLES, R0_KJORDAEMI],
   R / harness / info_set[info_set, read_inputs],
   R / harness / scorer[read_run_meta, score_cell],
-  R / harness / arms[arm]
+  R / harness / arms[arm],
+  R / harness / freeze[is_frozen],
+  R / harness / v2[v2_stan_data]
 )
 
 TIER0 <- c("would run A r0 2024-11-30 2024-11-29 1101", "would run B r0 2021-09-25 2021-03-29 1102")
 PARQUETS <- paste0(c("eday_kjordaemi", "eday_national", "latent_national", "param_draws"), ".parquet")
+REFUSED_2017 <- "fit_cell: 2017 is not fitted before the freeze (spec \u00a75.7)"
 GUARD <- "--file=R/harness/fit_cell.R"
 
 # queue.sh run from the project root; its output, with the exit status as attribute "status"
@@ -76,7 +79,7 @@ test_that("the queue refuses a bad command line or run list", {
   out <- queue(c(file.path(lists, "absent.txt"), "200", "200"))
   expect_identical(attr(out, "status"), 2L)
   results <- withr::local_tempdir()
-  withr::local_envvar(HARNESS_RESULTS = results, DRY_RUN = NA)
+  withr::local_envvar(HARNESS_RESULTS = results, DRY_RUN = NA, HARNESS_V2_STAN = NA, V2_STEPS = NA)
   out <- queue(c(bad, "200", "200"))
   expect_identical(attr(out, "status"), 2L)
   log <- readLines(file.path(results, "logs", "queue.log"))
@@ -88,7 +91,10 @@ test_that("the queue will not start beside a running fit_cell.R unless FORCE=1, 
   results <- withr::local_tempdir()
   bin <- withr::local_tempdir()
   stub(bin, "Rscript", "exit 3")
-  withr::local_envvar(HARNESS_RESULTS = results, DRY_RUN = NA, FORCE = NA, PATH = paste(bin, Sys.getenv("PATH"), sep = ":"))
+  withr::local_envvar(
+    HARNESS_RESULTS = results, DRY_RUN = NA, FORCE = NA, HARNESS_V2_STAN = NA, V2_STEPS = NA, PREFLIGHT = NA,
+    PATH = paste(bin, Sys.getenv("PATH"), sep = ":")
+  )
   logs <- file.path(results, "logs")
   fake_fit()
   out <- queue(c("harness/runs/tier0.txt", "200", "200"))
@@ -118,7 +124,10 @@ test_that("the queue's guard refuses to start when pgrep fails", {
   results <- withr::local_tempdir()
   bin <- withr::local_tempdir()
   stub(bin, "Rscript", "exit 3")
-  withr::local_envvar(HARNESS_RESULTS = results, DRY_RUN = NA, FORCE = NA, PATH = paste(bin, Sys.getenv("PATH"), sep = ":"))
+  withr::local_envvar(
+    HARNESS_RESULTS = results, DRY_RUN = NA, FORCE = NA, HARNESS_V2_STAN = NA, V2_STEPS = NA,
+    PATH = paste(bin, Sys.getenv("PATH"), sep = ":")
+  )
   for (rc in c(2L, 3L, 127L)) {
     stub(bin, "pgrep", paste("exit", rc))
     out <- queue(c("harness/runs/tier0.txt", "200", "200"))
@@ -130,6 +139,90 @@ test_that("the queue's guard refuses to start when pgrep fails", {
   }
 })
 
+test_that("the queue refuses to start while HARNESS_V2_STAN is set, FORCE=1 or not", {
+  results <- withr::local_tempdir()
+  bin <- withr::local_tempdir()
+  stub(bin, "Rscript", "exit 3")
+  logs <- file.path(results, "logs")
+  withr::local_envvar(
+    HARNESS_RESULTS = results, DRY_RUN = NA, HARNESS_V2_STAN = "/tmp/scratch/forecast_v2.stan",
+    PATH = paste(bin, Sys.getenv("PATH"), sep = ":")
+  )
+  for (force in c(NA, "1")) {
+    withr::local_envvar(FORCE = force)
+    out <- queue(c("harness/runs/tier0.txt", "200", "200"))
+    expect_identical(attr(out, "status"), 1L)
+    expect_match(out, "HARNESS_V2_STAN is set (/tmp/scratch/forecast_v2.stan)", fixed = TRUE, all = FALSE)
+    log <- readLines(file.path(logs, "queue.log"))
+    expect_match(log[length(log)], "^QUEUE ABORTED rc=1 HARNESS_V2_STAN is set ")
+    expect_match(log[length(log)], ABORTED)
+    expect_false(any(startsWith(log, "QUEUE START")))
+    expect_false(dir.exists(file.path(logs, "queue.lock")))
+    expect_false(file.exists(file.path(logs, "preflight.log")))
+  }
+  expect_length(readLines(file.path(logs, "queue.log")), 2)
+})
+
+test_that("the queue refuses to start while V2_STEPS is set, FORCE=1 or not, under either preflight", {
+  results <- withr::local_tempdir()
+  bin <- withr::local_tempdir()
+  stub(bin, "Rscript", "exit 3")
+  logs <- file.path(results, "logs")
+  withr::local_envvar(
+    HARNESS_RESULTS = results, DRY_RUN = NA, HARNESS_V2_STAN = NA, V2_STEPS = "v2s-m5",
+    PATH = paste(bin, Sys.getenv("PATH"), sep = ":")
+  )
+  for (preflight in c(NA, "lean")) {
+    for (force in c(NA, "1")) {
+      withr::local_envvar(FORCE = force, PREFLIGHT = preflight)
+      lbl <- paste("PREFLIGHT", preflight, "FORCE", force)
+      out <- queue(c("harness/runs/tier0.txt", "200", "200"))
+      expect_identical(attr(out, "status"), 1L, label = lbl)
+      expect_match(out, "V2_STEPS is set (v2s-m5): the preflight picks its own Stan tests", fixed = TRUE, all = FALSE, label = lbl)
+      expect_false(any(grepl("full slow suite", out, fixed = TRUE)), label = lbl)
+      log <- readLines(file.path(logs, "queue.log"))
+      expect_match(log[length(log)], "^QUEUE ABORTED rc=1 V2_STEPS is set ", label = lbl)
+      expect_match(log[length(log)], ABORTED, label = lbl)
+      expect_false(any(startsWith(log, "QUEUE START")), label = lbl)
+      expect_false(dir.exists(file.path(logs, "queue.lock")), label = lbl)
+      expect_false(file.exists(file.path(logs, "preflight.log")), label = lbl)
+    }
+  }
+  expect_length(readLines(file.path(logs, "queue.log")), 4)
+})
+
+test_that("the queue's HARNESS_V2_STAN refusal comes before the lock and the guard, which it leaves as they were", {
+  # WHY: the exit trap removes a lock the queue owns, so "no lock left behind" holds wherever
+  # the refusal sits. Here another queue holds the lock and the guard sees a fit, so a refusal
+  # moved past either would lose to that one's own reason.
+  results <- withr::local_tempdir()
+  bin <- withr::local_tempdir()
+  stub(bin, "Rscript", "exit 3")
+  stub(bin, "pgrep", "exit 0")
+  logs <- file.path(results, "logs")
+  lock <- file.path(logs, "queue.lock")
+  dir.create(lock, recursive = TRUE)
+  writeLines("424242", file.path(lock, "pid"))
+  before <- file.info(file.path(lock, "pid"))$mtime
+  withr::local_envvar(
+    HARNESS_RESULTS = results, DRY_RUN = NA, FORCE = NA, HARNESS_V2_STAN = "/tmp/scratch/forecast_v2.stan",
+    PATH = paste(bin, Sys.getenv("PATH"), sep = ":")
+  )
+  out <- queue(c("harness/runs/tier0.txt", "200", "200"))
+  expect_identical(attr(out, "status"), 1L)
+  expect_match(out, "HARNESS_V2_STAN is set (/tmp/scratch/forecast_v2.stan)", fixed = TRUE, all = FALSE)
+  expect_false(any(grepl("another queue holds", out, fixed = TRUE)))
+  expect_false(any(grepl("fit_cell.R", out, fixed = TRUE)))
+  log <- readLines(file.path(logs, "queue.log"))
+  expect_length(log, 1)
+  expect_match(log, ABORTED)
+  expect_match(log, "^QUEUE ABORTED rc=1 HARNESS_V2_STAN is set ")
+  expect_identical(list.files(lock, all.files = TRUE, no.. = TRUE), "pid")
+  expect_identical(readLines(file.path(lock, "pid")), "424242")
+  expect_identical(file.info(file.path(lock, "pid"))$mtime, before)
+  expect_false(file.exists(file.path(logs, "preflight.log")))
+})
+
 test_that("a second queue is refused while the first holds the lock, and a killed queue logs QUEUE ABORTED", {
   results <- withr::local_tempdir()
   bin <- withr::local_tempdir()
@@ -138,7 +231,7 @@ test_that("a second queue is refused while the first holds the lock, and a kille
   # WHY: the preflight waits for a file that never comes, so the first queue holds the lock in its preflight.
   stub(bin, "Rscript", c('echo "$*" >> "$CALLS"', 'while [ ! -f "$GO" ]; do sleep 0.1; done', "exit 0"))
   withr::local_envvar(
-    HARNESS_RESULTS = results, DRY_RUN = NA, FORCE = NA, GO = go, CALLS = calls,
+    HARNESS_RESULTS = results, DRY_RUN = NA, FORCE = NA, HARNESS_V2_STAN = NA, V2_STEPS = NA, PREFLIGHT = NA, GO = go, CALLS = calls,
     PATH = paste(bin, Sys.getenv("PATH"), sep = ":")
   )
   lock <- file.path(results, "logs", "queue.lock")
@@ -184,7 +277,7 @@ test_that("the queue runs each lane's runs in order, the lanes side by side, and
     "  A   r0 2024-11-30 2024-11-29 13"
   ), list)
   withr::local_envvar(
-    HARNESS_RESULTS = results, DRY_RUN = NA, FORCE = "1", HARNESS_SLOW = NA, CALLS = calls,
+    HARNESS_RESULTS = results, DRY_RUN = NA, FORCE = "1", HARNESS_SLOW = NA, HARNESS_V2_STAN = NA, V2_STEPS = NA, PREFLIGHT = NA, CALLS = calls,
     PATH = paste(stub, Sys.getenv("PATH"), sep = ":")
   )
   out <- queue(c(list, "200", "300"))
@@ -209,6 +302,67 @@ test_that("the queue runs each lane's runs in order, the lanes side by side, and
   ))
   expect_length(grep("^start [AB] r0_", log), 3)
   expect_identical(readLines(file.path(results, "logs", "r0_2024-11-30_2024-11-29_s11.log"))[1], "noise")
+})
+
+test_that("PREFLIGHT=lean runs the fast suite, then V2's and the permutation Stan tests, and a failure in either starts no fit", {
+  # WHY: the caller's HARNESS_SLOW=1 must not make the fast suite slow, and the lean preflight's
+  # own V2_STEPS must not trip the refusal of a caller's.
+  lean <- c("slow= steps= en_US.UTF-8 tests/run.R", "slow=1 steps=v2s-m5,perm en_US.UTF-8 tests/run.R v2-stan")
+  for (failing in c("tests/run.R", "tests/run.R v2-stan", "none")) {
+    results <- withr::local_tempdir()
+    bin <- withr::local_tempdir()
+    calls <- file.path(bin, "calls.txt")
+    stub(bin, "Rscript", c(
+      'echo "slow=${HARNESS_SLOW:-} steps=${V2_STEPS:-} $LC_ALL $*" >> "$CALLS"',
+      paste0('if [ "$*" = "', failing, '" ]; then exit 3; fi'),
+      'if [ "$1" = "tests/run.R" ]; then exit 0; fi',
+      'echo "DIAG run=$2_$3_$4_s$5 stub"'
+    ))
+    logs <- file.path(results, "logs")
+    withr::local_envvar(
+      HARNESS_RESULTS = results, DRY_RUN = NA, FORCE = "1", HARNESS_SLOW = "1", HARNESS_V2_STAN = NA, V2_STEPS = NA,
+      PREFLIGHT = "lean", CALLS = calls, PATH = paste(bin, Sys.getenv("PATH"), sep = ":")
+    )
+    out <- queue(c("harness/runs/tier0.txt", "200", "200"))
+    made <- readLines(calls)
+    log <- readLines(file.path(logs, "queue.log"))
+    expect_match(log[1], "^QUEUE START .* \\(pid [0-9]+\\)$")
+    expect_false(dir.exists(file.path(logs, "queue.lock")))
+    if (failing == "none") {
+      expect_null(attr(out, "status"))
+      expect_identical(made[1:2], lean)
+      expect_identical(log[2], "preflight PASS (lean)")
+      expect_setequal(made[-(1:2)], paste0("slow=1 steps= en_US.UTF-8 R/harness/fit_cell.R r0 ", c(
+        "2024-11-30 2024-11-29 1101", "2021-09-25 2021-03-29 1102"
+      ), " 200 200"))
+      expect_identical(log[length(log)], "QUEUE FINISHED")
+    } else {
+      expect_identical(attr(out, "status"), 1L, label = failing)
+      expect_identical(made, lean[seq_len(match(failing, c("tests/run.R", "tests/run.R v2-stan")))], label = failing)
+      expect_length(log, 3)
+      expect_match(log[2], "^preflight FAIL \\(lean\\) rc=3 ", label = failing)
+      expect_match(log[3], "^QUEUE ABORTED rc=1 preflight failed \\(rc=3\\)", label = failing)
+    }
+  }
+})
+
+test_that("the queue refuses a PREFLIGHT other than full or lean, before the lock, the guard and any preflight", {
+  results <- withr::local_tempdir()
+  bin <- withr::local_tempdir()
+  stub(bin, "Rscript", "exit 3")
+  logs <- file.path(results, "logs")
+  withr::local_envvar(
+    HARNESS_RESULTS = results, DRY_RUN = NA, FORCE = NA, HARNESS_V2_STAN = NA, V2_STEPS = NA, PREFLIGHT = "quick",
+    PATH = paste(bin, Sys.getenv("PATH"), sep = ":")
+  )
+  out <- queue(c("harness/runs/tier0.txt", "200", "200"))
+  expect_identical(attr(out, "status"), 2L)
+  expect_match(out, "PREFLIGHT must be full or lean: quick", fixed = TRUE, all = FALSE)
+  log <- readLines(file.path(logs, "queue.log"))
+  expect_length(log, 1)
+  expect_match(log, "^QUEUE ABORTED rc=2 PREFLIGHT must be full or lean: quick ")
+  expect_false(dir.exists(file.path(logs, "queue.lock")))
+  expect_false(file.exists(file.path(logs, "preflight.log")))
 })
 
 test_that("every variable the R0 extraction reads is declared in the R0 Stan file", {
@@ -270,8 +424,9 @@ test_that("fit_cell.R fits a cell, skips it while meta.json matches, and retires
     calls <<- calls + 1L
     stop("truth read")
   }
-  expect_error(score_cell(dir, truth = reader), "no freeze")
-  expect_identical(calls, 0L)
+  # WHY: a 2024 cell is scored with no freeze, so the scorer reaches the result reader.
+  expect_error(score_cell(dir, truth = reader), "truth read", fixed = TRUE)
+  expect_identical(calls, 1L)
 
   kd <- arrow::read_parquet(file.path(dir, "eday_kjordaemi.parquet"))
   expect_identical(sort(unique(kd$.draw)), seq_len(40L))
@@ -286,7 +441,8 @@ test_that("fit_cell.R fits a cell, skips it while meta.json matches, and retires
   P <- length(built$meta$party_order)
   expect_equal(sum(startsWith(keyd$variable, "scored_nat[")), P)
   expect_equal(sum(startsWith(keyd$variable, "scored_kd[")), 6 * P)
-  expect_setequal(setdiff(keyd$variable, keyd$variable[grepl("^scored_(nat|kd)\\[", keyd$variable)]), setdiff(names(pd), c(".chain", ".iteration", ".draw")))
+  expect_identical(sum(keyd$variable == "lp__"), 1L)
+  expect_setequal(setdiff(keyd$variable, c(keyd$variable[grepl("^scored_(nat|kd)\\[", keyd$variable)], "lp__")), setdiff(names(pd), c(".chain", ".iteration", ".draw")))
 
   out <- fit()
   expect_null(attr(out, "status"), info = shown(out))
@@ -318,4 +474,111 @@ test_that("fit_cell.R fits a cell, skips it while meta.json matches, and retires
   expect_identical(jsonlite::read_json(file.path(stale, "meta.json"))$seed, 2L)
   expect_length(grep("^DIAG run=", out), 1)
   expect_identical(meta_mismatch(jsonlite::read_json(path), expected), character(0))
+})
+
+# fit_cell.R run from the project root under LC_ALL=en_US.UTF-8; its output, with the exit
+# status as attribute "status" when it is not 0.
+fit_cell <- function(args) {
+  withr::with_dir(root(), suppressWarnings(system2(
+    file.path(R.home("bin"), "Rscript"), c("R/harness/fit_cell.R", args),
+    stdout = TRUE, stderr = TRUE, env = "LC_ALL=en_US.UTF-8"
+  )))
+}
+
+test_that("fit_cell.R refuses a 2017 cell before the freeze, before it builds or writes anything", {
+  # WHY: this reads the repository's real freeze state; Plan 4 replaces the test once the freeze is sealed.
+  skip_if(is_frozen(), "the freeze is sealed")
+  results <- withr::local_tempdir()
+  # WHY: with CMDSTAN naming an empty directory cmdstanr finds no CmdStan, so a regressed refusal stops at the first cmdstanr call, before any compile or sample.
+  withr::local_envvar(HARNESS_RESULTS = results)
+  local_no_cmdstan()
+  out <- fit_cell(c("v2s-m0", "2017-10-28", "2017-10-27", "1", "10", "10"))
+  expect_identical(attr(out, "status"), 1L)
+  expect_match(out, REFUSED_2017, fixed = TRUE, all = FALSE)
+  expect_false(any(grepl("^(DIAG|DONE|SKIP|STALE)", out)))
+  expect_false(any(grepl("Running MCMC", out, fixed = TRUE)))
+  expect_length(list.files(results, recursive = TRUE, all.files = TRUE, include.dirs = TRUE, no.. = TRUE), 0)
+  expect_false(dir.exists(root("results", "harness", "v2s-m0_2017-10-28_2017-10-27_s1")))
+})
+
+test_that("fit_cell.R fits v2s-m0 on 2024 eve: the five parquets, the role, n_leapfrog, the scorer's meta fields and an lp__ row", {
+  skip_unless_slow()
+  skip_without_snapshot()
+  results <- withr::local_tempdir()
+  withr::local_envvar(HARNESS_RESULTS = results, HARNESS_KEEP_CMDSTAN = "1")
+  E <- "2024-11-30"
+  F <- "2024-11-29"
+  id <- run_id("v2s-m0", E, F, 1)
+  dir <- file.path(results, id)
+  a <- arm("v2s-m0")
+  built <- v2_stan_data(info_set(as.Date(E), as.Date(F), read_inputs()), a$read_config(root(a$config)))
+  expected <- expected_meta("v2s-m0", 1, 10, 10, root(a$stan_file), root(a$config), stan_data_sha(built$data))
+
+  out <- fit_cell(c("v2s-m0", E, F, "1", "10", "10"))
+  expect_null(attr(out, "status"), info = paste(utils::tail(out, 30), collapse = "\n"))
+  expect_true(paste("DONE", dir) %in% out)
+  parquets <- c(PARQUETS, "ppc_results.parquet")
+  expect_true(all(file.exists(file.path(dir, c(parquets, "key_diagnostics.csv", "meta.json")))))
+  expect_identical(sort(list.files(dir, pattern = "\\.parquet$")), sort(parquets))
+
+  meta <- jsonlite::read_json(file.path(dir, "meta.json"))
+  expect_identical(meta_mismatch(meta, expected), character(0))
+  expect_true(all(c("arm", "E", "F", "role", "diagnostics", "gate", names(built$meta)) %in% names(meta)))
+  expect_identical(meta$role, "dev")
+  leapfrog <- meta$diagnostics$n_leapfrog
+  expect_true(is.numeric(leapfrog) && length(leapfrog) == 1 && leapfrog >= 40 && leapfrog == round(leapfrog))
+  # WHY: only the sampler's n_leapfrog__ column is read from the kept CSVs (variables = ""), no forecast value.
+  csvs <- list.files(file.path(dir, "cmdstan"), pattern = "\\.csv$", full.names = TRUE)
+  expect_length(csvs, 4)
+  steps <- cmdstanr::read_cmdstan_csv(csvs, variables = "", sampler_diagnostics = "n_leapfrog__")
+  per_chain <- apply(unclass(steps$post_warmup_sampler_diagnostics), 2, sum)
+  expect_length(per_chain, 4)
+  expect_equal(leapfrog, sum(per_chain))
+  expect_true(leapfrog > max(per_chain))
+  # WHY: v2s-m0 has no stage 1, so its stage1_sha256 is NULL, which must read back as a null, not as {}.
+  expect_true("stage1_sha256" %in% names(meta))
+  expect_null(meta$stage1_sha256)
+  expect_true(any(grepl('^\\s*"stage1_sha256": null,?$', readLines(file.path(dir, "meta.json")))))
+  box::use(R / harness / scorer[META_FIELDS])
+  run_meta <- read_run_meta(dir)
+  expect_true(all(META_FIELDS %in% names(run_meta)))
+  expect_true("stage1_sha256" %in% names(run_meta))
+  expect_null(run_meta$stage1_sha256)
+  expect_identical(run_meta$party_order, built$meta$party_order)
+  expect_identical(names(run_meta$n_pred_k), built$meta$kjordaemi_levels)
+  expect_error(score_cell(dir, truth = function(...) stop("truth read")), "has role dev", fixed = TRUE)
+
+  # WHY: only names, types and row counts are read: no forecast value is looked at.
+  schema <- function(f) {
+    x <- arrow::read_parquet(file.path(dir, f), as_data_frame = FALSE)
+    list(names = names(x), types = vapply(x$schema$fields, \(fl) fl$type$ToString(), character(1)), rows = x$num_rows)
+  }
+  K <- length(built$meta$kjordaemi_levels)
+  P <- length(built$meta$party_order)
+  ids <- c(".chain", ".iteration", ".draw")
+  kd <- schema("eday_kjordaemi.parquet")
+  expect_identical(kd$names, c(ids, "kjordaemi", "flokkur", "votes"))
+  expect_identical(kd$types, c("int32", "int32", "int32", "string", "string", "int32"))
+  expect_equal(kd$rows, 40 * K * P)
+  for (f in c("eday_national.parquet", "latent_national.parquet")) {
+    s <- schema(f)
+    expect_identical(s$names, c(ids, "flokkur", "share"), label = f)
+    expect_identical(s$types, c("int32", "int32", "int32", "string", "double"), label = f)
+    expect_equal(s$rows, 40 * P, label = f)
+  }
+  ppc <- schema("ppc_results.parquet")
+  expect_identical(ppc$names, c(ids, "election", "kjordaemi", "flokkur", "votes"))
+  expect_identical(ppc$types, c("int32", "int32", "int32", "date32[day]", "string", "string", "int32"))
+  expect_equal(ppc$rows, 40 * built$meta$n_closed * K * P)
+  pd <- schema("param_draws.parquet")
+  expect_identical(pd$names[1:3], ids)
+  kept <- setdiff(a$variables(a$read_config(root(a$config))), c("votes_kd", "pi_nat_eday", "pi_latent_E", "y_rep_res"))
+  expect_identical(unique(sub("\\[.*$", "", pd$names[-(1:3)])), kept)
+  expect_equal(pd$rows, 40)
+  keyd <- utils::read.csv(file.path(dir, "key_diagnostics.csv"), check.names = FALSE, encoding = "UTF-8")
+  expect_named(keyd, c("variable", "rhat", "ess_bulk", "ess_tail"))
+  # WHY: the stop rule reads lp__'s R-hat from this row (R/harness/compare_runs.R).
+  lp <- keyd[keyd$variable == "lp__", ]
+  expect_identical(nrow(lp), 1L)
+  expect_true(is.finite(lp$rhat))
 })

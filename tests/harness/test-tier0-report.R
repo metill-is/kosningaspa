@@ -12,8 +12,11 @@ report <- function(args) {
 PASSING <- list(
   max_rhat = 1.0087, max_rhat_scored = 1.00731, min_ess_bulk = 321.9, min_ess_bulk_scored = 456.7,
   min_ess_tail = 250.5, min_ess_tail_scored = 250.5, na_scored = 0L, divergent = 0L,
-  treedepth_hits = 40L, max_depth = 11L, min_ebfmi = 0.6789
+  treedepth_hits = 40L, max_depth = 11L, min_ebfmi = 0.6789, n_leapfrog = 400000
 )
+
+# WHY: a meta.json with no n_leapfrog, as the runs fitted before it was recorded have.
+NO_LEAPFROG <- "\u2013"
 
 # A finished run's meta.json as fit_cell.R writes it (non-finite numbers as strings), passed
 # through `edit` first, with its modification time set to `written`.
@@ -72,17 +75,18 @@ test_that("the Tier 0 report writes one row of diagnostics per run, non-finite v
   expect_length(rows, 2)
   expect_identical(cells(rows[1]), c(
     "2024-11-30, 2024-11-29, eve", "1101", "200 + 200", "12.5", "0", "40 (5.0%)", "11", "0.678",
-    "1.0087; 1.0074", "321; 456", "250; 250", "25.7; 36.5", "3219; 4567", "PASS", "2026-10-24 12:34 UTC"
+    "1.0087; 1.0074", "321; 456", "250; 250", "25.7; 36.5", "3219; 4567", "0.804", "PASS", "2026-10-24 12:34 UTC"
   ))
   expect_identical(cells(rows[2]), c(
     "2021-09-25, 2021-03-29, f180", "1102", "10 + 10", "0.0", "40", "0 (0.0%)", "0", "NaN",
-    "Inf; Inf", "NA; NA", "NA; NaN", "NA; NA", "NA; NA",
+    "Inf; Inf", "NA; NA", "NA; NaN", "NA; NA", "NA; NA", NO_LEAPFROG,
     "FAIL: max R-hat Inf > 1.01; divergent 40 > 0; min scored bulk ESS NA < 400; scored quantities with NA R-hat or ESS: 2",
     "2026-10-24 13:05 UTC"
   ))
   header <- cells(text[which(text == rows[1]) - 2L])
-  expect_length(header, 15)
+  expect_length(header, 16)
   expect_true(all(grepl("(gate scope: parameters block + scored; scored)", header[9:13], fixed = TRUE)))
+  expect_identical(header[14], "Min bulk ESS per 1,000 gradients (gate scope)")
   expect_true(any(grepl("CmdStan 2.36.0", text, fixed = TRUE)))
   ncpu <- system2("sysctl", c("-n", "hw.ncpu"), stdout = TRUE)
   expect_true(any(grepl(paste0("hw.ncpu: ", ncpu), text, fixed = TRUE)))
@@ -118,6 +122,12 @@ test_that("the Tier 0 report stops, writing nothing, on a run it cannot read", {
   fails_with("no meta.json")
   fake_run(results, "2024-11-30", "2024-11-29", 1101L, edit = \(m) utils::modifyList(m, list(seed = 1199L)))
   fails_with("is not of the run list's run r0_2024-11-30_2024-11-29_s1101")
+  # WHY: each other field of the ownership guard alone, with a valid value that is another run's.
+  for (other in list(list(arm = "v2"), list(E = "2021-09-25"), list(F = "2024-11-16"))) {
+    unlink(second, recursive = TRUE)
+    fake_run(results, "2024-11-30", "2024-11-29", 1101L, edit = \(m) utils::modifyList(m, other))
+    fails_with("is not of the run list's run r0_2024-11-30_2024-11-29_s1101")
+  }
   unlink(second, recursive = TRUE)
   fake_run(results, "2024-11-30", "2024-11-29", 1101L, edit = \(m) m[names(m) != "minutes"])
   fails_with("meta.json: minutes is not a number")
@@ -127,6 +137,12 @@ test_that("the Tier 0 report stops, writing nothing, on a run it cannot read", {
     m
   })
   fails_with("meta.json: diagnostics$max_rhat is not a number")
+  unlink(second, recursive = TRUE)
+  fake_run(results, "2024-11-30", "2024-11-29", 1101L, edit = \(m) {
+    m$diagnostics$n_leapfrog <- "many"
+    m
+  })
+  fails_with("meta.json: diagnostics$n_leapfrog is not a number")
   # WHY: NULL removes the field; NA is written as the string "NA", as fit_cell.R writes it.
   for (pass in list(NULL, NA, "TRUE", c(TRUE, FALSE))) {
     unlink(second, recursive = TRUE)

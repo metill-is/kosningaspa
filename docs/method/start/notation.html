@@ -17,7 +17,7 @@
   <div class="kicker">Kosningaspá · Method · Start here</div>
   <h1><span class="chnum">0.2</span> Notation and glossary</h1>
   <p class="sub">A reference page. Every symbol the written chapters use, with its Stan name and the chapter that defines it; the letters that mean two things; the Icelandic terms; the parties and their order in each model; the polling houses; and the words for windows, anchors, epochs and the harness.</p>
-  <div class="stamp"><b>Review state.</b> Not reviewed by the author. Drafted with Claude on 4 Nov 2026 from chapters 1.1, 1.4 and 3.1 and the code on master. <b>Snapshot.</b> Describes the code and records as they stood on master e4dc9f7, 4 Nov 2026 (party and house order read from the live data that day): kosningaspa <code>master</code> unless a box names a branch. Live state: kosningaspa <code>master</code>.</div>
+  <div class="stamp"><b>Review state.</b> Not reviewed by the author. Drafted with Claude on 4 Nov 2026 from chapters 1.1, 1.4 and 3.1 and the code on master. <b>Snapshot.</b> Describes the code and records as they stood on master e4dc9f7, 4 Nov 2026 (party and house order read from the live data that day); the freeze item follows 9f2eb81 on branch claude/epic-lichterman-e32cb6, 5 Nov 2026: kosningaspa <code>master</code> unless a box names a branch. Live state: kosningaspa <code>master</code>.</div>
 </header>
 
 <div class="layout">
@@ -44,7 +44,7 @@
  "sub": "A reference page. Every symbol the written chapters use, with its Stan name and the chapter that defines it; the letters that mean two things; the Icelandic terms; the parties and their order in each model; the polling houses; and the words for windows, anchors, epochs and the harness.",
  "kicker": "Start here",
  "review": "Not reviewed by the author. Drafted with Claude on 4 Nov 2026 from chapters 1.1, 1.4 and 3.1 and the code on master.",
- "snapshot": "master e4dc9f7, 4 Nov 2026 (party and house order read from the live data that day)",
+ "snapshot": "master e4dc9f7, 4 Nov 2026 (party and house order read from the live data that day); the freeze item follows 9f2eb81 on branch claude/epic-lichterman-e32cb6, 5 Nov 2026",
  "sources": [
   ["docs/method/forecast/walk.html, forecast/seats.html, bias/updating.html", "the symbols, as chapters 1.1, 1.4 and 3.1 define them"],
   ["Stan/polling_and_fundamentals_kjordaemi.stan; Stan/polling_watch_v4.stan; Stan/polling_watch_v5_epoch.stan; Stan/CLAUDE.md (Key Parameters)", "the Stan names, master"],
@@ -255,7 +255,7 @@
 <li><strong>Cell $(E, F)$.</strong> A harness forecast of election $E$ made on date $F$. <code>TARGETS</code> holds ten: f180, f47, f14 and eve (180, 47, 14 and 1 days before $E$) for 2021 and 2024, and f14 and eve for 2017, the held-out confirmatory target.</li>
 <li><strong>Arm.</strong> A model the harness runs on its cells (<code>R/harness/arms.R</code>). There is one so far, <code>r0</code>, from <code>Stan/polling_and_fundamentals_kjordaemi_r0.stan</code>.</li>
 <li><strong>Tier 0.</strong> A check of an arm's sampler on two cells before anything is scored (<code>harness/README.md</code>).</li>
-<li><strong>The freeze.</strong> <code>harness/FREEZE.md</code> and <code>harness/FREEZE.sha256</code>. Until both exist and are committed, the checksum list covers <code>FREEZE.md</code> and every listed checksum matches, <code>score_cell()</code> scores no cell against its result (<code>harness/README.md</code>).</li>
+<li><strong>The freeze.</strong> <code>harness/FREEZE.md</code> and <code>harness/FREEZE.sha256</code>. Until both exist and are committed, the checksum list covers <code>FREEZE.md</code> and every listed checksum matches, <code>score_cell()</code> scores no 2017 cell against its result; a 2021 or 2024 cell is scored with no freeze, so versions can be compared during development (<code>harness/README.md</code>).</li>
 <li><strong>The snapshot.</strong> The harness's frozen, checksummed copy of its inputs, git-ignored under <code>harness/snapshot/</code> and checked against <code>harness/snapshot_manifest.csv</code>.</li>
 <li><strong>v2.</strong> The next forecast model, on a branch not yet merged (chapter <a href="../bias/updating.html#v2">3.1</a>; 4.2, planned).</li>
 </ul>

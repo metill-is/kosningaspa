@@ -4,6 +4,8 @@
 #
 # It fits one arm (R/harness/arms.R) on one cell, in results_root()/<run_id> (HARNESS_RESULTS
 # overrides results/harness):
+#   0. stops on a 2017 cell before the freeze (forecast_free(); spec section 5.7, Decision 9),
+#      before anything is built or written;
 #   1. builds the cell's Stan data from info_set(E, F), after validate_inputs();
 #   2. computes the expected meta, with the sha256 of the freshly built data;
 #   3. prints "SKIP <id> (meta.json matches)" and exits 0 if a finished run matches it; a run
@@ -13,21 +15,25 @@
 #   5. fits with SAMPLER, the seed and the iterations, the CmdStan CSVs in cmdstan/;
 #   6. stops, with no meta.json, unless the fit has 4 chains of iter_sampling draws and the
 #      Stan file and the frozen data still hash as expected;
-#   7. extracts the parquets, then summarises the diagnostics over the parameters and the
-#      scored quantities, writes key_diagnostics.csv and applies the gate;
-#   8. writes meta.json last, read-only with the other outputs, so that its presence means the
-#      run is complete; prints the DIAG line and "DONE <dir>"; deletes the CmdStan CSVs.
+#   7. extracts the parquets (the arm's variables, a function of its config for V2), then
+#      summarises the diagnostics over the parameters present in the fit (a zero-size one is
+#      not in the CSVs) and the scored quantities, writes key_diagnostics.csv (the scored
+#      quantities, the param_draws columns and lp__, whose R-hat the stop rule of
+#      R/harness/compare_runs.R reads) and applies the gate;
+#   8. writes meta.json last (with the arm's role), read-only with the other outputs, so that
+#      its presence means the run is complete; prints the DIAG line and "DONE <dir>"; deletes
+#      the CmdStan CSVs, unless HARNESS_KEEP_CMDSTAN is 1 (for a test that reads them back).
 if (!isTRUE(l10n_info()[["UTF-8"]])) stop("fit_cell.R needs a UTF-8 locale: run under LC_ALL=en_US.UTF-8", call. = FALSE)
 # WHY: the box path below is the working directory, so check it is the project root first.
 stopifnot("run from the project root (no R/harness/constants.R here)" = file.exists("R/harness/constants.R"))
 options(box.path = normalizePath("."), width = 120, warn = 1)
 box::use(
   R / harness / arms[arm],
-  R / harness / constants[harness_path],
+  R / harness / freeze[forecast_free],
   R / harness / info_set[info_set, validate_inputs],
   R / harness / runs[
     SAMPLER, run_id, run_dir, sha256_file, stan_data_sha, write_frozen_inputs, expected_meta, meta_mismatch,
-    retire_run, summarise_diagnostics, diagnostics_gate, diag_line
+    retire_run, measure_draws, run_provenance, chain_sampler, summarise_diagnostics, diagnostics_gate, diag_line
   ],
   R / harness / scores[kd_to_nat]
 )
@@ -64,11 +70,6 @@ scored_draws <- function(eday_kd) {
   posterior::as_draws_array(posterior::as_draws_df(wide))
 }
 
-#' R-hat and the bulk and tail ESS of each variable of `x`.
-measure <- function(x) posterior::summarise_draws(x, "rhat", "ess_bulk", "ess_tail")
-
-git <- function(...) suppressWarnings(system2("git", c(...), stdout = TRUE, stderr = FALSE))
-
 args <- commandArgs(trailingOnly = TRUE)
 if (length(args) != 6) {
   stop("usage: Rscript R/harness/fit_cell.R <arm> <E> <F> <seed> <iter_warmup> <iter_sampling>", call. = FALSE)
@@ -79,10 +80,13 @@ a <- arm(name)
 id <- run_id(name, args[2], args[3], numbers[1])
 E <- as.Date(args[2])
 F <- as.Date(args[3])
+if (forecast_free(E)) stop("fit_cell: 2017 is not fitted before the freeze (spec \u00a75.7)", call. = FALSE)
 
 info <- info_set(E, F)
 validate_inputs(info)
-built <- a$build(info, a$read_config(a$config))
+cfg <- a$read_config(a$config)
+built <- a$build(info, cfg)
+variables <- if (is.function(a$variables)) a$variables(cfg) else a$variables
 
 data_sha <- stan_data_sha(built$data)
 expected <- expected_meta(name, numbers[1], numbers[2], numbers[3], a$stan_file, a$config, data_sha)
@@ -105,14 +109,8 @@ if (file.exists(meta_path)) {
   cat(sprintf("retired %s to %s\n", dir, to))
 }
 
-cell <- list(arm = name, E = format(E), F = format(F), id = id)
-provenance <- list(
-  git_head = git("rev-parse", "HEAD"),
-  git_dirty = length(git("status", "--porcelain")) > 0,
-  snapshot_manifest_sha256 = sha256_file(harness_path("snapshot_manifest.csv")),
-  cmdstan_version = cmdstanr::cmdstan_version(),
-  cmdstanr_version = as.character(utils::packageVersion("cmdstanr"))
-)
+cell <- list(arm = name, role = a$role, E = format(E), F = format(F), id = id)
+provenance <- run_provenance()
 built_meta <- json_ready(built$meta)
 if (!identical(write_frozen_inputs(dir, built$data, c(cell, expected, built_meta, provenance)), data_sha)) {
   stop("the frozen Stan data do not hash as the built data")
@@ -138,16 +136,16 @@ if (!all(fit$return_codes() == 0) || posterior::nchains(lp) != SAMPLER$chains ||
 if (!identical(sha256_file(a$stan_file), expected$stan_sha256)) stop("the Stan file changed during the fit; no meta.json written")
 if (!identical(sha256_file(data_json), expected$data_sha256)) stop("the frozen Stan data changed during the fit; no meta.json written")
 
-paths <- a$extract(fit$draws(variables = a$variables, format = "draws_df"), built$meta, dir)
+paths <- a$extract(fit$draws(variables = variables, format = "draws_df"), built$meta, dir)
 scored <- scored_draws(arrow::read_parquet(paths[["eday_kjordaemi"]]))
-params <- fit$draws(variables = names(model$variables()$parameters))
+# WHY: a zero-size parameter (V2's with its switch off) has no column in the CSVs, and fit$draws() refuses it.
+params <- fit$draws(variables = intersect(names(model$variables()$parameters), fit$metadata()$stan_variables))
 sampler <- fit$diagnostic_summary(quiet = TRUE)
-depth <- unclass(fit$sampler_diagnostics())[, , "treedepth__", drop = FALSE]
-d <- summarise_diagnostics(params, scored, list(
-  num_divergent = sampler$num_divergent, num_max_treedepth = sampler$num_max_treedepth,
-  ebfmi = sampler$ebfmi, max_depth = apply(depth, 2, max)
+d <- summarise_diagnostics(params, scored, c(
+  list(num_divergent = sampler$num_divergent, num_max_treedepth = sampler$num_max_treedepth, ebfmi = sampler$ebfmi),
+  chain_sampler(fit$sampler_diagnostics())
 ))
-key <- rbind(measure(scored), measure(posterior::as_draws_df(arrow::read_parquet(paths[["param_draws"]]))))
+key <- rbind(measure_draws(scored), measure_draws(posterior::as_draws_df(arrow::read_parquet(paths[["param_draws"]]))), measure_draws(lp))
 key_path <- file.path(dir, "key_diagnostics.csv")
 readr::write_csv(key[c("variable", "rhat", "ess_bulk", "ess_tail")], key_path)
 gate <- diagnostics_gate(d)
@@ -159,11 +157,12 @@ meta <- c(
 )
 tmp <- tempfile("meta-", tmpdir = dir, fileext = ".json")
 # WHY: jsonlite writes a numeric NA, NaN or Inf as a string by default (na = "null" would merge them); na = "string" also writes a logical or character NA as "NA", not null.
-jsonlite::write_json(meta, tmp, auto_unbox = TRUE, pretty = TRUE, digits = NA, na = "string")
+# WHY: jsonlite writes a NULL (V2's stage1_sha256 with no stage 1) as {} by default, which reads back as an empty list; null = "null" keeps it NULL.
+jsonlite::write_json(meta, tmp, auto_unbox = TRUE, pretty = TRUE, digits = NA, na = "string", null = "null")
 if (!all(Sys.chmod(c(paths, key_path, tmp), mode = "0444"))) stop("could not make the outputs read-only")
 if (!file.rename(tmp, meta_path)) stop("could not move ", tmp, " to ", meta_path)
 
 cat(diag_line(id, minutes, d, gate), "\n", sep = "")
 if (!gate$pass) cat(sprintf("gate: %s\n", paste(gate$reasons, collapse = "; ")))
 cat(sprintf("DONE %s\n", dir))
-unlink(cmdstan_dir, recursive = TRUE)
+if (!identical(Sys.getenv("HARNESS_KEEP_CMDSTAN"), "1")) unlink(cmdstan_dir, recursive = TRUE)

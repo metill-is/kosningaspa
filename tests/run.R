@@ -7,7 +7,16 @@ Sys.setenv(TESTTHAT_EDITION = "3")
 # WHY: attaching testthat after a profile-loaded devtools prints a masking notice.
 suppressPackageStartupMessages(library(testthat))
 args <- commandArgs(trailingOnly = TRUE)
-testthat::test_dir("tests/harness",
+results <- testthat::test_dir("tests/harness",
   filter = if (length(args)) args[1] else NULL,
   stop_on_failure = TRUE
 )
+# WHY: test_dir() stops on a failure before it returns, so the table follows a run that passed
+# and the exit status is test_dir()'s.
+per_test <- as.data.frame(results)
+if (nrow(per_test)) {
+  per_file <- stats::aggregate(real ~ file, data = per_test, FUN = sum)
+  per_file <- per_file[order(-per_file$real), ]
+  cat("\nReal seconds per test file, slowest first:\n")
+  cat(sprintf("%9.1f  %s", per_file$real, per_file$file), sep = "\n")
+}

@@ -85,9 +85,9 @@ stan_data_sha <- function(stan_data) {
 #' @return `stan_data_sha(stan_data)`, which is the sha256 of the written
 #'   `dir/inputs/stan_data.json` (`cmdstanr::write_stan_json()`), after writing it and
 #'   `dir/inputs/inputs.json` (`jsonlite::write_json(auto_unbox = TRUE, pretty = TRUE,
-#'   digits = NA)`) with mode 0444. Both are written into a temporary sibling directory
-#'   that is then renamed to `inputs`, so a failed write leaves no `inputs/`. An error if
-#'   `dir/inputs` exists
+#'   digits = NA, null = "null")`, so a NULL field is written as null) with mode 0444. Both
+#'   are written into a temporary sibling directory that is then renamed to `inputs`, so a
+#'   failed write leaves no `inputs/`. An error if `dir/inputs` exists
 #' @export
 write_frozen_inputs <- function(dir, stan_data, inputs_meta) {
   inputs <- file.path(dir, "inputs")
@@ -99,7 +99,7 @@ write_frozen_inputs <- function(dir, stan_data, inputs_meta) {
   data_json <- file.path(tmp, "stan_data.json")
   meta_json <- file.path(tmp, "inputs.json")
   cmdstanr::write_stan_json(stan_data, data_json)
-  jsonlite::write_json(inputs_meta, meta_json, auto_unbox = TRUE, pretty = TRUE, digits = NA)
+  jsonlite::write_json(inputs_meta, meta_json, auto_unbox = TRUE, pretty = TRUE, digits = NA, null = "null")
   if (!all(Sys.chmod(c(data_json, meta_json), mode = "0444"))) stop("could not make read-only: ", tmp)
   sha <- stan_data_sha(stan_data)
   if (!identical(sha, sha256_file(data_json))) stop("stan_data.json does not reproduce stan_data_sha()")
@@ -166,17 +166,43 @@ meta_mismatch <- function(meta, expected) {
 
 #' Move a run aside, for a refit.
 #' @param dir the run directory
-#' @return the new path, `results_root()/_stale/<id>_<YYYYmmddHHMMSS>` with `<id>` the
-#'   directory's name; an error if `dir` is not a directory or the new path exists
+#' @param label the name it is kept under: the directory's name, the run id, by default; a
+#'   recovery replicate, whose directory is named by its seed alone, passes its own
+#' @return the new path, `results_root()/_stale/<label>_<YYYYmmddHHMMSS>`; an error if `dir`
+#'   is not a directory or the new path exists
 #' @export
-retire_run <- function(dir) {
+retire_run <- function(dir, label = basename(dir)) {
   if (!dir.exists(dir)) stop("no run to retire: ", dir)
   stale <- file.path(results_root(), "_stale")
   dir.create(stale, showWarnings = FALSE, recursive = TRUE)
-  to <- file.path(stale, paste0(basename(dir), "_", format(Sys.time(), "%Y%m%d%H%M%S")))
+  to <- file.path(stale, paste0(label, "_", format(Sys.time(), "%Y%m%d%H%M%S")))
   if (file.exists(to)) stop("already retired this second: ", to)
   if (!file.rename(dir, to)) stop("could not move ", dir, " to ", to)
   to
+}
+
+#' R-hat and the bulk and tail ESS of each variable of a draws object.
+#' @param x a posterior draws object
+#' @return `posterior::summarise_draws(x, "rhat", "ess_bulk", "ess_tail")`
+#' @export
+measure_draws <- function(x) posterior::summarise_draws(x, "rhat", "ess_bulk", "ess_tail")
+
+#' What a fit records of where it ran: the commit and whether the tree had changes, the
+#' snapshot manifest's sha256 and the CmdStan and cmdstanr versions.
+#' @return `list(git_head, git_dirty, snapshot_manifest_sha256, cmdstan_version,
+#'   cmdstanr_version)`; `git_head` and `git_dirty` from git run in the working directory,
+#'   which a runner keeps at the project root
+#' @export
+run_provenance <- function() {
+  box::use(R / harness / constants[harness_path])
+  git <- function(...) suppressWarnings(system2("git", c(...), stdout = TRUE, stderr = FALSE))
+  list(
+    git_head = git("rev-parse", "HEAD"),
+    git_dirty = length(git("status", "--porcelain")) > 0,
+    snapshot_manifest_sha256 = sha256_file(harness_path("snapshot_manifest.csv")),
+    cmdstan_version = cmdstanr::cmdstan_version(),
+    cmdstanr_version = as.character(utils::packageVersion("cmdstanr"))
+  )
 }
 
 # WHY: a constant parameter (L_Omega's fixed entries) has no R-hat or ESS.
@@ -186,31 +212,53 @@ extreme <- function(f, x) {
   if (length(x)) f(x) else NA_real_
 }
 
+#' Each chain's deepest tree and leapfrog steps.
+#' @param diagnostics a fit's post-warmup sampler diagnostics (`fit$sampler_diagnostics()`),
+#'   a posterior draws object holding `treedepth__` and `n_leapfrog__`
+#' @return `list(max_depth, n_leapfrog)`, one value per chain, as `summarise_diagnostics()`
+#'   takes them: the chain's deepest `treedepth__` and the sum of its `n_leapfrog__` over
+#'   its draws
+#' @export
+chain_sampler <- function(diagnostics) {
+  x <- unclass(posterior::as_draws_array(diagnostics))
+  lacks <- setdiff(c("treedepth__", "n_leapfrog__"), dimnames(x)[[3]])
+  if (length(lacks)) stop("sampler diagnostics lack: ", paste(lacks, collapse = ", "))
+  list(
+    max_depth = apply(x[, , "treedepth__", drop = FALSE], 2, max),
+    n_leapfrog = apply(x[, , "n_leapfrog__", drop = FALSE], 2, sum)
+  )
+}
+
 #' The diagnostics of a fit.
 #' @param params the draws of every `parameters`-block variable, a posterior draws object
 #' @param scored the draws of the scored quantities, with the same chains
-#' @param sampler `list(num_divergent, num_max_treedepth, ebfmi, max_depth)`, one value
-#'   per chain: the first three from `fit$diagnostic_summary()`, `max_depth` the deepest
-#'   `treedepth__` of the chain in `fit$sampler_diagnostics()`
+#' @param sampler `list(num_divergent, num_max_treedepth, ebfmi, max_depth, n_leapfrog)`, one
+#'   value per chain: the first three from `fit$diagnostic_summary()`, `max_depth` the
+#'   deepest `treedepth__` of the chain in `fit$sampler_diagnostics()` and `n_leapfrog` the
+#'   sum of its post-warmup `n_leapfrog__` there (whole numbers), the last two as
+#'   `chain_sampler()` returns them
 #' @return a list: `max_rhat`, `min_ess_bulk` and `min_ess_tail` over `params` and
 #'   `scored` together (Decision 3); `max_rhat_scored`, `min_ess_bulk_scored` and
 #'   `min_ess_tail_scored` over `scored`; `na_scored`, the number of scored quantities
 #'   whose R-hat, bulk ESS or tail ESS is NA; `divergent` and `treedepth_hits`, summed
-#'   over chains; `max_depth` (integers) and `min_ebfmi`. A parameter without an R-hat or
+#'   over chains; `max_depth` (integers), `min_ebfmi` and `n_leapfrog`, the leapfrog steps
+#'   (gradients) of the post-warmup draws summed over chains. A parameter without an R-hat or
 #'   ESS (a constant) is left out of the extremes; a scored quantity without one (a
 #'   constant, or an NA draw) is kept, so the extremes it enters are NA
 #' @export
 summarise_diagnostics <- function(params, scored, sampler) {
-  lacks <- setdiff(c("num_divergent", "num_max_treedepth", "ebfmi", "max_depth"), names(sampler))
+  fields <- c("num_divergent", "num_max_treedepth", "ebfmi", "max_depth", "n_leapfrog")
+  lacks <- setdiff(fields, names(sampler))
   if (length(lacks)) stop("sampler lacks: ", paste(lacks, collapse = ", "))
   chains <- posterior::nchains(params)
   if (posterior::nchains(scored) != chains) stop("params and scored have different chains")
-  if (any(lengths(sampler[c("num_divergent", "num_max_treedepth", "ebfmi", "max_depth")]) != chains)) {
-    stop("sampler needs one value per chain (", chains, ")")
+  if (any(lengths(sampler[fields]) != chains)) stop("sampler needs one value per chain (", chains, ")")
+  leapfrog <- sampler$n_leapfrog
+  if (!is.numeric(leapfrog) || anyNA(leapfrog) || any(leapfrog < 0 | leapfrog != round(leapfrog))) {
+    stop("sampler n_leapfrog must be whole numbers, at least 0")
   }
-  measure <- function(x) posterior::summarise_draws(x, "rhat", "ess_bulk", "ess_tail")
-  p <- measure(params)
-  s <- measure(scored)
+  p <- measure_draws(params)
+  s <- measure_draws(scored)
   list(
     max_rhat = extreme(max, c(present(p$rhat), s$rhat)),
     max_rhat_scored = extreme(max, s$rhat),
@@ -222,7 +270,8 @@ summarise_diagnostics <- function(params, scored, sampler) {
     divergent = as.integer(sum(sampler$num_divergent)),
     treedepth_hits = as.integer(sum(sampler$num_max_treedepth)),
     max_depth = as.integer(max(sampler$max_depth)),
-    min_ebfmi = min(sampler$ebfmi)
+    min_ebfmi = min(sampler$ebfmi),
+    n_leapfrog = sum(as.numeric(leapfrog))
   )
 }
 

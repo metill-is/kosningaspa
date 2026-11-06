@@ -4,7 +4,9 @@ box::use(
   R / harness / tables[read_coalitions, formed_coalition, coalition_event],
   R / harness / scores[wide_draws, kd_to_nat, national_scores, party_scores, kd_scores, batch_of, batch_se],
   R / harness / scores[seat_draws, seat_scores],
-  R / election_utils[layout_for]
+  R / election_utils[layout_for],
+  R / harness / runs[expected_meta, meta_mismatch],
+  R / harness / arms[arm]
 )
 
 E24 <- as.Date("2024-11-30")
@@ -61,7 +63,8 @@ fixed_truth <- function(parties, kd) {
   )
 }
 
-test_that("score_cell refuses every target cell while the repo has no freeze, before reading any result", {
+test_that("with the repo unfrozen, score_cell reads the result for every 2021 and 2024 cell and refuses every 2017 one first", {
+  # WHY: Brynjólfur, 5 Nov 2026: 2021 and 2024 are scored while the model is developed; 2017 stays held out.
   expect_false(file.exists(root("harness", "FREEZE.md")))
   for (i in seq_len(nrow(TARGETS))) {
     calls <- 0L
@@ -69,9 +72,35 @@ test_that("score_cell refuses every target cell while the repo has no freeze, be
       calls <<- calls + 1L
       stop("truth read")
     }
-    expect_error(score_cell(fake_run(TARGETS$E[i], TARGETS$F[i]), truth = reader), "no freeze")
-    expect_equal(calls, 0L)
+    lbl <- paste(TARGETS$E[i], TARGETS$F[i])
+    if (TARGETS$confirmatory[i]) {
+      expect_error(score_cell(fake_run(TARGETS$E[i], TARGETS$F[i]), truth = reader), "no freeze", label = lbl)
+      expect_equal(calls, 0L, label = lbl)
+    } else {
+      expect_error(score_cell(fake_run(TARGETS$E[i], TARGETS$F[i]), truth = reader), "truth read", fixed = TRUE, label = lbl)
+      expect_equal(calls, 1L, label = lbl)
+    }
   }
+})
+
+test_that("score_cell scores a 2021 cell with no freeze", {
+  E21 <- as.Date("2021-09-25")
+  run <- fake_run(E21, "2021-03-29")
+  meta <- read_run_meta(run)
+  parties <- meta$party_order
+  nat <- NOMINAL[parties] / sum(NOMINAL[parties])
+  seats <- stats::setNames(as.integer(round(63 * nat * (parties != "Annað") / sum(nat[parties != "Annað"]))), parties)
+  seats[which.max(seats)] <- seats[which.max(seats)] + 63L - sum(seats)
+  tr <- list(
+    nat = nat,
+    kd = tidyr::expand_grid(kjordaemi = layout_for(E21)$kjordaemi, flokkur = parties) |>
+      dplyr::mutate(votes = 1000L, share = unname(nat[flokkur])),
+    seats = seats
+  )
+  s <- score_cell(run, truth = function(...) tr, root = withr::local_tempdir())
+  expect_identical(s$cell$E, E21)
+  expect_identical(s$national$reading, c("kd_aggregate", "eday_national"))
+  expect_true(all(is.finite(s$national$crps10)))
 })
 
 test_that("score_cell refuses a cell outside TARGETS, even under a freeze", {
@@ -230,7 +259,8 @@ test_that("score_cell with the default result reader refuses a root other than t
   fr <- frozen_root()
   expect_error(score_cell(fake_run(E24, F24), root = fr), paste0(root_msg, fr), fixed = TRUE)
   expect_error(score_cell(fake_run(E24, F24), truth = cell_truth, root = fr), paste0(root_msg, fr), fixed = TRUE)
-  expect_error(score_cell(fake_run(E24, F24), root = root()), "no freeze")
+  # WHY: with the project's root the guard passes a 2024 cell, so the real reader runs and refuses this run's party set.
+  expect_error(score_cell(fake_run(E24, F24), root = root()), "truth has votes for parties the run does not forecast", fixed = TRUE)
 })
 
 test_that("score_cell stops on a forecast party with no list at E before it reads a draw", {
@@ -259,4 +289,53 @@ test_that("score_cell refuses kjördæmi draws whose .draw restarts in each chai
   arrow::write_parquet(eday_kd, path)
   reader <- function(...) fixed_truth(meta$party_order, layout_for(E24)$kjordaemi)
   expect_error(score_cell(run, truth = reader, root = fr), "repeats a (.draw, kjordaemi, flokkur) cell", fixed = TRUE)
+})
+
+# The fake run of the 2024 eve with `fields` set in its meta.json (NULL drops one).
+run_with <- function(fields, env = parent.frame()) {
+  run <- fake_run(E24, F24, env = env)
+  path <- file.path(run, "meta.json")
+  m <- utils::modifyList(jsonlite::read_json(path), fields)
+  jsonlite::write_json(m, path, auto_unbox = TRUE, pretty = TRUE, digits = NA)
+  run
+}
+
+test_that("score_cell refuses a dev arm and a run whose role is not its arm's, before the freeze guard", {
+  calls <- 0L
+  reader <- function(...) {
+    calls <<- calls + 1L
+    stop("truth read")
+  }
+  dev <- "score_cell: arm v2s-m0 has role dev; check and dev arms are never scored"
+  # WHY: the guard passes a 2024 cell, so the reader's call count shows the refusal comes before it; a
+  # 2017 run, which the unfrozen guard refuses, shows the role is read before the guard too.
+  expect_error(score_cell(run_with(list(arm = "v2s-m0")), truth = reader), dev, fixed = TRUE)
+  expect_error(score_cell(run_with(list(arm = "v2s-m0", role = "dev")), truth = reader), dev, fixed = TRUE)
+  fr <- frozen_root()
+  expect_error(score_cell(run_with(list(arm = "v2s-m0")), truth = reader, root = fr), dev, fixed = TRUE)
+  mismatch <- "score_cell: run role dev differs from arm r0's role reference"
+  expect_error(score_cell(run_with(list(role = "dev")), truth = reader), mismatch, fixed = TRUE)
+  expect_error(score_cell(run_with(list(role = "dev")), truth = reader, root = fr), mismatch, fixed = TRUE)
+  run17 <- fake_run("2017-10-28", "2017-10-27")
+  path17 <- file.path(run17, "meta.json")
+  jsonlite::write_json(utils::modifyList(jsonlite::read_json(path17), list(arm = "v2s-m0")), path17, auto_unbox = TRUE, pretty = TRUE, digits = NA)
+  expect_error(score_cell(run17, truth = reader), dev, fixed = TRUE)
+  expect_equal(calls, 0L)
+  expect_error(score_cell(run_with(list(role = "reference")), truth = reader), "truth read", fixed = TRUE)
+  expect_error(score_cell(run_with(list(role = "reference")), truth = reader, root = fr), "truth read", fixed = TRUE)
+  expect_equal(calls, 2L)
+  expect_error(score_cell(run_with(list(arm = "r9")), truth = reader, root = fr), "unknown arm: r9")
+  expect_equal(calls, 2L)
+})
+
+test_that("a run whose recorded role is not its arm's still matches the sha-skip keys, and score_cell refuses it", {
+  a <- arm("r0")
+  expected <- expected_meta("r0", 1, 10, 10, root(a$stan_file), root(a$config), strrep("0", 64))
+  # WHY: role is no sha-skip key, so R0's runs without one still SKIP; an arm whose role changes keeps its runs until they are retired.
+  expect_false("role" %in% names(expected))
+  run <- run_with(c(expected, list(role = "candidate")))
+  expect_identical(meta_mismatch(jsonlite::read_json(file.path(run, "meta.json")), expected), character(0))
+  mismatch <- "score_cell: run role candidate differs from arm r0's role reference"
+  expect_error(score_cell(run, truth = function(...) stop("truth read")), mismatch, fixed = TRUE)
+  expect_error(score_cell(run, truth = function(...) stop("truth read"), root = frozen_root()), mismatch, fixed = TRUE)
 })

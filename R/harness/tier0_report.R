@@ -10,8 +10,11 @@
 #   (count, and percentage of the chains x sampling draws), the deepest tree and the min
 #   E-BFMI; the max R-hat and the min bulk and tail ESS over the gate's scope (every
 #   parameters-block variable and the scored quantities) and over the scored quantities alone;
-#   both min bulk ESS per minute and projected linearly to 2000 sampling iterations; the gate's
-#   verdict and reasons; and the modification time of meta.json, the measurement date.
+#   both min bulk ESS per minute and projected linearly to 2000 sampling iterations; the
+#   gate-scope min bulk ESS per 1,000 gradients, 1000 * min_ess_bulk / n_leapfrog (the
+#   post-warmup leapfrog steps summed over chains, diagnostics$n_leapfrog), or "–" for a
+#   meta.json without n_leapfrog; the gate's verdict and reasons; and the modification time of
+#   meta.json, the measurement date.
 # Above the table it records the run list, the CmdStan and cmdstanr versions and the
 # max_treedepth of meta.json, and `sysctl -n hw.ncpu` read when it runs. It stops, writing
 # nothing, on a run list with no run of <arm>, a run with no meta.json, a meta.json of another
@@ -36,8 +39,11 @@ HEADINGS <- c(
   paste("Max R-hat", SCOPE), paste("Min bulk ESS", SCOPE), paste("Min tail ESS", SCOPE),
   paste("Bulk ESS/min", SCOPE),
   paste("Bulk ESS at 2000 sampling iterations, linear projection", SCOPE),
-  "Gate (\u00a75.7, informational)", "meta.json written"
+  "Min bulk ESS per 1,000 gradients (gate scope)", "Gate (\u00a75.7, informational)", "meta.json written"
 )
+
+#' The cell of a run whose meta.json has no `n_leapfrog`, fitted before it was recorded.
+NO_LEAPFROG <- "\u2013"
 
 DIAGNOSTICS <- c(
   "max_rhat", "max_rhat_scored", "min_ess_bulk", "min_ess_bulk_scored", "min_ess_tail",
@@ -105,6 +111,12 @@ run_row <- function(arm, E, F, seed) {
   rhat <- c(v$max_rhat, v$max_rhat_scored)
   bulk <- c(v$min_ess_bulk, v$min_ess_bulk_scored)
   tail <- c(v$min_ess_tail, v$min_ess_tail_scored)
+  leapfrog <- d[["n_leapfrog"]]
+  per_gradient <- if (is.null(leapfrog)) {
+    NO_LEAPFROG
+  } else {
+    shown(1000 * v$min_ess_bulk / number(leapfrog, "diagnostics$n_leapfrog"), 3)
+  }
 
   if (!is.list(meta$gate)) stop("meta.json: gate is not an object", call. = FALSE)
   pass <- meta$gate$pass
@@ -131,6 +143,7 @@ run_row <- function(arm, E, F, seed) {
     pair(shown(tail, 0)),
     pair(shown(bulk / minutes, 1)),
     pair(shown(bulk * 2000 / sampling, 0)),
+    per_gradient,
     gate,
     format(file.mtime(meta_path), "%Y-%m-%d %H:%M UTC", tz = "UTC")
   )
@@ -210,6 +223,13 @@ report <- c(
   paste(
     "- **Bulk ESS at 2000 sampling iterations** scales each min bulk ESS by 2000 / `iter_sampling`.",
     "It is a linear projection that informs Decision 5, not the gate."
+  ),
+  paste(
+    "- **Min bulk ESS per 1,000 gradients (gate scope)** is 1000 \u00d7 the gate-scope min bulk ESS \u00f7",
+    "`n_leapfrog`, the fit's post-warmup leapfrog steps (gradients) summed over chains",
+    "(`diagnostics$n_leapfrog` of `meta.json`), and `\u2013` for a `meta.json` without it, as in a run",
+    "fitted before it was recorded. Rounded down. The Phase 2 plan's adoption rule (its Decision 6)",
+    "compares it between two forms of one model."
   ),
   "- **meta.json written** is the modification time of the run's `meta.json`: the date of the measurement."
 )

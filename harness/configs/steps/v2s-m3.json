@@ -1,0 +1,26 @@
+{
+  "campaign_days": 47,
+  "desired_weight": 0.22,
+  "weight_time": 180,
+  "delta_years_bar": 4,
+  "epoch_bias": 1,
+  "newcomer_pool": 1,
+  "shock": 1,
+  "delta_walk": 0,
+  "fundamentals": 0,
+  "walk_form": 0,
+  "delta_form": 0,
+  "order": "default",
+  "prior_tau_mu": 0.1,
+  "prior_s_bar_E": 0.15,
+  "prior_s_bar_zeta": 0.2,
+  "prior_sd_log_kappa": 0.5,
+  "prior_mu_phi": 6.907755278982137,
+  "prior_sd_mu1": 1,
+  "prior_rate_sigma_gamma": 1,
+  "stage1": {
+    "seed": 20261028,
+    "iter_warmup": 1000,
+    "iter_sampling": 1000
+  }
+}
