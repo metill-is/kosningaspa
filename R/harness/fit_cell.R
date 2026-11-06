@@ -12,7 +12,8 @@
 #      directory that does not, or has no meta.json, goes to _stale/ with
 #      "STALE <id> <mismatched keys>" (or "STALE <id> (no meta.json)");
 #   4. freezes the Stan data and the inputs meta, read-only, in inputs/;
-#   5. fits with SAMPLER, the seed and the iterations, the CmdStan CSVs in cmdstan/;
+#   5. fits with SAMPLER, the seed and the iterations, and the config's adapt_delta when it
+#      sets one (CmdStan's default otherwise), the CmdStan CSVs in cmdstan/;
 #   6. stops, with no meta.json, unless the fit has 4 chains of iter_sampling draws and the
 #      Stan file and the frozen data still hash as expected;
 #   7. extracts the parquets (the arm's variables, a function of its config for V2), then
@@ -20,8 +21,9 @@
 #      not in the CSVs) and the scored quantities, writes key_diagnostics.csv (the scored
 #      quantities, the param_draws columns and lp__, whose R-hat the stop rule of
 #      R/harness/compare_runs.R reads) and applies the gate;
-#   8. writes meta.json last (with the arm's role), read-only with the other outputs, so that
-#      its presence means the run is complete; prints the DIAG line and "DONE <dir>"; deletes
+#   8. writes meta.json last (with the arm's role and the adapt_delta the fit ran at), read-only
+#      with the other outputs, so that its presence means the run is complete; prints the DIAG
+#      line and "DONE <dir>"; deletes
 #      the CmdStan CSVs, unless HARNESS_KEEP_CMDSTAN is 1 (for a test that reads them back).
 if (!isTRUE(l10n_info()[["UTF-8"]])) stop("fit_cell.R needs a UTF-8 locale: run under LC_ALL=en_US.UTF-8", call. = FALSE)
 # WHY: the box path below is the working directory, so check it is the project root first.
@@ -124,7 +126,7 @@ start <- Sys.time()
 fit <- model$sample(
   data = data_json, seed = expected$seed, chains = SAMPLER$chains, parallel_chains = SAMPLER$parallel_chains,
   init = SAMPLER$init, max_treedepth = SAMPLER$max_treedepth, iter_warmup = expected$iter_warmup,
-  iter_sampling = expected$iter_sampling, refresh = 50, output_dir = cmdstan_dir
+  iter_sampling = expected$iter_sampling, adapt_delta = cfg[["adapt_delta"]], refresh = 50, output_dir = cmdstan_dir
 )
 minutes <- as.numeric(difftime(Sys.time(), start, units = "mins"))
 
@@ -152,7 +154,10 @@ gate <- diagnostics_gate(d)
 
 meta <- c(
   cell, expected, built_meta,
-  list(minutes = minutes, diagnostics = d, gate = list(pass = gate$pass, reasons = I(gate$reasons))),
+  list(
+    minutes = minutes, adapt_delta = fit$metadata()$adapt_delta, diagnostics = d,
+    gate = list(pass = gate$pass, reasons = I(gate$reasons))
+  ),
   provenance
 )
 tmp <- tempfile("meta-", tmpdir = dir, fileext = ".json")

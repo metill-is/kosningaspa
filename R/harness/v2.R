@@ -17,6 +17,10 @@ V2_PRIORS <- c(
 #' The keys of a V2 config, in order.
 V2_CONFIG_KEYS <- c("campaign_days", "desired_weight", "weight_time", "delta_years_bar", V2_SWITCHES, "order", V2_PRIORS, "stage1")
 
+#' The optional keys of a V2 config: `adapt_delta`, the sampler's target acceptance rate in the
+#' arm's fits by `R/harness/fit_cell.R` (absent: CmdStan's default, 0.8).
+V2_OPTIONAL_KEYS <- "adapt_delta"
+
 #' The keys of a V2 config's `stage1`.
 STAGE1_KEYS <- c("seed", "iter_warmup", "iter_sampling")
 
@@ -63,15 +67,16 @@ listed <- function(x) if (length(x)) paste(unique(x), collapse = "; ") else "non
 #'   (`"default"`: `POLL_PARTIES` and `KJORDAEMI$kjordaemi`, restricted to the cell;
 #'   `"reversed"`: both reversed), the `V2_PRIORS` (`prior_mu_phi` finite, the others
 #'   positive) and `stage1` = `list(seed, iter_warmup, iter_sampling)` (integers; the seed
-#'   at least 0, the iterations at least 1). An error, naming the file, on a missing or
+#'   at least 0, the iterations at least 1), then `adapt_delta` (in (0, 1)) when the config
+#'   sets that optional key (`V2_OPTIONAL_KEYS`). An error, naming the file, on a missing or
 #'   unknown key (in `stage1` too) or any other value
 #' @export
 read_v2_config <- function(path) {
   cfg <- jsonlite::read_json(path)
   bad <- function(...) stop(basename(path), ": ", ..., call. = FALSE)
-  keys <- function(x, want, where) {
+  keys <- function(x, want, where, optional = character(0)) {
     missing <- setdiff(want, names(x))
-    unknown <- setdiff(names(x), want)
+    unknown <- setdiff(names(x), c(want, optional))
     if (length(missing) || length(unknown)) {
       bad(where, "missing key(s): ", listed(missing), "; unknown key(s): ", listed(unknown))
     }
@@ -79,7 +84,7 @@ read_v2_config <- function(path) {
   number <- function(x) is.numeric(x) && length(x) == 1 && is.finite(x)
   whole <- function(x, lo) number(x) && x == round(x) && x >= lo
   if (!is.list(cfg) || is.null(names(cfg))) bad("not a JSON object")
-  keys(cfg, V2_CONFIG_KEYS, "")
+  keys(cfg, V2_CONFIG_KEYS, "", V2_OPTIONAL_KEYS)
   if (!whole(cfg$campaign_days, 1)) bad("campaign_days must be a whole number of days, at least 1")
   if (!(number(cfg$desired_weight) && cfg$desired_weight > 0 && cfg$desired_weight < 1)) {
     bad("desired_weight must be one number in (0, 1)")
@@ -109,6 +114,11 @@ read_v2_config <- function(path) {
   out$order <- cfg$order
   out[V2_PRIORS] <- lapply(cfg[V2_PRIORS], as.numeric)
   out$stage1 <- lapply(s1[STAGE1_KEYS], as.integer)
+  ad <- cfg[["adapt_delta"]]
+  if (!is.null(ad)) {
+    if (!(number(ad) && ad > 0 && ad < 1)) bad("adapt_delta must be one number in (0, 1)")
+    out$adapt_delta <- as.numeric(ad)
+  }
   out
 }
 

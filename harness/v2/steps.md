@@ -1628,3 +1628,116 @@ of newcomer house levels under `epoch_bias = 1`, and the exact tests above pin i
 ## Exit
 
 The exit's equivalence re-run on the final model (`R/harness/v2_equivalence.R --config=harness/configs/v2.json --form=both`) is skipped: neither P-step was adopted (P1 `KEEP v2s-m0`, P2 `KEEP v2s-m4`), so `v2.json` sets both forms to 0, the reference forms the M-steps' log-density tests ran in, and `--form=both` has nothing to check, as the script says when it refuses it.
+
+## v2s-p3: the anchored walk on V2 at `adapt_delta` 0.95 (P-step, lean)
+
+P1 was kept out only by condition 3, its 10 divergences on 2021 f180. This step re-tries the
+anchored walk on the finished V2 with a higher target acceptance rate. `v2s-p3` (config
+`harness/configs/steps/v2s-p3.json`) is `v2.json` with `walk_form = 1` and `adapt_delta =
+0.95`. `adapt_delta` is a V2 config's one optional key (`read_v2_config()`,
+`R/harness/v2.R`): `R/harness/fit_cell.R` passes it to the sampler and `meta.json` records the
+value each fit ran at. The reference is V2 at CmdStan's default, 0.8. The step ran under the
+lean checking policy (`harness/README.md`, Checking a model change): the equivalence check and
+one fit per cell, seed 2701 only. Decision 6's adoption rule needs two seeds per cell, so
+`compare_runs.R adopt` refuses this run list (`v2 has 1 fit on 2024-11-30, 2024-11-29 (seed
+2701), not 2 of different seeds`), and the verdict below applies the rule's four conditions to
+the one seed by hand.
+
+**Equivalence.** The four checks of `EQUIVALENCE_REQUIRED`, written to
+`harness/v2/steps/v2s-p3-equivalence.csv` by `LC_ALL=en_US.UTF-8 Rscript
+R/harness/v2_equivalence.R --config=harness/configs/steps/v2s-p3.json --form=walk
+--cell=<E>,<F> --out=harness/v2/steps/v2s-p3-equivalence.csv` (2017 eve with `--n=20`, the
+reversed row with `--reverse`), every row on `Stan/forecast_v2.stan` at sha256
+`88fca4521ffc…`. `adapt_delta` touches only the sampler, not the log density, so these rows
+check the anchored walk on V2's model and the current snapshot. Every row: no point dropped,
+excluded at a cap or finite on one side only, and each Jacobian term's negative control
+`fails`, as it must.
+
+| Cell | Order | Kept points | Constant range | Tolerance | Max path error | Generated quantities: points; max relative difference | Controls (`ref_walk`, `new_anchor`, `new_bridge`, `new_forward`) | Verdict |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2024 eve | default | 30 posterior + 15 off-posterior | 1.128e-10 | 6.789e-08 | 1.055e-14 | 30; 1.089e-13 | fails, fails, fails, fails | PASS |
+| 2021 f180 | default | 30 posterior + 15 off-posterior | 6.276e-11 | 1.478e-08 | 6.217e-15 | 30; 9.392e-14 | fails, fails, fails, fails | PASS |
+| 2017 eve | default | 20 prior (no fit, no forecast) | 5.093e-11 | 1.37e-07 | 6.439e-15 | 20; 9.01e-15 | fails, fails, fails, fails | PASS |
+| 2024 eve | reversed | 30 posterior + 15 off-posterior | 6.366e-11 | 2.834e-08 | 5.107e-15 | 30; 1.236e-13 | fails, fails, fails, fails | PASS |
+
+**Fits.** Four fits at 400 + 400, seed 2701, from `harness/runs/v2s-p3.txt`: V2 then `v2s-p3`
+on 2024 eve (lane A) and on 2021 f180 (lane B). V2 is refitted because the kjördæmi ingest of
+6 Nov 2026 (1234e59) changed the polls it reads, so no earlier V2 fit is this reference.
+`PREFLIGHT=lean zsh R/harness/queue.sh harness/runs/v2s-p3.txt 400 400` started at 10:04 on 6
+Nov 2026; the lean preflight passed, the fits ran from 10:18 to 12:17, all four exited 0, and
+`queue.log` ends in `QUEUE FINISHED`. CmdStan 2.38.0, `max_treedepth` 12. Each `meta.json`
+records `adapt_delta` 0.8 (V2) or 0.95 (`v2s-p3`). The diagnostics tables are
+`harness/v2/steps/v2s-p3.md` and, for V2's two fits, `harness/v2/steps/v2s-p3-reference.md`.
+
+**Provenance.** All four fits ran at 1234e59 with `git_dirty` true: this step's code, config,
+tests and run list were uncommitted, and are the commit that adds this section. They were
+written before the queue started and not edited while it ran. All four record the snapshot
+manifest at sha256 `5a040a07461f…`. The equivalence checks ran beside the queue until 11:03,
+so the minutes do not compare: V2's 2021 f180 fit ran wholly beside them and its 2024 eve fit
+mostly, while `v2s-p3`'s 2024 eve fit, the last, ran with nothing else from this session
+beside it. The adoption rule reads ESS per gradient, which load does not change.
+
+**Stop rule.** `LC_ALL=en_US.UTF-8 Rscript R/harness/compare_runs.R stop v2
+harness/runs/v2s-p3.txt` and the same with `v2s-p3`, both exit 0:
+
+```
+GO v2_2024-11-30_2024-11-29_s2701 lp_rhat=1.0039 divergent=0/1600 near_cap=0/1600 max_rhat=1.0165; recorded: minutes=76.7 treedepth_hits=0 ess_bulk_per_1k_grad=0.172
+GO v2_2021-09-25_2021-03-29_s2701 lp_rhat=1.0066 divergent=0/1600 near_cap=0/1600 max_rhat=1.0183; recorded: minutes=41.7 treedepth_hits=0 ess_bulk_per_1k_grad=0.145
+GO v2s-p3_2024-11-30_2024-11-29_s2701 lp_rhat=1.0060 divergent=0/1600 near_cap=0/1600 max_rhat=1.0184; recorded: minutes=41.5 treedepth_hits=0 ess_bulk_per_1k_grad=0.225
+GO v2s-p3_2021-09-25_2021-03-29_s2701 lp_rhat=1.0102 divergent=0/1600 near_cap=0/1600 max_rhat=1.0183; recorded: minutes=27.1 treedepth_hits=0 ess_bulk_per_1k_grad=0.175
+```
+
+**The adoption rule's conditions, on one seed.** Min bulk ESS per 1,000 gradients (gate
+scope) from each `meta.json`, 1000 × `min_ess_bulk` ÷ `n_leapfrog`:
+
+| Cell | V2 (`adapt_delta` 0.8) | `v2s-p3` (`adapt_delta` 0.95) | Ratio | At least 1.25 × V2's |
+| --- | --- | --- | --- | --- |
+| 2024 eve | 0.1722 | 0.2257 | 1.31 | yes |
+| 2021 f180 | 0.1455 | 0.1756 | 1.21 | no |
+
+1. The equivalence check passes: yes (4 rows, none FAIL, a PASS row of each of the 4 required
+   checks).
+2. On each cell, `v2s-p3`'s min bulk ESS per 1,000 gradients is at least 1.25 × V2's: no
+   (2021 f180, 1.21).
+3. `v2s-p3`'s divergences, 0, are at most V2's, 0, plus 4: yes.
+4. No fit of V2 or `v2s-p3` trips the stop rule: yes.
+
+**Verdict: KEEP V2, on one seed.** Condition 2 fails on 2021 f180 by less than one seed's
+spread: P1's two seeds gave ratios of 1.22 between them on 2024 eve (0.730 and 0.597) and 1.30
+on 2021 f180 (0.598 and 0.461), though `v2s-m0`'s two differed by under 2%. A seed 2702 fit of
+each arm on each cell would let `compare_runs.R adopt` give the rule's own verdict.
+`v2.json` keeps `walk_form = 0`.
+
+- **The higher `adapt_delta` removed the divergences and most of P1's gain.** P1 gained 2.62×
+  and 1.95× over `v2s-m0` at 0.8, with 10 divergences; `v2s-p3` gains 1.31× and 1.21× over V2
+  at 0.95, with none. The comparison is not like for like: `v2s-m0` is the core without M1 to
+  M5, on the data before the anchor correction and the kjördæmi ingest. Whether V2 needs 0.95
+  is not known, since the anchored walk has not been fitted on V2 at 0.8.
+- **Where the gradients went.** Every post-warmup transition of both `v2s-p3` fits took 511
+  leapfrog steps, a full tree of depth 9 (`n_leapfrog` 817,600 over 1,600 transitions). V2's
+  took 1,023, a full depth-10 tree, on 2024 eve, and 891.5 on average on 2021 f180. The
+  anchored walk halves the cost of a draw, but its min bulk ESS is lower too (184 against 281
+  on 2024 eve, 143 against 207 on 2021 f180), so the gain per gradient is 1.31× and 1.21×, not
+  2×.
+- **The binding parameters are not saved.** The gate-scope minima, and the 71 min tail ESS of
+  `v2s-p3`'s 2024 eve fit, are on `parameters`-block coordinates that `param_draws.parquet`
+  does not keep, and the CmdStan CSVs were deleted. The two forms' walk coordinates differ, so
+  their minima need not be the same variable. The scored quantities are not near: their min
+  bulk ESS is 935 to 1,477, and their min tail ESS 863 to 1,013, in all four fits.
+- **The §5.7 gate is not the stop rule.** Each fit's DIAG line reads `gate=FAIL` on its
+  gate-scope max R-hat (1.0165 to 1.0184), above 1.01, as at every 400 + 400 run here. A
+  `dev` arm is never scored.
+
+To rewrite the tables and the verdicts from the finished runs under `results/harness/`, from
+the project root:
+
+```
+LC_ALL=en_US.UTF-8 Rscript R/harness/tier0_report.R v2s-p3 harness/runs/v2s-p3.txt harness/v2/steps/v2s-p3.md
+LC_ALL=en_US.UTF-8 Rscript R/harness/tier0_report.R v2 harness/runs/v2s-p3.txt harness/v2/steps/v2s-p3-reference.md
+LC_ALL=en_US.UTF-8 Rscript R/harness/compare_runs.R stop v2 harness/runs/v2s-p3.txt
+LC_ALL=en_US.UTF-8 Rscript R/harness/compare_runs.R stop v2s-p3 harness/runs/v2s-p3.txt
+```
+
+With seed 2702 lines for both arms added to the run list, the rule runs as written:
+`LC_ALL=en_US.UTF-8 Rscript R/harness/compare_runs.R adopt v2 v2s-p3
+harness/v2/steps/v2s-p3-equivalence.csv harness/runs/v2s-p3.txt`.

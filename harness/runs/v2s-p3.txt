@@ -1,0 +1,8 @@
+# lane arm E F seed
+# P1 re-tried on V2 (harness/v2/steps.md, v2s-p3): V2 and v2s-p3 at 400 + 400, seed 2701, on 2024
+# eve (lane A) and 2021 f180 (lane B), on the snapshot taken after the 6 Nov 2026 kjördæmi
+# ingest. V2 is refitted because that ingest changed the kjördæmi polls it reads.
+A v2 2024-11-30 2024-11-29 2701
+A v2s-p3 2024-11-30 2024-11-29 2701
+B v2 2021-09-25 2021-03-29 2701
+B v2s-p3 2021-09-25 2021-03-29 2701

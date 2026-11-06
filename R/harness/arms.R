@@ -50,6 +50,8 @@ v2_arm <- function(config, role) {
 #' one component switch off (`epoch_bias`, `newcomer_pool`, `shock`, `delta_walk` and
 #' `fundamentals`), are its ablations. `v2-perm`, `v2`'s config with `order` = `"reversed"`
 #' (both the party and the kjördæmi order), is the check that must reproduce `v2`.
+#' `v2s-p3`, `v2`'s config with the anchored walk and `adapt_delta` 0.95, is a dev arm: P1
+#' re-tried on V2 (`harness/v2/steps.md`).
 #' @export
 ARMS <- local({
   box::use(R / harness / r0[r0_stan_data, read_r0_config, r0_extract, R0_EXTRACT_VARIABLES])
@@ -77,7 +79,8 @@ ARMS <- local({
     `v2-noshock` = v2_arm("harness/configs/v2-noshock.json", "ablation"),
     `v2-staticdelta` = v2_arm("harness/configs/v2-staticdelta.json", "ablation"),
     `v2-nofund` = v2_arm("harness/configs/v2-nofund.json", "ablation"),
-    `v2-perm` = v2_arm("harness/configs/v2-perm.json", "check")
+    `v2-perm` = v2_arm("harness/configs/v2-perm.json", "check"),
+    `v2s-p3` = v2_arm("harness/configs/steps/v2s-p3.json", "dev")
   )
 })
 

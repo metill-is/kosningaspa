@@ -132,6 +132,32 @@ test_that("v2s-p1's config is v2s-m0's with walk_form = 1 and nothing else", {
   expect_identical(arm("v2s-p1")$role, "dev")
 })
 
+test_that("v2s-p3's config is V2's with walk_form = 1 and adapt_delta = 0.95 and nothing else", {
+  v2 <- jsonlite::read_json(root(arm("v2")$config))
+  p3 <- jsonlite::read_json(root(arm("v2s-p3")$config))
+  expect_identical(p3$walk_form, 1L)
+  expect_identical(p3$adapt_delta, 0.95)
+  expect_identical(names(p3), c(names(v2), "adapt_delta"))
+  expect_identical(utils::modifyList(p3, list(walk_form = 0L, adapt_delta = NULL)), v2)
+  expect_identical(read_v2_config(root(arm("v2s-p3")$config))$adapt_delta, 0.95)
+  expect_identical(arm("v2s-p3")$role, "dev")
+})
+
+test_that("adapt_delta is the one optional V2 config key: absent it is not in the config, and it must lie in (0, 1)", {
+  path <- root(arm("v2")$config)
+  expect_false("adapt_delta" %in% names(read_v2_config(path)))
+  cfg <- jsonlite::read_json(path)
+  tmp <- withr::local_tempfile(fileext = ".json")
+  for (bad in list(1, 0, -0.5, "0.9", c(0.9, 0.95))) {
+    jsonlite::write_json(c(cfg, list(adapt_delta = bad)), tmp, auto_unbox = TRUE, digits = NA)
+    expect_error(read_v2_config(tmp), "adapt_delta must be one number in \\(0, 1\\)", label = paste(format(bad), collapse = " "))
+  }
+  jsonlite::write_json(c(cfg, list(adapt_delta = 0.9)), tmp, auto_unbox = TRUE, digits = NA)
+  expect_identical(read_v2_config(tmp)$adapt_delta, 0.9)
+  jsonlite::write_json(c(cfg, list(adapt_deltas = 0.9)), tmp, auto_unbox = TRUE, digits = NA)
+  expect_error(read_v2_config(tmp), "unknown key\\(s\\): adapt_deltas")
+})
+
 test_that("v2s-m1's config is v2s-m0's with epoch_bias = 1 and nothing else", {
   m0 <- jsonlite::read_json(root("harness", "configs", "steps", "v2s-m0.json"))
   m1 <- jsonlite::read_json(root(arm("v2s-m1")$config))
@@ -184,15 +210,15 @@ test_that("v2s-p2's config is v2s-m4's with delta_form = 1 and nothing else", {
   expect_identical(arm("v2s-p2")$role, "dev")
 })
 
-test_that("while P1's verdict stands (KEEP v2s-m0: the anchored walk is not adopted), every step config but v2s-p1 sets walk_form = 0, and so do V2 and its ablations", {
+test_that("while P1's verdict stands (KEEP v2s-m0: the anchored walk is not adopted), every step config but v2s-p1 and v2s-p3 sets walk_form = 0, and so do V2 and its ablations", {
   # WHY: the steps after P1 build on the reference walk; a re-ruling that adopts the anchored
-  # walk changes this test and the later step configs together.
+  # walk changes this test and the later step configs together. v2s-p3 is P1 re-tried on V2.
   files <- c(Sys.glob(root("harness", "configs", "steps", "v2s-*.json")), Sys.glob(root("harness", "configs", "v2*.json")))
   steps <- c("v2s-m1.json", "v2s-m2.json", "v2s-m3.json", "v2s-m4.json", "v2s-p2.json", "v2s-m5.json")
   expect_true(all(root("harness", "configs", "steps", steps) %in% files))
   expect_true(all(root("harness", "configs", c("v2.json", paste0(names(V2_ABLATIONS), ".json"))) %in% files))
   for (f in files) {
-    want <- if (basename(f) == "v2s-p1.json") 1L else 0L
+    want <- if (basename(f) %in% c("v2s-p1.json", "v2s-p3.json")) 1L else 0L
     expect_identical(jsonlite::read_json(f)$walk_form, want, label = basename(f))
   }
 })

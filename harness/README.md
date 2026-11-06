@@ -301,7 +301,8 @@ built data, never the hash of the run's own frozen file, which would compare the
 with itself; the slow `test-fit-cell.R` edits a run's frozen file and expects SKIP), the
 seed, the warmup and sampling
 iterations, the sampler settings of `SAMPLER` (4 chains, `init = 0`, `max_treedepth = 12`)
-and `EXTRACT_VERSION`. `meta_mismatch(meta, expected)` returns the keys of `expected` whose
+and `EXTRACT_VERSION`. A V2 config's optional `adapt_delta` needs no key of its own: the
+config's sha256 covers it. `meta_mismatch(meta, expected)` returns the keys of `expected` whose
 values differ or are missing from `meta`, and ignores every other key of `meta`. Numbers
 compare by value, since a JSON round trip turns `0` into `0L`; every other value must be
 identical, so a number written as a string, a null or an NA is a mismatch. An empty result
@@ -378,6 +379,8 @@ P-step's form was adopted) and its five ablations (`harness/configs/v2-no*.json`
 each one's single differing field).
 `v2-perm` (`harness/configs/v2-perm.json`, `v2.json` with `order` = `"reversed"`) is the check;
 `tests/harness/test-arms.R` asserts that it differs from `v2.json` in that field alone.
+`v2s-p3` (`harness/configs/steps/v2s-p3.json`, `v2.json` with `walk_form = 1` and
+`adapt_delta = 0.95`) is P1 re-tried on V2, a dev arm (`harness/v2/steps.md`).
 
 **R0's extraction.** `r0_extract(draws, meta, dir)` (`R/harness/r0.R`) writes the four
 parquets of spec §5.5 from a fit's draws: `eday_kjordaemi` (`.chain`, `.iteration`,
@@ -420,7 +423,9 @@ freshly built data) with the run's `meta.json`. On a match it prints
 meta.json)`) and refitted. It then freezes the inputs; `inputs.json` records the arm, E, F,
 the expected keys, the builder's meta, the git HEAD (and whether the tree was dirty), the
 sha256 of `snapshot_manifest.csv` and the CmdStan and cmdstanr versions. It fits with
-`SAMPLER`, the seed and the iterations (`refresh = 50`), on the Stan executable alone (never
+`SAMPLER`, the seed and the iterations (`refresh = 50`), with the config's `adapt_delta` when
+it sets one (V2's optional key; CmdStan's default, 0.8, otherwise, and `meta.json` records the
+value the fit ran at), on the Stan executable alone (never
 with the model methods compiled, which would build the model on the data inside R), and stops with no `meta.json`
 unless the fit holds 4 chains of `iter_sampling` draws and the Stan file and the frozen
 data still hash as expected. The extractor reads the arm's variables (for V2,
@@ -598,6 +603,13 @@ therefore `v2s-m4`'s with its own switch on (`harness/v2/steps.md`).
 M5 (`v2s-m5`), the fundamentals pseudo-observation (`fundamentals = 1`), passed the stop rule:
 `GO` on both fits, with no divergence and no draw near a cap (`harness/v2/steps.md`). Every
 component is now built, and V2's candidate config, `harness/configs/v2.json`, is `v2s-m5`'s.
+
+P3 (`v2s-p3`), P1 re-tried on V2 (`walk_form = 1` at `adapt_delta` 0.95), ran under the lean
+policy: its four equivalence checks passed, and one fit per cell at seed 2701 ran against V2
+refitted on the same seed (`harness/runs/v2s-p3.txt`). `adopt` needs two seeds per cell, so
+its conditions were applied by hand: no divergences and every fit `GO`, but ESS per gradient
+1.31 × V2's on 2024 eve and 1.21 × on 2021 f180, under condition 2's 1.25, so V2 is kept on
+one seed (`harness/v2/steps.md`). `v2.json` keeps `walk_form = 0`.
 
 A P-step's form is first checked against the reference form, point by point, by
 `R/harness/v2_equivalence.R` (the plan's Decision 6, condition 1), once for each check of
