@@ -7,9 +7,12 @@ fit by `R/fit_polling_watch.R`, deployed to metill.is/fylgisvakt). Written 2026-
 whose reported support depended on an *arbitrary* choice of reference party — a bug
 that, combined with a locale issue, briefly published an artefactual "D overtakes S"
 headline. The fix is a **sum-to-zero reparameterisation** that is invariant to party
-ordering. After comparing several variants, the production model is
+ordering. After comparing several variants, the production model became
 **`polling_watch_v4.stan` (per-party RW volatility + full cross-party correlation)**,
-fit with parties ordered **largest → smallest** for sampling efficiency.
+fit with parties ordered **largest → smallest** for sampling efficiency. Since 28 October
+2026 production is its successor **`polling_watch_v5_epoch.stan`**: v4 with a pollster bias
+per epoch between results, fit to the polls and results since 2016 (§10, §11). metill.is
+has shown v5 since 5 November 2026.
 
 ---
 
@@ -62,7 +65,7 @@ endpoint `pi_smooth` agrees to **< 0.11pp** (vs ~2pp for the drop-one model).
 | `polling_watch_v2.stan` | per-party (log-normal hierarchy) | full `lkj` | first invariant version; faithful to original |
 | `polling_watch_v3.stan` | single shared σ | full `lkj` | parsimonious |
 | `polling_watch_v3b.stan` | single shared σ | none (isotropic) | minimal; native `sum_to_zero_vector` innovations, no centring |
-| **`polling_watch_v4.stan`** | **per-party (independent half-t, no hierarchy)** | **full `lkj`** | **PRODUCTION** |
+| `polling_watch_v4.stan` | per-party (independent half-t, no hierarchy) | full `lkj` | production until 28 October 2026 (on metill.is until 5 November); v5 (§10) adds a bias per epoch to it |
 
 `v4` keeps both modelling features of the original (differential per-party volatility
 *and* full correlation) but drops the per-party σ *hierarchy* (`mu_log_sigma`,
@@ -217,7 +220,7 @@ with the shares at the last poll date scored against the official national resul
 (`R/sampler_check/score_polling_watch_backtest.R`; percentage points over the ten parties):
 
 The rows marked "live" fit v4 from the previous result, the window the live fit read until
-now (with the anchored v4, whose posterior is the forward walk's apart from the bound on log φ,
+v5 went live on 5 November 2026 (with the anchored v4, whose posterior is the forward walk's apart from the bound on log φ,
 §9).
 
 | Election | Model and window | MAE | RMSE | CRPS | 90% coverage | 90% width |
@@ -252,8 +255,8 @@ Samfylkingin a little where v4 lowered it.
 
 ## 11. Entry rules from the v2 forecast (5 November 2026)
 
-v5 was audited against the fixes made for the v2 forecast (`Stan/forecast_v2.stan` on its
-branch). It already had three: a walk whose step covariance is C Σ C over all ten parties, so
+v5 was audited against the fixes made for the v2 forecast (`Stan/forecast_v2.stan`, on
+master since PR #21). It already had three: a walk whose step covariance is C Σ C over all ten parties, so
 the reference party only picks coordinates; zero-sum shocks; and identity-gathered partial
 polls. It lacked two, which v5 now has:
 
