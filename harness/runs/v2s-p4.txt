@@ -1,0 +1,9 @@
+# lane arm E F seed
+# The anchored walk on V2 at CmdStan's default adapt_delta, 0.8 (harness/v2/steps.md, v2s-p4):
+# v2s-p4 at 400 + 400, seed 2701, on 2024 eve (lane A) and 2021 f180 (lane B). The V2 lines are
+# v2s-p3's reference fits, on the same snapshot: the runner skips them while their meta.json
+# matches, and they put both arms in one list for compare_runs.R and tier0_report.R.
+A v2 2024-11-30 2024-11-29 2701
+A v2s-p4 2024-11-30 2024-11-29 2701
+B v2 2021-09-25 2021-03-29 2701
+B v2s-p4 2021-09-25 2021-03-29 2701

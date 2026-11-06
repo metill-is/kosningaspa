@@ -380,7 +380,9 @@ each one's single differing field).
 `v2-perm` (`harness/configs/v2-perm.json`, `v2.json` with `order` = `"reversed"`) is the check;
 `tests/harness/test-arms.R` asserts that it differs from `v2.json` in that field alone.
 `v2s-p3` (`harness/configs/steps/v2s-p3.json`, `v2.json` with `walk_form = 1` and
-`adapt_delta = 0.95`) is P1 re-tried on V2, a dev arm (`harness/v2/steps.md`).
+`adapt_delta = 0.95`) is P1 re-tried on V2, a dev arm, and `v2s-p4`
+(`harness/configs/steps/v2s-p4.json`, `v2.json` with `walk_form = 1`) the same at CmdStan's
+default `adapt_delta` (`harness/v2/steps.md`).
 
 **R0's extraction.** `r0_extract(draws, meta, dir)` (`R/harness/r0.R`) writes the four
 parquets of spec §5.5 from a fit's draws: `eday_kjordaemi` (`.chain`, `.iteration`,
@@ -610,6 +612,12 @@ refitted on the same seed (`harness/runs/v2s-p3.txt`). `adopt` needs two seeds p
 its conditions were applied by hand: no divergences and every fit `GO`, but ESS per gradient
 1.31 × V2's on 2024 eve and 1.21 × on 2021 f180, under condition 2's 1.25, so V2 is kept on
 one seed (`harness/v2/steps.md`). `v2.json` keeps `walk_form = 0`.
+
+P4 (`v2s-p4`), the same walk at CmdStan's default `adapt_delta`, 0.8, ran the same way on
+`harness/runs/v2s-p4.txt`, reusing P3's equivalence rows and V2 fits. It diverged on both
+cells, 7 times in all, and gained 1.12 × on 2024 eve and 1.59 × on 2021 f180: it fails
+conditions 2 and 3, so V2 is kept. At either target the anchored walk spends 511 gradients
+per draw, so 0.95 removes the divergences at no cost (`harness/v2/steps.md`).
 
 A P-step's form is first checked against the reference form, point by point, by
 `R/harness/v2_equivalence.R` (the plan's Decision 6, condition 1), once for each check of

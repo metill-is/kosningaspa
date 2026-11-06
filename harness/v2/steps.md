@@ -1741,3 +1741,79 @@ LC_ALL=en_US.UTF-8 Rscript R/harness/compare_runs.R stop v2s-p3 harness/runs/v2s
 With seed 2702 lines for both arms added to the run list, the rule runs as written:
 `LC_ALL=en_US.UTF-8 Rscript R/harness/compare_runs.R adopt v2 v2s-p3
 harness/v2/steps/v2s-p3-equivalence.csv harness/runs/v2s-p3.txt`.
+
+## v2s-p4: the anchored walk on V2 at CmdStan's default `adapt_delta` (P-step, lean)
+
+P3 left open whether V2 needs the higher target: the anchored walk had not been fitted on V2
+at 0.8. `v2s-p4` (config `harness/configs/steps/v2s-p4.json`) is `v2.json` with `walk_form =
+1` and nothing else, so it samples at CmdStan's default, 0.8, as V2 does. The checks are P3's,
+under the same lean policy: one fit per cell, seed 2701, and the adoption rule's conditions
+applied by hand.
+
+**Equivalence.** Not re-run. `v2s-p4` has `v2s-p3`'s Stan file (sha256 `88fca4521ffc…`), data
+and `walk_form`, and `adapt_delta` touches only the sampler, so P3's four PASS rows in
+`harness/v2/steps/v2s-p3-equivalence.csv` are this arm's check too.
+
+**Fits.** Two fits at 400 + 400, seed 2701, from `harness/runs/v2s-p4.txt`: `v2s-p4` on 2024 eve
+(lane A) and 2021 f180 (lane B). The list also holds V2's reference fits from P3, on the same
+snapshot, so that both arms are in one list; the runner skipped them (`SKIP ... (meta.json
+matches)`), so V2's numbers are P3's. `PREFLIGHT=lean zsh R/harness/queue.sh
+harness/runs/v2s-p4.txt 400 400` started at 12:41 on 6 Nov 2026; the lean preflight passed, the
+two fits ran side by side from 12:51 to 13:25, both exited 0, and `queue.log` ends in `QUEUE
+FINISHED`. Both `meta.json` record `adapt_delta` 0.8, `git_head` d86d9ac with `git_dirty` true
+(this step's arm, config, tests and run list, uncommitted until this section's commit, and
+not edited while the queue ran), and the snapshot manifest at sha256 `5a040a07461f…`. The
+diagnostics table is `harness/v2/steps/v2s-p4.md`.
+
+**Stop rule.** `LC_ALL=en_US.UTF-8 Rscript R/harness/compare_runs.R stop v2s-p4
+harness/runs/v2s-p4.txt`, exit 0:
+
+```
+GO v2s-p4_2024-11-30_2024-11-29_s2701 lp_rhat=1.0041 divergent=5/1600 near_cap=0/1600 max_rhat=1.0234; recorded: minutes=33.8 treedepth_hits=0 ess_bulk_per_1k_grad=0.193
+GO v2s-p4_2021-09-25_2021-03-29_s2701 lp_rhat=1.0177 divergent=2/1600 near_cap=0/1600 max_rhat=1.0278; recorded: minutes=19.4 treedepth_hits=0 ess_bulk_per_1k_grad=0.231
+```
+
+**The adoption rule's conditions, on one seed.** Min bulk ESS per 1,000 gradients (gate
+scope) from each `meta.json`, with P3's for comparison:
+
+| Cell | V2 (0.8) | `v2s-p4` (0.8) | Ratio | At least 1.25 × V2's | `v2s-p3` (0.95), ratio |
+| --- | --- | --- | --- | --- | --- |
+| 2024 eve | 0.1722 | 0.1936 | 1.12 | no | 0.2257, 1.31 |
+| 2021 f180 | 0.1455 | 0.2312 | 1.59 | yes | 0.1756, 1.21 |
+
+1. The equivalence check passes: yes (P3's CSV, above).
+2. On each cell, `v2s-p4`'s min bulk ESS per 1,000 gradients is at least 1.25 × V2's: no
+   (2024 eve, 1.12).
+3. `v2s-p4`'s divergences, 7 (5 on 2024 eve, 2 on 2021 f180), are at most V2's, 0, plus 4: no.
+4. No fit of V2 or `v2s-p4` trips the stop rule: yes.
+
+**Verdict: KEEP V2, on one seed.** `v2s-p4` fails conditions 2 and 3. The divergences settle
+it: at 0.8 the anchored walk diverges on V2 as it did on `v2s-m0` (P1: 9 and 1 on 2021 f180),
+this time on both cells. `v2.json` keeps `walk_form = 0`.
+
+- **0.95 costs no gradients.** Every transition of the `v2s-p4` fits took 510.2 (2024 eve) and
+  510.4 (2021 f180) leapfrog steps on average, against 511 at 0.95: a tree of depth 9 either
+  way. A smaller step needs more steps for the same trajectory, but while the U-turn comes
+  within the same doubling the tree is the same size, and here it does. So the higher target
+  removes the divergences for free, and 0.95 is the setting at which to judge the anchored
+  walk.
+- **One seed's ratio moves by about a third.** The two arms spend the same gradients per draw,
+  yet their ratios to V2 differ: 1.31 at 0.95 and 1.12 at 0.8 on 2024 eve, 1.21 and 1.59 on
+  2021 f180. A min over the gate scope from one seed is that noisy here, so P3's verdict on
+  its own seed could go either way with a second; over these two fits the anchored walk gains
+  about 1.1× to 1.6× per cell, well short of P1's 1.95× and 2.62× over `v2s-m0`.
+- **Why the gain is smaller on V2.** The anchored walk halves the gradients of a draw (511
+  leapfrog steps against V2's 1,023 on 2024 eve and 891.5 on 2021 f180), but its min bulk ESS
+  falls too (158 and 188 against V2's 281 and 207). The binding coordinates are not saved
+  (`param_draws.parquet` does not keep them, and the CmdStan CSVs were deleted), so where the
+  ESS goes is not known.
+- **The scored quantities are not near.** Their min bulk ESS is 1,094 and 1,630, and their min
+  tail ESS 1,020 and 916.
+
+To rewrite the table and the verdicts from the finished runs under `results/harness/`, from
+the project root:
+
+```
+LC_ALL=en_US.UTF-8 Rscript R/harness/tier0_report.R v2s-p4 harness/runs/v2s-p4.txt harness/v2/steps/v2s-p4.md
+LC_ALL=en_US.UTF-8 Rscript R/harness/compare_runs.R stop v2s-p4 harness/runs/v2s-p4.txt
+```
