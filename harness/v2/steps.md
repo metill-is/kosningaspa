@@ -1818,7 +1818,7 @@ LC_ALL=en_US.UTF-8 Rscript R/harness/tier0_report.R v2s-p4 harness/runs/v2s-p4.t
 LC_ALL=en_US.UTF-8 Rscript R/harness/compare_runs.R stop v2s-p4 harness/runs/v2s-p4.txt
 ```
 
-## v2s-m6: the post-election multiplier (M-step, lean; built, not yet fitted)
+## v2s-m6: the post-election multiplier (M-step, lean; fitted and scored, 6 Nov 2026)
 
 **Why.** Scored against the 2024 model on 2024 eve (`harness/v2/scoring.md`), V2's MAE is 1.36
 over all parties against R0's 1.03, mostly from Miðflokkurinn, Flokkur fólksins and Viðreisn.
@@ -1879,13 +1879,50 @@ by the same operations as before.
   numbers moved since v2s-m5's run because the snapshot now holds the public kjördæmi polls
   (J 22 and 6, against 9 and 1).
 
-**Not done at build time.**
-- The fits. `harness/runs/v2s-m6.txt` lists v2s-m6 and V2 at 400 + 400, seed 2701, on 2024 eve
-  and 2021 f180. Changing `Stan/forecast_v2.stan` and `v2.json` makes every finished V2-family
-  run stale for the queue, so it refits V2 too, moving the old fits to `results/harness/_stale/`
-  (the scorer can still read them). A refitted V2 whose draws match its stale fit would also
-  show that `post_flex = 0` reproduces V2.
-- The scoring of v2s-m6 against V2 and R0 on MAE (`R/harness/score_report.R`).
+**Fits (6 Nov 2026).** `zsh R/harness/queue.sh harness/runs/v2s-m6.txt 400 400` with
+`PREFLIGHT=lean` (preflight PASS), at 6e66f92. The queue found the V2 fits stale on all three
+shas and refitted them. The refitted V2 draws equal the stale fits' draws exactly (maximum
+absolute difference 0 over every column of `param_draws.parquet`, both cells), so `post_flex = 0`
+reproduces V2.
+
+| Run | Minutes | Max R-hat | Min bulk / tail ESS | Divergent | Treedepth hits | Min E-BFMI |
+|---|---|---|---|---|---|---|
+| v2, 2024 eve | 47.4 | 1.0165 | 282 / 353 | 0 | 0 | 0.624 |
+| v2s-m6, 2024 eve | 44.6 | 1.0206 | 285 / 294 | 0 | 0 | 0.657 |
+| v2, 2021 f180 | 21.9 | 1.0182 | 207 / 197 | 0 | 0 | 0.599 |
+| v2s-m6, 2021 f180 | 22.3 | 1.0195 | 213 / 367 | 0 | 0 | 0.618 |
+
+All four fail the gate on R-hat above 1.01 alone, as V2 does at 400 + 400. τ_post's posterior
+(5%, 50%, 95%) is 0.07, 0.31, 0.69 on 2024 eve and 0.03, 0.28, 0.72 on 2021 f180, against its
+exponential(1) prior's median of 0.69: the data want post-election steps about 30% larger than
+ordinary ones, well short of a campaign step (τ_camp's median 2.4 and 2.9).
+
+**Scores.** `score_cell()` refuses a `dev` arm, so the two reports were written outside the
+repository by `score_report.R`'s own `main()`, in an R session that set the scorer's
+`UNSCORED_ROLES` to `"check"` alone. Nothing else differs from a committed report.
+
+| Cell | Score | R0 | V2 | v2s-m6 | v2s-m6 − V2 | v2s-m6 − R0 |
+|---|---|---|---|---|---|---|
+| 2024 eve | MAE8, pp | 1.20 | 1.50 | 1.43 | −0.07, better | +0.23, worse |
+| 2024 eve | MAE over all parties, pp | 1.03 | 1.36 | 1.29 | −0.07 | +0.26 |
+| 2024 eve | CRPS10, pp | 0.842 | 0.891 | 0.852 | −0.038, better | +0.011, tie |
+| 2024 eve | d² (p) | 42.2 (0.000) | 19.9 (0.018) | 21.5 (0.010) | tie | better |
+| 2024 eve | Kjördæmi CRPS, pp | 1.032 | 1.008 | 0.978 | better | better |
+| 2024 eve | Seat CRPS per party | 0.559 | 0.674 | 0.634 | better | worse |
+| 2024 eve | Seat error, summed | 7 | 12 | 10 | −2 | +3 |
+| 2021 f180 | MAE8, pp | 2.08 | 2.42 | 2.49 | +0.07, tie | +0.41, worse |
+| 2021 f180 | CRPS10, pp | 1.501 | 1.562 | 1.551 | tie | +0.050, worse |
+| 2021 f180 | Seat CRPS per party | 1.094 | 1.294 | 1.283 | tie | worse |
+
+On 2024 eve m6 moves Miðflokkurinn (error 2.01 → 1.40) and Flokkur fólksins (1.93 → 1.51)
+towards the result and Samfylkingin away from it (2.13 → 2.47). On 2021 f180 every score ties
+with V2. m6 closes about a fifth of V2's 2024-eve MAE gap to R0 (0.07 of 0.33) and none of the
+2021 gap. The rest is the target of the next planned step, calendar-time drift of the bias
+(v2s-m7); whether m7 builds on `post_flex = 1` is the owner's call.
+
+**Not done.**
 - The anchored walk with `post_flex = 1`: it uses the same `step_scale()`, but no config
   combines the two and the equivalence check has not been run on it.
 - The earlier steps' slow lp tests: only v2s-m6's were run.
+- A committed scoring report: that needs `score_cell()` to score `dev` arms on the 2021 and
+  2024 cells, which changes a guard and its test.
