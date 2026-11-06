@@ -130,6 +130,20 @@ and the wider suite waits for a forecast that is published or frozen. From the p
   `R/harness/fit_cell.R <arm> <E> <F> <seed> <iter_warmup> <iter_sampling>` directly, with the
   same `HARNESS_RESULTS`.
 
+  To compare two arms, not two commits (V2 against R0, say), fit both in this checkout, since
+  their run ids differ. `R/harness/score_report.R` then scores both runs on each cell with
+  `score_cell()` and reads the spec's adoption rule (section 5.7) on each cell alone, with the
+  tie rule on every score that carries a batch SE:
+
+  ```
+  LC_ALL=en_US.UTF-8 Rscript R/harness/score_report.R <ref_arm> <new_arm> <run_list> [out]
+  ```
+
+  It needs exactly one run of each arm on every cell of the run list that holds either arm,
+  writes `harness/v2/scoring.md` by default, and prints no score; its rule is tested in
+  `tests/harness/test-score-report.R` on made-up scores. The first such comparison, V2
+  against R0, is `harness/v2/scoring.md`.
+
   `results_root()` is `HARNESS_RESULTS`, or else `results/harness` under the checkout's own
   root, so setting it there keeps an exported value from sending the old fits into the new
   model's root. The two must not share one: a fit of the same arm, cell and seed in one

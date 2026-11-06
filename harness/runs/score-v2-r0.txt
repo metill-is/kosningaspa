@@ -1,0 +1,10 @@
+# lane arm E F seed
+# V2 against the 2024 model (R0), scored on 2024 eve and 2021 f180 (harness/v2/scoring.md).
+# R0 at 1000 + 1000, seed 2701. The V2 lines are v2s-p3's reference fits at 400 + 400, seed
+# 2701, on the same snapshot. A queue at 1000 + 1000 would refit them, so the r0 lines were
+# fitted with R/harness/fit_cell.R directly, one lane each (harness/README.md, Checking a
+# model change): Rscript R/harness/fit_cell.R r0 <E> <F> 2701 1000 1000.
+A r0 2024-11-30 2024-11-29 2701
+B r0 2021-09-25 2021-03-29 2701
+A v2 2024-11-30 2024-11-29 2701
+B v2 2021-09-25 2021-03-29 2701
