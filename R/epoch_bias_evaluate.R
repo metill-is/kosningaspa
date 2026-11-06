@@ -261,6 +261,7 @@ if (length(full_tags)) {
       geom_hline(yintercept = 0, linewidth = 0.3) +
       geom_pointrange(position = position_dodge(width = 150), size = 0.25) +
       facet_wrap(~party, ncol = 5) +
+      scale_x_date(breaks = as.Date(c("2017-01-01", "2021-01-01", "2025-01-01")), date_labels = "%Y") +
       labs(
         x = NULL, y = "Bias of active pollsters (logit, 90% interval)", colour = NULL,
         title = "Polling bias per election epoch, 2016-2026",
