@@ -10,6 +10,7 @@
   "delta_walk": 1,
   "fundamentals": 0,
   "post_flex": 0,
+  "bias_drift": 0,
   "walk_form": 0,
   "delta_form": 0,
   "order": "default",

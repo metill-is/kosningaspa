@@ -101,7 +101,7 @@ test_that("v2_variables() names the forecast, the replicates and the parameters 
   expect_identical(v2_variables(switched(delta_form = 1L)), c(V2_GQ, CORE, "delta_coord"))
   expect_identical(v2_variables(switched(fundamentals = 1L)), c(V2_GQ, CORE))
   all_on <- do.call(switched, as.list(stats::setNames(rep(1L, length(V2_SWITCHES)), V2_SWITCHES)))
-  expect_length(v2_variables(all_on), length(V2_GQ) + 24)
+  expect_length(v2_variables(all_on), length(V2_GQ) + 27)
   expect_error(v2_variables(cfg_m0()[setdiff(names(cfg_m0()), "shock")]), "switches")
   expect_error(v2_variables(switched(shock = 2L)), "switches")
 })
@@ -307,19 +307,51 @@ test_that("v2s-m6's config is V2's with post_flex = 1 and nothing else, and it i
   expect_identical(utils::modifyList(m6, list(post_flex = 0L)), v2)
 })
 
-test_that("every V2 config but v2s-m6's sets post_flex = 0, and every one post_days = 90", {
+test_that("every V2 config but v2s-m6's, v2s-m6-noepoch's and v2s-m7's sets post_flex = 0, and every one post_days = 90", {
   files <- c(Sys.glob(root("harness", "configs", "steps", "v2s-*.json")), Sys.glob(root("harness", "configs", "v2*.json")))
-  expect_true(root("harness", "configs", "steps", "v2s-m6.json") %in% files)
+  flex <- c("v2s-m6.json", "v2s-m6-noepoch.json", "v2s-m7.json")
+  expect_true(all(root("harness", "configs", "steps", flex) %in% files))
   for (f in files) {
     j <- jsonlite::read_json(f)
-    expect_identical(j$post_flex, if (basename(f) == "v2s-m6.json") 1L else 0L, label = basename(f))
+    expect_identical(j$post_flex, if (basename(f) %in% flex) 1L else 0L, label = basename(f))
     expect_identical(j$post_days, 90L, label = basename(f))
   }
 })
 
-test_that("v2s-m6's extractor reads tau_post, and no other V2 arm's does", {
-  expect_true("tau_post" %in% v2_variables(read_v2_config(root(arm("v2s-m6")$config))))
-  for (a in setdiff(grep("^v2", names(ARMS), value = TRUE), "v2s-m6")) {
+test_that("the extractors of v2s-m6, v2s-m6-noepoch and v2s-m7 read tau_post, and no other V2 arm's does", {
+  flex <- c("v2s-m6", "v2s-m6-noepoch", "v2s-m7")
+  for (a in flex) expect_true("tau_post" %in% v2_variables(read_v2_config(root(arm(a)$config))), label = a)
+  for (a in setdiff(grep("^v2", names(ARMS), value = TRUE), flex)) {
     expect_false("tau_post" %in% v2_variables(read_v2_config(root(arm(a)$config))), label = a)
+  }
+})
+
+test_that("v2s-m7's config is v2s-m6's with the epoch walk replaced by the calendar drift, and v2s-m6-noepoch's is v2s-m6's with a constant bias; both are dev arms", {
+  m6 <- read_v2_config(root(arm("v2s-m6")$config))
+  m7 <- read_v2_config(root(arm("v2s-m7")$config))
+  ne <- read_v2_config(root(arm("v2s-m6-noepoch")$config))
+  expect_identical(arm("v2s-m7")$config, "harness/configs/steps/v2s-m7.json")
+  expect_identical(arm("v2s-m6-noepoch")$config, "harness/configs/steps/v2s-m6-noepoch.json")
+  expect_identical(c(arm("v2s-m7")$role, arm("v2s-m6-noepoch")$role), c("dev", "dev"))
+  expect_identical(c(m7$epoch_bias, m7$bias_drift, m7$post_flex), c(0L, 1L, 1L))
+  expect_identical(utils::modifyList(m7, list(epoch_bias = 1L, bias_drift = 0L)), m6)
+  expect_identical(utils::modifyList(ne, list(epoch_bias = 1L)), m6)
+})
+
+test_that("every V2 config but v2s-m7's sets bias_drift = 0", {
+  files <- c(Sys.glob(root("harness", "configs", "steps", "v2s-*.json")), Sys.glob(root("harness", "configs", "v2*.json")))
+  expect_true(root("harness", "configs", "steps", "v2s-m7.json") %in% files)
+  for (f in files) {
+    expect_identical(jsonlite::read_json(f)$bias_drift, if (basename(f) == "v2s-m7.json") 1L else 0L, label = basename(f))
+  }
+})
+
+test_that("v2s-m7's extractor reads the drift's scales, and no other V2 arm's does", {
+  drift <- c("tau_drift", "tau_drift_A", "tau_house_drift")
+  v <- v2_variables(read_v2_config(root(arm("v2s-m7")$config)))
+  expect_true(all(drift %in% v))
+  expect_false(any(c("tau_mu", "tau_mu_A", "tau_house") %in% v))
+  for (a in setdiff(grep("^v2", names(ARMS), value = TRUE), "v2s-m7")) {
+    expect_false(any(drift %in% v2_variables(read_v2_config(root(arm(a)$config)))), label = a)
   }
 })

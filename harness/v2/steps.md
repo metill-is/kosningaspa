@@ -1926,3 +1926,105 @@ with V2. m6 closes about a fifth of V2's 2024-eve MAE gap to R0 (0.07 of 0.33) a
 - The earlier steps' slow lp tests: only v2s-m6's were run.
 - A committed scoring report: that needs `score_cell()` to score `dev` arms on the 2021 and
   2024 cells, which changes a guard and its test.
+
+## v2s-m7: the calendar drift of the bias (M-step, lean; built, not yet fitted)
+
+**Why.** m6 closed about a fifth of V2's 2024-eve MAE gap to R0 and none of the 2021 gap
+(v2s-m6, Scores). The epoch walk holds the industry bias constant across a whole term and lets
+it jump only at an election, so a bias that builds up over a term, or one that the polls just
+after an election read in and then lose, has to be averaged into one level per epoch. The
+calendar drift lets the bias move with time instead (spec §6.4, added to the design note on
+6 Nov 2026).
+
+**What was built.** `bias_drift`, the ninth switch of `V2_SWITCHES`, which replaces the epoch
+walk: the config reader refuses `bias_drift = 1` beside `epoch_bias = 1`. With `bias_drift = 1`:
+- the industry bias μ lives on half-yearly knots (`BIAS_KNOT_DAYS` = 182.625) and each house's
+  deviations on yearly knots (`HOUSE_KNOT_DAYS` = 365.25), both grids anchored at E and reaching
+  back past the first grid date (`knot_grid()`, which also gives each grid date its left knot
+  and its weight on the right one);
+- μ_k = μ_{k−1} + √(`bk_step_years`) C(τ ⊙ ξ_k), with τ_p = τ_drift and Annað's τ_drift,A, from
+  μ_1, the epoch walk's first level; each house's deviations walk by √(`hk_step_years`)
+  τ_house_drift ζ after the house's first knot (`house_first_hk`, the knot of its first
+  national poll) and are flat before it;
+- a newcomer restarts at its entry knot (`entry_bk`): its μ at the mean over the parties that
+  entered before that knot, plus m_new + s_new η, as the epoch walk's newcomer pool does at an
+  epoch; and each house's deviation for it at σ_γ ε plus the existing parties' mean drift, at
+  `entry_hk`;
+- a national poll's bias is the linear interpolation of μ and the house's deviations between
+  the knots around its date (`drift_bias()` in Stan);
+- `mu` and `gamma`, the outputs the extractor and the scorer read, are the drift's values at
+  each epoch's last grid date, so every downstream reader works unchanged;
+- τ_drift ~ half-N(0, 0.07), τ_drift,A ~ half-N(0, 0.15), τ_house_drift ~ half-N(0, 0.05), each
+  per √year; the knot steps ξ and ζ are standard normal; the three scales are the last
+  parameters, extracted into `param_draws.parquet` and added to `OFF_SCALES`;
+- the reference adds the same drift and four mutants: `drift_unscaled` (the √(step years)
+  factor left out), `drift_left_knot` (a poll reads its left knot alone, no interpolation),
+  `drift_house_from_start` (each house drifts from knot 1, not from its first poll) and
+  `drift_no_mu_restart` (a newcomer's μ carried from the walk, not restarted); the existing
+  mutant `newcomer_mean_over_all` now also acts at the entry knots;
+- the prior predictive check adds `drift_4y`, the industry bias's drift over the last eight
+  knot steps (four years) on a 20% party.
+
+On the harness cells the knots are:
+
+| Cell | Half-yearly knots | Yearly knots | New unconstrained parameters (m6 → m7) |
+|---|---|---|---|
+| 2024 eve | 19 | 10 | 3,456 → 3,966 |
+| 2021 f180 | 13 | 7 | 2,103 → 2,443 |
+| 2017 eve | 5 | 3 | 981 → 1,044 |
+
+`v2s-m7` (`harness/configs/steps/v2s-m7.json`) is `v2s-m6.json` with `epoch_bias = 0` and
+`bias_drift = 1`. `v2s-m6-noepoch` (`v2s-m6.json` with `epoch_bias = 0`) is the comparison: a
+constant bias plus the shock, which shows whether the bias needs to move at all. Both are dev
+arms; every other V2 config sets `bias_drift = 0`, and with it the knot fields are still built
+but nothing reads them.
+
+**Checks at build time.**
+- **Fast suite:** `LC_ALL=en_US.UTF-8 Rscript tests/run.R`, 0 failures, 6,952 passes, 78
+  skipped (the slow tests). Eight existing tests pinned the lists this step extends
+  (the arms' variable count, which configs set `post_flex`, which arms read `tau_post`, the
+  switch count, the data fields' order and types, the extracted variables and their switches,
+  the last core parameter, a hand-built fixture); each got the new entries only, with the
+  owner's yes.
+- **Stan against the reference:** `HARNESS_SLOW=1 V2_STEPS=v2s-m7 LC_ALL=en_US.UTF-8 Rscript
+  tests/run.R v2-stan`, 0 failures, 93 passes, 7 min 20 s. The points are drawn as for v2s-m6.
+
+  | Cell | Points | lp_stan − lp_ref range | Tolerance | `drift_unscaled` | `drift_left_knot` | `drift_house_from_start` | `drift_no_mu_restart` |
+  |---|---|---|---|---|---|---|---|
+  | 2024 eve | 40 | 1.34e-9 | 1.6e-3 | 1.55e5 | 1.97e4 | 1.40e4 | 2.47e4 |
+  | 2021 f180 | 40 | 3.78e-10 | 4.47e-4 | 3.66e5 | 5.00e4 | 3.42e3 | 4.66e4 |
+  | 2017 eve | 10 | 1.46e-10 | 1.40e-4 | 7.71e4 | 3.57e4 | not exercised | 7.67e3 |
+
+  The mutant columns are range / (100 tol). `drift_house_from_start` cannot act on 2017 eve,
+  where every house's first poll falls before the second yearly knot. `newcomer_mean_over_all`
+  acts at the entry knots and is rejected at 2.29e5, 5.29e5 and 1.41e5. Every earlier mutant
+  is exercised and rejected as on v2s-m6, except the five epoch-walk mutants, which cannot act
+  with the epoch walk off. The newcomer's house-level restart has no drift mutant: a fast
+  reference test pins it to the spec, and Stan's knot values equal the reference's. The knots' biases and each epoch's reported `mu` and `gamma` equal the reference's, the
+  log-likelihood rows match at a prior point, Stan adds exactly the knot steps and the three
+  scales and on `bias_drift = 0`'s data matches the reference without the switch, and
+  transformed data refuses the drift beside the epoch walk and entry knots that do not mark
+  exactly the newcomers.
+
+- **Prior predictive:** re-run on `v2s-m7.json` (`harness/v2/prior_predictive.md`). Every
+  row keeps its m6 status, and `industry_step` drops out with the epoch walk. `drift_4y`'s 5%
+  and 95% quantiles are −4.02 and 3.66 pp on 2024 eve and −3.63 and 3.81 on 2021 f180, inside
+  [−6, 6]. `fund_weight_bias`, reported only, moves from 0.24 and 0.34 (median, 95%) to 0.25 and
+  0.40 on 2024 eve: the drift adds more bias variance over the fundamentals window than the
+  epoch walk did; with a constant bias (`v2s-m6-noepoch`) it is 0.22 in every draw. The
+  other rows' quantiles moved from m6's by up to 1 pp (`kd_delta`'s 95% on 2024 eve 12.78 →
+  13.79); they equal `v2s-m6-noepoch`'s exactly, so the move comes from dropping the epoch
+  walk's draws, which shifts the random stream, not from the drift.
+
+**Fits.** Not run. `harness/runs/v2s-m7.txt` lists v2s-m7, v2s-m6 and v2s-m6-noepoch at
+400 + 400, seed 2701, on 2024 eve (lane A) and 2021 f180 (lane B). v2s-m6 is in the list so
+that the three arms are scored together; the queue will find its 6e66f92 fits stale and refit
+them, which also checks that `bias_drift = 0` reproduces m6's draws. The fits wait for the
+owner's go-ahead and for the Stan speed study running in its own session, whose changes may
+  apply to these fits.
+
+**Not done.**
+- The fits and the scores.
+- The anchored walk with `bias_drift = 1`: no config combines the two.
+- The earlier steps' slow lp tests: only v2s-m7's were run.
+- A committed scoring report, for the reason given under v2s-m6.

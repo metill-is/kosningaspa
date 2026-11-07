@@ -54,7 +54,11 @@ v2_arm <- function(config, role) {
 #' re-tried on V2 (`harness/v2/steps.md`). `v2s-p4`, `v2`'s config with the anchored walk at
 #' CmdStan's default `adapt_delta` (0.8), is a dev arm too: P3 without the higher target.
 #' `v2s-m6`, `v2`'s config with the post-election multiplier (`post_flex` = 1, §6.2), is a dev
-#' arm: the first fix for V2's 2024 MAE (`harness/v2/steps.md`).
+#' arm: the first fix for V2's 2024 MAE (`harness/v2/steps.md`). `v2s-m6-noepoch`, `v2s-m6`'s
+#' config with `epoch_bias` = 0, is a dev arm: a constant bias plus the shock, the comparison
+#' that shows whether the bias needs to move at all. `v2s-m7`, `v2s-m6`'s config with the epoch
+#' walk replaced by the calendar drift (`epoch_bias` = 0, `bias_drift` = 1, §6.4), is a dev arm:
+#' the second fix.
 #' @export
 ARMS <- local({
   box::use(R / harness / r0[r0_stan_data, read_r0_config, r0_extract, R0_EXTRACT_VARIABLES])
@@ -85,7 +89,9 @@ ARMS <- local({
     `v2-perm` = v2_arm("harness/configs/v2-perm.json", "check"),
     `v2s-p3` = v2_arm("harness/configs/steps/v2s-p3.json", "dev"),
     `v2s-p4` = v2_arm("harness/configs/steps/v2s-p4.json", "dev"),
-    `v2s-m6` = v2_arm("harness/configs/steps/v2s-m6.json", "dev")
+    `v2s-m6` = v2_arm("harness/configs/steps/v2s-m6.json", "dev"),
+    `v2s-m6-noepoch` = v2_arm("harness/configs/steps/v2s-m6-noepoch.json", "dev"),
+    `v2s-m7` = v2_arm("harness/configs/steps/v2s-m7.json", "dev")
   )
 })
 

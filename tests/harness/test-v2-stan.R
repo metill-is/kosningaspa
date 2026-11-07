@@ -1368,3 +1368,88 @@ test_that("v2s-m6: transformed data refuses post flags without the switch or ins
   many$weight_post_days <- d$weight_time - d$campaign_days + 1
   expect_error(v2_methods(V2_STAN, many), "forecast_v2: weight_post_days must be at most weight_time - campaign_days", fixed = TRUE)
 })
+
+# Step v2s-m7, the calendar drift (§6.4, switch bias_drift): in place of the epoch walk the
+# industry bias walks on half-yearly knots and each house's deviations on yearly ones, and a
+# national poll's bias is interpolated between the knots around its date. On v2s-m6's config
+# with epoch_bias = 0.
+
+test_that("v2s-m7: Stan's log density matches the reference up to a constant", {
+  skip_unless_slow()
+  skip_unless_step("v2s-m7")
+  hit <- expect_step_lp("v2s-m7", cfg_m7())
+  by_cell <- attr(hit, "by_cell")
+  expect_identical(names(by_cell), c("eve2024", "f180_2021", "eve2017"))
+  for (name in names(by_cell)) {
+    expect_true(all(c("drift_unscaled", "drift_left_knot", "drift_no_mu_restart", "post_unscaled") %in% by_cell[[name]]), label = name)
+  }
+  expect_true(all(c("drift_house_from_start", "fund_uncentred", "delta_entry_leak", "shock_unscaled", "newcomer_mean_over_all") %in% hit))
+})
+
+test_that("v2s-m7: the knots' biases and each epoch's reported mu and gamma are the reference's natural quantities", {
+  skip_unless_slow()
+  skip_unless_step("v2s-m7")
+  ref <- environment(v2_lp_ref)
+  for (cell in v2_test_cells(cfg_m7())) {
+    d <- cell$data
+    m <- v2_methods(V2_STAN, d)
+    for (seed in 1:2) {
+      s <- v2_simulate(d, seed = seed, observe = FALSE)
+      u <- m$unconstrain_variables(s$pars)
+      tp <- m$constrain_variables(u, transformed_parameters = TRUE, generated_quantities = FALSE)
+      pars <- stan_pars(m, u)
+      nat <- ref$natural(ref$core_pars(pars, d), d)
+      expect_equal(matrix(tp$mu_knot, d$n_bk, d$P), nat$mu_knot, tolerance = 1e-10)
+      expect_equal(array(tp$dev_knot, c(d$H, d$n_hk, d$P)), nat$dev_knot, tolerance = 1e-10)
+      ref_nat <- v2_natural(pars, d)
+      for (n in c("mu", "gamma")) {
+        dims <- dim(as.array(ref_nat[[n]]))
+        expect_equal(array(tp[[n]], dims), as.array(ref_nat[[n]]), tolerance = 1e-10, label = n)
+      }
+    }
+  }
+})
+
+test_that("v2s-m7: the switch adds the knots' steps, three scales and the knots' biases, and bias_drift = 0 is the model before it", {
+  skip_unless_slow()
+  skip_unless_step("v2s-m7")
+  d <- v2_test_cells(cfg_m7())$eve2024$data
+  d0 <- d
+  d0$bias_drift <- 0L
+  m <- v2_methods(V2_STAN, d)
+  m0 <- v2_methods(V2_STAN, d0)
+  expect_equal(n_unc(m), n_unc(m0) + d$P * (d$n_bk - 1) + d$H * d$P * (d$n_hk - 1) + 3)
+  added <- c("mu_drift_raw", "house_drift_raw", "tau_drift", "tau_drift_A", "tau_house_drift", "mu_knot", "dev_knot")
+  sizes <- m$metadata()$stan_variable_sizes
+  sizes0 <- m0$metadata()$stan_variable_sizes
+  expect_setequal(setdiff(names(sizes), names(sizes0)), added)
+  expect_identical(sizes[setdiff(names(sizes), added)], sizes0[setdiff(names(sizes0), added)])
+  # WHY: with bias_drift = 0 (and epoch_bias = 0) the bias is constant, and Stan's density is
+  # the reference's without the switch.
+  pts <- lp_points(m0, d0, n_post = 0, n_off = 0, n_prior = 5)
+  expect_lp_matches(m0, d0, pts)
+})
+
+test_that("v2s-m7: the log-likelihood rows are the reference's at a prior point", {
+  skip_unless_slow()
+  skip_unless_step("v2s-m7")
+  ref <- environment(v2_lp_ref)
+  d <- v2_test_cells(cfg_m7())$eve2024$data
+  d$draw_forecast <- 0L
+  r <- gq_at(V2_STAN, d, v2_simulate(d, seed = 2, observe = FALSE)$pars)
+  p <- ref$core_pars(r$pars, d)
+  rows <- ref$dm_rows(p, ref$natural(p, d), d)
+  expect_equal(r$gq$log_lik, vapply(rows, \(x) dirmult_lpmf(ref$row_counts(d, x), x$alpha), numeric(1)), tolerance = 1e-10)
+})
+
+test_that("v2s-m7: transformed data refuses the drift beside the epoch walk, and entry knots that do not mark the newcomers", {
+  skip_unless_slow()
+  skip_unless_step("v2s-m7")
+  d <- v2_test_cells(cfg_m7())$eve2024$data
+  both <- d
+  both$epoch_bias <- 1L
+  expect_error(v2_methods(V2_STAN, both), "forecast_v2: bias_drift = 1 replaces the epoch walk, so it needs epoch_bias = 0", fixed = TRUE)
+  e <- d
+  e$entry_hk[1] <- 1L
+  expect_error(v2_methods(V2_STAN, e), "forecast_v2: entry_bk and entry_hk must be positive exactly for the newcomers", fixed = TRUE)
+})

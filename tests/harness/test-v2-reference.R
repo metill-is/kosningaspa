@@ -452,7 +452,7 @@ test_that("Stan declares the parameters V2_CORE_PARS names, with its types, boun
   # §6.7 held centred (delta_form = 1): each closed election's coordinates delta_e[2:K, 2:P],
   # plain unconstrained matrices, and delta_raw then only the open epoch's zeta.
   expect_identical(V2_CORE_PARS$type[V2_CORE_PARS$name == "delta_coord"], "array[delta_form * n_closed] matrix[K - 1, P - 1]")
-  expect_identical(utils::tail(V2_CORE_PARS$name, 1), "tau_post")
+  expect_identical(utils::tail(V2_CORE_PARS$name, 1), "tau_house_drift")
 })
 
 test_that("v2_par_dims() refuses a delta_form other than 0 or 1, and delta_form = 1 without the delta walk", {
@@ -460,7 +460,8 @@ test_that("v2_par_dims() refuses a delta_form other than 0 or 1, and delta_form 
   # at 1 - n_closed matrices instead of stopping: a static delta has no centred form.
   d <- list(
     P = 4L, K = 3L, G = 9L, H = 2L, J = 1L, n_closed = 2L, n_epoch = 3L, entry_epoch = c(0L, 0L, 0L, 2L),
-    walk_form = 0L, epoch_bias = 0L, newcomer_pool = 0L, shock = 0L, delta_walk = 1L, delta_form = 1L, post_flex = 0L
+    walk_form = 0L, epoch_bias = 0L, newcomer_pool = 0L, shock = 0L, delta_walk = 1L, delta_form = 1L, post_flex = 0L,
+    bias_drift = 0L
   )
   expect_identical(
     lapply(v2_par_dims(d)[c("delta_raw", "delta_coord")], as.integer),
@@ -1092,4 +1093,144 @@ test_that("v2_simulate() with post_flex = 1 draws tau_post last, so every other 
   expect_gt(as.numeric(a$tau_post), 0)
   expect_identical(a[setdiff(names(a), "tau_post")], b[setdiff(names(b), "tau_post")])
   expect_identical(names(a), V2_CORE_PARS$name)
+})
+
+# The calendar drift (step v2s-m7, §6.4, switch bias_drift): in place of the epoch walk the
+# industry bias walks on half-yearly knots and each house's deviations on yearly ones, with
+# steps sqrt(years between knots) C(tau .* xi), and a poll's bias is interpolated between the
+# knots around its date.
+
+test_that("the drift reference: its mutants change the density wherever they apply, and the identity under permutation holds", {
+  cells <- v2_test_cells(cfg_m7(), stage1_stub)
+  for (name in names(cells)) {
+    d <- cells[[name]]$data
+    expect_identical(c(as.integer(d$bias_drift), as.integer(d$epoch_bias)), c(1L, 0L), label = name)
+    drift <- c("drift_unscaled", "drift_left_knot", "drift_house_from_start", "drift_no_mu_restart")
+    expect_true(all(drift %in% v2_mutants(d)), label = name)
+    expect_false(any(c("house_walk_from_first_poll", "no_mu_restart") %in% v2_mutants(d)), label = name)
+    dims <- v2_par_dims(d)
+    expect_identical(dims$mu_drift_raw, c(d$P, as.integer(d$n_bk) - 1L), label = name)
+    expect_identical(dims$house_drift_raw, c(d$H, d$P, as.integer(d$n_hk) - 1L), label = name)
+    expect_identical(as.integer(dims[c("tau_drift", "tau_drift_A", "tau_house_drift", "tau_mu")]), c(1L, 1L, 1L, 0L), label = name)
+    # WHY: the 2017 cell's houses all poll in the first house knot's interval, so nothing there
+    # tells a house's first knot from knot 1.
+    must <- if (all(c(d$house_first_hk) == 1L)) setdiff(drift, "drift_house_from_start") else drift
+    for (seed in 1:2) {
+      s <- v2_simulate(d, seed = seed, observe = FALSE)
+      lp <- v2_lp_ref(s$pars, d)
+      for (mu in must) expect_gt(abs(v2_lp_ref(s$pars, d, mu) - lp), 1e-6, label = paste(name, mu))
+      p <- permute_v2(s$pars, d, rev(seq_len(d$P)), rev(seq_len(d$K)))
+      expect_identical(p$pars$tau_drift, s$pars$tau_drift)
+      expect_lt(abs(v2_lp_ref(p$pars, p$data) - lp - attr(p, "ljac_L_Omega")), 1e-10 + 4 * .Machine$double.eps * abs(lp), label = name)
+    }
+  }
+  expect_identical(V2_MUTANTS$switch[startsWith(V2_MUTANTS$mutant, "drift_")], rep("bias_drift", 4))
+})
+
+test_that("the drift's knots step by sqrt(years) C(tau .* xi), a newcomer entering at the existing parties' mean plus m_new + s_new eta, and a poll's bias interpolates the knots around its date", {
+  ref <- environment(v2_lp_ref)
+  d <- v2_test_cells(cfg_m7(), stage1_stub)$eve2024$data
+  s <- v2_simulate(d, seed = 5, observe = FALSE)$pars
+  p <- ref$core_pars(s, d)
+  nat <- ref$natural(p, d)
+  P <- d$P
+  C <- function(x) x - mean(x)
+  tau <- rep(p$tau_drift, P)
+  tau[d$annad_idx] <- p$tau_drift_A
+  entry <- c(d$entry_bk)
+  m1 <- p$mu1
+  q1 <- which(entry == 1L)
+  m1[q1] <- mean(p$mu1[entry < 1L]) + p$m_new + p$s_new * p$new_raw[match(q1, which(entry > 0))]
+  expect_true(length(q1) >= 1)
+  expect_equal(nat$mu_knot[1, ], C(m1), tolerance = 1e-12)
+  for (k in 2:d$n_bk) {
+    step <- C(sqrt(0.5) * tau * p$mu_drift_raw[, k - 1])
+    if (!any(entry == k)) {
+      expect_equal(nat$mu_knot[k, ], C(nat$mu_knot[k - 1, ] + step), tolerance = 1e-12, label = k)
+    } else {
+      m <- nat$mu_knot[k - 1, ] + step
+      q <- which(entry == k)
+      before <- which(entry < k)
+      new <- which(entry > 0)
+      want <- m
+      want[q] <- mean(m[before]) + p$m_new + p$s_new * p$new_raw[match(q, new)]
+      expect_equal(nat$mu_knot[k, ], C(want), tolerance = 1e-12, label = k)
+    }
+  }
+  for (n in c(1, d$N_nat %/% 2, d$N_nat)) {
+    t <- d$grid_nat[n]
+    h <- d$house_nat[n]
+    lb <- d$bk_lo[t]
+    lh <- d$hk_lo[t]
+    want <- (1 - d$bk_a[t]) * nat$mu_knot[lb, ] + d$bk_a[t] * nat$mu_knot[lb + 1, ] +
+      (1 - d$hk_a[t]) * nat$dev_knot[h, lh, ] + d$hk_a[t] * nat$dev_knot[h, lh + 1, ]
+    expect_equal(nat$gamma_nat[n, ], want, tolerance = 1e-12, label = n)
+  }
+  # WHY: mu and gamma report the bias at each epoch's last date: the closed elections, then E.
+  t <- d$grid_res[2]
+  expect_equal(nat$mu[2, ], (1 - d$bk_a[t]) * nat$mu_knot[d$bk_lo[t], ] + d$bk_a[t] * nat$mu_knot[d$bk_lo[t] + 1, ], tolerance = 1e-12)
+  expect_equal(nat$mu[d$n_epoch, ], nat$mu_knot[d$n_bk, ], tolerance = 1e-12)
+})
+
+test_that("a house's drift starts after its first knot, and a newcomer's level in a walking house restarts at sigma_gamma eps plus the existing parties' mean drift", {
+  ref <- environment(v2_lp_ref)
+  d <- v2_test_cells(cfg_m7(), stage1_stub)$eve2024$data
+  p <- ref$core_pars(v2_simulate(d, seed = 6, observe = FALSE)$pars, d)
+  nat <- ref$natural(p, d)
+  h <- which.max(c(d$house_first_hk))
+  f <- d$house_first_hk[h]
+  expect_gt(f, 1L)
+  base <- p$sigma_gamma * p$house_raw[h, ]
+  for (k in seq_len(f)) expect_equal(nat$dev_knot[h, k, ], base - mean(base), tolerance = 1e-12, label = k)
+  h1 <- which(c(d$house_first_hk) == 1L)[1]
+  entry <- c(d$entry_hk)
+  k <- max(entry)
+  q <- which(entry == k)
+  before <- which(entry < k)
+  # WHY: the levels are known up to a common shift, which the centring removes; rebuild them.
+  x <- p$sigma_gamma * p$house_raw[h1, ]
+  for (j in 2:k) {
+    x <- x + sqrt(1) * p$tau_house_drift * p$house_drift_raw[h1, , j - 1]
+    if (any(entry == j)) {
+      e <- which(entry == j)
+      b <- which(entry < j)
+      x[e] <- p$sigma_gamma * p$house_raw[h1, e] + mean(x[b] - p$sigma_gamma * p$house_raw[h1, b])
+    }
+  }
+  expect_equal(nat$dev_knot[h1, k, ], x - mean(x), tolerance = 1e-12)
+  expect_true(length(q) >= 1 && length(before) >= 1)
+})
+
+test_that("the drift reference refuses the epoch walk beside it and malformed knot data", {
+  d <- v2_test_cells(cfg_m7(), stage1_stub)$eve2024$data
+  s <- v2_simulate(d, seed = 3, observe = FALSE)$pars
+  both <- d
+  both$epoch_bias <- 1L
+  expect_error(v2_lp_ref(s, both), "data\\$bias_drift = 1 replaces the epoch walk, so it needs epoch_bias = 0")
+  lo <- d
+  lo$bk_lo[1] <- d$n_bk
+  expect_error(v2_lp_ref(s, lo), "data\\$bk_lo must be G knots in 1..n_bk - 1")
+  a <- d
+  a$hk_a[2] <- 1.5
+  expect_error(v2_lp_ref(s, a), "data\\$hk_a must be G weights in \\[0, 1\\]")
+  e <- d
+  e$entry_bk[1] <- 1L
+  expect_error(v2_lp_ref(s, e), "data\\$entry_bk must be P knots, positive exactly for the newcomers")
+  f <- d
+  f$house_first_hk[1] <- d$n_hk + 1L
+  expect_error(v2_lp_ref(s, f), "data\\$house_first_hk must be H knots in 1..n_hk")
+})
+
+test_that("v2_simulate() with bias_drift = 1 draws the drift last, so every other parameter is bias_drift = 0's draw", {
+  d <- v2_test_cells(cfg_m7(), stage1_stub)$eve2024$data
+  d0 <- d
+  d0$bias_drift <- 0L
+  a <- v2_simulate(d, seed = 21, observe = FALSE)$pars
+  b <- v2_simulate(d0, seed = 21, observe = FALSE)$pars
+  drift <- c("mu_drift_raw", "house_drift_raw", "tau_drift", "tau_drift_A", "tau_house_drift")
+  expect_identical(lengths(a[c("tau_drift", "tau_drift_A", "tau_house_drift")]), c(tau_drift = 1L, tau_drift_A = 1L, tau_house_drift = 1L))
+  expect_identical(sum(lengths(b[drift])), 0L)
+  expect_identical(a[setdiff(names(a), drift)], b[setdiff(names(b), drift)])
+  expect_identical(names(a), V2_CORE_PARS$name)
+  expect_identical(tail(V2_CORE_PARS$name, 5), drift)
 })

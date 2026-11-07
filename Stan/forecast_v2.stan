@@ -32,6 +32,13 @@
 // flags) scale by 1 + tau_post, as the campaign's by 1 + tau_camp, tau_post ~ exponential(1),
 // so that real moves just after an election go to the walk and not to the next epoch's bias;
 // V_w counts the post days of its window (weight_post_days). It adds one parameter, tau_post.
+// Step v2s-m7 builds bias_drift = 1 (§6.4), which replaces the epoch walk (epoch_bias must be
+// 0): the industry bias walks on half-yearly knots and each house's deviations on yearly knots,
+// both anchored at E, with steps sqrt(years between knots) C(tau .* xi), and the bias at a
+// poll's date is linearly interpolated between the two knots around it, so it carries through
+// election days. Newcomers restart at the knot opening their first poll's interval, as at an
+// entry epoch. mu and gamma then hold the bias at each epoch's last date. It adds the knots'
+// steps and three scales, tau_drift, tau_drift_A and tau_house_drift, each per sqrt(year).
 functions {
   // The walk's per-step scale sqrt(Delta_i) s_i (§6.2): s_i = 1 + tau_camp c_i, plus tau_post q_i
   // with post_flex = 1, where tau_post is an array of size post_flex and q the post flags.
@@ -39,6 +46,13 @@ functions {
     vector[rows(sqrt_delta)] s = 1 + tau_camp * campaign_v;
     if (size(tau_post) > 0) s += tau_post[1] * post_v;
     return sqrt_delta .* s;
+  }
+
+  // The calendar drift's bias of house h at a grid date (bias_drift = 1, §6.4): the industry
+  // bias interpolated between knots lb and lb + 1 with weight ab on lb + 1, plus the house's
+  // centred deviations interpolated between house knots lh and lh + 1 with weight ah.
+  vector drift_bias(array[] vector mu_knot, array[,] vector dev_knot, int h, int lb, real ab, int lh, real ah) {
+    return (1 - ab) * mu_knot[lb] + ab * mu_knot[lb + 1] + (1 - ah) * dev_knot[h, lh] + ah * dev_knot[h, lh + 1];
   }
 
   // The map M_e of §6.7 on a K x P matrix: subtract each party's w-weighted mean over the
@@ -186,6 +200,21 @@ data {
   array[P] int<lower=0, upper=n_epoch> entry_epoch;   // [P] 0 for a party present at the window's start
   int<lower=0, upper=P> annad_idx;                    // Annad's index, 0 if none: its industry-bias steps scale by tau_mu_A
 
+  // The calendar drift's knots (§6.4), read with bias_drift = 1: the industry bias's every
+  // half-year and the houses' every year, both anchored at E. A date's bias interpolates
+  // between knots lo and lo + 1, with weight a on lo + 1.
+  int<lower=2> n_bk;                                  // industry-bias knots
+  array[G] int<lower=1, upper=n_bk - 1> bk_lo;        // [G] each date's left knot
+  vector<lower=0, upper=1>[G] bk_a;                   // [G] its weight on the right knot
+  real<lower=0> bk_step_years;                        // years between industry knots
+  array[P] int<lower=0, upper=n_bk> entry_bk;         // [P] a newcomer's entry knot, 0 for a party present at the window's start
+  int<lower=2> n_hk;                                  // house knots
+  array[G] int<lower=1, upper=n_hk - 1> hk_lo;        // [G] each date's left house knot
+  vector<lower=0, upper=1>[G] hk_a;                   // [G] its weight on the right house knot
+  real<lower=0> hk_step_years;                        // years between house knots
+  array[P] int<lower=0, upper=n_hk> entry_hk;         // [P] a newcomer's entry house knot, 0 for a party present at the window's start
+  array[H] int<lower=1, upper=n_hk> house_first_hk;   // [H] the left house knot of each house's first national poll, n_hk for a house with none
+
   // Shock scaling, the forecast and the outputs (§6.6, §6.8)
   matrix<lower=0>[n_epoch, P] d_shock;                // [n_epoch, P] shock scaling
   array[K] int<lower=1> N_open;                       // [K] valid votes of the previous election
@@ -211,13 +240,14 @@ data {
   real<lower=0> prior_sd_mu1;
   real<lower=0> prior_rate_sigma_gamma;
 
-  // Switches: six components, then two parameterisations (V2_SWITCHES)
+  // Switches: seven components, then two parameterisations (V2_SWITCHES)
   int<lower=0, upper=1> epoch_bias;
   int<lower=0, upper=1> newcomer_pool;
   int<lower=0, upper=1> shock;
   int<lower=0, upper=1> delta_walk;
   int<lower=0, upper=1> fundamentals;
   int<lower=0, upper=1> post_flex;
+  int<lower=0, upper=1> bias_drift;
   int<lower=0, upper=1> walk_form;
   int<lower=0, upper=1> delta_form;
 }
@@ -296,6 +326,17 @@ transformed data {
   if (fundamentals && weight_post_days > weight_time - campaign_days) {
     reject("forecast_v2: weight_post_days must be at most weight_time - campaign_days, but weight_post_days = ",
            weight_post_days, ", weight_time = ", weight_time, " and campaign_days = ", campaign_days);
+  }
+  // The calendar drift (bias_drift = 1, §6.4) replaces the epoch walk, and its entry knots
+  // mark the same newcomers as entry_epoch.
+  if (bias_drift && epoch_bias) {
+    reject("forecast_v2: bias_drift = 1 replaces the epoch walk, so it needs epoch_bias = 0");
+  }
+  for (p in 1:P) {
+    if ((entry_bk[p] > 0) != (entry_epoch[p] > 0) || (entry_hk[p] > 0) != (entry_epoch[p] > 0)) {
+      reject("forecast_v2: entry_bk and entry_hk must be positive exactly for the newcomers (entry_epoch > 0), but party ", p,
+             " has entry_epoch = ", entry_epoch[p], ", entry_bk = ", entry_bk[p], " and entry_hk = ", entry_hk[p]);
+    }
   }
   real n_pred = sum(N_open);
 
@@ -478,6 +519,40 @@ transformed data {
       }
     }
   }
+  // The calendar drift's newcomers (bias_drift = 1): the parties entering at each industry and
+  // house knot, and those existing before it; and each epoch's last grid date, where mu and
+  // gamma report the bias (the closed elections' dates, then E).
+  array[n_bk] int n_enter_b = rep_array(0, n_bk);
+  array[n_bk, P] int enter_idx_b = rep_array(0, n_bk, P);
+  array[n_bk] int n_before_b = rep_array(0, n_bk);
+  array[n_bk, P] int before_idx_b = rep_array(0, n_bk, P);
+  for (k in 1:n_bk) {
+    for (p in 1:P) {
+      if (entry_bk[p] == k) {
+        n_enter_b[k] += 1;
+        enter_idx_b[k, n_enter_b[k]] = p;
+      } else if (entry_bk[p] < k) {
+        n_before_b[k] += 1;
+        before_idx_b[k, n_before_b[k]] = p;
+      }
+    }
+  }
+  array[n_hk] int n_enter_h = rep_array(0, n_hk);
+  array[n_hk, P] int enter_idx_h = rep_array(0, n_hk, P);
+  array[n_hk] int n_before_h = rep_array(0, n_hk);
+  array[n_hk, P] int before_idx_h = rep_array(0, n_hk, P);
+  for (k in 1:n_hk) {
+    for (p in 1:P) {
+      if (entry_hk[p] == k) {
+        n_enter_h[k] += 1;
+        enter_idx_h[k, n_enter_h[k]] = p;
+      } else if (entry_hk[p] < k) {
+        n_before_h[k] += 1;
+        before_idx_h[k, n_before_h[k]] = p;
+      }
+    }
+  }
+  array[n_epoch] int epoch_end = append_array(grid_res, {G});
 }
 
 parameters {
@@ -527,12 +602,21 @@ parameters {
   array[delta_form * n_closed] matrix[K - 1, P - 1] delta_coord;
   // The post-election multiplier (post_flex = 1, §6.2), size 0 with post_flex = 0.
   array[post_flex] real<lower=0> tau_post;
+  // The calendar drift (bias_drift = 1, §6.4), each size 0 with bias_drift = 0. Column k - 1
+  // holds the step into knot k.
+  matrix[P, bias_drift * (n_bk - 1)] mu_drift_raw;    // the industry bias's steps xi_k
+  array[H] matrix[P, bias_drift * (n_hk - 1)] house_drift_raw;  // each house's steps zeta_{k,h}
+  array[bias_drift] real<lower=0> tau_drift;          // the industry bias's drift, per sqrt(year)
+  array[bias_drift] real<lower=0> tau_drift_A;        // Annad's
+  array[bias_drift] real<lower=0> tau_house_drift;    // the houses' drift, per sqrt(year)
 }
 
 transformed parameters {
   matrix[P, G] theta;                                 // the latent national log-ratio state
-  array[n_epoch] vector[P] mu;                        // industry bias by epoch
-  array[n_epoch, H] vector[P] gamma;                  // house bias by epoch
+  array[n_epoch] vector[P] mu;                        // industry bias by epoch (bias_drift = 1: at each epoch's last date)
+  array[n_epoch, H] vector[P] gamma;                  // house bias by epoch (bias_drift = 1: at each epoch's last date)
+  array[bias_drift * n_bk] vector[P] mu_knot;         // bias_drift = 1: the industry bias at each knot
+  array[H, bias_drift * n_hk] vector[P] dev_knot;     // bias_drift = 1: each house's centred deviations at each house knot
   array[n_epoch] matrix[K, P] delta;                  // kjordaemi deviations by epoch
   matrix[n_closed, P] eps = rep_matrix(0, n_closed, P);  // the closed elections' shocks, 0 with shock = 0
   vector[H] log_phi = phi_cap - (phi_cap - phi_init) * exp(log_phi_u);
@@ -606,8 +690,8 @@ transformed parameters {
   // the parties existing before that epoch, plus m_new + s_new eta; then mu_e is re-centred,
   // and after it the newcomer walks with the rest. With newcomer_pool = 1 m_new and s_new are
   // the parameters, which the newcomers' entries inform; with newcomer_pool = 0 they are fixed
-  // at 0 and 0.2023.
-  {
+  // at 0 and 0.2023. With bias_drift = 1 the calendar drift below sets mu and gamma instead.
+  if (bias_drift == 0) {
     vector[P] tau = rep_vector(0, P);
     if (epoch_bias) {
       tau = rep_vector(tau_mu[1], P);
@@ -648,21 +732,84 @@ transformed parameters {
   // parties, which is flat in every row before the entry; and tau_house = 0 is the core. With
   // epoch_bias = 0, d_h = C(sigma_gamma eps_h) in every epoch, so a newcomer's slot is its
   // restarted deviation.
-  for (h in 1:H) {
-    row_vector[P] x = sigma_gamma * house_raw[h];
-    for (e in 1:n_epoch) {
-      if (epoch_bias && e > house_first_epoch[h]) {
-        x += tau_house[1] * house_step_raw[h][ : , e - 1]';
-        if (n_enter[e] > 0) {
-          array[n_before[e]] int q = before_idx[e, 1:n_before[e]];
-          real drift = mean(x[q] - sigma_gamma * house_raw[h, q]);
-          for (i in 1:n_enter[e]) {
-            int p = enter_idx[e, i];
-            x[p] = sigma_gamma * house_raw[h, p] + drift;
+  if (bias_drift == 0) {
+    for (h in 1:H) {
+      row_vector[P] x = sigma_gamma * house_raw[h];
+      for (e in 1:n_epoch) {
+        if (epoch_bias && e > house_first_epoch[h]) {
+          x += tau_house[1] * house_step_raw[h][ : , e - 1]';
+          if (n_enter[e] > 0) {
+            array[n_before[e]] int q = before_idx[e, 1:n_before[e]];
+            real drift = mean(x[q] - sigma_gamma * house_raw[h, q]);
+            for (i in 1:n_enter[e]) {
+              int p = enter_idx[e, i];
+              x[p] = sigma_gamma * house_raw[h, p] + drift;
+            }
           }
         }
+        gamma[e, h] = (x - mean(x))' + mu[e];
       }
-      gamma[e, h] = (x - mean(x))' + mu[e];
+    }
+  }
+
+  // §6.4, the calendar drift (bias_drift = 1): the industry bias walks on its knots, mu at knot
+  // 1 = mu1 and mu_k = mu_{k-1} + sqrt(bk_step_years) C(tau .* xi_k), tau_p = tau_drift but
+  // tau_drift_A for Annad; a newcomer restarts at its entry knot at the mean of the parties
+  // existing before it plus m_new + s_new eta, and each knot is re-centred. Each house's levels
+  // start at sigma_gamma eps_h and walk after its first knot by sqrt(hk_step_years) tau_house_drift
+  // zeta_{k,h}, a newcomer restarting at its entry knot at sigma_gamma eps plus the existing
+  // parties' mean drift, as at an entry epoch. mu and gamma report the bias at each epoch's
+  // last date; the likelihood interpolates it at each poll's date (drift_bias()).
+  if (bias_drift) {
+    vector[P] tau = rep_vector(tau_drift[1], P);
+    if (annad_idx > 0) tau[annad_idx] = tau_drift_A[1];
+    real mn = m_new_fixed;
+    real sn = s_new_fixed;
+    if (newcomer_pool) {
+      mn = m_new[1];
+      sn = s_new[1];
+    }
+    real rb = sqrt(bk_step_years);
+    vector[P] m = mu1;
+    for (k in 1:n_bk) {
+      if (k > 1) {
+        vector[P] s = rb * tau .* mu_drift_raw[ : , k - 1];
+        m += s - mean(s);
+      }
+      if (n_enter_b[k] > 0) {
+        real base = mean(m[before_idx_b[k, 1:n_before_b[k]]]);
+        for (i in 1:n_enter_b[k]) {
+          int p = enter_idx_b[k, i];
+          m[p] = base + mn + sn * new_raw[new_pos[p]];
+        }
+      }
+      m -= mean(m);
+      mu_knot[k] = m;
+    }
+    real rh = sqrt(hk_step_years);
+    for (h in 1:H) {
+      row_vector[P] x = sigma_gamma * house_raw[h];
+      for (k in 1:n_hk) {
+        if (k > house_first_hk[h]) {
+          x += rh * tau_house_drift[1] * house_drift_raw[h][ : , k - 1]';
+          if (n_enter_h[k] > 0) {
+            array[n_before_h[k]] int q = before_idx_h[k, 1:n_before_h[k]];
+            real drift = mean(x[q] - sigma_gamma * house_raw[h, q]);
+            for (i in 1:n_enter_h[k]) {
+              int p = enter_idx_h[k, i];
+              x[p] = sigma_gamma * house_raw[h, p] + drift;
+            }
+          }
+        }
+        dev_knot[h, k] = (x - mean(x))';
+      }
+    }
+    for (e in 1:n_epoch) {
+      int t = epoch_end[e];
+      mu[e] = (1 - bk_a[t]) * mu_knot[bk_lo[t]] + bk_a[t] * mu_knot[bk_lo[t] + 1];
+      for (h in 1:H) {
+        gamma[e, h] = drift_bias(mu_knot, dev_knot, h, bk_lo[t], bk_a[t], hk_lo[t], hk_a[t]);
+      }
     }
   }
 
@@ -738,13 +885,16 @@ model {
   real kappa = exp(log_kappa);
   real phi_K = exp(log_phi_K);
 
-  // National polls (§6.3): y_n ~ DirMult(phi_h normalise(pi_nat[S] .* exp(gamma_{e,h}[S]))).
+  // National polls (§6.3): y_n ~ DirMult(phi_h normalise(pi_nat[S] .* exp(gamma_{e,h}[S]))), with
+  // bias_drift = 1 the bias at the poll's date in place of gamma_{e,h}.
   for (n in 1:N_nat) {
     int t = grid_nat[n];
     int e = grid_epoch[t];
     array[n_rep_nat[n]] int S = idx_nat[n, 1:n_rep_nat[n]];
     vector[P] pi = national_share(theta[ : , t], delta[e], w[e], exist_idx[t, 1:n_exist[t]]);
-    y_nat[n, S] ~ dirichlet_multinomial(national_alpha(pi, gamma[e, house_nat[n]], phi[house_nat[n]], S));
+    vector[P] g = gamma[e, house_nat[n]];
+    if (bias_drift) g = drift_bias(mu_knot, dev_knot, house_nat[n], bk_lo[t], bk_a[t], hk_lo[t], hk_a[t]);
+    y_nat[n, S] ~ dirichlet_multinomial(national_alpha(pi, g, phi[house_nat[n]], S));
   }
 
   // Kjordaemi polls (§6.7): y_jk ~ DirMult(kappa phi_h softmax over S of (nu_j + delta_{e,k})).
@@ -847,6 +997,15 @@ model {
   tau_mu ~ normal(0, prior_tau_mu);
   tau_mu_A ~ normal(0, 0.3);
   tau_house ~ normal(0, 0.1);
+  // The calendar drift (bias_drift = 1): N(0, 1) steps and half-normal scales per sqrt(year),
+  // all size 0 with bias_drift = 0.
+  to_vector(mu_drift_raw) ~ std_normal();
+  for (h in 1:H) {
+    to_vector(house_drift_raw[h]) ~ std_normal();
+  }
+  tau_drift ~ normal(0, 0.07);
+  tau_drift_A ~ normal(0, 0.15);
+  tau_house_drift ~ normal(0, 0.05);
   // The newcomer pool (newcomer_pool = 1): m_new ~ N(0, 0.3) and s_new ~ half-N(0, 0.3), both
   // size 0 with newcomer_pool = 0.
   m_new ~ normal(0, 0.3);
@@ -918,7 +1077,9 @@ generated quantities {
       int e = grid_epoch[t];
       array[n_rep_nat[n]] int S = idx_nat[n, 1:n_rep_nat[n]];
       vector[P] pi = national_share(theta[ : , t], delta[e], w[e], exist_idx[t, 1:n_exist[t]]);
-      log_lik[n] = dirichlet_multinomial_lpmf(y_nat[n, S] | national_alpha(pi, gamma[e, house_nat[n]], phi[house_nat[n]], S));
+      vector[P] g = gamma[e, house_nat[n]];
+      if (bias_drift) g = drift_bias(mu_knot, dev_knot, house_nat[n], bk_lo[t], bk_a[t], hk_lo[t], hk_a[t]);
+      log_lik[n] = dirichlet_multinomial_lpmf(y_nat[n, S] | national_alpha(pi, g, phi[house_nat[n]], S));
     }
     for (r in 1:N_kd) {
       int e = grid_epoch[grid_kd[r]];

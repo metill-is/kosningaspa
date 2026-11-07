@@ -3,7 +3,7 @@ box::use(
   R / harness / info_set[info_set],
   R / harness / tables[grid_dates, valid_votes],
   R / harness / truth[national_shares, read_truth],
-  R / harness / v2[read_v2_config, v2_stan_data, V2_SWITCHES]
+  R / harness / v2[BIAS_KNOT_DAYS, HOUSE_KNOT_DAYS, knot_grid, read_v2_config, v2_stan_data, V2_SWITCHES]
 )
 
 test_that("the grid holds every observation date, F and E, strictly increasing", {
@@ -79,7 +79,7 @@ test_that("the guards fire", {
 
 test_that("the m0 config has every switch off, the default orders and Decision 1's values, and its keys are checked", {
   cfg <- cfg_m0()
-  expect_identical(unlist(cfg[V2_SWITCHES]), stats::setNames(integer(8), V2_SWITCHES))
+  expect_identical(unlist(cfg[V2_SWITCHES]), stats::setNames(integer(9), V2_SWITCHES))
   expect_identical(cfg$order, "default")
   expect_identical(cfg$prior_mu_phi, log(1000))
   expect_identical(cfg[c("prior_sd_mu1", "prior_rate_sigma_gamma")], list(prior_sd_mu1 = 1, prior_rate_sigma_gamma = 1))
@@ -99,12 +99,17 @@ test_that("the data fields come in the contract's order, with integer counts and
     "J", "N_kd", "poll_kd", "kd_kd", "grid_kd", "house_kd", "y_kd", "n_rep_kd", "idx_kd",
     "n_closed", "grid_res", "y_res", "n_rep_res", "idx_res",
     "house_first_epoch", "entry_epoch", "annad_idx",
+    "n_bk", "bk_lo", "bk_a", "bk_step_years", "entry_bk", "n_hk", "hk_lo", "hk_a", "hk_step_years", "entry_hk",
+    "house_first_hk",
     "d_shock", "N_open", "draw_forecast", "latent_path",
     "n_sf", "sf_idx", "mu_f", "desired_weight", "weight_time", "campaign_days", "weight_post_days", "delta_years_bar",
     "prior_tau_mu", "prior_s_bar_E", "prior_s_bar_zeta", "prior_sd_log_kappa", "prior_mu_phi", "prior_sd_mu1",
     "prior_rate_sigma_gamma", V2_SWITCHES
   ))
-  reals <- c("delta_days", "w", "delta_years", "d_shock", "mu_f", "desired_weight", "weight_time", "weight_post_days", "delta_years_bar")
+  reals <- c(
+    "delta_days", "w", "delta_years", "bk_a", "bk_step_years", "hk_a", "hk_step_years", "d_shock", "mu_f", "desired_weight",
+    "weight_time", "weight_post_days", "delta_years_bar"
+  )
   reals <- c(reals, grep("^prior_", names(d), value = TRUE))
   for (f in setdiff(names(d), reals)) expect_true(is.integer(d[[f]]), label = f)
   for (f in reals) expect_true(is.double(d[[f]]), label = f)
@@ -347,4 +352,76 @@ test_that("weight_post_days counts the days of the fundamentals window before th
   expect_identical(v2_stan_data(info, cfg, root = withr::local_tempdir())$data$weight_post_days, 46)
   expect_identical(v2_stan_data(info, utils::modifyList(cfg, list(weight_time = 180)), root = withr::local_tempdir())$data$weight_post_days, 0)
   expect_identical(v2_stan_data(info, utils::modifyList(cfg, list(post_flex = 0L)), root = withr::local_tempdir())$data$weight_post_days, 0)
+})
+
+# The calendar drift's knots (step v2s-m7, §6.4, switch bias_drift): the industry bias's every
+# half-year and the houses' every year, both anchored at E, built whatever the switch.
+
+test_that("knot_grid() anchors the knots at E, starts on or before the first date and places each date between two knots", {
+  g <- as.Date(c("2016-01-10", "2016-03-01", "2016-10-29", "2017-05-02", "2017-10-27", "2017-10-28"))
+  for (spacing in c(BIAS_KNOT_DAYS, HOUSE_KNOT_DAYS)) {
+    k <- knot_grid(g, spacing)
+    knot <- as.numeric(as.Date("2017-10-28")) - (k$n - seq_len(k$n)) * spacing
+    expect_lte(knot[1], as.numeric(g[1]))
+    expect_gt(knot[2], as.numeric(g[1]))
+    expect_true(all(k$lo >= 1L & k$lo <= k$n - 1L))
+    expect_true(all(k$a >= 0 & k$a <= 1))
+    expect_equal(knot[k$lo] + k$a * spacing, as.numeric(g), tolerance = 1e-9)
+    expect_identical(k$step_years, spacing / 365.25)
+  }
+  expect_identical(c(BIAS_KNOT_DAYS, HOUSE_KNOT_DAYS), c(182.625, 365.25))
+  # WHY: E lies on the last knot, which a date's interpolation reaches as the right knot of the last interval.
+  k <- knot_grid(g, BIAS_KNOT_DAYS)
+  expect_identical(c(k$lo[length(g)], k$a[length(g)]), c(k$n - 1L, 1))
+  expect_identical(knot_grid(as.Date(c("2017-10-27", "2017-10-28")), BIAS_KNOT_DAYS)$n, 2L)
+})
+
+test_that("bias_drift = 1 with epoch_bias = 1 is refused, since the drift replaces the epoch walk", {
+  expect_identical(cfg_m0()$bias_drift, 0L)
+  expect_no_error(read_v2_config(config_with(epoch_bias = 0, bias_drift = 1)))
+  expect_error(read_v2_config(config_with(epoch_bias = 1, bias_drift = 1)), "bias_drift = 1 replaces the epoch walk: set epoch_bias to 0")
+})
+
+test_that("the knot fields follow annad_idx: entry knots mark exactly the newcomers, at the knot opening their first date's interval, and each house starts at its first national poll's", {
+  skip_without_snapshot()
+  for (cell in list(c("2024-11-30", "2024-11-29"), c("2021-09-25", "2021-03-29"), c("2017-10-28", "2017-10-27"))) {
+    E <- as.Date(cell[1])
+    info <- info_set(E, as.Date(cell[2]), v2_inputs())
+    b <- v2_stan_data(info, utils::modifyList(cfg_m7(), list(fundamentals = 0L)), root = withr::local_tempdir())
+    d <- b$data
+    n <- names(d)
+    i <- match("annad_idx", n)
+    expect_identical(
+      n[i + seq_len(11)],
+      c("n_bk", "bk_lo", "bk_a", "bk_step_years", "entry_bk", "n_hk", "hk_lo", "hk_a", "hk_step_years", "entry_hk", "house_first_hk"),
+      label = cell[1]
+    )
+    g <- grid_dates(info, 47L, 90L)
+    bk <- knot_grid(g, BIAS_KNOT_DAYS)
+    hk <- knot_grid(g, HOUSE_KNOT_DAYS)
+    expect_identical(c(d$n_bk, d$n_hk), c(bk$n, hk$n), label = cell[1])
+    expect_identical(c(d$bk_lo), bk$lo, label = cell[1])
+    expect_identical(c(d$hk_a), hk$a, label = cell[1])
+    first <- apply(d$exists, 2, \(x) match(1L, x))
+    new <- c(d$entry_epoch) > 0L
+    expect_identical(c(d$entry_bk) > 0L, new, label = cell[1])
+    expect_identical(c(d$entry_bk)[new], bk$lo[first[new]], label = cell[1])
+    expect_identical(c(d$entry_hk)[new], hk$lo[first[new]], label = cell[1])
+    nat_first <- vapply(seq_len(d$H), \(h) {
+      t <- c(d$grid_nat)[c(d$house_nat) == h]
+      if (length(t)) hk$lo[min(t)] else hk$n
+    }, integer(1))
+    expect_identical(c(d$house_first_hk), nat_first, label = cell[1])
+  }
+})
+
+test_that("the knots are built whatever bias_drift says, so V2's data hold the same knots as v2s-m7's", {
+  skip_without_snapshot()
+  info <- info_2024eve()
+  a <- v2_stan_data(info, utils::modifyList(cfg_m6(), list(fundamentals = 0L)), root = withr::local_tempdir())$data
+  b <- v2_stan_data(info, utils::modifyList(cfg_m7(), list(fundamentals = 0L)), root = withr::local_tempdir())$data
+  knots <- c("n_bk", "bk_lo", "bk_a", "bk_step_years", "entry_bk", "n_hk", "hk_lo", "hk_a", "hk_step_years", "entry_hk", "house_first_hk")
+  expect_identical(a[knots], b[knots])
+  differs <- names(a)[!vapply(names(a), \(k) identical(a[[k]], b[[k]]), logical(1))]
+  expect_setequal(differs, c("epoch_bias", "bias_drift"))
 })

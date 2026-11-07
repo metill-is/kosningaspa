@@ -402,8 +402,15 @@ each one's single differing field).
 default `adapt_delta` (`harness/v2/steps.md`). `v2s-m6` (`harness/configs/steps/v2s-m6.json`,
 `v2.json` with `post_flex = 1`) is a dev arm: the post-election multiplier (spec §6.2), each
 walk step within `post_days` after a closed election scaled by 1 + τ_post, built as the first
-fix for V2's 2024 MAE. Every other V2 config sets `post_flex = 0`, and every one carries
-`post_days = 90`; its fits are listed in `harness/runs/v2s-m6.txt`.
+fix for V2's 2024 MAE. Every other V2 config but `v2s-m6-noepoch`'s and `v2s-m7`'s sets
+`post_flex = 0`, and every one carries `post_days = 90`; its fits are listed in
+`harness/runs/v2s-m6.txt`. `v2s-m7` (`harness/configs/steps/v2s-m7.json`, `v2s-m6.json` with
+`epoch_bias = 0` and `bias_drift = 1`) is a dev arm: the calendar drift of the bias (spec
+§6.4), the industry bias on half-yearly knots and each house's deviations on yearly knots
+anchored at E, interpolated to each poll's date, built as the second fix. `v2s-m6-noepoch`
+(`v2s-m6.json` with `epoch_bias = 0`) is a dev arm too: a constant bias plus the shock, the
+comparison that shows whether the bias needs to move at all. Every other V2 config sets
+`bias_drift = 0`; the three arms' fits are listed in `harness/runs/v2s-m7.txt`.
 
 **R0's extraction.** `r0_extract(draws, meta, dir)` (`R/harness/r0.R`) writes the four
 parquets of spec §5.5 from a fit's draws: `eday_kjordaemi` (`.chain`, `.iteration`,

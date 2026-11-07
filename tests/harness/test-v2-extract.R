@@ -85,12 +85,13 @@ test_that("V2_PARAM_VARIABLES lists the core's and the switched parameters in pa
   expect_identical(V2_PARAM_VARIABLES, c(
     "sigma", "L_Omega", "tau_camp", "mu_phi", "sigma_phi", "log_phi", "log_phi_K", "log_kappa", "sigma_gamma", "mu",
     "tau_mu", "tau_mu_A", "tau_house", "m_new", "s_new", "s_bar_E", "mu_sd", "tau_sd", "s_delta0", "s_bar_zeta", "s_zeta",
-    "anchor_w", "delta_coord", "tau_post"
+    "anchor_w", "delta_coord", "tau_post", "tau_drift", "tau_drift_A", "tau_house_drift"
   ))
   expect_identical(V2_PARAM_SWITCH, c(
     tau_mu = "epoch_bias", tau_mu_A = "epoch_bias", tau_house = "epoch_bias", m_new = "newcomer_pool",
     s_new = "newcomer_pool", s_bar_E = "shock", s_bar_zeta = "delta_walk", s_zeta = "delta_walk", anchor_w = "walk_form",
-    delta_coord = "delta_form", tau_post = "post_flex"
+    delta_coord = "delta_form", tau_post = "post_flex", tau_drift = "bias_drift", tau_drift_A = "bias_drift",
+    tau_house_drift = "bias_drift"
   ))
   expect_identical(setdiff(V2_PARAM_VARIABLES, names(V2_PARAM_SWITCH)), CORE)
 })

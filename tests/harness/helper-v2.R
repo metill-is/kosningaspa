@@ -26,6 +26,7 @@ V2_M3_CONFIG <- file.path(project_root(), "harness", "configs", "steps", "v2s-m3
 V2_M4_CONFIG <- file.path(project_root(), "harness", "configs", "steps", "v2s-m4.json")
 V2_M5_CONFIG <- file.path(project_root(), "harness", "configs", "steps", "v2s-m5.json")
 V2_M6_CONFIG <- file.path(project_root(), "harness", "configs", "steps", "v2s-m6.json")
+V2_M7_CONFIG <- file.path(project_root(), "harness", "configs", "steps", "v2s-m7.json")
 
 # WHY: read_inputs() and v2_stan_data() take seconds, and the 2024-eve fixtures serve many tests.
 v2_cache <- new.env(parent = emptyenv())
@@ -73,6 +74,12 @@ cfg_m5 <- function() {
 cfg_m6 <- function() {
   box::use(R / harness / v2[read_v2_config])
   read_v2_config(V2_M6_CONFIG)
+}
+
+# Step v2s-m7's config: v2s-m6's with the epoch walk replaced by the calendar drift (§6.4).
+cfg_m7 <- function() {
+  box::use(R / harness / v2[read_v2_config])
+  read_v2_config(V2_M7_CONFIG)
 }
 
 # A temporary copy of the m0 config with the named keys changed (NULL drops a key, a new

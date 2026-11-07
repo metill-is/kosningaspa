@@ -93,6 +93,11 @@
 #     windows on the grid (the data's post flags; `post_days` when each window lies on the
 #     grid): a 20% party's walk change over one post window (§6.2). The change is signed, so its
 #     band reads the upper tail, as walk_180's does.
+#   - drift_4y (step v2s-m7, switch bias_drift): x = C(τ ⊙ √(bk_step_years) Σ ξ_k), the
+#     industry bias's calendar drift over the last eight half-yearly knot steps before E (§6.4;
+#     pars mu_drift_raw, tau_drift and tau_drift_A), four years, on a 20% party: τ_p = τ_drift
+#     but τ_drift,A for Annað, coordinate 1 (it stops if that is Annað, or with fewer than
+#     eight steps). It reads a term's bias change, as industry_step does for the epoch walk.
 #
 # The bands, each built by its constructor and checked by in_band():
 #   band_inside(lo, hi)                      the 5% quantile at least lo, the 95% at most hi
@@ -262,6 +267,19 @@ SUMMARY_FUNS <- list(
     z <- withr::with_seed(seed, stats::rnorm(data$P))
     v <- sim$pars$sigma * drop(matrix(sim$pars$L_Omega, data$P, data$P) %*% z)
     share_change(sqrt(days) * (1 + as.numeric(sim$pars$tau_post)) * (v - mean(v)))
+  },
+  drift_4y = function(sim, data, seed) {
+    n_step <- as.integer(data$n_bk) - 1L
+    if (length(sim$pars$tau_drift) != 1 || n_step < 8L) {
+      stop("prior predictive: drift_4y needs tau_drift and eight knot steps, which bias_drift = 1 puts in the model", call. = FALSE)
+    }
+    if (identical(as.integer(data$annad_idx), 1L)) {
+      stop("prior predictive: the coordinate party is Anna\u00f0, whose drift has its own scale", call. = FALSE)
+    }
+    xi <- matrix(sim$pars$mu_drift_raw, data$P, n_step)
+    tau <- replace(rep(as.numeric(sim$pars$tau_drift), data$P), data$annad_idx, as.numeric(sim$pars$tau_drift_A))
+    x <- tau * sqrt(data$bk_step_years) * rowSums(xi[, n_step - 0:7, drop = FALSE])
+    share_change(x - mean(x))
   },
   industry_step = function(sim, data, seed) {
     if (identical(as.integer(data$annad_idx), 1L)) {
@@ -569,6 +587,14 @@ ROWS <- check_rows(dplyr::bind_rows(
       "D the window's days on the grid, `post_days` = 90 in V2; \u03c4_post ~ exponential(1))"
     ),
     character(0), band_q95(2, 30)
+  ),
+  summary_rows(
+    "drift_4y", "v2s-m7", "bias_drift",
+    paste0(
+      "The industry bias's calendar drift over four years on a 20% party (C(\u03c4 \u2299 \u221a0.5 \u03a3 \u03be_k) over ",
+      "the last eight half-yearly steps, \u03c4_drift ~ half-N(0, 0.07) per \u221ayear, \u03c4_drift,A ~ half-N(0, 0.15) for Anna\u00f0)"
+    ),
+    character(0), band_inside(-6, 6)
   )
 ))
 

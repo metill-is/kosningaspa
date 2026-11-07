@@ -3,7 +3,8 @@
 # pooling, §6.4, switch newcomer_pool; step v2s-m3's election-day shock, §6.6, switch shock;
 # step v2s-m4's δ walk across elections, §6.7, switch delta_walk; step v2s-m5's fundamentals
 # pseudo-observation, §6.5, switch fundamentals; step v2s-m6's post-election multiplier, §6.2,
-# switch post_flex), written from the spec and
+# switch post_flex; step v2s-m7's calendar drift of the bias, §6.4, switch bias_drift), written
+# from the spec and
 # never from Stan/forecast_v2.stan, so that the Stan file is tested against an independent
 # oracle: the log density that log_prob(u, jacobian = FALSE) evaluates, a prior simulator, the
 # kjördæmi map M_e, the failure modes the tests use as mutants, and the map of a point and its
@@ -36,16 +37,21 @@ box::use(
 #' `s_zeta_raw`, the walk's per-party scales over s̄_ζ (s_ζ = s̄_ζ `s_zeta_raw`), and
 #' `s_bar_zeta`, s̄_ζ, an array of one. `delta_coord` comes next, the δ walk held centred at the
 #' closed elections (`delta_form` = 1, §6.7): n_closed × (K − 1) × (P − 1), each closed
-#' election's coordinates of δ_e[2:K, 2:P]; size 0 in the reference forms. `tau_post` is last,
-#' the post-election multiplier τ_post (§6.2, `post_flex` = 1), an array of one, size 0 with
-#' `post_flex` = 0.
+#' election's coordinates of δ_e[2:K, 2:P]; size 0 in the reference forms. `tau_post` comes
+#' next, the post-election multiplier τ_post (§6.2, `post_flex` = 1), an array of one, size 0
+#' with `post_flex` = 0. The calendar drift's (§6.4, `bias_drift` = 1) are last, each size 0
+#' with `bias_drift` = 0: `mu_drift_raw`, P × (n_bk − 1), column k − 1 holding ξ_k of the
+#' industry bias's step into knot k; `house_drift_raw`, each house's ζ_{k,h} on the house
+#' knots, H × P × (n_hk − 1); and `tau_drift`, `tau_drift_A` (Annað's) and `tau_house_drift`,
+#' their scales per √year, each an array of one.
 #' @export
 V2_CORE_PARS <- tibble::tibble(
   name = c(
     "theta1", "anchor_w", "z_walk", "sigma", "L_Omega", "tau_camp", "mu1", "house_raw", "sigma_gamma", "new_raw",
     "log_phi_u", "mu_phi", "sigma_phi", "log_phi_K_u", "log_kappa_u", "delta_raw", "s_delta0_raw", "mu_sd",
     "tau_sd", "nu", "mu_step_raw", "house_step_raw", "tau_mu", "tau_mu_A", "tau_house", "m_new", "s_new", "z_shock",
-    "s_bar_E", "s_zeta_raw", "s_bar_zeta", "delta_coord", "tau_post"
+    "s_bar_E", "s_zeta_raw", "s_bar_zeta", "delta_coord", "tau_post", "mu_drift_raw", "house_drift_raw", "tau_drift",
+    "tau_drift_A", "tau_house_drift"
   ),
   type = c(
     "sum_to_zero_vector[P]", "array[walk_form * n_closed] vector[P - 1]", "matrix[P - 1, G - 1 - walk_form * n_closed]",
@@ -59,7 +65,8 @@ V2_CORE_PARS <- tibble::tibble(
     "array[epoch_bias] real<lower=0>", "array[epoch_bias] real<lower=0>", "array[newcomer_pool] real",
     "array[newcomer_pool] real<lower=0>", "matrix[P, shock * n_closed]", "array[shock] real<lower=0>",
     "vector<lower=0>[delta_walk * P]", "array[delta_walk] real<lower=0>", "array[delta_form * n_closed] matrix[K - 1, P - 1]",
-    "array[post_flex] real<lower=0>"
+    "array[post_flex] real<lower=0>", "matrix[P, bias_drift * (n_bk - 1)]", "array[H] matrix[P, bias_drift * (n_hk - 1)]",
+    "array[bias_drift] real<lower=0>", "array[bias_drift] real<lower=0>", "array[bias_drift] real<lower=0>"
   )
 )
 
@@ -102,7 +109,8 @@ V2_CORE_PARS <- tibble::tibble(
 #'   `tests/harness/test-v2-reference.R`, pins the reference's set, entry_epoch < e_p, and the
 #'   lp tests pin Stan to the reference.
 #'   Any newcomer entering in the window exercises the mutant, the 2017 cells' (one closed
-#'   election) included.
+#'   election) included. With `bias_drift` = 1 it acts at each entry knot instead, where μ
+#'   likewise sums to zero.
 #'
 #' The shock's (`shock`, §6.6):
 #' - `shock_unscaled`: d ≡ 1, the shock C(s̄_E z_e) without the √(min(0.2 / π̄, 10)) scaling.
@@ -134,25 +142,39 @@ V2_CORE_PARS <- tibble::tibble(
 #'   left out of the walk while its prior stays. Any closed election whose post window holds a
 #'   grid step exercises it, and the builder puts the window's end on the grid, so every cell
 #'   with a closed election in its window does, the 2017 cells' included.
+#'
+#' The calendar drift's (`bias_drift`, §6.4):
+#' - `drift_unscaled`: every knot step, the industry bias's and the houses', scales by √1, not
+#'   √(years between knots). The knots are half a year and a year apart, so the industry
+#'   bias's steps exercise it on every cell;
+#' - `drift_left_knot`: a poll's bias is the left knots' alone, not interpolated towards the
+#'   right ones. Any poll off a knot exercises it, which every cell has;
+#' - `drift_house_from_start`: every house's deviations drift from knot 1 instead of from its
+#'   first knot. Any house whose first national poll comes after the first house knot's
+#'   interval exercises it;
+#' - `drift_no_mu_restart`: a newcomer's industry bias at its entry knot keeps the prior-only
+#'   drift its slot gathered before it (its own elements of the centred steps into knots
+#'   2..k_p) on top of its entry value. Any newcomer entering after the first knot exercises it.
 #' @export
 V2_MUTANTS <- tibble::tibble(
   mutant = c(
     "positional_gather", "previous_w", "next_epoch_delta", "close_last_kjordaemi", "conditional_walk",
     "house_walk_from_first_poll", "newcomer_mean_of_mu1", "no_mu_restart", "no_house_restart",
     "house_restart_absolute", "newcomer_mean_over_all", "shock_unscaled", "delta_years_unscaled", "no_delta_restart",
-    "delta_entry_leak", "fund_uncentred", "post_unscaled"
+    "delta_entry_leak", "fund_uncentred", "post_unscaled", "drift_unscaled", "drift_left_knot", "drift_house_from_start",
+    "drift_no_mu_restart"
   ),
   switch = c(
     rep(NA_character_, 5), rep("epoch_bias", 5), "newcomer_pool", "shock", rep("delta_walk", 3), "fundamentals",
-    "post_flex"
+    "post_flex", rep("bias_drift", 4)
   ),
-  min_closed = c(1L, 2L, 2L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L)
+  min_closed = c(1L, 2L, 2L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L)
 )
 
 #' The component switches the reference has (each 0 or 1), the switches of the components it
-#' does not have yet (none: step v2s-m6 built the last), and the parameterisation switches
+#' does not have yet (none: step v2s-m7 built the last), and the parameterisation switches
 #' whose reference form is 0.
-BUILT_SWITCHES <- c("epoch_bias", "newcomer_pool", "shock", "delta_walk", "fundamentals", "post_flex")
+BUILT_SWITCHES <- c("epoch_bias", "newcomer_pool", "shock", "delta_walk", "fundamentals", "post_flex", "bias_drift")
 FORM_SWITCHES <- c("walk_form", "delta_form")
 COMPONENT_SWITCHES <- setdiff(V2_SWITCHES, c(FORM_SWITCHES, BUILT_SWITCHES))
 
@@ -187,6 +209,11 @@ TAU_SD_SD <- 0.5
 #' The epoch bias's literal scales (§6.10): τ_μ,A ~ half-N(0, 0.3) and τ_house ~ half-N(0, 0.1).
 TAU_MU_A_SD <- 0.3
 TAU_HOUSE_SD <- 0.1
+#' The calendar drift's literal scales per √year (§6.10): τ_drift ~ half-N(0, 0.07), τ_drift,A
+#' ~ half-N(0, 0.15) and τ_house,d ~ half-N(0, 0.05).
+TAU_DRIFT_SD <- 0.07
+TAU_DRIFT_A_SD <- 0.15
+TAU_HOUSE_DRIFT_SD <- 0.05
 
 #' The caps of the bounded log concentrations (Decision 4), named as their columns in
 #' `param_draws.parquet`: log φ_h (one column per house), log φ_K and log κ. The one place R
@@ -472,7 +499,9 @@ lkj_corr_cholesky_rng <- function(P, eta) {
 #' 1 × K × P and the other two 0. With `delta_form` = 1 (which needs `delta_walk` = 1),
 #' `delta_coord` is n_closed × (K − 1) × (P − 1) and `delta_raw` 1 × K × P, the open epoch's ζ;
 #' with 0, `delta_coord` is 0 × (K − 1) × (P − 1). With `post_flex` = 1, `tau_post` is 1; with
-#' 0, 0.
+#' 0, 0. With `bias_drift` = 1, `mu_drift_raw` is P × (n_bk − 1), `house_drift_raw`
+#' H × P × (n_hk − 1) and `tau_drift`, `tau_drift_A` and `tau_house_drift` 1 each; with 0,
+#' their last dimension is 0.
 #' @param data a `v2_stan_data()` data list
 #' @return a named list of integer vectors
 #' @export
@@ -495,6 +524,8 @@ v2_par_dims <- function(data) {
   check(df <= dw, "data$delta_form = 1 needs delta_walk = 1")
   pf <- as.integer(data$post_flex)
   check(length(pf) == 1 && pf %in% 0:1, "data$post_flex must be 0 or 1")
+  bd <- as.integer(data$bias_drift)
+  check(length(bd) == 1 && bd %in% 0:1, "data$bias_drift must be 0 or 1")
   list(
     theta1 = P, anchor_w = c(n_anchor, P - 1L), z_walk = c(P - 1L, data$G - 1L - n_anchor), sigma = P,
     L_Omega = c(P, P), tau_camp = 1L, mu1 = P,
@@ -504,7 +535,9 @@ v2_par_dims <- function(data) {
     s_delta0_raw = P, mu_sd = 1L, tau_sd = 1L, nu = c(data$J, P), mu_step_raw = c(P, n_step),
     house_step_raw = c(data$H, P, n_step), tau_mu = eb, tau_mu_A = eb, tau_house = eb, m_new = np, s_new = np,
     z_shock = c(P, sh * as.integer(data$n_closed)), s_bar_E = sh, s_zeta_raw = dw * P, s_bar_zeta = dw,
-    delta_coord = c(df * as.integer(data$n_closed), data$K - 1L, P - 1L), tau_post = pf
+    delta_coord = c(df * as.integer(data$n_closed), data$K - 1L, P - 1L), tau_post = pf,
+    mu_drift_raw = c(P, bd * (as.integer(data$n_bk) - 1L)), house_drift_raw = c(data$H, P, bd * (as.integer(data$n_hk) - 1L)),
+    tau_drift = bd, tau_drift_A = bd, tau_house_drift = bd
   )
 }
 
@@ -518,9 +551,27 @@ check_core <- function(data, mutant = "none") {
   if (length(on)) fail("switch(es) not in the reference yet: ", listed(on))
   built <- vapply(BUILT_SWITCHES, \(s) length(data[[s]]) == 1 && as.integer(data[[s]]) %in% 0:1, logical(1))
   if (!all(built)) fail("switch(es) neither 0 nor 1: ", listed(BUILT_SWITCHES[!built]))
-  if (identical(as.integer(data$epoch_bias), 1L)) {
+  if (identical(as.integer(data$epoch_bias), 1L) || identical(as.integer(data$bias_drift), 1L)) {
     a <- data$annad_idx
     check(length(a) == 1 && a %in% 0:data$P, "data$annad_idx must be 0 or a party index")
+  }
+  if (identical(as.integer(data$bias_drift), 1L)) {
+    check(identical(as.integer(data$epoch_bias), 0L), "data$bias_drift = 1 replaces the epoch walk, so it needs epoch_bias = 0")
+    new <- c(data$entry_epoch) > 0
+    knots <- function(n, lo, a, years, entry, what) {
+      check(length(n) == 1 && n >= 2, paste0("data$n_", what, " must be at least 2"))
+      check(length(lo) == data$G && all(lo %in% seq_len(n - 1)), paste0("data$", what, "_lo must be G knots in 1..n_", what, " - 1"))
+      check(length(a) == data$G && all(is.finite(a) & a >= 0 & a <= 1), paste0("data$", what, "_a must be G weights in [0, 1]"))
+      check(length(years) == 1 && is.finite(years) && years > 0, paste0("data$", what, "_step_years must be one positive number"))
+      check(
+        length(entry) == data$P && all(entry %in% 0:n) && identical(entry > 0, new),
+        paste0("data$entry_", substr(what, 1, 2), " must be P knots, positive exactly for the newcomers")
+      )
+    }
+    knots(data$n_bk, c(data$bk_lo), c(data$bk_a), data$bk_step_years, c(data$entry_bk), "bk")
+    knots(data$n_hk, c(data$hk_lo), c(data$hk_a), data$hk_step_years, c(data$entry_hk), "hk")
+    f <- c(data$house_first_hk)
+    check(length(f) == data$H && all(f %in% seq_len(data$n_hk)), "data$house_first_hk must be H knots in 1..n_hk")
   }
   if (identical(as.integer(data$delta_walk), 1L)) {
     y <- c(data$delta_years)
@@ -587,13 +638,15 @@ core_pars <- function(pars, data) {
   for (n in c("z_walk", "L_Omega", "house_raw", "nu", "mu_step_raw", "z_shock")) p[[n]] <- as_matrix(n)
   p$delta_raw <- array(as.numeric(pars$delta_raw), dims$delta_raw)
   p$house_step_raw <- array(as.numeric(pars$house_step_raw), dims$house_step_raw)
+  p$mu_drift_raw <- as_matrix("mu_drift_raw")
+  p$house_drift_raw <- array(as.numeric(pars$house_drift_raw), dims$house_drift_raw)
   zero_sum <- function(x) abs(sum(x)) <= 1e-8 * max(1, abs(x))
   check(zero_sum(p$theta1), "theta1 does not sum to 0")
   check(zero_sum(p$mu1), "mu1 does not sum to 0")
   check(all(apply(p$nu, 1, zero_sum)), "a row of nu does not sum to 0")
   positive <- c(
     "sigma", "tau_camp", "sigma_gamma", "sigma_phi", "tau_sd", "tau_mu", "tau_mu_A", "tau_house", "s_new", "s_bar_E",
-    "s_zeta_raw", "s_bar_zeta", "tau_post"
+    "s_zeta_raw", "s_bar_zeta", "tau_post", "tau_drift", "tau_drift_A", "tau_house_drift"
   )
   for (n in positive) {
     check(all(p[[n]] > 0), paste(n, "must be positive"))
@@ -664,15 +717,21 @@ delta_epochs <- function(zeta, s_delta0, s_zeta, data, close_last = FALSE, years
 #' `phi_init`, s_δ0, s_ζ, π_nat at each national poll's date and the closed elections' shocks
 #' ε. `conditional`, `close_last`, `house_from_start`, `entry_mean_mu1`, `mu_carry`,
 #' `house_carry`, `house_absolute`, `entry_mean_all`, `unscaled`, `years_unscaled`,
-#' `delta_carry`, `entry_leak` and `post_unscaled` switch to the `conditional_walk`,
+#' `delta_carry`, `entry_leak`, `post_unscaled`, `drift_unscaled`, `drift_left`,
+#' `drift_house_start` and `drift_mu_carry` switch to the `conditional_walk`,
 #' `close_last_kjordaemi`, `house_walk_from_first_poll`, `newcomer_mean_of_mu1`,
 #' `no_mu_restart`, `no_house_restart`, `house_restart_absolute`, `newcomer_mean_over_all`,
 #' `shock_unscaled`, `delta_years_unscaled`, `no_delta_restart`, `delta_entry_leak` and
-#' `post_unscaled` mutants.
+#' `post_unscaled`, `drift_unscaled`, `drift_left_knot`, `drift_house_from_start` and
+#' `drift_no_mu_restart` mutants. Besides those quantities it gives `gamma_nat` (N_nat × P),
+#' the bias of each national poll's house at its date, which the likelihood reads, and with
+#' `bias_drift` = 1 `mu_knot` (n_bk × P, the industry bias at each knot) and `dev_knot`
+#' (H × n_hk × P, each house's centred deviations at each house knot), NULL with 0.
 natural <- function(p, data, conditional = FALSE, close_last = FALSE, house_from_start = FALSE, entry_mean_mu1 = FALSE,
                     mu_carry = FALSE, house_carry = FALSE, house_absolute = FALSE, entry_mean_all = FALSE,
                     unscaled = FALSE, years_unscaled = FALSE, delta_carry = FALSE, entry_leak = FALSE,
-                    post_unscaled = FALSE) {
+                    post_unscaled = FALSE, drift_unscaled = FALSE, drift_left = FALSE, drift_house_start = FALSE,
+                    drift_mu_carry = FALSE) {
   P <- data$P
   G <- data$G
   H <- data$H
@@ -759,6 +818,80 @@ natural <- function(p, data, conditional = FALSE, close_last = FALSE, house_from
     }
   }
 
+  # §6.4, the calendar drift (bias_drift = 1), in place of the epoch walk (epoch_bias = 0, so
+  # the loops above left μ and γ constant over epochs): the industry bias walks on its knots,
+  # μ at knot 1 = μ_1 and μ_k = μ_{k−1} + √(bk_step_years) C(τ ⊙ ξ_k), τ_p = τ_drift but
+  # τ_drift,A for Annað; a newcomer enters at its entry knot k_p at the mean of μ_{k_p} over the
+  # parties existing before it (entry_bk < k_p) plus m_new + s_new η, and each knot is
+  # re-centred. Each house's levels start at σ_γ ε_h and drift after its first knot by
+  # √(hk_step_years) τ_house,d ζ_{k,h}, a newcomer restarting at its entry house knot at σ_γ ε
+  # plus the mean drift of the parties existing before it. A poll's bias interpolates each part
+  # linearly between the knots around its date; μ_e and γ_{e,h} are the bias at epoch e's last
+  # date (closed election e, or E).
+  drift_on <- identical(as.integer(data$bias_drift), 1L)
+  bias_at <- NULL
+  if (drift_on) {
+    rb <- if (drift_unscaled) 1 else sqrt(data$bk_step_years)
+    rh <- if (drift_unscaled) 1 else sqrt(data$hk_step_years)
+    tau_d <- replace(rep(p$tau_drift, P), data$annad_idx, p$tau_drift_A)
+    entry_b <- c(data$entry_bk)
+    entry_h <- c(data$entry_hk)
+    mu_knot <- matrix(0, data$n_bk, P)
+    m <- p$mu1
+    carried <- numeric(P)
+    for (k in seq_len(data$n_bk)) {
+      if (k > 1) {
+        s <- centre(rb * tau_d * p$mu_drift_raw[, k - 1])
+        m <- m + s
+        carried <- carried + s
+      }
+      entering <- which(entry_b == k)
+      if (length(entering)) {
+        existing <- if (entry_mean_all) seq_len(P) else which(entry_b < k)
+        m[entering] <- mean(m[existing]) + m_new + s_new * p$new_raw[match(entering, new)] +
+          if (drift_mu_carry) carried[entering] else 0
+      }
+      m <- centre(m)
+      mu_knot[k, ] <- m
+    }
+    dev_knot <- array(0, c(H, data$n_hk, P))
+    for (h in seq_len(H)) {
+      start <- if (drift_house_start) 1L else data$house_first_hk[h]
+      x <- p$sigma_gamma * p$house_raw[h, ]
+      for (k in seq_len(data$n_hk)) {
+        if (k > start) {
+          x <- x + rh * p$tau_house_drift * p$house_drift_raw[h, , k - 1]
+          entering <- which(entry_h == k)
+          if (length(entering)) {
+            existing <- which(entry_h < k)
+            x[entering] <- p$sigma_gamma * p$house_raw[h, entering] +
+              mean(x[existing] - p$sigma_gamma * p$house_raw[h, existing])
+          }
+        }
+        dev_knot[h, k, ] <- centre(x)
+      }
+    }
+    industry_at <- function(t) {
+      a <- if (drift_left) 0 else data$bk_a[t]
+      (1 - a) * mu_knot[data$bk_lo[t], ] + a * mu_knot[data$bk_lo[t] + 1L, ]
+    }
+    bias_at <- function(t, h) {
+      a <- if (drift_left) 0 else data$hk_a[t]
+      industry_at(t) + (1 - a) * dev_knot[h, data$hk_lo[t], ] + a * dev_knot[h, data$hk_lo[t] + 1L, ]
+    }
+    ends <- c(c(data$grid_res), G)
+    for (e in seq_len(n_epoch)) {
+      mu[e, ] <- industry_at(ends[e])
+      for (h in seq_len(H)) gamma[e, h, ] <- bias_at(ends[e], h)
+    }
+  }
+  gamma_nat <- matrix(0, data$N_nat, P)
+  for (n in seq_len(data$N_nat)) {
+    t <- data$grid_nat[n]
+    h <- data$house_nat[n]
+    gamma_nat[n, ] <- if (drift_on) bias_at(t, h) else gamma[data$grid_epoch[t], h, ]
+  }
+
   # §6.7: δ, static with delta_walk = 0 and the walk across elections with 1, s_ζ = s̄_ζ
   # s_zeta_raw (delta_epochs()).
   s_delta0 <- exp(p$mu_sd + p$tau_sd * p$s_delta0_raw)
@@ -796,7 +929,8 @@ natural <- function(p, data, conditional = FALSE, close_last = FALSE, house_from
   }
 
   list(
-    theta = theta, step = step, L_walk = L_walk, mu = mu, gamma = gamma, delta = delta, phi_init = phi_init,
+    theta = theta, step = step, L_walk = L_walk, mu = mu, gamma = gamma, gamma_nat = gamma_nat,
+    mu_knot = if (drift_on) mu_knot, dev_knot = if (drift_on) dev_knot, delta = delta, phi_init = phi_init,
     log_phi = log_phi, log_phi_K = log_phi_K, log_kappa = log_kappa, s_delta0 = s_delta0, s_zeta = s_zeta,
     pi_nat = pi_nat, eps = eps
   )
@@ -829,7 +963,8 @@ v2_natural <- function(pars, data) {
 #' Every likelihood row of the core, each `list(field, at, S, alpha)`: the count field and
 #' its row (`at`; (e, k) for a result), the parties S its counts are gathered by and its
 #' Dirichlet-multinomial concentrations over S. National poll n (§6.3):
-#' φ_h normalise(π_nat[S] ⊙ exp(γ_{e,h}[S])). Kjördæmi poll row r (§6.7):
+#' φ_h normalise(π_nat[S] ⊙ exp(γ[S])), γ its house's bias at its date (`natural()`'s
+#' `gamma_nat`: γ_{e,h}, or with `bias_drift` = 1 the drift interpolated at the date). Kjördæmi poll row r (§6.7):
 #' κ φ_h softmax over S of (ν_j + δ_{e,k}). Result (e, k) (§6.6):
 #' φ_K softmax over S of (θ_{t_e} + ε_e + δ_{e,k}), ε_e the election's shock (`natural()`'s
 #' `eps`, 0 with `shock` = 0). S is the row's reported parties by identity,
@@ -842,10 +977,9 @@ dm_rows <- function(p, nat, data, positional = FALSE, next_delta = FALSE) {
   rows <- vector("list", data$N_nat + data$N_kd + data$n_closed * data$K)
   i <- 0L
   for (n in seq_len(data$N_nat)) {
-    e <- data$grid_epoch[data$grid_nat[n]]
     h <- data$house_nat[n]
     S <- parties(data$idx_nat, data$n_rep_nat, n)
-    a <- nat$pi_nat[n, S] * exp(nat$gamma[e, h, S])
+    a <- nat$pi_nat[n, S] * exp(nat$gamma_nat[n, S])
     i <- i + 1L
     rows[[i]] <- list(field = "y_nat", at = n, S = S, alpha = phi[h] * a / sum(a))
   }
@@ -948,6 +1082,14 @@ prior_terms <- function(p, nat, data) {
   )
   # WHY: with post_flex = 0 the term is left out, so every earlier step sums the same terms as before.
   if (identical(as.integer(data$post_flex), 1L)) out <- c(out, tau_post = stats::dexp(p$tau_post, TAU_POST_RATE, log = TRUE))
+  # WHY: with bias_drift = 0 the terms are left out, so every earlier step sums the same terms as before.
+  if (identical(as.integer(data$bias_drift), 1L)) {
+    out <- c(out,
+      mu_drift_raw = ld(p$mu_drift_raw), house_drift_raw = ld(p$house_drift_raw),
+      tau_drift = log(2) + ld(p$tau_drift, 0, TAU_DRIFT_SD), tau_drift_A = log(2) + ld(p$tau_drift_A, 0, TAU_DRIFT_A_SD),
+      tau_house_drift = log(2) + ld(p$tau_house_drift, 0, TAU_HOUSE_DRIFT_SD)
+    )
+  }
   out
 }
 
@@ -960,7 +1102,9 @@ prior_terms <- function(p, nat, data) {
 #' pseudo-observation, §6.5, with `fundamentals` = 1: μ_f ~ N(x_c, τ_f) over S_f, x_c the
 #' centred log π_nat,E[S_f], a likelihood term on data with no new parameter, `fund_normal()`
 #' and `fund_scales()`; the post-election multiplier, §6.2, with `post_flex` = 1: each step in
-#' a post window scaled by 1 + τ_camp c + τ_post, τ_post ~ exponential(1)): what Stan's
+#' a post window scaled by 1 + τ_camp c + τ_post, τ_post ~ exponential(1); the calendar drift,
+#' §6.4, with `bias_drift` = 1: the knots' steps ~ N(0, 1), τ_drift, τ_drift,A and τ_house,d
+#' half-normal, and each national poll's bias interpolated at its date): what Stan's
 #' `log_prob(u, jacobian = FALSE)`
 #' evaluates in the reference forms, up to a constant. It is the density of the parameters
 #' on their constrained values (the §6.10
@@ -994,7 +1138,9 @@ v2_lp_ref <- function(pars, data, mutant = "none") {
     mu_carry = mutant == "no_mu_restart", house_carry = mutant == "no_house_restart",
     house_absolute = mutant == "house_restart_absolute", entry_mean_all = mutant == "newcomer_mean_over_all", unscaled = mutant == "shock_unscaled",
     years_unscaled = mutant == "delta_years_unscaled", delta_carry = mutant == "no_delta_restart",
-    entry_leak = mutant == "delta_entry_leak", post_unscaled = mutant == "post_unscaled"
+    entry_leak = mutant == "delta_entry_leak", post_unscaled = mutant == "post_unscaled",
+    drift_unscaled = mutant == "drift_unscaled", drift_left = mutant == "drift_left_knot",
+    drift_house_start = mutant == "drift_house_from_start", drift_mu_carry = mutant == "drift_no_mu_restart"
   )
   rows <- dm_rows(p, nat, data, positional = mutant == "positional_gather", next_delta = mutant == "next_epoch_delta")
   lik <- vapply(rows, \(r) dirmult_lpmf(row_counts(data, r), r$alpha), numeric(1))
@@ -1109,6 +1255,16 @@ draw_prior <- function(data) {
   # the same as before the post-election multiplier existed.
   pf <- as.integer(data$post_flex)
   out$tau_post <- array(stats::rexp(pf, TAU_POST_RATE), pf)
+  # WHY: drawn last, so that with bias_drift = 0 (nothing drawn) every other parameter's draw
+  # is the same as before the calendar drift existed.
+  bd <- as.integer(data$bias_drift)
+  nb <- bd * (as.integer(data$n_bk) - 1L)
+  nh <- bd * (as.integer(data$n_hk) - 1L)
+  out$mu_drift_raw <- matrix(stats::rnorm(P * nb), P, nb)
+  out$house_drift_raw <- array(stats::rnorm(H * P * nh), c(H, P, nh))
+  out$tau_drift <- array(abs(stats::rnorm(bd, 0, TAU_DRIFT_SD)), bd)
+  out$tau_drift_A <- array(abs(stats::rnorm(bd, 0, TAU_DRIFT_A_SD)), bd)
+  out$tau_house_drift <- array(abs(stats::rnorm(bd, 0, TAU_HOUSE_DRIFT_SD)), bd)
   out
 }
 
@@ -1126,7 +1282,8 @@ draw_prior <- function(data) {
 #'     cap (the model's prior), the epoch bias's τ_μ, τ_μ,A and τ_house half-normal, the
 #'     newcomer pool's m_new normal and s_new half-normal, the shock's z_shock standard
 #'     normal and s̄_E half-normal, the δ walk's ζ standard normal and `s_zeta_raw` and
-#'     s̄_ζ half-normal, and the post-election multiplier's τ_post exponential(1);
+#'     s̄_ζ half-normal, the post-election multiplier's τ_post exponential(1), and the
+#'     calendar drift's steps standard normal and τ_drift, τ_drift,A and τ_house,d half-normal;
 #'   - `truth`, `v2_natural(pars, data)`;
 #'   - `data`, the input with `y_nat`, `y_kd` and `y_res` replaced (when `observe`): each
 #'     row keeps its total and its reported parties (`idx_*`, `n_rep_*`), its other cells
@@ -1197,6 +1354,8 @@ permute_data <- function(data, pp, kp) {
   out$y_res <- data$y_res[, kp, pp, drop = FALSE]
   out$idx_res <- remap_idx(data$idx_res, c(data$n_rep_res), pp)
   out$entry_epoch <- same_shape(c(data$entry_epoch)[pp], data$entry_epoch)
+  out$entry_bk <- same_shape(c(data$entry_bk)[pp], data$entry_bk)
+  out$entry_hk <- same_shape(c(data$entry_hk)[pp], data$entry_hk)
   out$annad_idx <- if (data$annad_idx > 0L) match(data$annad_idx, pp) else 0L
   out$d_shock <- data$d_shock[, pp, drop = FALSE]
   out$N_open <- same_shape(c(data$N_open)[kp], data$N_open)
@@ -1207,11 +1366,11 @@ permute_data <- function(data, pp, kp) {
 #' A point and its data in another party and kjördæmi order, mapped through the natural
 #' quantities, for the reference forms. The permuted data's party i is the input's party
 #' `party_perm[i]`, and its kjördæmi k the input's `kd_perm[k]`. θ_1, μ_1, the houses' ε,
-#' ν, every epoch's ζ, r, the newcomers' η, the epoch bias's steps ξ and ζ, the shock's z and
-#' the δ walk's `s_zeta_raw` are permuted, and Annað's index re-derived (the other scales,
+#' ν, every epoch's ζ, r, the newcomers' η, the epoch bias's steps ξ and ζ, the calendar
+#' drift's steps, the shock's z and the δ walk's `s_zeta_raw` are permuted, and Annað's index re-derived (the other scales,
 #' m_new and s_new are not party-indexed); `L_Omega` is re-derived as chol(Ω[pp, pp]),
 #' and `z_walk` from the permuted θ increments in the new coordinates 2:P. The data keep the
-#' builder's contract: counts, `exists`, `entry_epoch`, `d_shock`, `w` columns, `y_res`'s
+#' builder's contract: counts, `exists`, `entry_epoch`, `entry_bk`, `entry_hk`, `d_shock`, `w` columns, `y_res`'s
 #' kjördæmi and party dimensions and `N_open` permuted; reported-party lists re-derived by
 #' identity; kjördæmi poll rows re-sorted by poll and new kjördæmi; `sf_idx` re-indexed.
 #' @param pars a named list of `V2_CORE_PARS`
@@ -1262,7 +1421,9 @@ permute_v2 <- function(pars, data, party_perm, kd_perm) {
     z_shock = p$z_shock[pp, , drop = FALSE], s_bar_E = pars$s_bar_E,
     # WHY: numeric(0)[pp] would be P NAs.
     s_zeta_raw = if (length(p$s_zeta_raw)) p$s_zeta_raw[pp] else p$s_zeta_raw, s_bar_zeta = pars$s_bar_zeta,
-    delta_coord = array(numeric(0), c(0L, K - 1L, P - 1L)), tau_post = pars$tau_post
+    delta_coord = array(numeric(0), c(0L, K - 1L, P - 1L)), tau_post = pars$tau_post,
+    mu_drift_raw = p$mu_drift_raw[pp, , drop = FALSE], house_drift_raw = p$house_drift_raw[, pp, , drop = FALSE],
+    tau_drift = pars$tau_drift, tau_drift_A = pars$tau_drift_A, tau_house_drift = pars$tau_house_drift
   )
   ljac <- function(L) sum((P - 2:P) * log(diag(L)[2:P]))
   structure(list(pars = out_pars, data = out_data), ljac_L_Omega = ljac(L) - ljac(p$L_Omega))

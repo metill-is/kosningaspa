@@ -2,10 +2,13 @@
 # of Stan/forecast_v2.stan, with the meta its extractor and the scorer read; and its
 # extraction (spec §5.5): the variables a fit's draws must hold, and their parquets.
 
-#' V2's data switches, in the order of the Stan data: six model components, then two
+#' V2's data switches, in the order of the Stan data: seven model components, then two
 #' parameterisations.
 #' @export
-V2_SWITCHES <- c("epoch_bias", "newcomer_pool", "shock", "delta_walk", "fundamentals", "post_flex", "walk_form", "delta_form")
+V2_SWITCHES <- c(
+  "epoch_bias", "newcomer_pool", "shock", "delta_walk", "fundamentals", "post_flex", "bias_drift", "walk_form",
+  "delta_form"
+)
 
 #' The prior locations and scales V2 takes as data (Tier 3b's and Decision 1's), in data
 #' order.
@@ -33,8 +36,32 @@ V2_ORDERS <- c("default", "reversed")
 V2_VECTOR_FIELDS <- c(
   "delta_days", "campaign", "post", "grid_epoch", "delta_years", "grid_nat", "house_nat", "n_rep_nat",
   "poll_kd", "kd_kd", "grid_kd", "house_kd", "n_rep_kd", "grid_res", "n_rep_res",
-  "house_first_epoch", "entry_epoch", "N_open", "sf_idx", "mu_f"
+  "house_first_epoch", "entry_epoch", "bk_lo", "bk_a", "entry_bk", "hk_lo", "hk_a", "entry_hk", "house_first_hk",
+  "N_open", "sf_idx", "mu_f"
 )
+
+#' The knot spacings of the bias's calendar drift (`bias_drift` = 1, §6.4), in days: the
+#' industry bias every half-year, each house's deviations every year.
+#' @export
+BIAS_KNOT_DAYS <- 182.625
+#' The house knots' spacing, in days (see `BIAS_KNOT_DAYS`).
+#' @export
+HOUSE_KNOT_DAYS <- 365.25
+
+#' The knots of a calendar drift (§6.4), anchored at E: knot k on E - (n - k) `spacing`, the
+#' first on or before the grid's first date, and each grid date's place between two of them.
+#' @param g the grid dates (a Date vector ending at E)
+#' @param spacing the days between knots
+#' @return a list: `n` (the knots, at least 2), `lo` (each date's left knot, in 1..n - 1),
+#'   `a` (its weight on the right knot, lo + 1, in [0, 1]) and `step_years` (spacing / 365.25)
+#' @export
+knot_grid <- function(g, spacing) {
+  E <- as.numeric(g[length(g)])
+  n <- max(2L, as.integer(ceiling((E - as.numeric(g[1])) / spacing)) + 1L)
+  pos <- (as.numeric(g) - (E - (n - 1) * spacing)) / spacing
+  lo <- pmin(pmax(as.integer(floor(pos)) + 1L, 1L), n - 1L)
+  list(n = n, lo = lo, a = pmin(pmax(pos - (lo - 1L), 0), 1), step_years = spacing / 365.25)
+}
 
 #' π̄ for a party with no previous result, and the cap on 0.2 / π̄ in the shock scaling (§6.6).
 SHOCK_FLOOR <- 0.02
@@ -96,6 +123,7 @@ read_v2_config <- function(path) {
   }
   if (!(number(cfg$delta_years_bar) && cfg$delta_years_bar > 0)) bad("delta_years_bar must be one positive number")
   for (s in V2_SWITCHES) if (!(number(cfg[[s]]) && cfg[[s]] %in% c(0, 1))) bad(s, " must be 0 or 1")
+  if (cfg$bias_drift == 1 && cfg$epoch_bias == 1) bad("bias_drift = 1 replaces the epoch walk: set epoch_bias to 0")
   if (!(is.character(cfg$order) && length(cfg$order) == 1 && cfg$order %in% V2_ORDERS)) {
     bad("order must be ", paste(V2_ORDERS, collapse = " or "))
   }
@@ -200,6 +228,13 @@ reported <- function(y) {
 #'     or kjördæmi poll, ties by name), `entry_epoch` (0 for a party present at the window's start,
 #'     else its entry epoch) and `annad_idx` (Annað's index in the party order, 0 if the
 #'     cell has none: its industry-bias steps take their own scale τ_μ,A, §6.4);
+#'   - the knots of the bias's calendar drift (§6.4, read by the model with `bias_drift` = 1,
+#'     built whatever the switch): `n_bk`, `bk_lo`, `bk_a` and `bk_step_years`, the industry
+#'     bias's (`knot_grid(g, BIAS_KNOT_DAYS)`), `entry_bk` (0 for a party present at the
+#'     window's start, else the left knot of its first date in `exists`), `n_hk`, `hk_lo`,
+#'     `hk_a`, `hk_step_years` and `entry_hk`, the same on the houses' knots
+#'     (`HOUSE_KNOT_DAYS`), and `house_first_hk` (the left house knot of each house's first
+#'     admitted national poll, where its drift starts, or `n_hk` for a house with none);
 #'   - `d_shock` (n_epoch × P: √(min(0.2 / π̄, 10)), π̄ the national share at the election
 #'     before the one closing the epoch (`info$prev_shares`; 2013's for epoch 1, from the
 #'     fundamentals table), 0.02 for a party with none; the open epoch's row serves E),
@@ -425,6 +460,14 @@ v2_stan_data <- function(info, cfg, stage1 = stage1_mu_f, party_order = NULL, ro
 
   entry_epoch <- ifelse(entry$newcomer, as.integer(entry$entry_epoch), 0L)
   check(all(entry_epoch >= 0L & entry_epoch <= n_epoch), "a party enters after E's epoch")
+  bk <- knot_grid(g, BIAS_KNOT_DAYS)
+  hk <- knot_grid(g, HOUSE_KNOT_DAYS)
+  first_t <- apply(exists, 2, \(x) match(1L, x))
+  check(!anyNA(first_t), "a party exists at no grid date")
+  entry_bk <- ifelse(entry_epoch > 0L, bk$lo[first_t], 0L)
+  entry_hk <- ifelse(entry_epoch > 0L, hk$lo[first_t], 0L)
+  house_first_hk <- rep(hk$n, length(house_levels))
+  house_first_hk[!is.na(first_nat)] <- hk$lo[match(first_nat[!is.na(first_nat)], g)]
   data <- list(
     P = P, K = K, H = length(house_levels), G = G, n_epoch = n_epoch,
     delta_days = steps, campaign = campaign, post = post, grid_epoch = epoch_of(g), exists = exists, w = w,
@@ -438,6 +481,9 @@ v2_stan_data <- function(info, cfg, stage1 = stage1_mu_f, party_order = NULL, ro
     idx_res = reported(nat_res),
     house_first_epoch = as.integer(house_first_epoch), entry_epoch = entry_epoch,
     annad_idx = match("Anna\u00f0", party_order, nomatch = 0L),
+    n_bk = bk$n, bk_lo = bk$lo, bk_a = bk$a, bk_step_years = bk$step_years, entry_bk = as.integer(entry_bk),
+    n_hk = hk$n, hk_lo = hk$lo, hk_a = hk$a, hk_step_years = hk$step_years, entry_hk = as.integer(entry_hk),
+    house_first_hk = as.integer(house_first_hk),
     d_shock = d_shock, N_open = as.integer(N_open), draw_forecast = if (free) 0L else 1L, latent_path = 0L,
     n_sf = n_sf, sf_idx = sf_idx, mu_f = mu_f,
     desired_weight = cfg$desired_weight, weight_time = cfg$weight_time, campaign_days = cd,
@@ -485,20 +531,22 @@ V2_DRAW_VARIABLES <- c("votes_kd", "pi_nat_eday", "pi_latent_E", "y_rep_res")
 V2_PARAM_VARIABLES <- c(
   "sigma", "L_Omega", "tau_camp", "mu_phi", "sigma_phi", "log_phi", "log_phi_K", "log_kappa", "sigma_gamma", "mu",
   "tau_mu", "tau_mu_A", "tau_house", "m_new", "s_new", "s_bar_E", "mu_sd", "tau_sd", "s_delta0", "s_bar_zeta", "s_zeta",
-  "anchor_w", "delta_coord", "tau_post"
+  "anchor_w", "delta_coord", "tau_post", "tau_drift", "tau_drift_A", "tau_house_drift"
 )
 
 #' The switch that puts each switch-dependent variable of `V2_PARAM_VARIABLES` in the model:
 #' the epoch walk's scales (§6.4), the newcomer pool's mean and scale (§6.4), the shock's
 #' scale (§6.6), the δ walk's scales (§6.7), the anchored walk's anchors (`walk_form = 1`,
-#' §6.9), the centred δ walk's coordinates at the closed elections (`delta_form = 1`, §6.7) and
-#' the post-election multiplier (`post_flex = 1`, §6.2).
+#' §6.9), the centred δ walk's coordinates at the closed elections (`delta_form = 1`, §6.7),
+#' the post-election multiplier (`post_flex = 1`, §6.2) and the calendar drift's scales
+#' (`bias_drift = 1`, §6.4).
 #' Each is size 0, or absent, with its switch at 0.
 #' @export
 V2_PARAM_SWITCH <- c(
   tau_mu = "epoch_bias", tau_mu_A = "epoch_bias", tau_house = "epoch_bias", m_new = "newcomer_pool",
   s_new = "newcomer_pool", s_bar_E = "shock", s_bar_zeta = "delta_walk", s_zeta = "delta_walk", anchor_w = "walk_form",
-  delta_coord = "delta_form", tau_post = "post_flex"
+  delta_coord = "delta_form", tau_post = "post_flex", tau_drift = "bias_drift", tau_drift_A = "bias_drift",
+  tau_house_drift = "bias_drift"
 )
 
 #' The variables of `V2_PARAM_VARIABLES` in the model under `switches`.
