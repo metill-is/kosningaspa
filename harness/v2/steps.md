@@ -2084,8 +2084,43 @@ The constant bias, v2s-m6-noepoch, is worse than m6 on 2024 eve (CRPS10 +0.039, 
 20.3, kjördæmi and seat CRPS worse) and ties on 2021 f180: the bias does need to move, and the
 epoch walk moves it better than the drift does.
 
+**Diagnosis of the Samfylkingin miss (7 Nov 2026).** The final polls were nearly right for
+Samfylkingin: the ten national polls of the last 30 days averaged 21.0%, against its 20.75%.
+Every V2-family arm, and R0, still lowered it, by 2 to 4 points:
+
+| Run | S's industry bias in the open epoch (log ratio) | S at E, % | Error, pp |
+|---|---|---|---|
+| R0 | – | 18.00 | −2.75 |
+| V2 | 0.053 | 18.62 | −2.13 |
+| V2 without fundamentals (`v2-nofund`, fitted 7 Nov for this check) | 0.035 | 18.80 | −1.95 |
+| v2s-m6 | 0.073 | 18.26 | −2.49 |
+| v2s-m6-noepoch | 0.125 | 17.50 | −3.25 |
+| v2s-m7 | 0.157 | 16.57 | −4.18 |
+
+- **The fundamentals cost S only 0.18 points** (V2 against `v2-nofund`, whose fit took 11.5
+  minutes, max R-hat 1.0174, no divergences).
+- **m7's extra miss is its industry bias at E.** Against m6 it misses by 1.69 points more, and
+  its bias for S at E is 0.157 against 0.073, a log gap of 0.084, about 1.5 points on S. The
+  polls overstated S at the 2016 and 2021 elections (log gaps of +0.19 and +0.25 over their last
+  30 days), but the polls of the 90 days after the 2021 election were close to its result
+  (+0.05). The epoch walk lets the open epoch's bias rest on those polls: m6 moves S's bias from
+  0.144 to 0.073 at the 2021 election. The calendar drift is slow (τ_drift's median 0.035 per
+  √year), so m7 carries 2021's level into the open epoch.
+- **Fylgisvakt's v5 did better with the same idea.** Its epoch-varying bias
+  (`Stan/polling_watch_variants.md` §10) missed S by −0.9 points in its 2024 leave-future-out
+  backtest (MAE 0.73, CRPS 0.542). Fitted to all the data, its S bias is +0.19, +0.11 and +0.15
+  in the epochs ending in 2016, 2017 and 2021, and −0.06 in the epoch ending in 2024: a step of
+  −0.21 at the 2021 election, against v5's per-epoch scale τ_mu of 0.15. V2's τ_mu has posterior
+  median 0.094 on 2024 eve (0.078 in m6) under its half-N(0, 0.1) prior, so V2's industry bias
+  moves less between elections than v5's; the house scales agree (τ_house 0.048 against 0.05).
+- **About 1.3 points of V2's miss are not separated.** They lie beyond the industry bias and the
+  fundamentals: in the late polls' house deviations, or in the walk. The extracts hold neither γ
+  at E nor the house steps.
+
 **Not done.**
-- Why m7 moves Samfylkingin away: its house deviations at E, against m6's, were not examined.
+- A wider prior on τ_mu, so that the bias can move between elections as far as v5 finds it does.
+- Separating the last 1.3 points of V2's Samfylkingin miss (γ at E needs a generated-quantities
+  pass or a wider extract).
 - A second seed per arm and cell.
 - The anchored walk with `bias_drift = 1`: no config combines the two.
 - A committed scoring report, for the reason given under v2s-m6.
