@@ -1453,3 +1453,26 @@ test_that("v2s-m7: transformed data refuses the drift beside the epoch walk, and
   e$entry_hk[1] <- 1L
   expect_error(v2_methods(V2_STAN, e), "forecast_v2: entry_bk and entry_hk must be positive exactly for the newcomers", fixed = TRUE)
 })
+
+test_that("the matrix likelihood's transformed data refuses a decreasing grid_epoch, and date G outside the open epoch", {
+  # WHY: the likelihood reads each epoch's poll dates as one contiguous block of columns, which
+  # holds only when grid_epoch never decreases and the last date is in the open epoch.
+  skip_unless_slow()
+  skip_unless_step("v2s-m0", "matrix_likelihood")
+  d <- v2_test_cells(cfg_m0())$eve2024$data
+  t2 <- match(2L, d$grid_epoch)
+  dec <- d
+  dec$grid_epoch[t2 + 1] <- 1L
+  expect_error(
+    v2_methods(V2_STAN, dec),
+    paste0("forecast_v2: the matrix likelihood needs grid_epoch non-decreasing, but grid_epoch[", t2 + 1, "] = 1 < grid_epoch[", t2, "] = 2"),
+    fixed = TRUE
+  )
+  shut <- d
+  shut$grid_epoch[shut$grid_epoch == d$n_epoch] <- d$n_epoch - 1L
+  expect_error(
+    v2_methods(V2_STAN, shut),
+    paste0("forecast_v2: the matrix likelihood needs date G in the open epoch, but grid_epoch[G] = ", d$n_epoch - 1L, " and n_epoch = ", d$n_epoch),
+    fixed = TRUE
+  )
+})

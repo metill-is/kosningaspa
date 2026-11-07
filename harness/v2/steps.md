@@ -2028,3 +2028,89 @@ owner's go-ahead and for the Stan speed study running in its own session, whose 
 - The anchored walk with `bias_drift = 1`: no config combines the two.
 - The earlier steps' slow lp tests: only v2s-m7's were run.
 - A committed scoring report, for the reason given under v2s-m6.
+
+## Speed: the likelihood in matrix form (exact, 7 Nov 2026)
+
+**Why.** A profile of V2's model on 2024 eve put 82% of each gradient in the national
+likelihood. `national_share()` ran once per poll and looped over the six kjördæmi, and the
+built-in `dirichlet_multinomial` ran once per row; each pass was a string of small vector
+operations, every one allocating memory and adding nodes to the autodiff tape. A Stan speed
+study, run in a side session on 7 Nov 2026 against the model at 4b7223a (its report is outside
+the repository), rewrote the likelihood in matrix form. This change ports it onto v2s-m7.
+
+**What changed.** Computation only:
+- π_nat at every date the likelihood reads comes from two matrix products per epoch:
+  exp(δ_e) times the masked exp(θ) columns gives each kjördæmi's normaliser at every date, and
+  exp(δ_e)ᵀ (w_e ⊘ S) the weighted sum. Subtracting max(θ) before exp() cancels in each ratio
+  and keeps exp() from overflowing, as `softmax()` does.
+- The national, kjördæmi and results Dirichlet-multinomials are flattened into vectorised
+  `lgamma` terms over the reported cells. α sums to α₀ in each row, so lgamma(α₀) −
+  lgamma(α₀ + N) needs one call per row.
+- Each row is summed before the rows are added: a row's cells are contiguous, so the row sums
+  are one CSR product with a matrix of ones. The study's patch summed every cell's terms across
+  the whole likelihood, so terms near 1e7 cancelled to an lp near 3e5. That multiplied the
+  rounding about 100-fold and failed the v2s-m0 permutation test (worst error 1.54 × its
+  tolerance, against 0.0139 for the row-by-row form). Per-row sums bring it to 0.165, for about
+  5% of the gradient.
+- With `bias_drift = 1`, every poll's bias is μ's knots times `Wb_nat` plus the house knots times
+  `Wh_nat`, data matrices whose columns hold the interpolation weights, the same as
+  `drift_bias()` poll by poll. This is the one part the study's patch lacked: it was built
+  before m7 and read one bias per epoch and house.
+- The forward walk (`walk_form = 0`) builds θ by `cumulative_sum`; the anchored walk is
+  untouched.
+- The data terms the built-in keeps inside its `lbeta()` calls even in a sampling statement,
+  lgamma(N) − Σ lgamma(y) over the nonzero counts, are added to each row from transformed data
+  (`dm_nat`, `dm_kd`, `dm_res`), so `lp__` is the row-by-row form's.
+- Transformed data refuses a decreasing `grid_epoch` and a date G outside the open epoch, since
+  each epoch's poll dates are read as one block of columns.
+
+The data, parameters, transformed parameters and generated quantities are unchanged, and
+generated quantities keep the row-by-row form for `log_lik`. The Stan file's sha changes, so
+the queue will find every existing V2-family fit stale.
+
+**Checks.**
+- **Old against new:** CmdStan's `log_prob` (jacobian = 1) at 20 points of a static-HMC path
+  from init 0 towards the mode, with 5127f5b's model and this one built side by side, on v2s-m7's
+  data for 2024 eve, 2021 f180 and 2017 eve, and on V2's and v2s-p3's (the anchored walk) for
+  2024 eve and 2021 f180. On all seven the lp offset's range is at most 1.25e-9 and its value
+  at most 4.4e-10 in absolute value (zero up to rounding, against |lp| up to 3.5e4), and every
+  gradient coordinate agrees to at most 4.9e-9 relative error.
+- **Speed:** 4,000 static-HMC gradients from init 0, each model run alone, ms per gradient:
+
+  | Data | 5127f5b | Matrix form | Gain |
+  |---|---|---|---|
+  | v2s-m7, 2024 eve | 2.81 | 0.84 | 3.3× |
+  | v2s-m7, 2021 f180 | 1.53 | 0.46 | 3.3× |
+  | v2s-m7, 2017 eve | 0.72 | 0.21 | 3.4× |
+  | V2, 2024 eve | 2.53 | 0.67 | 3.8× |
+  | V2, 2021 f180 | 1.37 | 0.37 | 3.7× |
+  | v2s-p3, 2024 eve | 2.67 | 0.83 | 3.2× |
+
+  m7 gains a little less than V2 because the drift's knots, built in transformed parameters,
+  are untouched.
+- **Stan against the reference, every step:** `HARNESS_SLOW=1 LC_ALL=en_US.UTF-8 Rscript
+  tests/run.R v2-stan`, 1,136 passes and 1 failure, 13 min 54 s. All 38 lp comparisons pass,
+  the worst at 2.8e-5 of its tolerance (v2s-m1, 2021 f180); every mutant is exercised and
+  rejected where it was before; the permutation test's worst error is 0.165 of its tolerance.
+  The failure is older than this change and than v2s-m7: the votes_kd test (test-v2-stan.R)
+  first checks that its seed-1 prior draw puts every house's φ at least 10 times from φ_K = 30,
+  and the draw now gives φ between 72 and 97 (the same at 4b7223a and 5127f5b), so the guard
+  fails before the test's own checks run. It needs a new fixture value, with the owner's yes.
+- **Fast suite:** 0 failures, 6,952 passes, 79 skipped (the slow tests).
+- **The refusals:** a new slow test (tag `matrix_likelihood`) feeds each reject bad data and
+  matches its message.
+- **Fits (the study's, not the harness's):** 4-chain 400 + 400 fits of the study's copy of
+  the rewritten model (its sums across the whole likelihood, not per row) on the v2s-m6 fits'
+  frozen data took 12.2 and 11.3 minutes on 2024 eve
+  (seeds 2701 and 2702) against the recorded v2s-m6 fit's 44.6, and 5.8 and 6.2 on 2021 f180
+  against 22.3, at the same gradients per draw (1,023 and 895). The minimum bulk ESS per 1,000
+  sampling gradients was 0.149 and 0.158 against 0.174 on 2024 eve, and 0.146 and 0.110
+  against 0.149 on 2021 f180, within the seed noise P4 recorded. No fit diverged.
+
+**Not done.**
+- A harness fit with this file: the v2s-m7 queue will be the first.
+- Reusing a reference fit's adaptation (inverse metric, step size and one init per chain, with
+  about 100 burn-in iterations): the study measured another 2.1× (2024 eve) and 2.9× (2021
+  f180) ESS per gradient over the whole fit when the reference was the same model on the same
+  data. It needs `fit_cell.R` to save each run's adaptation and to take a reference run's.
+- The drift's transformed parameters: m7's gradient costs 0.84 ms against V2's 0.67.

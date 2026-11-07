@@ -519,6 +519,179 @@ transformed data {
       }
     }
   }
+
+  // The likelihood is written in matrix form, which evaluates the same density as one
+  // national_share() and one dirichlet_multinomial per row at about a quarter of the gradient's
+  // cost (generated quantities keep the row-by-row form for log_lik). Its indices:
+  // the grid dates the national likelihood reads (each national poll's, and E with
+  // fundamentals = 1), in date order; ucol[t] is date t's column, 0 if none. The columns of one
+  // epoch are contiguous because grid_epoch never decreases, which the rejects below check.
+  int nU = 0;
+  array[G] int ucol = rep_array(0, G);
+  {
+    array[G] int need = rep_array(0, G);
+    for (n in 1:N_nat) need[grid_nat[n]] = 1;
+    if (fundamentals) need[G] = 1;
+    for (t in 1:G) {
+      if (need[t]) {
+        nU += 1;
+        ucol[t] = nU;
+      }
+    }
+  }
+  for (t in 2:G) {
+    if (grid_epoch[t] < grid_epoch[t - 1]) {
+      reject("forecast_v2: the matrix likelihood needs grid_epoch non-decreasing, but grid_epoch[", t, "] = ",
+             grid_epoch[t], " < grid_epoch[", t - 1, "] = ", grid_epoch[t - 1]);
+    }
+  }
+  if (grid_epoch[G] != n_epoch) {
+    reject("forecast_v2: the matrix likelihood needs date G in the open epoch, but grid_epoch[G] = ", grid_epoch[G],
+           " and n_epoch = ", n_epoch);
+  }
+  array[nU] int u_date;
+  for (t in 1:G) {
+    if (ucol[t] > 0) u_date[ucol[t]] = t;
+  }
+  matrix[P, nU] u_mask;
+  for (j in 1:nU) {
+    for (p in 1:P) u_mask[p, j] = exists[u_date[j], p];
+  }
+  array[n_epoch] int u_lo = rep_array(0, n_epoch);
+  array[n_epoch] int u_n = rep_array(0, n_epoch);
+  for (j in 1:nU) {
+    int e = grid_epoch[u_date[j]];
+    if (u_n[e] == 0) u_lo[e] = j;
+    u_n[e] += 1;
+  }
+
+  // The national likelihood flattened: the reported cells (n, p) of the P x N_nat count matrix,
+  // column-major, and each poll's epoch-house column of the gamma matrix.
+  int n_flat = sum(n_rep_nat);
+  array[n_flat] int flat_idx;
+  vector[n_flat] y_flat;
+  matrix[P, N_nat] rep_mask = rep_matrix(0, P, N_nat);
+  vector[N_nat] N_poll;
+  array[N_nat] int eh_nat;
+  array[N_nat] int ucol_nat;
+  {
+    int i = 0;
+    for (n in 1:N_nat) {
+      N_poll[n] = sum(y_nat[n]);
+      eh_nat[n] = (grid_epoch[grid_nat[n]] - 1) * H + house_nat[n];
+      ucol_nat[n] = ucol[grid_nat[n]];
+      for (j in 1:n_rep_nat[n]) {
+        int p = idx_nat[n, j];
+        i += 1;
+        flat_idx[i] = (n - 1) * P + p;
+        y_flat[i] = y_nat[n, p];
+        rep_mask[p, n] = 1;
+      }
+    }
+  }
+
+  // The kjordaemi likelihood flattened, as the national one.
+  int n_flat_kd = sum(n_rep_kd);
+  array[n_flat_kd] int flat_kd;
+  vector[n_flat_kd] y_flat_kd;
+  matrix[P, N_kd] kd_mask = rep_matrix(0, P, N_kd);
+  vector[N_kd] N_row_kd;
+  array[N_kd] int ek_kd;
+  {
+    int i = 0;
+    for (r in 1:N_kd) {
+      N_row_kd[r] = sum(y_kd[r]);
+      ek_kd[r] = (grid_epoch[grid_kd[r]] - 1) * K + kd_kd[r];
+      for (j in 1:n_rep_kd[r]) {
+        int p = idx_kd[r, j];
+        i += 1;
+        flat_kd[i] = (r - 1) * P + p;
+        y_flat_kd[i] = y_kd[r, p];
+        kd_mask[p, r] = 1;
+      }
+    }
+  }
+
+  // The results likelihood flattened: column (e - 1) K + k is closed election e's kjordaemi k.
+  int n_flat_res = K * sum(n_rep_res);
+  array[n_flat_res] int flat_res;
+  vector[n_flat_res] y_flat_res;
+  matrix[P, n_closed * K] res_mask = rep_matrix(0, P, n_closed * K);
+  vector[n_closed * K] N_res;
+  {
+    int i = 0;
+    for (e in 1:n_closed) {
+      for (k in 1:K) {
+        int c = (e - 1) * K + k;
+        N_res[c] = sum(y_res[e, k]);
+        for (j in 1:n_rep_res[e]) {
+          int p = idx_res[e, j];
+          i += 1;
+          flat_res[i] = (c - 1) * P + p;
+          y_flat_res[i] = y_res[e, k, p];
+          res_mask[p, c] = 1;
+        }
+      }
+    }
+  }
+  // With bias_drift = 1, each national poll's bias as data-weighted sums of the knots, as
+  // drift_bias() forms it: column n of Wb_nat holds 1 - a and a at the two industry knots around
+  // the poll's date, and column n of Wh_nat the same at its house's two knots (row (h - 1) n_hk
+  // + k), so that the P x N_nat biases are mu_knot Wb_nat + dev_knot Wh_nat.
+  matrix[bias_drift * n_bk, bias_drift * N_nat] Wb_nat = rep_matrix(0, bias_drift * n_bk, bias_drift * N_nat);
+  matrix[bias_drift * H * n_hk, bias_drift * N_nat] Wh_nat = rep_matrix(0, bias_drift * H * n_hk, bias_drift * N_nat);
+  if (bias_drift) {
+    for (n in 1:N_nat) {
+      int t = grid_nat[n];
+      int r = (house_nat[n] - 1) * n_hk + hk_lo[t];
+      Wb_nat[bk_lo[t], n] = 1 - bk_a[t];
+      Wb_nat[bk_lo[t] + 1, n] = bk_a[t];
+      Wh_nat[r, n] = 1 - hk_a[t];
+      Wh_nat[r + 1, n] = hk_a[t];
+    }
+  }
+  // Each row's log density is summed before the rows are added, so that its large lgamma terms
+  // cancel within the row, as in dirichlet_multinomial, and not across the whole likelihood,
+  // which would cost about 25 times the rounding. A row's cells are contiguous in the flattened
+  // vectors, so the row sums are one CSR product with a matrix of ones: u_* are the rows' first
+  // cells (CSR row starts) and v_* the cells' own indices.
+  array[N_nat + 1] int u_nat;
+  array[N_kd + 1] int u_kd;
+  array[n_closed * K + 1] int u_res;
+  u_nat[1] = 1;
+  for (n in 1:N_nat) u_nat[n + 1] = u_nat[n] + n_rep_nat[n];
+  u_kd[1] = 1;
+  for (r in 1:N_kd) u_kd[r + 1] = u_kd[r] + n_rep_kd[r];
+  u_res[1] = 1;
+  for (e in 1:n_closed) {
+    for (k in 1:K) u_res[(e - 1) * K + k + 1] = u_res[(e - 1) * K + k] + n_rep_res[e];
+  }
+  array[n_flat] int v_nat = linspaced_int_array(n_flat, 1, n_flat);
+  array[n_flat_kd] int v_kd = linspaced_int_array(n_flat_kd, 1, n_flat_kd);
+  array[n_flat_res] int v_res = linspaced_int_array(n_flat_res, 1, n_flat_res);
+  // The data terms that dirichlet_multinomial keeps inside its lbeta() calls even in a sampling
+  // statement, lgamma(N) - sum of lgamma(y) over the nonzero counts, row by row. The flattened
+  // likelihood adds them to each row, so that lp__ is the row-by-row form's.
+  vector[N_nat] dm_nat = lgamma(N_poll);
+  for (n in 1:N_nat) {
+    for (j in 1:n_rep_nat[n]) {
+      if (y_nat[n, idx_nat[n, j]] > 0) dm_nat[n] -= lgamma(y_nat[n, idx_nat[n, j]]);
+    }
+  }
+  vector[N_kd] dm_kd = lgamma(N_row_kd);
+  for (r in 1:N_kd) {
+    for (j in 1:n_rep_kd[r]) {
+      if (y_kd[r, idx_kd[r, j]] > 0) dm_kd[r] -= lgamma(y_kd[r, idx_kd[r, j]]);
+    }
+  }
+  vector[n_closed * K] dm_res = lgamma(N_res);
+  for (e in 1:n_closed) {
+    for (k in 1:K) {
+      for (j in 1:n_rep_res[e]) {
+        if (y_res[e, k, idx_res[e, j]] > 0) dm_res[(e - 1) * K + k] -= lgamma(y_res[e, k, idx_res[e, j]]);
+      }
+    }
+  }
   // The calendar drift's newcomers (bias_drift = 1): the parties entering at each industry and
   // house knot, and those existing before it; and each epoch's last grid date, where mu and
   // gamma report the bias (the closed elections' dates, then E).
@@ -637,11 +810,10 @@ transformed parameters {
     vector[G - 1] scale = step_scale(sqrt_delta, tau_camp, campaign_v, tau_post, post_v);
     if (walk_form == 0) {
       matrix[P - 1, G - 1] step = diag_post_multiply(L_walk * z_walk, scale);
-      theta[ : , 1] = theta1;
-      for (i in 1:(G - 1)) {
-        theta[2:P, i + 1] = theta[2:P, i] + step[ : , i];
-        theta[1, i + 1] = theta[1, i] - sum(step[ : , i]);
-      }
+      matrix[P - 1, G] th = append_col(theta1[2:P], step);
+      for (p in 1:(P - 1)) th[p] = cumulative_sum(th[p]);
+      theta[2:P, : ] = th;
+      theta[1, : ] = -rep_row_vector(1, P - 1) * th;
     } else {
       // §6.9, the same walk anchored at the closed elections, forward from theta1. With
       // v[t] = Delta s^2 of the step from t - 1 to t and cv its running total, the walk from
@@ -885,34 +1057,87 @@ model {
   real kappa = exp(log_kappa);
   real phi_K = exp(log_phi_K);
 
-  // National polls (§6.3): y_n ~ DirMult(phi_h normalise(pi_nat[S] .* exp(gamma_{e,h}[S]))), with
-  // bias_drift = 1 the bias at the poll's date in place of gamma_{e,h}.
-  for (n in 1:N_nat) {
-    int t = grid_nat[n];
-    int e = grid_epoch[t];
-    array[n_rep_nat[n]] int S = idx_nat[n, 1:n_rep_nat[n]];
-    vector[P] pi = national_share(theta[ : , t], delta[e], w[e], exist_idx[t, 1:n_exist[t]]);
-    vector[P] g = gamma[e, house_nat[n]];
-    if (bias_drift) g = drift_bias(mu_knot, dev_knot, house_nat[n], bk_lo[t], bk_a[t], hk_lo[t], hk_a[t]);
-    y_nat[n, S] ~ dirichlet_multinomial(national_alpha(pi, g, phi[house_nat[n]], S));
+  // pi_nat at every date the likelihood reads (§6.3): pi[p, j] = sum_k w_k exp(theta_p +
+  // delta_kp) m_p / sum_q m_q exp(theta_q + delta_kq), m the date's existing parties, from two
+  // matrix products per epoch: S = exp(delta_e) Et gives every kjordaemi's normaliser at every
+  // date, and exp(delta_e)' (w_e ./ S) the weighted sum. Subtracting max(theta) before exp()
+  // cancels in each ratio and keeps exp() from overflowing, as softmax() does.
+  matrix[P, nU] Pi_u;
+  {
+    matrix[P, nU] Et = exp(theta[ : , u_date] - max(theta)) .* u_mask;
+    for (e in 1:n_epoch) {
+      if (u_n[e] > 0) {
+        matrix[K, P] Ed = exp(delta[e]);
+        matrix[P, u_n[e]] Eb = block(Et, 1, u_lo[e], P, u_n[e]);
+        matrix[K, u_n[e]] C = rep_matrix(w[e]', u_n[e]) ./ (Ed * Eb);
+        Pi_u[ : , u_lo[e]:(u_lo[e] + u_n[e] - 1)] = Eb .* (Ed' * C);
+      }
+    }
   }
 
-  // Kjordaemi polls (§6.7): y_jk ~ DirMult(kappa phi_h softmax over S of (nu_j + delta_{e,k})).
-  for (r in 1:N_kd) {
-    int e = grid_epoch[grid_kd[r]];
-    array[n_rep_kd[r]] int S = idx_kd[r, 1:n_rep_kd[r]];
-    y_kd[r, S] ~ dirichlet_multinomial(kappa * phi[house_kd[r]] * softmax(nu[poll_kd[r]][S] + delta[e][kd_kd[r], S]'));
+  // National polls (§6.3): y_n ~ DirMult(phi_h normalise(pi_nat[S] .* exp(gamma_{e,h}[S]))), with
+  // bias_drift = 1 the bias at the poll's date in place of gamma_{e,h}. Flattened: alpha_n sums
+  // to phi_h, so the density's lgamma(alpha_0) - lgamma(alpha_0 + N) is lgamma(phi_h) -
+  // lgamma(phi_h + N), and the rest is a sum of lgamma(alpha + y) - lgamma(alpha) over the
+  // reported cells; each row is summed first (transformed data's u_nat) and gets its data terms
+  // (dm_nat).
+  {
+    matrix[P, N_nat] Eg;
+    if (bias_drift) {
+      matrix[P, n_bk] MuK;
+      matrix[P, H * n_hk] DevK;
+      for (k in 1:n_bk) MuK[ : , k] = mu_knot[k];
+      for (h in 1:H) {
+        for (k in 1:n_hk) DevK[ : , (h - 1) * n_hk + k] = dev_knot[h, k];
+      }
+      Eg = exp(MuK * Wb_nat + DevK * Wh_nat);
+    } else {
+      matrix[P, n_epoch * H] Gm;
+      for (e in 1:n_epoch) {
+        for (h in 1:H) Gm[ : , (e - 1) * H + h] = gamma[e, h];
+      }
+      Eg = exp(Gm)[ : , eh_nat];
+    }
+    matrix[P, N_nat] A = Pi_u[ : , ucol_nat] .* Eg .* rep_mask;
+    vector[N_nat] phin = phi[house_nat];
+    matrix[P, N_nat] Al = diag_post_multiply(A, phin ./ (rep_row_vector(1, P) * A)');
+    vector[n_flat] af = to_vector(Al)[flat_idx];
+    vector[N_nat] cells = csr_matrix_times_vector(N_nat, n_flat, rep_vector(1, n_flat), v_nat, u_nat,
+                                                  lgamma(af + y_flat) - lgamma(af));
+    target += sum(cells + lgamma(phin) - lgamma(phin + N_poll) + dm_nat);
+  }
+
+  // Kjordaemi polls (§6.7): y_jk ~ DirMult(kappa phi_h softmax over S of (nu_j + delta_{e,k})),
+  // flattened as the national polls, the softmax as exp(nu_j) .* exp(delta_ek) masked to S.
+  {
+    matrix[P, J] Enu;
+    for (j in 1:J) Enu[ : , j] = nu[j];
+    matrix[P, n_epoch * K] Dm;
+    for (e in 1:n_epoch) Dm[ : , ((e - 1) * K + 1):(e * K)] = delta[e]';
+    matrix[P, N_kd] A = exp(Enu)[ : , poll_kd] .* exp(Dm)[ : , ek_kd] .* kd_mask;
+    vector[N_kd] cphi = kappa * phi[house_kd];
+    matrix[P, N_kd] Al = diag_post_multiply(A, cphi ./ (rep_row_vector(1, P) * A)');
+    vector[n_flat_kd] af = to_vector(Al)[flat_kd];
+    vector[N_kd] cells = csr_matrix_times_vector(N_kd, n_flat_kd, rep_vector(1, n_flat_kd), v_kd, u_kd,
+                                                 lgamma(af + y_flat_kd) - lgamma(af));
+    target += sum(cells + lgamma(cphi) - lgamma(cphi + N_row_kd) + dm_kd);
   }
 
   // Results (§6.6): y_ek ~ DirMult(phi_K softmax over S of (theta_te + eps_e + delta_{e,k})),
-  // eps_e = 0 with shock = 0.
-  for (e in 1:n_closed) {
-    int t = grid_res[e];
-    int de = grid_epoch[t];
-    array[n_rep_res[e]] int S = idx_res[e, 1:n_rep_res[e]];
-    for (k in 1:K) {
-      y_res[e, k, S] ~ dirichlet_multinomial(phi_K * softmax(theta[S, t] + eps[e, S]' + delta[de][k, S]'));
+  // eps_e = 0 with shock = 0, flattened as the national polls.
+  {
+    matrix[P, n_closed * K] Ar;
+    for (e in 1:n_closed) {
+      int t = grid_res[e];
+      int de = grid_epoch[t];
+      Ar[ : , ((e - 1) * K + 1):(e * K)] = rep_matrix(theta[ : , t] + eps[e]', K) + delta[de]';
     }
+    Ar = exp(Ar) .* res_mask;
+    matrix[P, n_closed * K] Al = diag_post_multiply(Ar, phi_K ./ (rep_row_vector(1, P) * Ar)');
+    vector[n_flat_res] af = to_vector(Al)[flat_res];
+    vector[n_closed * K] cells = csr_matrix_times_vector(n_closed * K, n_flat_res, rep_vector(1, n_flat_res), v_res,
+                                                         u_res, lgamma(af + y_flat_res) - lgamma(af));
+    target += sum(cells + lgamma(phi_K) - lgamma(phi_K + N_res) + dm_res);
   }
 
   // The fundamentals pseudo-observation (fundamentals = 1, §6.5): mu_f ~ N(x_c, tau_f), x = log
@@ -926,7 +1151,7 @@ model {
   // (1 + tau_post)^2 each: ((weight_time - campaign_days - weight_post_days) + weight_post_days
   // (1 + tau_post)^2 + campaign_days (1 + tau_camp)^2).
   if (fundamentals) {
-    vector[P] pi_E = national_share(theta[ : , G], delta[n_epoch], w[n_epoch], exist_idx[G, 1:n_exist[G]]);
+    vector[P] pi_E = Pi_u[ : , ucol[G]];
     vector[n_sf] x = log(pi_E[sf_idx]);
     real days = (weight_time - campaign_days) + campaign_days * square(1 + tau_camp);
     if (post_flex) {
