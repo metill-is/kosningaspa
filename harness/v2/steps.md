@@ -1927,7 +1927,7 @@ with V2. m6 closes about a fifth of V2's 2024-eve MAE gap to R0 (0.07 of 0.33) a
 - A committed scoring report: that needs `score_cell()` to score `dev` arms on the 2021 and
   2024 cells, which changes a guard and its test.
 
-## v2s-m7: the calendar drift of the bias (M-step, lean; built, not yet fitted)
+## v2s-m7: the calendar drift of the bias (M-step, lean; fitted and scored, 7 Nov 2026)
 
 **Why.** m6 closed about a fifth of V2's 2024-eve MAE gap to R0 and none of the 2021 gap
 (v2s-m6, Scores). The epoch walk holds the industry bias constant across a whole term and lets
@@ -2016,17 +2016,78 @@ but nothing reads them.
   13.79); they equal `v2s-m6-noepoch`'s exactly, so the move comes from dropping the epoch
   walk's draws, which shifts the random stream, not from the drift.
 
-**Fits.** Not run. `harness/runs/v2s-m7.txt` lists v2s-m7, v2s-m6 and v2s-m6-noepoch at
-400 + 400, seed 2701, on 2024 eve (lane A) and 2021 f180 (lane B). v2s-m6 is in the list so
-that the three arms are scored together; the queue will find its 6e66f92 fits stale and refit
-them, which also checks that `bias_drift = 0` reproduces m6's draws. The fits wait for the
-owner's go-ahead and for the Stan speed study running in its own session, whose changes may
-  apply to these fits.
+**Fits (7 Nov 2026).** `PREFLIGHT=lean zsh R/harness/queue.sh harness/runs/v2s-m7.txt 400 400`
+(preflight PASS), at 258d3c8, so with the likelihood in matrix form (the next section). The list
+holds v2s-m7, v2s-m6 and v2s-m6-noepoch, seed 2701, on 2024 eve (lane A) and 2021 f180 (lane
+B). The queue found m6's 6e66f92 fits stale on their Stan, config and data hashes (the config
+and the data gained `bias_drift` and the knot fields) and refitted them. The refits' draws are
+not bit-identical to the old ones, since the matrix form rounds differently and NUTS paths part
+after a few iterations. So the check is the harness's permutation rule (`compare_runs.R`,
+Decision 8, applied to each refit and its stale fit by the module's `perm_z()` and
+`perm_verdict()`): PASS on 2024 eve (1 of 280 |z| above 3, max 3.09, sd of the mean z's 1.05)
+and on 2021 f180 (3 of 280, max 3.58, sd 1.06).
+
+| Run | Minutes | Max R-hat | Min bulk / tail ESS | Divergent | Treedepth hits | Min E-BFMI |
+|---|---|---|---|---|---|---|
+| v2s-m7, 2024 eve | 17.4 | 1.0208 | 203 / 256 | 0 | 0 | 0.626 |
+| v2s-m6, 2024 eve | 12.1 | 1.0209 | 176 / 81 | 0 | 0 | 0.648 |
+| v2s-m6-noepoch, 2024 eve | 11.4 | 1.0311 | 189 / 195 | 0 | 0 | 0.630 |
+| v2s-m7, 2021 f180 | 8.0 | 1.0284 | 183 / 330 | 0 | 0 | 0.612 |
+| v2s-m6, 2021 f180 | 6.3 | 1.0222 | 191 / 332 | 0 | 0 | 0.497 |
+| v2s-m6-noepoch, 2021 f180 | 5.8 | 1.0210 | 184 / 178 | 0 | 0 | 0.576 |
+
+All six fail the gate on R-hat above 1.01 alone, as V2 does at 400 + 400; the stop rule reads
+GO on both v2s-m7 runs. The m6 refit's tail ESS of 81 on 2024 eve is one parameter at one seed
+(the 6e66f92 fit had 294).
+
+The drift scales' posteriors (5%, 50%, 95%), per √year:
+
+| Scale | Prior median | 2024 eve | 2021 f180 |
+|---|---|---|---|
+| τ_drift (industry) | 0.047 | 0.005, 0.035, 0.080 | 0.004, 0.041, 0.101 |
+| τ_drift,A (Annað) | 0.101 | 0.009, 0.100, 0.280 | 0.009, 0.085, 0.249 |
+| τ_house_drift | 0.034 | 0.046, 0.056, 0.067 | 0.042, 0.060, 0.081 |
+
+The houses' drift is identified, tight and above its prior's median on both cells; the
+industry's is not, its posterior at or below the prior and reaching down to near zero. τ_post
+stays near m6's (medians 0.265 and 0.258).
+
+**Scores.** Written as for v2s-m6, outside the repository by `score_report.R`'s own `main()` in
+an R session that set the scorer's `UNSCORED_ROLES` to `"check"` alone: v2s-m7 and
+v2s-m6-noepoch each against v2s-m6, and each against R0.
+
+| Cell | Score | R0 | v2s-m6 | v2s-m6-noepoch | v2s-m7 | v2s-m7 − v2s-m6 |
+|---|---|---|---|---|---|---|
+| 2024 eve | MAE8, pp | 1.20 | 1.40 | 1.40 | 1.44 | +0.04, tie |
+| 2024 eve | MAE over all parties, pp | 1.03 | 1.26 | 1.24 | 1.30 | +0.04 |
+| 2024 eve | CRPS10, pp | 0.842 | 0.849 | 0.888 | 0.982 | +0.133, worse |
+| 2024 eve | d² (p) | 42.2 (0.000) | 20.3 (0.016) | 24.5 (0.004) | 17.0 (0.049) | better |
+| 2024 eve | IS90 | 7.46 | 6.75 | 6.89 | 7.90 | +1.15, worse |
+| 2024 eve | Kjördæmi CRPS, pp | 1.032 | 0.973 | 0.999 | 1.102 | worse |
+| 2024 eve | Seat CRPS per party | 0.559 | 0.622 | 0.675 | 0.724 | worse |
+| 2021 f180 | MAE8, pp | 2.08 | 2.48 | 2.46 | 2.43 | −0.05, tie |
+| 2021 f180 | CRPS10, pp | 1.501 | 1.566 | 1.537 | 1.546 | tie |
+| 2021 f180 | Kjördæmi CRPS, pp | 1.701 | 1.704 | 1.677 | 1.681 | tie |
+| 2021 f180 | Seat CRPS per party | 1.094 | 1.286 | 1.266 | 1.273 | tie |
+
+m6's refit scores MAE8 1.40 on 2024 eve against its 6e66f92 fit's 1.43 (v2s-m6, Scores): a
+different NUTS path at the same seed.
+
+On 2024 eve m7 moves the four parties m6 was aimed at towards the result (Miðflokkurinn's error
+1.40 → 0.62, Viðreisn's 0.87 → 0.11, Flokkur fólksins's 1.52 → 1.10, Sjálfstæðisflokkurinn's
+1.71 → 1.36), but Samfylkingin away from it (2.49 → 4.18, median 16.6% against 20.75%), and
+it widens the forecast (IS90 6.75 → 7.90). CRPS10 worsens by 0.133 pp, beyond the 0.05 margin,
+and the kjördæmi and seat scores follow; only d² improves. On 2021 f180 every score ties.
+So by the lean reading m7 does not improve on m6, and it closes none of the MAE gap to R0.
+
+The constant bias, v2s-m6-noepoch, is worse than m6 on 2024 eve (CRPS10 +0.039, d² 24.5 against
+20.3, kjördæmi and seat CRPS worse) and ties on 2021 f180: the bias does need to move, and the
+epoch walk moves it better than the drift does.
 
 **Not done.**
-- The fits and the scores.
+- Why m7 moves Samfylkingin away: its house deviations at E, against m6's, were not examined.
+- A second seed per arm and cell.
 - The anchored walk with `bias_drift = 1`: no config combines the two.
-- The earlier steps' slow lp tests: only v2s-m7's were run.
 - A committed scoring report, for the reason given under v2s-m6.
 
 ## Speed: the likelihood in matrix form (exact, 7 Nov 2026)
@@ -2107,8 +2168,12 @@ the queue will find every existing V2-family fit stale.
   sampling gradients was 0.149 and 0.158 against 0.174 on 2024 eve, and 0.146 and 0.110
   against 0.149 on 2021 f180, within the seed noise P4 recorded. No fit diverged.
 
+**Harness fits.** The v2s-m7 queue ran at this commit (v2s-m7, Fits). The m6 refits took
+12.1 minutes on 2024 eve and 6.3 on 2021 f180, against 44.6 and 22.3 for their 6e66f92 fits,
+with both lanes running at once as before, and their posteriors pass the permutation rule
+against those fits.
+
 **Not done.**
-- A harness fit with this file: the v2s-m7 queue will be the first.
 - Reusing a reference fit's adaptation (inverse metric, step size and one init per chain, with
   about 100 burn-in iterations): the study measured another 2.1× (2024 eve) and 2.9× (2021
   f180) ESS per gradient over the whole fit when the reference was the same model on the same
