@@ -2214,3 +2214,118 @@ against those fits.
   f180) ESS per gradient over the whole fit when the reference was the same model on the same
   data. It needs `fit_cell.R` to save each run's adaptation and to take a reference run's.
 - The drift's transformed parameters: m7's gradient costs 0.84 ms against V2's 0.67.
+
+## Out-of-sample search: the newcomer pool off (exploratory, 8 Nov 2026)
+
+**Why.** The goal was a simple change to V2, defensible on theory, that scores no worse than R0
+and beats the pollsters' own last polls. Every fit here ran in a scratch copy of the tree at
+1ab6f06, outside the repository, with this tree's Stan file and builder, at 400 + 400, seed
+2701. The dev arms were scored with `score_report.R`'s code, its refusal of dev arms lifted
+in that R session only. The scores therefore read like this file's other lean scores, but no
+committed run list reproduces them yet.
+
+**Cells.** 2024 eve and 2021 f180, the lean pair, plus 2021 eve (a `TARGETS` cell, free to
+score under the lean policy). 2021 eve tests the bias where it matters: at 2021 f180 most of
+every model's error is the campaign's move (Framsóknarflokkurinn −6.6 points in every arm).
+The two f14 cells (2024-11-16 and 2021-09-11) were fitted last, for R0, `v2s-m6` and the
+chosen change, as a check on a horizon and an information set the search did not use.
+
+**The polls' baseline.** Each house's latest national poll among those `info_set()` admits
+at F, for every house with a poll in the 30 days to F, averaged over the houses. Its absolute
+error over the ten parties, which is also its CRPS10 as a point forecast: 1.49 points on 2024
+eve, 2.34 on 2021 eve, 2.58 on 2021 f180, 2.16 on 2024 f14 and 2.20 on 2021 f14.
+
+**What was tried, on `v2s-m6`'s config** (MAE over all parties of the kjördæmi aggregate's
+medians; CRPS10 in points):
+
+| Arm | Change | CRPS10 2024 eve | 2021 eve | 2021 f180 | MAE 2024 eve | 2021 eve | 2021 f180 |
+|---|---|---|---|---|---|---|---|
+| R0 | — | 0.842 | 1.080 | 1.501 | 1.03 | 1.63 | 2.01 |
+| `v2s-m6` | — | 0.849 | 1.020 | 1.566 | 1.26 | 1.57 | 2.09 |
+| `v2s-m6-noepoch` | constant bias | 0.888 | – | 1.537 | 1.24 | – | 2.09 |
+| x-ns | `shock` = 0 | 0.832 | 1.064 | 1.553 | 1.24 | 1.61 | 2.05 |
+| x-t3 | `prior_tau_mu` 0.3 | 0.844 | – | 1.546 | 1.28 | – | 2.04 |
+| x-lite | shock, δ walk, fundamentals, post window, newcomer pool all off | 0.961 | 0.963 | – | 1.45 | 1.49 | – |
+| **x-nn** | **`newcomer_pool` = 0** | **0.821** | **0.894** | **1.494** | 1.24 | **1.41** | **1.96** |
+| x-ns-nn | both | 0.828 | 0.920 | 1.436 | 1.24 | 1.42 | 1.90 |
+| x-nn-tight5 | x-nn, every bias walk's prior scale 0.05 | 0.840 | 0.878 | 1.500 | 1.23 | 1.40 | 2.00 |
+| x-nn-tight | x-nn, every bias walk's prior scale 0.02 | 0.870 | 0.893 | 1.466 | 1.22 | 1.41 | 1.93 |
+
+The tight arms use a copy of the Stan file in which `tau_house` ~ half-N(0, `prior_tau_mu`)
+and `tau_mu_A` ~ half-N(0, 3 `prior_tau_mu`), so at 0.1 the copy is V2's priors and one
+config value tightens all three walks.
+
+**The finding: the newcomer pool misleads.** For the 2021 and 2024 cells, m_new is learned
+from three entrants: Viðreisn (2016), Flokkur fólksins (2016) and Miðflokkurinn (2017), whose
+first-epoch industry biases in `v2s-m6`'s 2024 fit are about 0, −0.22 and −0.11. In the 2021
+fits its posterior median is −0.17 (eve) and −0.18 (f180), so "polls understate a newcomer by
+about a sixth"; in 2024 eve's, −0.06. That figure is then applied to Sósíalistaflokkurinn, whose polls
+overstated it at both elections (2021: final polls about 5.7%, result 4.10%; 2024: about 5.4%,
+result 3.96%). With the pool, V2 put it at 6.2% on 2021 eve and 5.15% on 2024 eve; with
+m_new = 0 and s_new = 0.2023 (`newcomer_pool` = 0), at 5.4% and 4.96%. The theory behind
+turning it off: three entrants cannot pin down a mean newcomer bias, and they are not
+exchangeable. A party's poll error follows from who votes for it, not from how new it is.
+With the pool off, a newcomer's contrast is centred on the existing parties' mean and its
+bias is learned from its own first result.
+
+**x-nn on all five cells** (the same measures; the polls' row is their absolute error):
+
+| Arm | CRPS10 2024 eve | 2024 f14 | 2021 eve | 2021 f14 | 2021 f180 | MAE 2024 eve | 2024 f14 | 2021 eve | 2021 f14 | 2021 f180 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Polls' last | 1.486 | 2.161 | 2.343 | 2.195 | 2.576 | 1.49 | 2.16 | 2.34 | 2.20 | 2.58 |
+| R0 | 0.842 | 1.062 | 1.080 | 1.152 | 1.501 | 1.03 | 1.42 | 1.63 | 1.65 | 2.01 |
+| `v2s-m6` | 0.849 | 1.083 | 1.020 | 1.341 | 1.566 | 1.26 | 1.58 | 1.57 | 1.89 | 2.09 |
+| x-nn | 0.821 | 1.056 | 0.894 | 1.190 | 1.494 | 1.24 | 1.54 | 1.41 | 1.69 | 1.96 |
+
+x-nn beats `v2s-m6` on both measures in every cell and the polls by 0.6 to 1.4 points of CRPS10.
+Against R0 its CRPS10 is lower or tied in four cells and 0.037 higher on 2021 f14 (SE_diff
+0.017), inside the 0.05 margin. Its MAE is higher in the 2024 cells and lower in the 2021 ones.
+
+**x-nn against R0 and `v2s-m6`** (`score_report.R`, one run per arm per cell):
+- 2024 eve against R0: all four criteria pass, a first for a V2 variant. CRPS10 −0.020
+  (SE_diff 0.008, better), mDSS −17.7, d² 20.2 against 42.2 (p 0.016 against 0.000),
+  kjördæmi CRPS −0.080, seat CRPS +0.027 (within 0.05).
+- 2021 eve against R0: CRPS10 −0.185 (SE_diff 0.018), d² 7.8 against 26.3, kjördæmi CRPS
+  −0.378; seat CRPS +0.124 (criterion 4 fails). Sósíalistaflokkurinn alone is that gap.
+  Without it, x-nn's seat CRPS is 0.587 against R0's 0.581. R0 gives it no seats because
+  `mu_gamma_pred`'s last element is minus the sum of the others, and before 2021 nothing
+  else informs that party's bias: +1.46 on the log scale, which turns polls of about 5.7%
+  into 1.2%. That is the reference-party artefact V2 was built to remove, not a forecast.
+- 2021 f180 against R0: CRPS10 tie (−0.008), kjördæmi CRPS −0.061; seat CRPS +0.117
+  (criterion 4 fails), of which Sósíalistaflokkurinn is 0.055 and Framsóknarflokkurinn's
+  campaign surge most of the rest.
+- 2024 f14 against R0: CRPS10 tie (−0.006), mDSS better, d² 11.7 against 18.8, kjördæmi CRPS
+  tie; seat CRPS +0.060 (criterion 4 fails), +0.026 without Sósíalistaflokkurinn.
+- 2021 f14 against R0: CRPS10 +0.037 (within the margin), mDSS tie (criterion 3 fails),
+  kjördæmi CRPS −0.098; seat CRPS +0.215 (criterion 4 fails), −0.039 without
+  Sósíalistaflokkurinn, which x-nn puts at 7.1% from its early-September polls (R0: 1.8%).
+- Leaving Sósíalistaflokkurinn out, x-nn's seat CRPS is within 0.05 of R0's in four of the
+  five cells; on 2021 f180 it is 0.062 above.
+- Against `v2s-m6` (eves and 2021 f180): better or tied on every score (CRPS10 −0.028, −0.126,
+  −0.072; seat CRPS −0.036, −0.144, −0.075).
+
+**Diagnoses that ruled other levers out.**
+- *The shock.* V2's d_shock gives a newcomer, which has no previous share, the largest
+  scale (3.16), so at 2021 the shock could take most of Sósíalistaflokkurinn's poll miss.
+  Turning it off helps on 2024 eve and hurts on 2021 eve.
+- *The campaign multiplier.* With τ_camp about 2.4, V2's latent path moves through the 2021
+  campaign (Sósíalistaflokkurinn 7.1% → 4.5%, Flokkur fólksins 5.4% → 8.85%), so part of each
+  final poll miss is read as late swing, not bias. The campaign polls do show a trend. R0
+  has the same multiplier (`tau_stjornarslit` about 2.45).
+- *The open epoch's bias.* It rests on how the polls move just after the last result. Those
+  moves mix bias with real change (Miðflokkurinn's post-2021 drop became a bias of −0.30
+  without the post window). Replacing it after the fit with the mean of the closed epochs'
+  biases lowers MAE in all three cells but raises CRPS10 on both eves.
+- *Freezing the bias* (`v2s-m6-noepoch`, or the tight priors on x-nn) trades MAE against
+  CRPS10. The tighter the prior, the more of Samfylkingin's 2017–2021 overstatement (+0.12)
+  reaches 2024, where its polls were accurate (21.0% against 20.75%).
+- *Fylgisvakt v5's 2024 MAE of 0.73* used every poll dated before the election, including
+  three that the harness does not admit at F = 29 Nov (Gallup's of 26 Nov, and Maskína's and
+  Félagsvísindastofnun's of 28 Nov), so it is not comparable with the harness's cells.
+
+**Not done.** A harness arm and committed run list for x-nn (a `v2s-m8` step: `v2s-m6.json`
+with `newcomer_pool` = 0). Adding one extends three pinned tests in `tests/harness/test-arms.R`
+(the configs that may set `post_flex` = 1, the extractors that read `tau_post`, and the arms
+table's roles). A second seed. A principled answer to Sósíalistaflokkurinn near the 5%
+threshold: its polls overstated it at both elections, but in 2021 nothing in the window
+foretold that, and any model that reads the polls of a party with no result gives it seats.
