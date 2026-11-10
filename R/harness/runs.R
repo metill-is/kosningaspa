@@ -198,7 +198,7 @@ meta_mismatch <- function(meta, expected) {
 #' Move a run aside, for a refit.
 #' @param dir the run directory
 #' @param label the name it is kept under: the directory's name, the run id, by default; a
-#'   recovery replicate, whose directory is named by its seed alone, passes its own
+#'   directory not named by a run id can be given its own
 #' @return the new path, `results_root()/_stale/<label>_<YYYYmmddHHMMSS>`; an error if `dir`
 #'   is not a directory or the new path exists
 #' @export

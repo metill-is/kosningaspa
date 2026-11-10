@@ -160,8 +160,8 @@ near_cap <- function(dir, n) {
 above <- function(value, limit, reason) if (isTRUE(value <= limit)) NULL else reason
 
 #' One run's stop rule (Decision 5), read from the directory that holds its outputs. A
-#' harness run reaches it through `stop_rule()`; a recovery replicate (`R/harness/recovery.R`),
-#' whose directory is not a `run_dir()`, calls it directly.
+#' harness run reaches it through `stop_rule()`; a directory that is not a `run_dir()` can be
+#' passed directly.
 #' @param dir the directory: its `key_diagnostics.csv` (the `lp__` row) and
 #'   `param_draws.parquet` (the bounded log concentrations' columns) are read
 #' @param meta its `meta.json`, read with `simplifyVector = TRUE`: `chains`, `iter_sampling`,

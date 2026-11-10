@@ -45,22 +45,20 @@ testthat edition 3, and a passing run prints each test file's seconds, slowest f
 - **The slow suite** adds the tests that call `skip_unless_slow()`: the sweep of every forecast
   day, the self-test's kjördæmi and seat scores, the R0 and V2 Stan tests and the cell
   runner's test fits, which compile with CmdStan:
-  `HARNESS_SLOW=1 LC_ALL=en_US.UTF-8 Rscript tests/run.R`. The V2 Stan tests in
-  `tests/harness/test-v2-stan.R` are named by the step they test; `V2_STEPS=<step>[,<step>…]`
-  runs only those (`skip_unless_step()`), and the tag `perm` runs the permutation lp tests.
-  `HARNESS_V2_STAN=<absolute path>` runs them on a scratch copy of the Stan file instead.
+  `HARNESS_SLOW=1 LC_ALL=en_US.UTF-8 Rscript tests/run.R`. `HARNESS_V2_STAN=<absolute path>`
+  runs the V2 Stan tests (`tests/harness/test-v2-stan.R`) on a scratch copy of the Stan file.
 - **The live-data test** reads `data/polling_data.csv` and runs only with
   `KOSNINGASPA_LIVE_DATA=1`: `KOSNINGASPA_LIVE_DATA=1 LC_ALL=en_US.UTF-8 Rscript tests/run.R election-data`.
 
 **The lean check for a model change** (the owner's policy of 5 November 2026: a change gets the
 checks its kind needs, and the wider suite waits for a published or frozen forecast):
 
-- *Any change:* the fast suite, then Stan's log density against the R reference on V2's
-  configuration and the permutation lp tests:
+- *Any change:* the fast suite, then the V2 Stan tests (Stan's log density against the R
+  reference, the permutation lp test, the generated quantities):
 
   ```
   LC_ALL=en_US.UTF-8 Rscript tests/run.R
-  HARNESS_SLOW=1 V2_STEPS=v2s-m5,perm LC_ALL=en_US.UTF-8 Rscript tests/run.R v2-stan
+  HARNESS_SLOW=1 LC_ALL=en_US.UTF-8 Rscript tests/run.R v2-stan
   ```
 
 - *A change to what the model computes:* add one short fit on the cell the change matters for,
@@ -74,9 +72,10 @@ checks its kind needs, and the wider suite waits for a published or frozen forec
   ```
 
 - *A change meant to improve forecasts:* fit the old and the new model once each on 2024 eve
-  and 2021 f180 and score them (Scoring a comparison).
-- *Before a published forecast or the freeze:* the full slow suite and, at a size chosen then,
-  recovery (`R/harness/recovery.R`) and two seeds per arm and cell.
+  and 2021 f180 and score them (Scoring a comparison). The working model's run list is
+  `harness/runs/v2.txt`.
+- *Before a published forecast or the freeze:* the full slow suite, two seeds per arm and cell,
+  and a recovery study, which has to be rebuilt for this model first (`R/harness/archive/README.md`).
 
 ## Running fits
 
@@ -154,10 +153,9 @@ and what it changes. The number of rows is the number of comparisons behind any 
 ## The freeze and the 2017 locks
 
 `score_cell(run_dir)` (`R/harness/scorer.R`) is the only function that scores a forecast
-cell against its result (spec §5.6–§5.7). It reads the run's `meta.json`, refuses an arm
-whose role is `check` or `dev` and a run whose `meta.json` records a role other than its
-arm's (`R/harness/arms.R`), calls `freeze_guard(E, F)` (`R/harness/freeze.R`), and only once the guard passes reads the
-result (`cell_truth()`) and then the draws. With the default result reader, which reads
+cell against its result (spec §5.6–§5.7). It reads the run's `meta.json`, calls
+`freeze_guard(E, F)` (`R/harness/freeze.R`), refuses a 2017 cell, and only then reads the
+result (`cell_truth()`) and the draws. With the default result reader, which reads
 this project's results, it refuses a `root` other than the project's, since the guard
 would otherwise check another repository's freeze.
 
@@ -225,10 +223,13 @@ sealed freeze and decision run in temporary git repositories.
 
 ## Where the record is
 
-- `harness/v2/decisions.md`: each V2 step's verdict and commit, and the working model.
-- `harness/archive/`: the frozen V2 step log (`steps.md`) and this page as it stood before
-  10 November 2026 (`README-2026-11-10.md`).
-- `R/harness/archive/`: retired one-off studies (`v2_checks.R`, `v2_equivalence.R`, and the
-  `adopt` and `perm` commands once in `compare_runs.R`), with their own README.
-- Generated reports: `harness/v2/` (scoring, recovery, the prior predictive check and each
-  step's diagnostics in `harness/v2/steps/`) and `harness/tier0/` (Tier 0 sampler reports).
+- `harness/v2/decisions.md`: each V2 step's verdict and commit, and the working model. The
+  switched file and its harness are at the tag `v2-switched-final`.
+- `harness/archive/`: the frozen V2 step log (`steps.md`), this page as it stood before
+  10 November 2026 (`README-2026-11-10.md`), the step and ablation configs (`configs/`), the
+  old run lists (`runs/`) and the nine-switch model's reports (`v2/`: scoring, recovery and
+  each step's diagnostics; `tier0/`: its Tier 0 sampler reports).
+- `R/harness/archive/`: retired one-off studies and the recovery study, with their own README.
+- Generated reports: `harness/v2/` (scoring, the simple core's log-density equivalence, and
+  the prior predictive check, `R/harness/v2_prior_predictive.R harness/configs/v2.json`) and
+  `harness/tier0/` (R0's Tier 0 sampler report).
