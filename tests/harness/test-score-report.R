@@ -1,7 +1,7 @@
 # score_report.R's rule, on made-up scores: the tie rule (read_diff()), the d2 p-value and
 # the adoption rule's four criteria (adoption_criteria()). The script part, which scores real
 # runs, is not run here.
-box::use(R / harness / score_report[read_diff, d2_p, adoption_criteria, mae_summary, MARGINS, GATE_P])
+box::use(R / harness / score_report[read_diff, d2_p, adoption_criteria, mae_summary, election_reading, MARGINS, GATE_P])
 
 test_that("read_diff calls a difference under 2 x SE_diff a tie, and otherwise better or worse (lower is better)", {
   d <- read_diff(1.00, 1.05, 0.03, 0.04)
@@ -85,4 +85,38 @@ test_that("mae_summary takes each run's MAEs from the scored reading and reads M
   expect_equal(m$kd_mae, c(ref = 1.6, new = 1.7))
   expect_equal(m$seat_err, c(ref = 7, new = 12))
   expect_identical(mae_summary(fake(1.2, 0.1, 1, 1, 1), fake(1.25, 0.1, 1, 1, 1))$mae8_diff$reading, "tie")
+})
+
+test_that("election_reading averages a score's differences within each election, then over elections with equal weight", {
+  r <- election_reading(
+    E = c("2021-09-25", "2021-09-25", "2021-09-25", "2024-11-30"),
+    diff = c(-0.30, -0.10, -0.20, 0.10), noise = c(0.2, 0.1, 0.3, 0.1)
+  )
+  expect_identical(r$by_election$E, c("2021-09-25", "2024-11-30"))
+  expect_identical(r$by_election$cells, c(3L, 1L))
+  expect_equal(r$by_election$diff, c(-0.20, 0.10))
+  # WHY: the horizons of one election share its outcome, so their noise does not average out.
+  expect_equal(r$by_election$noise, c(0.2, 0.1))
+  expect_equal(r$diff, -0.05)
+  expect_equal(r$noise, sqrt(0.2^2 + 0.1^2) / 2)
+  expect_equal(r$z, -0.05 / (sqrt(0.05) / 2))
+  expect_identical(r$reading, "indistinguishable")
+})
+
+test_that("election_reading calls a mean difference under twice its noise indistinguishable, else better or worse", {
+  one <- function(diff, noise) election_reading("2024-11-30", diff, noise)$reading
+  expect_identical(one(-0.19, 0.1), "indistinguishable")
+  expect_identical(one(-0.21, 0.1), "better")
+  expect_identical(one(0.21, 0.1), "worse")
+  # WHY: exactly twice the noise is not under it.
+  expect_identical(one(0.2, 0.1), "worse")
+  expect_identical(one(0, 0), "indistinguishable")
+  expect_identical(one(0.01, 0), "worse")
+  expect_identical(one(NA, 0.1), NA_character_)
+  expect_identical(one(0.1, NA), NA_character_)
+})
+
+test_that("election_reading stops on inputs of different lengths or none", {
+  expect_error(election_reading(c("a", "b"), 1, 1), "one value per cell")
+  expect_error(election_reading(character(0), numeric(0), numeric(0)), "one value per cell")
 })

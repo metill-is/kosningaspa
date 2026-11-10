@@ -132,10 +132,19 @@ and the wider suite waits for a forecast that is published or frozen. From the p
 
   To compare two arms, not two commits (V2 against R0, say), fit both in this checkout, since
   their run ids differ. `R/harness/score_report.R` then scores both runs on each cell with
-  `score_cell()` and reads the spec's adoption rule (section 5.7) on each cell alone, with the
-  tie rule on every score that carries a batch SE. It opens with the MAEs, the mean absolute
-  error of each model's median vote share in points (MAE8 over the eight named parties, with
-  its SE, and the MAE over all parties), and lists each party's result, medians and errors:
+  `score_cell()`. It opens with the election-level reading, the one to rank two arms by:
+  CRPS10's difference on each cell beside its outcome noise (`outcome_noise()` in
+  `R/harness/scores.R`: the spread of that difference over the election results each forecast
+  itself holds possible, from the two runs' draws and no result), averaged within each election
+  and then over the elections with equal weight, and read as indistinguishable when the mean is
+  under twice its noise (`election_reading()`). The noise is an estimate, not a bound: it holds
+  both forecasts fixed and takes one of them to be right. Then come the MAEs, the mean absolute error of
+  each model's median vote share in points (MAE8 over the eight named parties, with its SE, and
+  the MAE over all parties), and per cell the spec's adoption rule (section 5.7) with the tie
+  rule on every score that carries a batch SE, and each party's result, medians and errors.
+  The tie rule's SE_diff is Monte Carlo error alone, an order of magnitude below the outcome
+  noise on the pairs scored so far, so a per-cell "better" or "worse" says that a difference is
+  computed precisely, not that one model forecasts better:
 
   ```
   LC_ALL=en_US.UTF-8 Rscript R/harness/score_report.R <ref_arm> <new_arm> <run_list> [out]
@@ -145,6 +154,13 @@ and the wider suite waits for a forecast that is published or frozen. From the p
   writes `harness/v2/scoring.md` by default, and prints no score; its rule is tested in
   `tests/harness/test-score-report.R` on made-up scores. The first such comparison, V2
   against R0, is `harness/v2/scoring.md`.
+
+  Every arm fitted on a scored cell gets a row in `harness/trials.csv`: the arm, the day it
+  was first fitted, its config (or that it lives outside the repository), the cells it has
+  draws for, how it was conceived (`planned` before any forecast was scored, `after-scores`,
+  or `sampler` for another form of the same posterior) and what it changes. The number of rows
+  is the number of comparisons behind any choice, and an `after-scores` arm is exploratory on
+  2021 and 2024 until another election confirms it.
 
   `results_root()` is `HARNESS_RESULTS`, or else `results/harness` under the checkout's own
   root, so setting it there keeps an exported value from sending the old fits into the new

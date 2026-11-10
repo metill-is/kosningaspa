@@ -1,0 +1,23 @@
+arm,first_fitted,config,cells_with_draws,conceived,change
+r0,2026-10-25,harness/configs/r0.json,2024 eve; 2024 f14; 2021 eve; 2021 f14; 2021 f180,planned,The 2024 production model with harness hooks
+v2,2026-11-04,harness/configs/v2.json,2024 eve; 2021 f180,planned,"V2: epoch bias walk, newcomer pool, election-day shock, delta walk, fundamentals pseudo-observation"
+v2-nofund,2026-11-04,harness/configs/v2-nofund.json,2024 eve,planned,v2 with fundamentals = 0 (ablation)
+v2s-m6,2026-11-06,harness/configs/steps/v2s-m6.json,2024 eve; 2024 f14; 2021 eve; 2021 f14; 2021 f180,after-scores,v2 with a post-election multiplier on the walk (post_flex = 1)
+v2s-p3,2026-11-06,harness/configs/steps/v2s-p3.json,2024 eve; 2021 f180,sampler,v2 with the anchored walk at adapt_delta 0.95 (same posterior)
+v2s-p4,2026-11-06,harness/configs/steps/v2s-p4.json,2024 eve; 2021 f180,sampler,v2 with the anchored walk at adapt_delta 0.8 (same posterior)
+v2s-m6-noepoch,2026-11-07,harness/configs/steps/v2s-m6-noepoch.json,2024 eve; 2021 f180,after-scores,v2s-m6 with a constant bias (epoch_bias = 0)
+v2s-m7,2026-11-07,harness/configs/steps/v2s-m7.json,2024 eve; 2021 f180,after-scores,v2s-m6 with a calendar drift of the bias in place of the epoch walk
+x-lite,2026-11-07,"scratch, outside the repository",2024 eve; 2021 eve,after-scores,"v2s-m6 with shock, delta walk, fundamentals, post window and newcomer pool off"
+x-ns,2026-11-07,"scratch, outside the repository",2024 eve; 2021 eve; 2021 f180,after-scores,v2s-m6 with shock = 0
+x-ns-t3,2026-11-07,"scratch, outside the repository",2024 eve; 2021 f180,after-scores,v2s-m6 with shock = 0 and prior_tau_mu = 0.3
+x-t3,2026-11-07,"scratch, outside the repository",2024 eve; 2021 f180,after-scores,v2s-m6 with prior_tau_mu = 0.3
+x-cut,2026-11-08,"scratch, outside the repository",2024 eve; 2024 f14; 2021 eve; 2021 f14; 2021 f180,after-scores,"v2 without the newcomer pool, the walk step leaving an election nearly free"
+x-cut-ar,2026-11-08,"scratch, outside the repository",2024 eve; 2021 eve; 2021 f180,after-scores,x-cut with an estimated persistence of the bias
+x-nn,2026-11-08,"scratch, outside the repository",2024 eve; 2024 f14; 2021 eve; 2021 f14; 2021 f180,after-scores,v2s-m6 with newcomer_pool = 0
+x-nn-pin,2026-11-08,"scratch, outside the repository",2024 eve; 2021 eve; 2021 f180,after-scores,"x-nn with the results concentration prior centred at 30,000"
+x-nn-tight,2026-11-08,"scratch, outside the repository",2024 eve; 2021 eve; 2021 f180,after-scores,x-nn with every bias walk prior scale 0.02
+x-nn-tight5,2026-11-08,"scratch, outside the repository",2024 eve; 2021 eve; 2021 f180,after-scores,x-nn with every bias walk prior scale 0.05
+x-ns-nn,2026-11-08,"scratch, outside the repository",2024 eve; 2021 eve; 2021 f180,after-scores,v2s-m6 with shock = 0 and newcomer_pool = 0
+x-r0,2026-11-08,"scratch, outside the repository",2024 eve; 2024 f14; 2021 eve; 2021 f14; 2021 f180,after-scores,x-r0w with the 2024 model hedge on the bias in the forecast
+x-r0w,2026-11-08,"scratch, outside the repository",2024 eve; 2021 eve; 2021 f180,after-scores,x-r1 with the walk step leaving an election scaled by the campaign multiplier
+x-r1,2026-11-08,"scratch, outside the repository",2024 eve; 2021 eve; 2021 f180,after-scores,"constant bias; epoch walk, shock, delta walk, post window and newcomer pool off"

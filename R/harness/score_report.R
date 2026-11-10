@@ -23,8 +23,13 @@
 #     worse, each or a tie);
 #   - each party's result, both arms' medians, absolute errors and CRPS, and the number of
 #     parties on which new's median is closer and its CRPS lower.
-# Above the cells, a table of the MAEs (mae_summary()): MAE8 with its SE and the tie rule's
-# reading, the MAE over all parties, the kjordaemi MAE and the summed seat error.
+# Above the cells, the election-level reading, which ranks the two arms: CRPS10's difference on
+# each cell beside its outcome noise (scores.R's outcome_noise(): its spread over the results each
+# forecast itself holds possible, from the scored draws score_cell() returns), the mean per election
+# and the mean over elections with equal weight, read as indistinguishable under twice its noise
+# (election_reading()). The tie rule's SE_diff says only how precisely the runs compute a score.
+# Then a table of the MAEs (mae_summary()): MAE8 with its SE and the tie rule's reading, the MAE
+# over all parties, the kjordaemi MAE and the summed seat error.
 # It reads each run's meta.json for its iterations, seed and gate, and stops, writing nothing,
 # on a run list with no run of an arm, a cell missing one arm's run or holding two, a run with
 # no meta.json, and on whatever score_cell() refuses (a 2017 cell, a dev or check arm).
@@ -37,6 +42,7 @@ if (is.null(box::name())) {
 box::use(
   R / harness / runs[run_id, run_dir],
   R / harness / scorer[score_cell],
+  R / harness / scores[outcome_noise],
   R / harness / compare_runs[relative]
 )
 
@@ -53,6 +59,20 @@ DEFAULT_OUT <- "harness/v2/scoring.md"
 PREFIX <- "score_report: "
 fail <- function(...) stop(PREFIX, ..., call. = FALSE)
 
+# A difference's reading against a scale (lower is better): `tie` when it is 0 or under twice
+# the scale, else "better" (negative) or "worse"; NA when either is NA.
+reading_of <- function(d, scale, tie) {
+  if (anyNA(c(d, scale))) {
+    NA_character_
+  } else if (d == 0 || abs(d) < 2 * scale) {
+    tie
+  } else if (d < 0) {
+    "better"
+  } else {
+    "worse"
+  }
+}
+
 #' The tie rule (spec section 5.7) on one score where lower is better.
 #' @param ref,new the two arms' values
 #' @param se_ref,se_new their batch-means SEs
@@ -63,16 +83,7 @@ fail <- function(...) stop(PREFIX, ..., call. = FALSE)
 read_diff <- function(ref, new, se_ref, se_new) {
   diff <- new - ref
   se_diff <- sqrt(se_ref^2 + se_new^2)
-  reading <- if (anyNA(c(diff, se_diff))) {
-    NA_character_
-  } else if (diff == 0 || abs(diff) < 2 * se_diff) {
-    "tie"
-  } else if (diff < 0) {
-    "better"
-  } else {
-    "worse"
-  }
-  list(diff = diff, se_diff = se_diff, reading = reading)
+  list(diff = diff, se_diff = se_diff, reading = reading_of(diff, se_diff, "tie"))
 }
 
 #' The p-value of a Mahalanobis d2 against chi-squared with n_parties - 1 degrees of freedom.
@@ -137,6 +148,35 @@ mae_summary <- function(s_ref, s_new) {
     kd_mae = c(ref = s_ref$kjordaemi$kd_mae_named, new = s_new$kjordaemi$kd_mae_named),
     seat_err = c(ref = s_ref$seats$seat_abs_err, new = s_new$seats$seat_abs_err)
   )
+}
+
+#' The election-level reading of one score's differences (new - ref; lower is better).
+#' @param E the election of each cell
+#' @param diff new - ref on each cell
+#' @param noise the outcome noise of that difference on each cell (`outcome_noise()$sd`)
+#' @return a list: `by_election`, a data frame with a row per election in order of first
+#'   appearance: `E`, `cells`, `diff` (the mean over its cells) and `noise` (the mean of its
+#'   cells' noise: the horizons of one election share its outcome, so their noise does not
+#'   average out); `diff`, the mean of the elections' differences, each election weighted
+#'   equally; `noise`, sqrt(the sum of the elections' squared noise) / the number of
+#'   elections; `z`, diff / noise; and `reading`: `"indistinguishable"` when |diff| < 2 noise
+#'   or diff is 0, else `"better"` (diff < 0) or `"worse"`, and NA when any input is NA
+#' @export
+election_reading <- function(E, diff, noise) {
+  if (!length(E) || length(diff) != length(E) || length(noise) != length(E)) {
+    fail("election_reading: one value per cell of E, diff and noise")
+  }
+  E <- as.character(E)
+  elections <- unique(E)
+  by_election <- data.frame(
+    E = elections,
+    cells = vapply(elections, \(e) sum(E == e), 0L, USE.NAMES = FALSE),
+    diff = vapply(elections, \(e) mean(diff[E == e]), 0, USE.NAMES = FALSE),
+    noise = vapply(elections, \(e) mean(noise[E == e]), 0, USE.NAMES = FALSE)
+  )
+  d <- mean(by_election$diff)
+  s <- sqrt(sum(by_election$noise^2)) / nrow(by_election)
+  list(by_election = by_election, diff = d, noise = s, z = d / s, reading = reading_of(d, s, "indistinguishable"))
 }
 
 read_run_list <- function(path) {
@@ -269,6 +309,47 @@ cell_section <- function(cell, ref, new, s_ref, s_new) {
   )
 }
 
+#' The election-level section: one row per cell, one per election, and the reading.
+election_section <- function(rows, ref, new) {
+  r <- election_reading(rows$E, rows$diff, rows$noise)
+  n <- nrow(r$by_election)
+  c(
+    "## Election-level reading", "",
+    sprintf("CRPS10 in pp, %s @MINUS@ %s; lower is better. Rank the two arms by this section. The outcome noise of a", new, ref),
+    "cell is the standard deviation of that difference over the election results each forecast itself holds",
+    "possible (`outcome_noise()` in `R/harness/scores.R`): how far it would move with the election's outcome",
+    "alone. SE_diff says only how precisely the two runs compute their scores. The horizons of one election",
+    "share its outcome, so an election's noise is the mean over its cells, and each election has equal weight.",
+    "The noise is an estimate, not a bound: it holds both forecasts fixed and takes one of them to be right.", "",
+    row(
+      "Cell", paste0(new, " @MINUS@ ", ref), "SE_diff (Monte Carlo)", "Outcome noise",
+      paste0("Expected if ", ref, " is right"), paste0("Expected if ", new, " is right")
+    ),
+    row(rep("---", 6)),
+    vapply(seq_len(nrow(rows)), \(i) row(
+      rows$cell[i], num(rows$diff[i], 3), num(rows$se_diff[i], 3), num(rows$noise[i], 3),
+      num(rows$if_ref[i], 3), num(rows$if_new[i], 3)
+    ), ""),
+    "",
+    row("Election", "Cells", paste0("Mean ", new, " @MINUS@ ", ref), "Outcome noise"),
+    row(rep("---", 4)),
+    vapply(seq_len(n), \(i) row(
+      r$by_election$E[i], r$by_election$cells[i], num(r$by_election$diff[i], 3), num(r$by_election$noise[i], 3)
+    ), ""),
+    "",
+    if (is.na(r$reading)) {
+      "Not read: on at least one cell the two arms forecast different parties, so its outcome noise is not defined."
+    } else {
+      sprintf(
+        "Over the %d election%s: mean %s pp, outcome noise %s pp, ratio %s: %s%s.",
+        n, if (n == 1) "" else "s", num(r$diff, 3), num(r$noise, 3), num(r$z, 2), r$reading,
+        if (identical(r$reading, "indistinguishable")) " (a mean difference under twice its noise)" else paste0(" for ", new)
+      )
+    },
+    ""
+  )
+}
+
 main <- function(args) {
   if (!length(args) %in% 3:4) fail("usage: Rscript R/harness/score_report.R <ref_arm> <new_arm> <run_list> [out]")
   ref <- args[1]
@@ -283,6 +364,7 @@ main <- function(args) {
   sections <- character(0)
   run_rows <- character(0)
   mae_rows <- character(0)
+  election_rows <- NULL
   for (i in seq_len(nrow(cells))) {
     on <- runs[runs$E == cells$E[i] & runs$F == cells$F[i], ]
     for (a in c(ref, new)) {
@@ -302,9 +384,22 @@ main <- function(args) {
     s_ref <- score_cell(run_dir(ids[[1]]))
     s_new <- score_cell(run_dir(ids[[2]]))
     sections <- c(sections, cell_section(s_new$cell, ref, new, s_ref, s_new))
+    label <- paste(format(s_new$cell$E, "%Y"), s_new$cell$tag)
+    noise <- if (setequal(colnames(s_ref$draws), colnames(s_new$draws))) {
+      outcome_noise(s_ref$draws, s_new$draws)
+    } else {
+      list(sd = NA_real_, mean_if_ref = NA_real_, mean_if_new = NA_real_)
+    }
+    a <- cell_scores(s_ref)
+    b <- cell_scores(s_new)
+    crps <- read_diff(a$crps10, b$crps10, a$se_crps10, b$se_crps10)
+    election_rows <- rbind(election_rows, data.frame(
+      E = format(s_new$cell$E), cell = label, diff = crps$diff, se_diff = crps$se_diff,
+      noise = noise$sd, if_ref = noise$mean_if_ref, if_new = noise$mean_if_new
+    ))
     m <- mae_summary(s_ref, s_new)
     mae_rows <- c(mae_rows, row(
-      paste(format(s_new$cell$E, "%Y"), s_new$cell$tag),
+      label,
       paste0(num(m$mae8[["ref"]], 2), " (", num(m$se_mae8[["ref"]], 2), ")"),
       paste0(num(m$mae8[["new"]], 2), " (", num(m$se_mae8[["new"]], 2), ")"),
       num(m$mae8_diff$diff, 2), m$mae8_diff$reading, num(m$mae_all[["ref"]], 2), num(m$mae_all[["new"]], 2),
@@ -317,7 +412,9 @@ main <- function(args) {
     "The lean reading (`harness/README.md`, Checking a model change): one run per arm per cell. SE_diff is",
     "the two runs' batch-means SEs alone, with no seed-to-seed spread, and the spec's adoption rule (section",
     "5.7), written for two decision cells and two seeds per election, is read on each cell alone. A",
-    "difference under 2 @TIMES@ SE_diff is a tie, and ties satisfy criteria 2 and 4 but are not \"lower\".", "",
+    "difference under 2 @TIMES@ SE_diff is a tie, and ties satisfy criteria 2 and 4 but are not \"lower\".",
+    "SE_diff is Monte Carlo error only; the election-level reading below sets each difference against the noise",
+    "of the election's outcome, and is the reading to rank the two arms by.", "",
     sprintf("- Run list: `%s`", relative(path)),
     sprintf(
       "- Margins: CRPS10 %s pp, kj\u00f6rd\u00e6mi CRPS %s pp, seat CRPS %s seats per party; calibration gate p > %s",
@@ -326,6 +423,7 @@ main <- function(args) {
     row("Cell (E, F)", "Arm", "Run", "Iterations (warmup + sampling)", "Seed", "Commit", "Gate (section 5.7)"),
     row(rep("---", 7)),
     run_rows, "",
+    election_section(election_rows, ref, new),
     "## MAE",
     "",
     "The mean absolute error of each model's median vote share against the result, in points. MAE8 is over the",

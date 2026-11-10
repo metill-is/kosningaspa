@@ -102,6 +102,8 @@ draws_se <- function(long, score) {
 #'   `SE_SCORES`, so coverage comes with its Monte Carlo error;
 #'   - `gap_pp`: 100 × the largest absolute difference between the two readings'
 #'   posterior means;
+#'   - `draws`: the scored reading's draw x party share matrix (`wide_draws()`), for
+#'   comparisons between runs that need no result, such as `outcome_noise()`;
 #'   - `per_party`: `party_scores()` of the scored reading (with each party's result,
 #'   `actual`, and the absolute error of its median, `abs_err`), with `pit_se` from
 #'   `batch_se()`;
@@ -196,6 +198,7 @@ score_cell <- function(run_dir, truth = cell_truth, root = project_root()) {
     cell = tibble::tibble(arm = meta$arm, E = E, F = meta$F, tag = cell$tag),
     national = national,
     gap_pp = 100 * max(abs(colMeans(X) - colMeans(X_nat)[colnames(X)])),
+    draws = X,
     per_party = per_party,
     kjordaemi = kjordaemi,
     seats = scored_seats$summary,

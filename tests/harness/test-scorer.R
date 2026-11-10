@@ -176,10 +176,11 @@ test_that("score_cell scores the kjördæmi aggregate and reports the eday readi
   expect_length(calls, 1)
   expect_identical(as.Date(calls[[1]]$E), E24)
   expect_identical(calls[[1]]$parties, meta$party_order)
-  expect_named(s, c("cell", "national", "gap_pp", "per_party", "kjordaemi", "seats", "seats_per_party"))
+  expect_named(s, c("cell", "national", "gap_pp", "draws", "per_party", "kjordaemi", "seats", "seats_per_party"))
   expect_identical(s$cell, tibble::tibble(arm = "r0", E = E24, F = F24, tag = "eve"))
 
   eday_kd <- arrow::read_parquet(file.path(run, "eday_kjordaemi.parquet"))
+  expect_identical(s$draws, wide_draws(kd_to_nat(eday_kd), "share"))
   X <- wide_draws(kd_to_nat(eday_kd), "share")
   Xn <- wide_draws(arrow::read_parquet(file.path(run, "eday_national.parquet")), "share")
   zero_kd <- 0.5 / sum(meta$n_pred_k)

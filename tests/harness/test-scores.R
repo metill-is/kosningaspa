@@ -1,6 +1,7 @@
 box::use(R / harness / scores[NAMED8, crps_draws, wide_draws, party_scores, alr_dss, energy_score])
 box::use(R / harness / scores[national_scores, mae_se, batch_of, batch_se, kd_to_nat])
 box::use(R / harness / scores[kd_scores, seat_draws, seat_scores, majority_prob])
+box::use(R / harness / scores[outcome_noise])
 box::use(R / election_utils[calculate_seats, seats_layout_2021])
 
 ZERO_SHARE <- 0.5 / 196292
@@ -378,4 +379,59 @@ test_that("majority_prob is the share of draws in which the parties hold a major
   expect_equal(majority_prob(seats, c("A", "B")), 0.5)
   expect_equal(majority_prob(seats, c("A", "B"), majority = 33L), 0.25)
   expect_error(majority_prob(seats, c("A", "D")), "parties absent from the draws: D")
+})
+
+# outcome_noise(): how much the CRPS10 difference between two forecasts of one election would
+# vary over the results each forecast itself holds possible.
+brute_noise <- function(X_ref, X_new, rows_ref, rows_new) {
+  crps10 <- function(X, y) 100 * mean(vapply(seq_len(ncol(X)), \(j) crps_draws(X[, j], y[j]), 0))
+  d_ref <- vapply(rows_ref, \(i) crps10(X_new, X_ref[i, ]) - crps10(X_ref, X_ref[i, ]), 0)
+  d_new <- vapply(rows_new, \(i) crps10(X_new, X_new[i, ]) - crps10(X_ref, X_new[i, ]), 0)
+  list(sd = sqrt((stats::var(d_ref) + stats::var(d_new)) / 2), mean_if_ref = mean(d_ref), mean_if_new = mean(d_new))
+}
+
+test_that("outcome_noise is the spread of the CRPS10 difference over each forecast's own draws taken as results", {
+  set.seed(31)
+  parties <- c("a", "b", "c")
+  X_ref <- dirichlet_like(60, c(40, 35, 25))
+  X_new <- dirichlet_like(60, c(46, 30, 24))
+  colnames(X_ref) <- colnames(X_new) <- parties
+  got <- outcome_noise(X_ref, X_new, n_results = 60L)
+  want <- brute_noise(X_ref, X_new, seq_len(60), seq_len(60))
+  expect_equal(got$sd, want$sd, tolerance = 1e-12)
+  expect_equal(got$mean_if_ref, want$mean_if_ref, tolerance = 1e-12)
+  expect_equal(got$mean_if_new, want$mean_if_new, tolerance = 1e-12)
+  # WHY: CRPS is proper, so each forecast scores better in expectation when it is the truth.
+  expect_gt(got$mean_if_ref, 0)
+  expect_lt(got$mean_if_new, 0)
+  expect_gt(got$sd, 0)
+})
+
+test_that("outcome_noise takes its hypothetical results evenly over the draws, and no more than there are", {
+  set.seed(32)
+  X_ref <- dirichlet_like(40, c(5, 3, 2))
+  X_new <- dirichlet_like(50, c(4, 4, 2))
+  colnames(X_ref) <- colnames(X_new) <- c("a", "b", "c")
+  rows <- function(n, k) unique(round(seq(1, n, length.out = min(k, n))))
+  expect_equal(outcome_noise(X_ref, X_new, n_results = 9L), brute_noise(X_ref, X_new, rows(40, 9), rows(50, 9)), tolerance = 1e-12)
+  expect_equal(outcome_noise(X_ref, X_new, n_results = 400L), brute_noise(X_ref, X_new, seq_len(40), seq_len(50)), tolerance = 1e-12)
+})
+
+test_that("outcome_noise is zero for one forecast against itself, and matches parties by name", {
+  set.seed(33)
+  X <- dirichlet_like(30, c(5, 3, 2))
+  colnames(X) <- c("a", "b", "c")
+  same <- outcome_noise(X, X)
+  expect_identical(c(same$sd, same$mean_if_ref, same$mean_if_new), c(0, 0, 0))
+  Y <- dirichlet_like(30, c(4, 4, 2))
+  colnames(Y) <- c("a", "b", "c")
+  expect_equal(outcome_noise(X, Y[, c("c", "a", "b")]), outcome_noise(X, Y))
+})
+
+test_that("outcome_noise stops on forecasts of different parties and on fewer than two results", {
+  X <- matrix(c(0.6, 0.5, 0.4, 0.5), 2, dimnames = list(NULL, c("a", "b")))
+  Y <- matrix(c(0.6, 0.5, 0.4, 0.5), 2, dimnames = list(NULL, c("a", "c")))
+  expect_error(outcome_noise(X, Y), "name different parties")
+  expect_error(outcome_noise(unname(X), unname(X)), "name different parties")
+  expect_error(outcome_noise(X, X, n_results = 1L), "at least two")
 })

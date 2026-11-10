@@ -11,11 +11,19 @@ NAMED8 <- local({
   setdiff(POLL_PARTIES, c("Anna\u00f0", "S\u00f3s\u00edalistaflokkurinn"))
 })
 
+# Whether two name vectors hold the same parties, each once.
+same_parties <- function(a, b) !is.null(a) && !is.null(b) && !anyDuplicated(a) && !anyDuplicated(b) && setequal(a, b)
+
+# E|X - X'| / 2 of sorted draws, in its V-statistic form.
+half_spread <- function(x) {
+  n <- length(x)
+  sum((2 * seq_len(n) - n - 1) * x) / n^2
+}
+
 # The truth `y` in the column order of `X`; an error unless both name the same parties.
 align_truth <- function(X, y) {
   parties <- colnames(X)
-  if (is.null(names(y)) || is.null(parties) || anyDuplicated(names(y)) || anyDuplicated(parties) ||
-    !setequal(names(y), parties)) {
+  if (!same_parties(names(y), parties)) {
     stop(
       "truth and draws name different parties; truth: ", paste(names(y), collapse = ", "),
       "; draws: ", paste(parties, collapse = ", ")
@@ -35,8 +43,7 @@ is90 <- function(lo, hi, y) (hi - lo) + 20 * pmax(lo - y, 0) + 20 * pmax(y - hi,
 #' @export
 crps_draws <- function(x, y) {
   x <- sort(x)
-  n <- length(x)
-  mean(abs(x - y)) - sum((2 * seq_len(n) - n - 1) * x) / n^2
+  mean(abs(x - y)) - half_spread(x)
 }
 
 #' Long draws to a draw × party matrix.
@@ -213,6 +220,40 @@ batch_se <- function(f, X, block) {
   values <- lapply(split(seq_len(nrow(X)), block), \(ix) f(X[ix, , drop = FALSE]))
   bt <- do.call(rbind, values)
   apply(bt, 2, stats::sd) / sqrt(nrow(bt))
+}
+
+#' The spread, over hypothetical results, of the CRPS10 difference between two forecasts of
+#' one election: each forecast's own draws are taken in turn as the results that could have
+#' happened, and both forecasts are scored on each. It measures how far the difference would
+#' move with the election's outcome alone, which a batch-means SE does not. It is an estimate,
+#' not a bound: it holds both forecasts fixed and takes one of them to be right.
+#' @param X_ref,X_new draw x party share matrices that name the same parties, in any order
+#' @param n_results the number of hypothetical results taken from each forecast, evenly
+#'   spaced over its draws (all of them when it has fewer)
+#' @return a list: `sd`, the root mean square of the two standard deviations of CRPS10(new)
+#'   - CRPS10(ref), one over the results taken from `X_ref` and one over those from `X_new`,
+#'   in pp; `mean_if_ref` and `mean_if_new`, the mean difference over each set (the first at
+#'   least 0 and the second at most 0 up to sampling error, since the CRPS is proper)
+#' @export
+outcome_noise <- function(X_ref, X_new, n_results = 400L) {
+  parties <- colnames(X_ref)
+  if (!same_parties(parties, colnames(X_new))) stop("the two forecasts name different parties")
+  if (n_results < 2 || nrow(X_ref) < 2 || nrow(X_new) < 2) {
+    stop("outcome_noise needs at least two hypothetical results from each forecast")
+  }
+  X_new <- X_new[, parties, drop = FALSE]
+  spreads <- function(X) vapply(seq_len(ncol(X)), \(j) half_spread(sort(X[, j])), 0)
+  crps10_at <- function(X, s, Y) {
+    per_party <- vapply(seq_len(ncol(X)), \(j) colMeans(abs(outer(X[, j], Y[, j], "-"))) - s[j], numeric(nrow(Y)))
+    100 * rowMeans(per_party)
+  }
+  taken <- function(X) X[unique(round(seq(1, nrow(X), length.out = min(n_results, nrow(X))))), , drop = FALSE]
+  s_ref <- spreads(X_ref)
+  s_new <- spreads(X_new)
+  diff_at <- function(Y) crps10_at(X_new, s_new, Y) - crps10_at(X_ref, s_ref, Y)
+  d_ref <- diff_at(taken(X_ref))
+  d_new <- diff_at(taken(X_new))
+  list(sd = sqrt((stats::var(d_ref) + stats::var(d_new)) / 2), mean_if_ref = mean(d_ref), mean_if_new = mean(d_new))
 }
 
 #' National vote shares from kjördæmi vote draws.
