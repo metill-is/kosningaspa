@@ -1,5 +1,6 @@
 # Fixed constants of the v2 harness: the window, its elections, the forecast cells, the
-# poll party set and the kjördæmi labels.
+# poll party set, the kjördæmi labels, the stop rule's near-cap margin and relative(), which
+# keeps absolute paths out of messages.
 
 root_dir <- normalizePath(box::file("..", ".."), mustWork = TRUE)
 
@@ -105,3 +106,27 @@ KJORDAEMI <- tibble::tibble(
   ),
   code = c("RS", "RN", "SV", "SU", "NA", "NV")
 )
+
+#' The stop rule's margin: a draw is near a cap when cap - x <= NEAR_CAP. The stop rule
+#' (R/harness/compare_runs.R) and stage 1's record (R/harness/stage1.R) count the draws within it.
+#' @export
+NEAR_CAP <- 0.5
+
+#' `text` with every path under the project root relative to it, and every path under the
+#' results root (when outside the project) written as $HARNESS_RESULTS/..., so that no message
+#' prints an absolute run directory.
+#' @param text a message
+#' @return `text` with those paths replaced
+#' @export
+relative <- function(text) {
+  # WHY: imported at call time, since runs.R imports this module.
+  box::use(R / harness / runs[results_root])
+  bases <- list(project_root(), results_root())
+  labels <- c("", "$HARNESS_RESULTS/")
+  for (i in seq_along(bases)) {
+    forms <- unique(sub("/+$", "", c(bases[[i]], normalizePath(bases[[i]], mustWork = FALSE))))
+    # WHY: the longer form first, since a resolved path can hold the given one (/private/var/... holds /var/...).
+    for (base in forms[order(-nchar(forms))]) text <- gsub(paste0(base, "/"), labels[i], text, fixed = TRUE)
+  }
+  text
+}

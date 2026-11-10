@@ -152,7 +152,7 @@ NEAR_CAP_FIELDS <- c("cap", "margin", "near_cap", "n_draws", "within_margin", "w
 #'   three whole numbers; an error, "stage 1: ...", for no draws or a missing or non-positive one
 #' @export
 stage1_near_cap <- function(phi_f_inv) {
-  box::use(R / harness / compare_runs[NEAR_CAP], R / harness / v2_reference[V2_CAP_MARGIN, V2_STAGE1_LOG_CAP])
+  box::use(R / harness / constants[NEAR_CAP], R / harness / v2_reference[V2_CAP_MARGIN, V2_STAGE1_LOG_CAP])
   x <- as.numeric(phi_f_inv)
   check(length(x) > 0 && !anyNA(x) && all(x > 0), "phi_f_inv has no draws, or a missing or non-positive one")
   log_phi_f <- -log(x)
@@ -175,7 +175,7 @@ stage1_near_cap <- function(phi_f_inv) {
 #' @export
 stage1_near_cap_of <- function(rec) {
   box::use(
-    R / harness / compare_runs[NEAR_CAP],
+    R / harness / constants[NEAR_CAP],
     R / harness / runs[SAMPLER],
     R / harness / v2_reference[V2_CAP_MARGIN, V2_STAGE1_LOG_CAP]
   )

@@ -229,7 +229,7 @@ V2_LOG_CAPS <- c(log_phi = LOG_PHI_CAP, log_phi_K = LOG_PHI_K_CAP, log_kappa = L
 #' @export
 V2_STAGE1_LOG_CAP <- c(log_phi_f = 20)
 
-#' Decision 4's reporting margin: the Tier 0 checks (`R/harness/v2_checks.R`) report the draws
+#' Decision 4's reporting margin: the Tier 0 checks (`R/harness/archive/v2_checks.R`) report the draws
 #' of each bounded log concentration within this of its cap, log c > cap − 2, beside the stop
 #' rule's 0.5 (`NEAR_CAP`, `R/harness/compare_runs.R`).
 #' @export

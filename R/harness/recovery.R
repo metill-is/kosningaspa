@@ -97,8 +97,8 @@ if (is.null(box::name())) {
 }
 box::use(
   R / harness / arms[arm],
-  R / harness / compare_runs[relative, stop_rule_at],
-  R / harness / constants[project_root],
+  R / harness / compare_runs[stop_rule_at],
+  R / harness / constants[project_root, relative],
   R / harness / freeze[forecast_free],
   R / harness / runs[
     SAMPLER, results_root, sha256_file, stan_data_sha, write_frozen_inputs, meta_mismatch, retire_run, measure_draws,

@@ -1,6 +1,5 @@
 box::use(
-  R / harness / compare_runs[NEAR_CAP],
-  R / harness / constants[project_root],
+  R / harness / constants[NEAR_CAP, project_root],
   R / harness / info_set[info_set],
   R / harness / runs[sha256_file],
   R / harness / stage1[

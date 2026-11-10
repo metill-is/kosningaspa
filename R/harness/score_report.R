@@ -43,7 +43,7 @@ box::use(
   R / harness / runs[run_id, run_dir],
   R / harness / scorer[score_cell],
   R / harness / scores[outcome_noise],
-  R / harness / compare_runs[relative]
+  R / harness / constants[relative]
 )
 
 #' The margins of the adoption rule's criteria 2 and 4 (spec section 5.7): CRPS10 in pp,

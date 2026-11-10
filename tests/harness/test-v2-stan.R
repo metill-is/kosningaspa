@@ -962,7 +962,7 @@ test_that("v2s-m4: a fit_values() point keeps s_bar_zeta as a one-element array,
 # closed election e, delta_e in the coordinates D_e = delta_e[2:K, 2:P], the parties without
 # results non-centred and those with results centred, shifted per kjordaemi row and stored
 # relative to the result's kjordaemi log-share deviations; the open epoch non-centred. The
-# same model as v2s-m4's, which R/harness/v2_equivalence.R checks.
+# same model as v2s-m4's, which R/harness/archive/v2_equivalence.R checks.
 P2_PARS <- c("delta_raw", "delta_coord")
 
 # The cell's data with delta held centred; nothing else in the data depends on the switch.

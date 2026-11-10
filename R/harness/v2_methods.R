@@ -1,6 +1,6 @@
 # The model-method machinery for Stan/forecast_v2.stan and the other V2 Stan files, shared by
 # the tests (tests/harness/helper-v2.R imports it under the same names) and by
-# R/harness/v2_equivalence.R, so that the script and the tests run one copy of the heap-safe
+# R/harness/archive/v2_equivalence.R, so that the script and the tests run one copy of the heap-safe
 # code. cmdstanr's model methods are built with g++-16 against a
 # clang-built R, so a C++ exception in any of them (a reject, a bound or a sum-to-zero vector
 # violated) corrupts R's heap even when caught. Everything here therefore runs the data and
