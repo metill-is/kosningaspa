@@ -13,7 +13,7 @@
 # share derived material only with registered users). 2021 and the campaign surveys
 # are CC0. Downloading the GAGNÍS-terms files means accepting those terms.
 #
-# Run from the repo root:  Rscript R/download_iskos.R [voter_survey|campaign_survey ...]
+# Run from the repo root:  Rscript R/archive/download_iskos.R [voter_survey|campaign_survey ...]
 # (optional args restrict the run to those surveys; the manifest keeps other surveys' rows).
 
 library(here)

@@ -22,7 +22,7 @@
 #   --tag=name               output folder under results/epoch_bias/ [required]
 #   --dry_run=1              stop after printing the epoch table [0]
 #   --data_rds=path          fit a saved meta.rds (e.g. simulated data from
-#                            R/epoch_bias_simulate.R) instead of building the
+#                            R/archive/epoch_bias_simulate.R) instead of building the
 #                            data; window/epoch options are then ignored [none]
 #
 # Writes results/epoch_bias/<tag>/: fit.rds, meta.rds (party/house/date/epoch

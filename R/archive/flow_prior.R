@@ -11,7 +11,7 @@
 # Laplacian cannot. In log-ratio (clr) coordinates it reduces exactly to independent
 # per-party log shocks, w_aR / pi_a^2, because D^-1 (e_a - pi) = e_a / pi_a - 1 and the
 # common 1 is centred away; so it shrinks Omega_0 slightly but adds no co-movement.
-# W is the gross exchange in an ÍSKOS switching table (R/build_iskos_switching.R).
+# W is the gross exchange in an ÍSKOS switching table (R/archive/build_iskos_switching.R).
 #
 # Omega_0 is sensitive to the smallest share in pi. Its log-scale shocks scale as
 # 1 / pi^2 and, through the clr mean, enter every coordinate; a 0.5% party measured by
@@ -164,7 +164,7 @@ model_coords_target <- function(Sigma_q, pi) {
   list(Sigma0 = Sigma0, Omega0 = Omega0, Omega0_inv = solve(Omega0), min_eigen = ev)
 }
 
-#' Switching tables written by R/build_iskos_switching.R.
+#' Switching tables written by R/archive/build_iskos_switching.R.
 #' @export
 read_switching <- function() {
   arrow::read_parquet(here::here("data", "iskos", "switching_long.parquet"))

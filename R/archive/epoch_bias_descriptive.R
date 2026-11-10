@@ -11,7 +11,7 @@
 # epoch-varying gamma)? Of particular interest: Framsóknarflokkurinn (B) and
 # Miðflokkurinn (M).
 #
-# Run from the project root: Rscript R/epoch_bias_descriptive.R
+# Run from the project root: Rscript R/archive/epoch_bias_descriptive.R
 
 Sys.setlocale("LC_ALL", "en_US.UTF-8")
 

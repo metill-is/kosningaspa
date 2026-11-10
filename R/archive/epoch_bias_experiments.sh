@@ -3,8 +3,8 @@
 # evaluation after every stage. Each fit writes results/epoch_bias/<tag>/ and a
 # log under results/epoch_bias/logs/; the DIAG lines collect in logs/driver.log.
 #
-#   bash R/epoch_bias_experiments.sh              # whole grid (bt17 excluded)
-#   bash R/epoch_bias_experiments.sh full bt24    # only some stages
+#   bash R/archive/epoch_bias_experiments.sh              # whole grid (bt17 excluded)
+#   bash R/archive/epoch_bias_experiments.sh full bt24    # only some stages
 #
 # Stages: full (2016+ window, v4 vs v5); bt24 / bt21 / bt17 (leave-future-out
 # backtests of the 2024 / 2021 / 2017 elections; bt17 runs only when asked for by
@@ -74,7 +74,7 @@ for s in $stages; do
     fit v4w1_bt2017 --model=v4 --start=2016-10-29 --cutoff=2017-10-28
     ;;
   sim)
-    Rscript R/epoch_bias_simulate.R --from=v4_full --tau_mu=0.12 --tau_house=0.05 --seed=1 --tag=sim1 >"$LOGS/sim1_generate.log" 2>&1
+    Rscript R/archive/epoch_bias_simulate.R --from=v4_full --tau_mu=0.12 --tau_house=0.05 --seed=1 --tag=sim1 >"$LOGS/sim1_generate.log" 2>&1
     pair "sim1_v5_full --model=v5 --data_rds=results/epoch_bias/sim1_data/meta.rds" \
       "sim1_v4_full --model=v4 --data_rds=results/epoch_bias/sim1_data/meta.rds"
     ;;
@@ -86,7 +86,7 @@ for s in $stages; do
       "v5fix05_bt2024 --model=v5 --estimate_tau=0 --tau_mu=0.05 --tau_house=0.05 --cutoff=2024-11-30"
     ;;
   esac
-  Rscript R/epoch_bias_evaluate.R >"$LOGS/evaluate.log" 2>&1
+  Rscript R/archive/epoch_bias_evaluate.R >"$LOGS/evaluate.log" 2>&1
   echo "$(date '+%F %T') END stage=$s evaluate_rc=$?" >>"$LOGS/driver.log"
 done
 echo "$(date '+%F %T') DONE stages=[$stages]" >>"$LOGS/driver.log"

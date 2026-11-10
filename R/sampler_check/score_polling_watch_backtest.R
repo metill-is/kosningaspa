@@ -20,7 +20,7 @@ box::use(R / harness / scores[crps_draws])
 
 args <- commandArgs(trailingOnly = TRUE)
 election <- as.Date(args[1])
-# WHY: 2017 is the v2 harness's held-out confirmatory target (R/epoch_bias_experiments.sh)
+# WHY: 2017 is the v2 harness's held-out confirmatory target (R/archive/epoch_bias_experiments.sh)
 if (election == as.Date("2017-10-28") && !file.exists("harness/DECISION.md")) {
   stop("2017 is held out until harness/DECISION.md exists")
 }

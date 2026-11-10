@@ -1,5 +1,5 @@
 # Flow-informed prior targets (Omega_0) for the forecast model's RW correlation, one per
-# election, from the ÍSKOS switching tables. Method and Stan snippet: R/flow_prior.R.
+# election, from the ÍSKOS switching tables. Method and Stan snippet: R/archive/flow_prior.R.
 #
 # Each election uses the previous cycle's table (2024 <- 2017->2021), so a backtest does
 # not leak; 2028 reuses 2017->2021 until the ÍSKOS 2024 wave is released. Variants:
@@ -7,14 +7,14 @@
 #   gamma2    gamma = 2 (multiplicative edge shocks)
 #   min3      3% minimum share (robustness of the small-party regulariser)
 # (Dropping the reservoir is not a useful variant for Omega_0: in clr coordinates the
-# reservoir only adds independent per-party log noise; see R/flow_prior.R.)
+# reservoir only adds independent per-party log noise; see R/archive/flow_prior.R.)
 #
 # Writes the gitignored data/iskos/flow_targets.rds (derived from GAGNÍS-licensed data):
 # a list by variant then election, each with pi, W, Sigma_q, R_q, Sigma0, Omega0,
 # Omega0_inv, imputed parties and the table used.
 #
-# Run from the repo root:  Rscript R/build_iskos_flow_targets.R   (needs data/iskos/,
-# from R/build_iskos_switching.R)
+# Run from the repo root:  Rscript R/archive/build_iskos_flow_targets.R   (needs data/iskos/,
+# from R/archive/build_iskos_switching.R)
 
 suppressPackageStartupMessages({
   library(tidyverse)
@@ -22,7 +22,7 @@ suppressPackageStartupMessages({
 })
 invisible(Sys.setlocale("LC_ALL", "is_IS.UTF-8"))
 options(width = 150)
-box::use(R / flow_prior[flow_prior_target, read_switching, model_parties])
+box::use(R / archive / flow_prior[flow_prior_target, read_switching, model_parties])
 
 elections <- c(2016, 2017, 2021, 2024, 2028)
 variants <- list(

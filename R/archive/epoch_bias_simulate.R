@@ -7,7 +7,7 @@
 # posterior: one draw of the latent path beta, overdispersion phi, epoch-1
 # industry bias and house deviations. Epoch shocks are then drawn with the SDs given here.
 #
-#   Rscript R/epoch_bias_simulate.R --from=v4_full --tau_mu=0.12 --tau_house=0.05 --seed=1 --tag=sim1
+#   Rscript R/archive/epoch_bias_simulate.R --from=v4_full --tau_mu=0.12 --tau_house=0.05 --seed=1 --tag=sim1
 #
 # Writes results/epoch_bias/<tag>_data/meta.rds (a meta list that
 # fit_polling_watch_epoch.R --data_rds= accepts) and truth.rds.

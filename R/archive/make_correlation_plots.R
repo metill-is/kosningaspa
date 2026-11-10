@@ -5,7 +5,7 @@
 # hierarchically clusters parties by co-movement, and renders a clustered heatmap
 # (marginal | partial) with a dendrogram. See Stan/polling_watch_variants.md.
 #
-# Run from the repo root:  Rscript R/make_correlation_plots.R
+# Run from the repo root:  Rscript R/archive/make_correlation_plots.R
 
 library(tidyverse)
 library(metill)

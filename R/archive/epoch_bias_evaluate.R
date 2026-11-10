@@ -7,7 +7,7 @@
 #   3. Full-window fits ("<model>_full"): industry bias per epoch (v5) against
 #      the constant bias (v4), the shock SDs, and the current smoothed support.
 #
-# Run from the project root: Rscript R/epoch_bias_evaluate.R [tag_prefix]
+# Run from the project root: Rscript R/archive/epoch_bias_evaluate.R [tag_prefix]
 # Writes results/epoch_bias/eval_*.csv and Figures/epoch_bias_*.png.
 
 Sys.setlocale("LC_ALL", "en_US.UTF-8")

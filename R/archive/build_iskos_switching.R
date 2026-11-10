@@ -20,14 +20,14 @@
 # "Nei, kaus ekki", and a few named a party. 1987 has no fvote83 and folds everyone
 # else without a 1983 party into prtfvote83 == 90 "Annað", which becomes "Óflokkað".
 #
-# Reads data-raw/iskos/voter_survey/ (R/download_iskos.R). Writes, to the gitignored
+# Reads data-raw/iskos/voter_survey/ (R/archive/download_iskos.R). Writes, to the gitignored
 # data/iskos/ (derived from GAGNÍS-licensed data, so never commit them):
 #   switching_long.{parquet,csv}  one row per wave x weight scheme x prev x cur cell
 #   validation.csv                survey vs official shares, current and recalled vote
 #   label_map.csv                 audit: every (wave, variable, code, label) -> party/status/group
 #   diagnostics.csv               per wave: birth-year ineligibility overrides and what they replaced
 #
-# Run from the repo root:  Rscript R/build_iskos_switching.R
+# Run from the repo root:  Rscript R/archive/build_iskos_switching.R
 
 suppressPackageStartupMessages({
   library(tidyverse)

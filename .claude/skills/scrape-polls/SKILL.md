@@ -77,7 +77,7 @@ Four reliable sources. Use whichever is freshest:
 
 4. **The downstream article on RÚV (`ruv.is/frettir/innlent/...`), Vísir (`visir.is/g/...`), or mbl.is (`mbl.is/frettir/innlent/...`).** Useful when the firm's own publication is delayed or you only have an indirect lead. Article bodies sometimes disclose `svarendur` and field period directly; when paywalled, per-party percentages can still be cross-checked via search snippets.
 
-The R scraper (`scrape_polls.R::scrape_gallup` / `scrape_maskina`) historically did article-body regex against the tag pages on RÚV and Vísir. **Both tag pages now lazy-load via JavaScript and `rvest` sees nothing**, so the scraper silently returns empty results. Don't rely on it for discovery; treat it as a deprecated fallback.
+`R/scrape_polls.R` has no scraper: its rvest scrapers for the RÚV and Vísir tag pages, which lazy-load through JavaScript, returned nothing and were removed. Discovery is the channels above; `update_post_election_polls(scrape = TRUE)` now stops with an error.
 
 ## Procedure
 
@@ -222,7 +222,6 @@ Don't run the hand-off commands. Stan fits take minutes; the user picks the mome
 - **Publication order varies, so check every channel.** Sometimes gallup.is publishes the Þjóðarpúls PDF first and RÚV's `pollsArray` lags by a week or more. Other times RÚV's *article* comes first: for the May and September 2026 readings, RÚV published the full nine-party breakdown and methodology (in the article's Highcharts data, readable via `Highcharts.charts[…].series[0].data`) while gallup.is, the cdnx PDF and the Looker series all still showed the previous month. In that case ingest from the RÚV article and flag the row in `data_sources.md` for reconciliation. `pollsArray` is the slowest of the three and is never enough on its own to conclude "no new polls".
 - **Gallup PDF URL pattern.** `gallup.is/documents/<id>/Puls_MMYY_Fylgi_flokka.pdf` where `MMYY` is the *publication* month (May 2026 → `0526`), reporting the previous month's field period. The `<id>` is opaque (e.g. `2237` for May 2026) — find it by reading the iframe `src` on the PDF viewer page, don't try to guess it.
 - **Polls before the last election.** Don't add anything dated before 2024-11-30. Pre-election polls live in a Google Sheet and feed a different model.
-- **The deprecated R scraper.** `Rscript -e 'source("R/scrape_polls.R"); update_post_election_polls(scrape = TRUE)'` will report "No new Gallup articles found" and may silently drop Maskína nationals — that's a known rvest-vs-JS-lazy-load issue, not a real "no polls". Trust the `pollsArray` JSON, not the scraper.
 
 ## Tooling cheat sheet
 

@@ -151,7 +151,7 @@ innovations (saved to `data/<date>/polling_watch_omega.parquet`). Marginal and p
 - **Co-movement (positive):** F↔Other +0.35 (fringe bloc), D↔B (centre-right pair), and a
   D↔S "big-two consolidation vs fragmentation" axis that survives into the invariant basis.
 
-Plotted by **`R/make_correlation_plots.R`** (reads the latest `polling_watch_omega.parquet`,
+Plotted by **`R/archive/make_correlation_plots.R`** (reads the latest `polling_watch_omega.parquet`,
 computes marginal + precision-based partial correlations, clusters parties by co-movement) →
 `Figures/latent_rw_correlation_clustered.png` (clustered heatmap + dendrogram).
 
@@ -169,7 +169,7 @@ computes marginal + precision-based partial correlations, clusters parties by co
 | `Stan/archive/polling_watch.stan` | original drop-one model (superseded; not invariant) |
 | `R/fit_polling_watch.R` | fits v5 to `read_polling_watch_data()` from 1 January 2016, the election forecast's window (fixed party order + locale guard), with the epochs of `prepare_polling_watch_epochs()`; writes the `pi_smooth`, `Omega` and per-epoch house-effect parquets, the epoch table, the fit, `diagnostics.json` and the polls it saw |
 | `R/sampler_check/fit_polling_watch_headless.R`, `equivalence_polling_watch.R`, `compare_polling_watch.R`, `exact_checks_polling_watch.R` | the §9–§11 checks: headless fits (optionally leave-future-out), the point-by-point equivalence check, old against new, and §11's exact checks (reference invariance, entry flatness, reductions) |
-| `R/make_correlation_plots.R` | renders the clustered marginal + partial (precision) correlation heatmap from `Omega` |
+| `R/archive/make_correlation_plots.R` | renders the clustered marginal + partial (precision) correlation heatmap from `Omega` |
 
 ---
 

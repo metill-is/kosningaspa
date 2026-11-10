@@ -11,7 +11,7 @@
 # All matrices are computed per draw and then averaged; a cell label is bold when
 # its 90% posterior interval excludes zero.
 #
-# Run from the repo root:  Rscript R/make_rw_innovation_cov_plots.R
+# Run from the repo root:  Rscript R/archive/make_rw_innovation_cov_plots.R
 
 library(tidyverse)
 library(metill)
