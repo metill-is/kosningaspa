@@ -2,8 +2,8 @@
 # pull request #21's record). Its adoption and permutation
 # rules (Decisions 6 and 8) ran during the P-steps and are kept, not run, in
 # R/harness/archive/compare_runs_adopt_perm.R.
-# A plain script whose definitions also load as a box module, so that R/harness/recovery.R can
-# import stop_rule_at(); the script part runs only when box::name() is NULL. Run from the project root:
+# A plain script whose definitions also load as a box module; the script part runs only when
+# box::name() is NULL. Run from the project root:
 #   LC_ALL=en_US.UTF-8 Rscript R/harness/compare_runs.R stop <arm> [run_list]
 #
 # The run list is the queue's (harness/runs/; "lane arm E F seed" per line, # for comments),
