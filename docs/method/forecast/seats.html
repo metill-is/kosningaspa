@@ -49,7 +49,7 @@
   ["R/election_utils.R calculate_seats(), seats_tibble(), seats_layout_2021(), layout_for()", "the allocator and the layouts, master"],
   ["harness/truth/elections_official.csv, harness/truth/README.md, harness/sources/seats_2021_official.csv", "official votes and seats 2016–2024, committed"],
   ["tests/harness/test-truth.R, tests/harness/test-seats.R", "the allocator's tests, master"],
-  ["R/harness/scores.R seat_draws(), majority_prob(), seat_scores(); R/archive/predict_seats.R; R/process_seats_draws.R; R/make_meirihlutar_plots.R; R/make_new_prediction_plots_seats.R", "from draws to seat distributions, master"],
+  ["R/harness/scores.R seat_draws(), majority_prob(), seat_scores(); R/predict_seats.R; R/archive/predict_seats.R; R/process_seats_draws.R; R/make_meirihlutar_plots.R; R/make_new_prediction_plots_seats.R", "from draws to seat distributions, master"],
   ["commits e1910f6 (PR #4), aaf0aa1, 6ecf13d and bcd1ea6 (PR #16)", "history"],
   ["Lög um kosningar til Alþingis nr. 24/2000 (2016, 2017, 2021); Kosningalög nr. 112/2021 (2024)", "the election acts; their articles not checked"],
   ["docs/method/analysis/1.4-seats/", "the scripts behind this chapter's worked example and folding table, 4 Nov 2026"]
@@ -188,7 +188,7 @@
 <p>A forecast gives, per posterior draw, integer votes for each list in each kjördæmi (<code>y_pred_constituency</code>, chapter <a href="constituencies.html#forecast">1.3</a>). Running an allocator on each draw turns them into a joint distribution of seats. From that come each party's seat distribution and the probability that a set of parties holds a majority, at least 32 of 63 seats.</p>
 <ul>
 <li><strong>The harness</strong> does this in <code>R/harness/scores.R</code>: <code>seat_draws()</code> runs the allocator per draw with Annað ineligible by default, <code>majority_prob()</code> counts draws at 32 seats or more, and <code>seat_scores()</code> scores the seats against a result.</li>
-<li><strong>The live forecast scripts</strong> have no step that writes the seat draws. <code>R/process_seats_draws.R</code>, <code>R/make_meirihlutar_plots.R</code> and <code>R/make_new_prediction_plots_seats.R</code> read a <code>seats_draws.parquet</code> that, for the 2024 forecast, <code>R/archive/predict_seats.R</code> wrote, with Annað as an ordinary list. PR #16 fixed two of the plots built from it. The seat plot (<code>make_new_prediction_plots_seats.R</code>) now draws the posterior's own probabilities (aaf0aa1). In the majority plot, the coalition labelled DFS now sums D, F and S where it had summed D, M and S (6ecf13d), and the side table is sorted as the plot is (bcd1ea6).</li>
+<li><strong>The live forecast scripts</strong> write the seat draws with <code>R/predict_seats.R</code>, which runs <code>calculate_seats()</code> once per draw with Annað ineligible and writes <code>seats_draws.parquet</code> (9031952, 10 Nov 2026). <code>R/process_seats_draws.R</code>, <code>R/make_meirihlutar_plots.R</code> and <code>R/make_new_prediction_plots_seats.R</code> read that file. For the 2024 forecast it was written by <code>R/archive/predict_seats.R</code>, with Annað as an ordinary list; that script is kept as the record of the published rules. Run on the 2024-11-30 forecast's draws, the two give the same seats in every draw, party and kjördæmi (9031952). PR #16 fixed two of the plots built from it. The seat plot (<code>make_new_prediction_plots_seats.R</code>) now draws the posterior's own probabilities (aaf0aa1). In the majority plot, the coalition labelled DFS now sums D, F and S where it had summed D, M and S (6ecf13d), and the side table is sorted as the plot is (bcd1ea6).</li>
 </ul>
 
 <h3>What folding into Annað does</h3>
@@ -225,7 +225,6 @@
 <section id="open"><h2>What is open</h2>
 <div class="open"><span class="lab">Open</span>
 <ul>
-<li><strong>No live seat step.</strong> No script on master turns a forecast's kjördæmi draws into <code>seats_draws.parquet</code>. The 2024 forecast's copy is in <code>R/archive/</code>, and only the harness calls <code>calculate_seats()</code> on draws.</li>
 <li><strong>Folding.</strong> In the harness a list the polls do not name wins nothing. That matters whenever such a list would win a seat: over 5% nationally, or strong enough in one kjördæmi for a constituency seat, which needs no threshold. Björt framtíð's 2016 seats are the example.</li>
 <li><strong>No seat distribution here.</strong> The chapter shows no forecast's seat distribution: it works from official results only, and no forecast has been fitted for these notes.</li>
 <li><strong>Layouts.</strong> <code>layout_for()</code> knows four election dates. The next election's layout has to be added before it is forecast.</li>
@@ -239,7 +238,7 @@
 <li><code>R/election_utils.R</code> (master b67a29f): <code>calculate_seats()</code>, <code>seats_tibble()</code>, <code>seats_layout_2021()</code>, <code>layout_for()</code>. Earlier copies: <code>git show e1910f6^:R/election_utils.R</code> and <code>R/archive/predict_seats.R</code>.</li>
 <li><code>harness/truth/elections_official.csv</code> and <code>harness/truth/README.md</code> (sources: Hagstofa KOS02118b, KOS02118a, KOS02115/KOS02019 and KOS02018; Alþingi's 2021 results page), and <code>harness/sources/seats_2021_official.csv</code>.</li>
 <li><code>tests/harness/test-truth.R</code> and <code>tests/harness/test-seats.R</code>.</li>
-<li><code>R/harness/scores.R</code> (<code>seat_draws()</code>, <code>majority_prob()</code>, <code>seat_scores()</code>); <code>R/process_seats_draws.R</code>; <code>R/make_meirihlutar_plots.R</code>; <code>R/make_new_prediction_plots_seats.R</code>.</li>
+<li><code>R/harness/scores.R</code> (<code>seat_draws()</code>, <code>majority_prob()</code>, <code>seat_scores()</code>); <code>R/predict_seats.R</code> (<code>predict_seats()</code>); <code>R/archive/predict_seats.R</code>; <code>R/process_seats_draws.R</code>; <code>R/make_meirihlutar_plots.R</code>; <code>R/make_new_prediction_plots_seats.R</code>.</li>
 <li>Commits: e1910f6 (PR #4, merge 5d22031); aaf0aa1, 6ecf13d and bcd1ea6 (PR #16, merge a54f3fe).</li>
 <li>Lög um kosningar til Alþingis nr. 24/2000 (the 2016, 2017 and 2021 elections) and Kosningalög nr. 112/2021 (in force from 1 Jan 2022; the 2024 election).</li>
 <li>Numbers computed for this page: <code>docs/method/analysis/1.4-seats/d_2021.R</code> (the 2021 trace) and <code>d_fold.R</code> (the folding table), 4 Nov 2026, from committed files only.</li>
