@@ -21,11 +21,9 @@ box::use(
     update_constituency_data
   ],
   R / stan_data[
-    prepare_stan_data,
-    n_pred_k_2024,
+    prepare_kjordaemi_stan_data,
     poll_dates,
-    kjordaemi_full_polls,
-    kjordaemi_obs_k
+    kjordaemi_full_polls
   ]
 )
 
@@ -74,41 +72,12 @@ constituency_data |>
       distinct(date, fyrirtaeki)
   )
 
-stan_data <- prepare_stan_data(
+stan_data <- prepare_kjordaemi_stan_data(
   polling_data,
   fundamentals_data,
-  constituency_data
+  constituency_data,
+  election_date
 )
-
-constituency_weights <- constituency_data |>
-  summarise(
-    n = sum(n),
-    .by = c(kjordaemi, date)
-  ) |>
-  mutate(
-    p = n / sum(n),
-    .by = date
-  ) |>
-  select(-n) |>
-  pivot_wider(
-    names_from = kjordaemi,
-    values_from = p,
-    values_fill = 0
-  ) |>
-  column_to_rownames("date")
-
-N_obs_k <- nrow(constituency_weights)
-obs_k <- kjordaemi_obs_k(stan_data, constituency_weights, polling_data, constituency_data)
-
-
-stan_data$n_pred_k <- n_pred_k_2024(levels(constituency_data$kjordaemi))
-
-stan_data$constituency_weights <- constituency_weights
-stan_data$constituency_weights_pred <- constituency_weights[1, ] |> as.numeric()
-stan_data$desired_weight <- 0.22
-stan_data$weight_time <- 180
-stan_data$N_obs_k <- N_obs_k
-stan_data$obs_k <- obs_k
 
 str(stan_data)
 
@@ -698,7 +667,7 @@ constituency_data |>
     .by = kjordaemi
   ) |>
   mutate(
-    weight = constituency_weights[7, ] |> as.numeric(),
+    weight = stan_data$constituency_weights[7, ] |> as.numeric(),
     .by = flokkur
   ) |>
   summarise(

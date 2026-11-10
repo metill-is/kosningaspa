@@ -1,6 +1,6 @@
 # Headless fit of the production constituency model, for sampler checks.
-# Builds stan_data exactly as R/fit_polling_and_fundamentals_kjordaemi_model.R does
-# (its data section, up to str(stan_data)), optionally with every poll after a
+# Reads and filters the data as R/fit_polling_and_fundamentals_kjordaemi_model.R does and
+# builds stan_data with the same prepare_kjordaemi_stan_data(), optionally with every poll after a
 # forecast date dropped, then samples 4 chains with init 0. The cutoff serves sampler
 # checks only, not leave-future-out forecasts: the election date, the stjornarslit
 # window, the fundamentals and n_pred_k stay as the fit script sets them.
@@ -45,7 +45,7 @@ dir.create(file.path(out, "cmdstan"), recursive = TRUE, showWarnings = FALSE)
 build_stan_data <- function(cutoff) {
   box::use(
     R / data[read_polling_data, read_fundamentals_data, read_constituency_data],
-    R / stan_data[prepare_stan_data, n_pred_k_2024, kjordaemi_full_polls, kjordaemi_obs_k]
+    R / stan_data[prepare_kjordaemi_stan_data, kjordaemi_full_polls]
   )
   keep_date <- function(date) if (is.null(cutoff)) rep(TRUE, length(date)) else date <= as.Date(cutoff)
 
@@ -82,26 +82,7 @@ build_stan_data <- function(cutoff) {
     ) |>
     arrange(flokkur, date, kjordaemi)
 
-  stan_data <- prepare_stan_data(polling_data, fundamentals_data, constituency_data)
-
-  constituency_weights <- constituency_data |>
-    summarise(n = sum(n), .by = c(kjordaemi, date)) |>
-    mutate(p = n / sum(n), .by = date) |>
-    select(-n) |>
-    pivot_wider(names_from = kjordaemi, values_from = p, values_fill = 0) |>
-    column_to_rownames("date")
-  N_obs_k <- nrow(constituency_weights)
-  obs_k <- kjordaemi_obs_k(stan_data, constituency_weights, polling_data, constituency_data)
-
-  stan_data$n_pred_k <- n_pred_k_2024(levels(constituency_data$kjordaemi))
-
-  stan_data$constituency_weights <- as.matrix(constituency_weights)
-  stan_data$constituency_weights_pred <- constituency_weights[1, ] |> as.numeric()
-  stan_data$desired_weight <- 0.22
-  stan_data$weight_time <- 180
-  stan_data$N_obs_k <- N_obs_k
-  stan_data$obs_k <- obs_k
-  stan_data
+  prepare_kjordaemi_stan_data(polling_data, fundamentals_data, constituency_data)
 }
 
 data_built_here <- !file.exists(data_json)

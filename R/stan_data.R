@@ -354,6 +354,60 @@ kjordaemi_obs_k <- function(stan_data, constituency_weights, polling_data, const
 }
 
 
+#' The constituency model's Stan data (`Stan/polling_and_fundamentals_kjordaemi.stan`):
+#' `prepare_stan_data()`'s list plus each kjördæmi poll date's weights, `obs_k`, the
+#' election-day `n_pred_k` and the fundamentals-weight settings. The interactive fit
+#' script and `R/sampler_check/fit_headless.R` both build their data with it.
+#'
+#' @param polling_data national rows, filtered as the fit script filters them, with the
+#'   factor levels `read_polling_data()` sets (reference party first).
+#' @param fundamentals_data `read_fundamentals_data()` joined to the economy data by date.
+#' @param constituency_data kjördæmi rows that pass `kjordaemi_full_polls()`, with
+#'   `polling_data`'s factor levels, sorted by flokkur, date and kjordaemi.
+#' @param election_date the date of the election the draws run to.
+#' @param n_pred_k the expected valid votes per kjördæmi, in the order of
+#'   `constituency_data$kjordaemi`'s levels.
+#' @param desired_weight,weight_time the model's fundamentals-weight settings.
+#' @return a named list for cmdstanr; `constituency_weights` is a data frame with rows
+#'   named by date and one column per kjördæmi. An error from `kjordaemi_obs_k()` when
+#'   the kjördæmi rows do not line up with their dates' weights.
+#' @export
+prepare_kjordaemi_stan_data <- function(
+  polling_data,
+  fundamentals_data,
+  constituency_data,
+  election_date = clock::date_build(2024, 11, 30),
+  n_pred_k = n_pred_k_2024(levels(constituency_data$kjordaemi)),
+  desired_weight = 0.22,
+  weight_time = 180
+) {
+  box::use(
+    dplyr[summarise, mutate, select],
+    tidyr[pivot_wider],
+    tibble[column_to_rownames]
+  )
+
+  stan_data <- prepare_stan_data(polling_data, fundamentals_data, constituency_data, election_date)
+
+  constituency_weights <- constituency_data |>
+    summarise(n = sum(n), .by = c(kjordaemi, date)) |>
+    mutate(p = n / sum(n), .by = date) |>
+    select(-n) |>
+    pivot_wider(names_from = kjordaemi, values_from = p, values_fill = 0) |>
+    column_to_rownames("date")
+
+  obs_k <- kjordaemi_obs_k(stan_data, constituency_weights, polling_data, constituency_data)
+
+  stan_data$n_pred_k <- n_pred_k
+  stan_data$constituency_weights <- constituency_weights
+  stan_data$constituency_weights_pred <- as.numeric(constituency_weights[1, ])
+  stan_data$desired_weight <- desired_weight
+  stan_data$weight_time <- weight_time
+  stan_data$N_obs_k <- nrow(constituency_weights)
+  stan_data$obs_k <- obs_k
+  stan_data
+}
+
 #' @export
 prepare_fundamentals_data <- function(fundamentals_data) {
   box::use(
