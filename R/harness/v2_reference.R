@@ -11,7 +11,7 @@
 # data to other party and kjördæmi orders.
 
 box::use(
-  R / harness / v2[V2_SWITCHES]
+  R / harness / v2
 )
 
 #' The core's parameters, in the declaration order of Stan/forecast_v2.stan, with their Stan
@@ -176,7 +176,7 @@ V2_MUTANTS <- tibble::tibble(
 #' whose reference form is 0.
 BUILT_SWITCHES <- c("epoch_bias", "newcomer_pool", "shock", "delta_walk", "fundamentals", "post_flex", "bias_drift")
 FORM_SWITCHES <- c("walk_form", "delta_form")
-COMPONENT_SWITCHES <- setdiff(V2_SWITCHES, c(FORM_SWITCHES, BUILT_SWITCHES))
+COMPONENT_SWITCHES <- character(0)
 
 # The §6.10 priors and the bounded transforms (Decision 4) that are literals, not data.
 THETA1_SD <- 2

@@ -7,7 +7,7 @@
 #   LC_ALL=en_US.UTF-8 Rscript R/harness/compare_runs.R stop <arm> [run_list]
 #
 # The run list is the queue's (harness/runs/; "lane arm E F seed" per line, # for comments),
-# harness/runs/v2-steps.txt by default. Each run of an arm in it is read from
+# harness/runs/v2.txt by default. Each run of an arm in it is read from
 # results_root()/<run_id>, once its meta.json exists and names that run. A 2017 cell of the run
 # list is refused before the freeze (forecast_free(); spec section 5.7), before any run is read.
 #
@@ -45,7 +45,7 @@ box::use(
   R / harness / v2_reference[V2_LOG_CAPS]
 )
 
-DEFAULT_RUN_LIST <- "harness/runs/v2-steps.txt"
+DEFAULT_RUN_LIST <- "harness/runs/v2.txt"
 PREFIX <- "compare_runs: "
 USAGE <- "usage: Rscript R/harness/compare_runs.R stop <arm> [run_list]"
 

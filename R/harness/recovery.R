@@ -655,7 +655,7 @@ fit_replicate <- function(cell, seed, iters, expected, model, log) {
   arrow::write_parquet(pd, paths[2])
   readr::write_csv(key[c("variable", "rhat", "ess_bulk", "ess_tail")], paths[3])
   meta <- c(
-    list(id = id, arm = RECOVERY_ARM, role = "recovery", E = cell$E, F = cell$F, lane = cell$lane),
+    list(id = id, arm = RECOVERY_ARM, E = cell$E, F = cell$F, lane = cell$lane),
     expected,
     list(
       data_sha256 = data_sha, sim_seed = sim$sim_seed, attempts = sim$attempts, rejected = sim$attempts - 1L,
@@ -706,7 +706,7 @@ run_replicates <- function(E, F, first_seed, n, iter_warmup, iter_sampling, lane
   design_sha <- stan_data_sha(data)
   cell <- list(
     E = format(E), F = format(F), lane = lane, data = data, meta = built$meta, stan_file = stan_file,
-    param_variables = intersect(V2_PARAM_VARIABLES, a$variables(cfg)), real_redraw = real_rule_text(data, built$meta),
+    param_variables = intersect(V2_PARAM_VARIABLES, a$variables), real_redraw = real_rule_text(data, built$meta),
     provenance = provenance
   )
   say(log, sprintf(
