@@ -32,7 +32,9 @@
 # over all parties, the kjordaemi MAE and the summed seat error.
 # It reads each run's meta.json for its iterations, seed and gate, and stops, writing nothing,
 # on a run list with no run of an arm, a cell missing one arm's run or holding two, a run with
-# no meta.json, and on whatever score_cell() refuses (a 2017 cell, a dev or check arm).
+# no meta.json, and on whatever score_cell() refuses (a 2017 cell, a dev or check arm). The run table lists
+# each run's diagnostics flags (the gate's reasons). The thresholds are for the long fits behind a
+# published forecast; a short development fit that misses them is flagged, not failed.
 if (is.null(box::name())) {
   if (!isTRUE(l10n_info()[["UTF-8"]])) stop("score_report: needs a UTF-8 locale: run under LC_ALL=en_US.UTF-8", call. = FALSE)
   # WHY: the box path below is the working directory, so check it is the project root first.
@@ -219,7 +221,7 @@ cell_section <- function(cell, ref, new, s_ref, s_new) {
   p_a <- d2_p(a$d2, a$n_parties)
   p_b <- d2_p(b$d2, b$n_parties)
   table <- c(
-    row("Score (lower is better unless marked)", paste0(ref, " (SE)"), paste0(new, " (SE)"), paste0(new, " @MINUS@ ", ref), "SE_diff", "Reading"),
+    row("Score (lower is better unless marked)", paste0(ref, " (SE)"), paste0(new, " (SE)"), paste0(new, " @MINUS@ ", ref), "SE_diff", "Reading (Monte Carlo error only)"),
     row(rep("---", 6)),
     scored("CRPS10, pp (co-primary)", a$crps10, b$crps10, a$se_crps10, b$se_crps10, 3),
     scored("mDSS (co-primary)", a$mdss, b$mdss, a$se_mdss, b$se_mdss, 2),
@@ -378,7 +380,7 @@ main <- function(args) {
       run_rows <- c(run_rows, row(
         paste(cells$E[i], cells$F[i], sep = ", "), m$arm, paste0("`", id, "`"),
         paste(m$iter_warmup, "+", m$iter_sampling), m$seed, m$git_head %||% "NA",
-        if (isTRUE(m$gate$pass)) "pass" else paste("FAIL:", paste(unlist(m$gate$reasons), collapse = "; "))
+        if (isTRUE(m$gate$pass)) "pass" else paste("flags:", paste(unlist(m$gate$reasons), collapse = "; "))
       ))
     }
     s_ref <- score_cell(run_dir(ids[[1]]))
@@ -420,7 +422,7 @@ main <- function(args) {
       "- Margins: CRPS10 %s pp, kj\u00f6rd\u00e6mi CRPS %s pp, seat CRPS %s seats per party; calibration gate p > %s",
       format(MARGINS[["crps10"]]), format(MARGINS[["kd_crps"]]), format(MARGINS[["seat_crps_pp"]]), format(GATE_P)
     ), "",
-    row("Cell (E, F)", "Arm", "Run", "Iterations (warmup + sampling)", "Seed", "Commit", "Gate (section 5.7)"),
+    row("Cell (E, F)", "Arm", "Run", "Iterations (warmup + sampling)", "Seed", "Commit", "Diagnostics flags"),
     row(rep("---", 7)),
     run_rows, "",
     election_section(election_rows, ref, new),

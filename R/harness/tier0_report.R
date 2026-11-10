@@ -13,7 +13,7 @@
 #   both min bulk ESS per minute and projected linearly to 2000 sampling iterations; the
 #   gate-scope min bulk ESS per 1,000 gradients, 1000 * min_ess_bulk / n_leapfrog (the
 #   post-warmup leapfrog steps summed over chains, diagnostics$n_leapfrog), or "–" for a
-#   meta.json without n_leapfrog; the gate's verdict and reasons; and the modification time of
+#   meta.json without n_leapfrog; PASS or "flags: <the gate's reasons>"; and the modification time of
 #   meta.json, the measurement date.
 # Above the table it records the run list, the CmdStan and cmdstanr versions and the
 # max_treedepth of meta.json, and `sysctl -n hw.ncpu` read when it runs. It stops, writing
@@ -21,6 +21,8 @@
 # run, a cell that is not a forecast cell (the message names the run), or a field it reads
 # that is missing or does not parse: the gate's `pass` must be true or false and its
 # `reasons` a list of strings, possibly empty.
+# The diagnostics thresholds are for the long fits behind a published forecast; a short
+# development fit that misses them is flagged, not failed.
 if (!isTRUE(l10n_info()[["UTF-8"]])) stop("tier0_report.R needs a UTF-8 locale: run under LC_ALL=en_US.UTF-8", call. = FALSE)
 # WHY: the box path below is the working directory, so check it is the project root first.
 stopifnot("run from the project root (no R/harness/constants.R here)" = file.exists("R/harness/constants.R"))
@@ -127,7 +129,7 @@ run_row <- function(arm, E, F, seed) {
   # WHY: read_json() reads an empty array as list(), and an empty object as a named list().
   if (is.list(reasons) && !length(reasons) && is.null(names(reasons))) reasons <- character(0)
   if (!is.character(reasons)) stop("meta.json: gate$reasons is not a list of strings", call. = FALSE)
-  gate <- if (pass) "PASS" else paste0("FAIL", if (length(reasons)) paste0(": ", paste(reasons, collapse = "; ")))
+  gate <- if (pass) "PASS" else paste0("flags", if (length(reasons)) paste0(": ", paste(reasons, collapse = "; ")))
   pair <- function(x) paste(x, collapse = "; ")
   cells <- c(
     sprintf("%s, %s, %s", format(meta_E), format(meta_F), tag),

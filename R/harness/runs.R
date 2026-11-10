@@ -107,23 +107,48 @@ write_frozen_inputs <- function(dir, stan_data, inputs_meta) {
   sha
 }
 
+#' The sha256 of a config as its reader returns it.
+#' @param config the config list (an arm's `read_config()` result)
+#' @return 64 lowercase hex characters: the sha256 of the config as JSON with every object's
+#'   keys sorted, scalars unboxed and numbers at full precision, so that key order, whitespace
+#'   and number formatting in the file do not change it, and an integer and a double of the
+#'   same whole value hash alike
+#' @export
+config_sha <- function(config) {
+  sorted <- function(x) {
+    if (!is.list(x)) {
+      return(x)
+    }
+    if (!is.null(names(x))) x <- x[order(names(x), method = "radix")]
+    lapply(x, sorted)
+  }
+  text <- jsonlite::toJSON(sorted(config), auto_unbox = TRUE, digits = NA, null = "null", na = "string")
+  digest::digest(as.character(text), algo = "sha256", serialize = FALSE)
+}
+
 #' The meta keys a finished run must match to be reused (sha-skip).
 #' @param arm the arm's name; not a key, since the run id carries it
 #' @param seed,iter_warmup,iter_sampling the sampler seed and iterations, whole numbers
-#' @param stan_file,config_file the arm's Stan file and config, hashed here
+#' @param stan_file the arm's Stan file, hashed here
+#' @param config_file the arm's config file
 #' @param data_sha the sha256 of the run's Stan data JSON (`write_frozen_inputs()`)
-#' @return a named list: `stan_sha256`, `config_sha256`, `data_sha256`, `seed`,
-#'   `iter_warmup`, `iter_sampling` (integers), `chains`, `max_treedepth`, `init` (from
-#'   `SAMPLER`) and `extract_version` (`EXTRACT_VERSION`)
+#' @param config the config as the arm's reader returns it; by default the file as
+#'   `jsonlite::read_json()` parses it
+#' @return a named list: `stan_sha256`, `config_sha256` (`config_sha(config)`), `data_sha256`,
+#'   `seed`, `iter_warmup`, `iter_sampling` (integers), `chains`, `max_treedepth`, `init` (from
+#'   `SAMPLER`) and `extract_version` (`EXTRACT_VERSION`). Its attribute `"also_accepted"`,
+#'   `list(config_sha256 = <sha256 of the file's raw text>)`, is the hash runs recorded before
+#'   `config_sha()`, which `meta_mismatch()` accepts too
 #' @export
-expected_meta <- function(arm, seed, iter_warmup, iter_sampling, stan_file, config_file, data_sha) {
+expected_meta <- function(arm, seed, iter_warmup, iter_sampling, stan_file, config_file, data_sha,
+                          config = jsonlite::read_json(config_file)) {
   as_arm(arm)
   if (!is.character(data_sha) || length(data_sha) != 1 || !grepl("^[0-9a-f]{64}$", data_sha)) {
     stop("data_sha must be one sha256 (64 lowercase hex characters)")
   }
-  list(
+  e <- list(
     stan_sha256 = sha256_file(stan_file),
-    config_sha256 = sha256_file(config_file),
+    config_sha256 = config_sha(config),
     data_sha256 = data_sha,
     seed = as_count(seed, "seed"),
     iter_warmup = as_count(iter_warmup, "iter_warmup"),
@@ -133,6 +158,9 @@ expected_meta <- function(arm, seed, iter_warmup, iter_sampling, stan_file, conf
     init = SAMPLER$init,
     extract_version = EXTRACT_VERSION
   )
+  # WHY: a run finished before config_sha() recorded the raw file's sha; it stays fresh.
+  attr(e, "also_accepted") <- list(config_sha256 = sha256_file(config_file))
+  e
 }
 
 same_value <- function(a, b) {
@@ -151,7 +179,8 @@ same_value <- function(a, b) {
 #' The keys of `expected` that a run's meta does not match.
 #' @param meta a run's `meta.json` as parsed (`jsonlite::read_json()`, simplified or not);
 #'   keys outside `expected` are ignored
-#' @param expected `expected_meta()`
+#' @param expected `expected_meta()`; a key of its attribute `"also_accepted"` (a named list)
+#'   matches either value
 #' @return the names of the keys whose values differ from `expected` or are missing from
 #'   `meta`, in the order of `expected`; `character(0)` when the run can be reused.
 #'   Numbers compare by value whatever their type; any other value must be identical, so a
@@ -161,7 +190,9 @@ meta_mismatch <- function(meta, expected) {
   keys <- names(expected)
   if (!is.list(expected) || is.null(keys) || !all(nzchar(keys))) stop("expected must be a named list")
   if (!is.list(meta)) meta <- list()
-  keys[!vapply(keys, \(k) same_value(meta[[k]], expected[[k]]), logical(1))]
+  also <- attr(expected, "also_accepted")
+  ok <- function(k) same_value(meta[[k]], expected[[k]]) || (!is.null(also[[k]]) && same_value(meta[[k]], also[[k]]))
+  keys[!vapply(keys, ok, logical(1))]
 }
 
 #' Move a run aside, for a refit.

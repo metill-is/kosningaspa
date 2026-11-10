@@ -7,7 +7,8 @@
 #   0. stops on a 2017 cell before the freeze (forecast_free(); spec section 5.7, Decision 9),
 #      before anything is built or written;
 #   1. builds the cell's Stan data from info_set(E, F), after validate_inputs();
-#   2. computes the expected meta, with the sha256 of the freshly built data;
+#   2. computes the expected meta, with the sha256 of the freshly built data and of the config
+#      as its reader returns it;
 #   3. prints "SKIP <id> (meta.json matches)" and exits 0 if a finished run matches it; a run
 #      directory that does not, or has no meta.json, goes to _stale/ with
 #      "STALE <id> <mismatched keys>" (or "STALE <id> (no meta.json)");
@@ -25,6 +26,8 @@
 #      with the other outputs, so that its presence means the run is complete; prints the DIAG
 #      line and "DONE <dir>"; deletes
 #      the CmdStan CSVs, unless HARNESS_KEEP_CMDSTAN is 1 (for a test that reads them back).
+# The diagnostics thresholds are for the long fits behind a published forecast; a short
+# development fit that misses them is flagged, not failed.
 if (!isTRUE(l10n_info()[["UTF-8"]])) stop("fit_cell.R needs a UTF-8 locale: run under LC_ALL=en_US.UTF-8", call. = FALSE)
 # WHY: the box path below is the working directory, so check it is the project root first.
 stopifnot("run from the project root (no R/harness/constants.R here)" = file.exists("R/harness/constants.R"))
@@ -91,7 +94,7 @@ built <- a$build(info, cfg)
 variables <- if (is.function(a$variables)) a$variables(cfg) else a$variables
 
 data_sha <- stan_data_sha(built$data)
-expected <- expected_meta(name, numbers[1], numbers[2], numbers[3], a$stan_file, a$config, data_sha)
+expected <- expected_meta(name, numbers[1], numbers[2], numbers[3], a$stan_file, a$config, data_sha, config = cfg)
 
 dir <- run_dir(id)
 meta_path <- file.path(dir, "meta.json")
@@ -168,6 +171,6 @@ if (!all(Sys.chmod(c(paths, key_path, tmp), mode = "0444"))) stop("could not mak
 if (!file.rename(tmp, meta_path)) stop("could not move ", tmp, " to ", meta_path)
 
 cat(diag_line(id, minutes, d, gate), "\n", sep = "")
-if (!gate$pass) cat(sprintf("gate: %s\n", paste(gate$reasons, collapse = "; ")))
+if (!gate$pass) cat(sprintf("flags: %s\n", paste(gate$reasons, collapse = "; ")))
 cat(sprintf("DONE %s\n", dir))
 if (!identical(Sys.getenv("HARNESS_KEEP_CMDSTAN"), "1")) unlink(cmdstan_dir, recursive = TRUE)

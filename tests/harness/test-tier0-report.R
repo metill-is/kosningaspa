@@ -80,7 +80,7 @@ test_that("the Tier 0 report writes one row of diagnostics per run, non-finite v
   expect_identical(cells(rows[2]), c(
     "2021-09-25, 2021-03-29, f180", "1102", "10 + 10", "0.0", "40", "0 (0.0%)", "0", "NaN",
     "Inf; Inf", "NA; NA", "NA; NaN", "NA; NA", "NA; NA", NO_LEAPFROG,
-    "FAIL: max R-hat Inf > 1.01; divergent 40 > 0; min scored bulk ESS NA < 400; scored quantities with NA R-hat or ESS: 2",
+    "flags: max R-hat Inf > 1.01; divergent 40 > 0; min scored bulk ESS NA < 400; scored quantities with NA R-hat or ESS: 2",
     "2026-10-24 13:05 UTC"
   ))
   header <- cells(text[which(text == rows[1]) - 2L])

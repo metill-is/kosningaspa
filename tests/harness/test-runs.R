@@ -1,7 +1,7 @@
 box::use(
   R / harness / runs[
     EXTRACT_VERSION, SAMPLER, results_root, run_id, run_dir, sha256_file, stan_data_sha, write_frozen_inputs,
-    expected_meta, meta_mismatch, retire_run, chain_sampler, summarise_diagnostics, diagnostics_gate, diag_line
+    config_sha, expected_meta, meta_mismatch, retire_run, chain_sampler, summarise_diagnostics, diagnostics_gate, diag_line
   ]
 )
 
@@ -121,7 +121,8 @@ test_that("expected_meta() holds the shas, the seed, the iterations and the samp
   e <- fx$expected
   expect_identical(names(e), EXPECTED_KEYS)
   expect_identical(e$stan_sha256, digest::digest(file = fx$stan, algo = "sha256"))
-  expect_identical(e$config_sha256, digest::digest(file = fx$config, algo = "sha256"))
+  expect_identical(e$config_sha256, config_sha(jsonlite::read_json(fx$config)))
+  expect_identical(attr(e, "also_accepted"), list(config_sha256 = digest::digest(file = fx$config, algo = "sha256")))
   expect_identical(e$data_sha256, strrep("a", 64))
   expect_identical(e[c("seed", "iter_warmup", "iter_sampling")], list(seed = 1101L, iter_warmup = 200L, iter_sampling = 200L))
   expect_identical(e[c("chains", "max_treedepth", "init")], SAMPLER[c("chains", "max_treedepth", "init")])
@@ -170,6 +171,38 @@ test_that("a changed Stan file, config or data makes the finished run stale", {
   writeLines('{"prior": 2}', fx$config)
   now <- expected_meta("r0", 1101, 200, 200, fx$stan, fx$config, strrep("c", 64))
   expect_identical(meta_mismatch(old, now), c("stan_sha256", "config_sha256", "data_sha256"))
+})
+
+test_that("config_sha() ignores key order, whitespace and number formatting, not a changed value", {
+  dir <- withr::local_tempdir()
+  a <- file.path(dir, "a.json")
+  b <- file.path(dir, "b.json")
+  writeLines('{"prior": 1, "order": "fixed", "stage1": {"seed": 3, "iter": 10}}', a)
+  writeLines(c("{", '  "stage1": {"iter": 10.0, "seed": 3},', '  "order":   "fixed",', '  "prior": 1', "}"), b)
+  expect_false(identical(sha256_file(a), sha256_file(b)))
+  expect_identical(config_sha(jsonlite::read_json(a)), config_sha(jsonlite::read_json(b)))
+  expect_identical(config_sha(list(n = 3L, w = 0.25)), config_sha(list(w = 0.25, n = 3)))
+  writeLines('{"prior": 1, "order": "fixed", "stage1": {"seed": 3, "iter": 11}}', b)
+  expect_false(identical(config_sha(jsonlite::read_json(a)), config_sha(jsonlite::read_json(b))))
+  expect_false(identical(config_sha(list(w = 0.1)), config_sha(list(w = 0.1 + 1e-12))))
+})
+
+test_that("expected_meta() hashes the config its reader returns, and a run that recorded the raw file's sha stays fresh", {
+  fx <- meta_fixture()
+  read <- function(path) list(prior = as.numeric(jsonlite::read_json(path)$prior), extra = 0L)
+  e <- expected_meta("r0", 1101, 200, 200, fx$stan, fx$config, strrep("a", 64), config = read(fx$config))
+  expect_identical(e$config_sha256, config_sha(list(extra = 0L, prior = 1)))
+  legacy <- e
+  legacy$config_sha256 <- sha256_file(fx$config)
+  expect_identical(meta_mismatch(legacy, e), character(0))
+  path <- withr::local_tempfile(fileext = ".json")
+  jsonlite::write_json(unclass(legacy), path, auto_unbox = TRUE, digits = NA)
+  expect_identical(meta_mismatch(jsonlite::read_json(path), e), character(0))
+  neither <- e
+  neither$config_sha256 <- strrep("f", 64)
+  expect_identical(meta_mismatch(neither, e), "config_sha256")
+  neither$config_sha256 <- NULL
+  expect_identical(meta_mismatch(neither, e), "config_sha256")
 })
 
 test_that("retire_run() moves a run under _stale/ and leaves nothing at the old path", {
