@@ -93,6 +93,8 @@ That's the lower bound for what to look for.
 
 ### 2. Pull the canonical poll list from RÚV
 
+The array comes from a JSON API that `curl` reads without a browser: `https://muninn.kosningar.ruv.is/kosningar/api/a/polls/?from=2024-06-26&to=2026-12-31` (same `{election, results}` entries, `ratio` in percent). Prefer it; a hidden browser pane can return an empty `pollsArray`.
+
 In Chrome, navigate to `https://www.ruv.is/kosningar/kannanir-a-landsvisu`. The page hydrates `window.pollsArray` after a brief delay (~2 seconds), so wait before reading or you'll get an empty array. Note that top-level `await` is not allowed in the eval context — use a promise:
 
 ```javascript
