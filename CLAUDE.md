@@ -46,7 +46,7 @@ Google Sheets → data.R (update_*) → CSV files in data/
                                                     ↓
                   constituency_predictions.parquet in data/{date}/
                                                     ↓
-          calculate_seats() per draw → seats_draws.parquet (no live script;
+          calculate_seats() per draw → seats_draws.parquet (R/predict_seats.R;
           the 2024 forecast used R/archive/predict_seats.R)
                                                     ↓
           process_seats_draws.R, make_new_prediction_plots*.R → Figures/
@@ -69,7 +69,7 @@ by up to 0.36 points, so its diff holds a shift that no new poll explains (`R/CL
 - `jofnunarsaeti()` — Adjustment seat allocation (9 seats, 5% threshold)
 - `calculate_seats(draw, layout = seats_tibble(), ineligible = character(0))` — End-to-end: D'Hondt per constituency, then the adjustment seats by national D'Hondt over lists with ≥ 5%, each placed where the list's next quotient is the largest share of that constituency's votes; lists in `ineligible` (a forecast passes `"Annað"`) win no seat, but their votes still count in the 5% threshold and in those shares; returns `seats` and `kjordaemi_seats`
 - 63 total seats in each layout (constituency + adjustment seats). 2024 (`seats_tibble()`): Reykjavík Suður (9 + 2), Reykjavík Norður (9 + 2), Suðvestur (12 + 2), Suður (9 + 1), Norðaustur (9 + 1), Norðvestur (6 + 1). 2013–2021 (`seats_layout_2021()`): Suðvestur (11 + 2) and Norðvestur (7 + 1), the rest as in 2024. `layout_for(election)` returns the layout in force for 2016-10-29, 2017-10-28, 2021-09-25 or 2024-11-30
-- No live script turns `constituency_predictions.parquet` into `seats_draws.parquet`: the 2024 forecast used `R/archive/predict_seats.R`, which carries its own copy of the allocator
+- `LC_ALL=en_US.UTF-8 Rscript R/predict_seats.R data/<date>` turns `constituency_predictions.parquet` into `seats_draws.parquet` with `calculate_seats()` per draw, Annað ineligible; the 2024 forecast used `R/archive/predict_seats.R`, which carries its own copy of the allocator
 
 ## Language & Naming Conventions
 
