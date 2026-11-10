@@ -11,9 +11,6 @@ SE_SCORES <- c("crps10", "is90", "dss10", "mdss", "d2", "mae8", "cov50", "cov90"
 #' @export
 META_FIELDS <- c("arm", "E", "F", "party_order", "n_pred", "n_pred_k", "coalition_event")
 
-#' The roles whose arms `score_cell()` never scores.
-UNSCORED_ROLES <- c("check", "dev")
-
 #' The fields of a run's `meta.json` that `score_cell()` reads.
 #' @param run_dir the run directory
 #' @return the parsed `meta.json` (`jsonlite::read_json(simplifyVector = TRUE)`, every
@@ -118,12 +115,7 @@ draws_se <- function(long, score) {
 #'
 #'   With the default `truth`, `cell_truth`, it stops unless `root` is `project_root()`:
 #'   that reader reads this project's results, whatever `root` is. Then, in order, it reads
-#'   `meta.json`; looks up its arm's role in `ARMS` (an error for an unknown arm) and stops
-#'   with "score_cell: arm <a> has role <r>; check and dev arms are never scored" for a
-#'   `check` or `dev` arm, and with "score_cell: run role <r1> differs from arm <a>'s role
-#'   <r2>" when `meta.json` records another role (a `meta.json` without `role`, as R0's
-#'   Phase 1 runs have, takes the arm's); calls `freeze_guard(E, F, root)`, refuses a
-#'   confirmatory cell ("2017
+#'   `meta.json`; calls `freeze_guard(E, F, root)`, refuses a confirmatory cell ("2017
 #'   cells are scored by the Tier C runbook, which writes harness/CONFIRM.md"), stops with
 #'   "coalition event changed since the fit: refit <run>" unless `coalition_event(F,
 #'   read_coalitions())$parties` and meta.json's are the same set (the sha-skip does not
@@ -133,7 +125,6 @@ draws_se <- function(long, score) {
 score_cell <- function(run_dir, truth = cell_truth, root = project_root()) {
   # WHY: the default arguments are promises, forced after this import.
   box::use(
-    R / harness / arms[arm],
     R / harness / constants[project_root],
     R / harness / truth[cell_truth],
     R / harness / freeze[freeze_guard, target_cell],
@@ -147,13 +138,6 @@ score_cell <- function(run_dir, truth = cell_truth, root = project_root()) {
     stop("the default result reader reads this project's results, so root must be project_root(), not ", root)
   }
   meta <- read_run_meta(run_dir)
-  role <- arm(meta$arm)$role
-  if (role %in% UNSCORED_ROLES) {
-    stop(sprintf("score_cell: arm %s has role %s; check and dev arms are never scored", meta$arm, role), call. = FALSE)
-  }
-  if (!is.null(meta$role) && !identical(meta$role, role)) {
-    stop(sprintf("score_cell: run role %s differs from arm %s's role %s", paste(format(meta$role), collapse = ", "), meta$arm, role), call. = FALSE)
-  }
   E <- meta$E
   freeze_guard(E, meta$F, root)
   cell <- target_cell(E, meta$F)

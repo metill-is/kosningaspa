@@ -32,8 +32,9 @@
 # over all parties, the kjordaemi MAE and the summed seat error.
 # It reads each run's meta.json for its iterations, seed and gate, and stops, writing nothing,
 # on a run list with no run of an arm, a cell missing one arm's run or holding two, a run with
-# no meta.json, and on whatever score_cell() refuses (a 2017 cell, a dev or check arm). The run table lists
-# each run's diagnostics flags (the gate's reasons). The thresholds are for the long fits behind a
+# no meta.json, and on whatever score_cell() refuses (a cell that is not a forecast cell, a 2017
+# cell, a coalition event changed since the fit, a party with no list at the election). The run
+# table lists each run's diagnostics flags (the gate's reasons). The thresholds are for the long fits behind a
 # published forecast; a short development fit that misses them is flagged, not failed.
 if (is.null(box::name())) {
   if (!isTRUE(l10n_info()[["UTF-8"]])) stop("score_report: needs a UTF-8 locale: run under LC_ALL=en_US.UTF-8", call. = FALSE)

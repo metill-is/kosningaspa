@@ -17,7 +17,7 @@
   <div class="kicker">Kosningaspá · Method · Start here</div>
   <h1><span class="chnum">0.2</span> Notation and glossary</h1>
   <p class="sub">A reference page. Every symbol the written chapters use, with its Stan name and the chapter that defines it; the letters that mean two things; the Icelandic terms; the parties and their order in each model; the polling houses; and the words for windows, anchors, epochs and the harness.</p>
-  <div class="stamp"><b>Review state.</b> Not reviewed by the author. Drafted with Claude on 4 Nov 2026 from chapters 1.1, 1.4 and 3.1 and the code on master. <b>Snapshot.</b> Describes the code and records as they stood on master e4dc9f7, 4 Nov 2026 (party and house order read from the live data that day); the freeze item follows 9f2eb81, on master since PR #21 (2bc25f0), 6 Nov 2026: kosningaspa <code>master</code> unless a box names a branch. Live state: kosningaspa <code>master</code>.</div>
+  <div class="stamp"><b>Review state.</b> Not reviewed by the author. Drafted with Claude on 4 Nov 2026 from chapters 1.1, 1.4 and 3.1 and the code on master; edited on 10 Nov 2026 for v2&#x27;s cut to one configuration. <b>Snapshot.</b> Describes the code and records as they stood on master e4dc9f7, 4 Nov 2026 (party and house order read from the live data that day); the freeze item follows 9f2eb81, on master since PR #21 (2bc25f0), 6 Nov 2026; v2&#x27;s symbols as of 10 Nov 2026 (the simple core): kosningaspa <code>master</code> unless a box names a branch. Live state: kosningaspa <code>master</code>.</div>
 </header>
 
 <div class="layout">
@@ -43,13 +43,14 @@
 {"id": "0.2", "title": "Notation and glossary",
  "sub": "A reference page. Every symbol the written chapters use, with its Stan name and the chapter that defines it; the letters that mean two things; the Icelandic terms; the parties and their order in each model; the polling houses; and the words for windows, anchors, epochs and the harness.",
  "kicker": "Start here",
- "review": "Not reviewed by the author. Drafted with Claude on 4 Nov 2026 from chapters 1.1, 1.4 and 3.1 and the code on master.",
- "snapshot": "master e4dc9f7, 4 Nov 2026 (party and house order read from the live data that day); the freeze item follows 9f2eb81, on master since PR #21 (2bc25f0), 6 Nov 2026",
+ "review": "Not reviewed by the author. Drafted with Claude on 4 Nov 2026 from chapters 1.1, 1.4 and 3.1 and the code on master; edited on 10 Nov 2026 for v2's cut to one configuration.",
+ "snapshot": "master e4dc9f7, 4 Nov 2026 (party and house order read from the live data that day); the freeze item follows 9f2eb81, on master since PR #21 (2bc25f0), 6 Nov 2026; v2's symbols as of 10 Nov 2026 (the simple core)",
  "sources": [
   ["docs/method/forecast/walk.html, forecast/seats.html, bias/updating.html", "the symbols, as chapters 1.1, 1.4 and 3.1 define them"],
   ["Stan/polling_and_fundamentals_kjordaemi.stan; Stan/polling_watch_v4.stan; Stan/polling_watch_v5_epoch.stan; Stan/CLAUDE.md (Key Parameters)", "the Stan names, master"],
   ["R/data.R read_polling_data(), read_polling_watch_data(); R/stan_data.R; R/party_utils.R party_tibble()", "the party and house order, master"],
   ["R/harness/constants.R; R/harness/arms.R; harness/README.md", "the harness's terms, master"],
+  ["Stan/forecast_v2.stan", "v2's Stan names, 10 Nov 2026"],
   ["CLAUDE.md (Language & Naming Conventions)", "the Icelandic names in the code"],
   ["docs/method/analysis/0.2-notation/", "the script that reads the party and house order, 4 Nov 2026"]
  ]}
@@ -123,7 +124,7 @@
 <tr><td>$n_e$</td><td>—</td><td>the number of anchor elections since 2016 a party ran in: the hedge's divisor is $\sqrt{n_e}$</td><td><a href="../bias/updating.html#forecast">3.1</a></td></tr>
 <tr><td>—</td><td><code>mu_gamma_pred</code></td><td>the hedge, added to $\beta$ on the forecast days only</td><td><a href="../bias/updating.html#forecast">3.1</a></td></tr>
 <tr><td>$\Delta$, $b$, $C$</td><td>—</td><td>a bias's effect in pp on one poll; a logit shift; the set of parties a poll reports</td><td><a href="../bias/updating.html#what-bias-is">3.1</a></td></tr>
-<tr><td>$\tau_{\mu,A}$, $m_{\text{new}}$, $s_{\text{new}}$, $\varphi_K$, $\varepsilon_e$</td><td>on the v2 branch</td><td>v2's Annað step scale, newcomer offset and spread, kjördæmi result precision, and the planned election-day shock</td><td><a href="../bias/updating.html#v2">3.1</a></td></tr>
+<tr><td>$s_{\text{new}}$, $\varphi_K$</td><td><code>s_new_fixed</code>, <code>log_phi_K_u</code> (bounded log $\varphi_K$) in <code>Stan/forecast_v2.stan</code></td><td>v2's newcomer spread and kjördæmi result precision</td><td><a href="../bias/updating.html#v2">3.1</a></td></tr>
 </tbody>
 <caption>Stan names from <code>Stan/polling_watch_v4.stan</code>, <code>Stan/polling_watch_v5_epoch.stan</code> and <code>Stan/polling_and_fundamentals_kjordaemi.stan</code> on master.</caption>
 </table></div>
@@ -164,11 +165,11 @@
 <tr><td>$\lambda$</td><td>$\lambda_p$, the partial-centring weight of $\log\sigma_p$ (1.1); $\lambda_{p,k}$, that of $\delta_{p,k}$ (1.3); the shrinkage weight in a formula 3.1 quotes</td><td>the subscript</td></tr>
 <tr><td>$w$</td><td>the hedge's weight (3.1); $w_{o,k}$ and $w^{\text{pred}}$, the kjördæmi weights (1.3)</td><td>the subscript</td></tr>
 <tr><td>$b$</td><td>the next anchor, in $\beta_b$ and $C_b$ (1.1); a logit shift (3.1)</td><td>subscript or not</td></tr>
-<tr><td>$\eta$</td><td>the linear predictor (1.1, 3.1); a standard normal draw in v2's newcomer rule, $m_{\text{new}} + s_{\text{new}}\eta$ (3.1)</td><td>the context</td></tr>
+<tr><td>$\eta$</td><td>the linear predictor (1.1, 3.1); a standard normal draw in v2's newcomer rule, $s_{\text{new}}\eta$ (3.1)</td><td>the context</td></tr>
 <tr><td>$p$</td><td>a party index; once, a share, in the rule of thumb $p(1-p)\,b$ (3.1)</td><td>the context</td></tr>
 <tr><td>$I$</td><td>the identity matrix in $N(0, I)$; $I_p$ and $I_{p,k}$, the information proxies (1.1, 1.3)</td><td>the subscript</td></tr>
 <tr><td>$S$, $V$, $F$</td><td>$S_i$ and $V_i$, a list's seats and votes (1.4), and $F$, a cell's forecast date; the letters of Samfylkingin, Vinstri græn and Flokkur fólksins</td><td>as for $D$</td></tr>
-<tr><td>$\Delta$</td><td>a bias's effect in pp on one poll (3.1); elsewhere in 3.1, a gap between elections in years and its mean, $\overline{\Delta}$ (v2's $\delta$ walk)</td><td>the context</td></tr>
+<tr><td>$\Delta$</td><td>a bias's effect in pp on one poll (3.1)</td><td>the context</td></tr>
 </tbody>
 </table></div>
 </section>
@@ -257,7 +258,7 @@
 <li><strong>Tier 0.</strong> A check of an arm's sampler on two cells before anything is scored (<code>harness/README.md</code>).</li>
 <li><strong>The freeze.</strong> <code>harness/FREEZE.md</code> and <code>harness/FREEZE.sha256</code>. Until both exist and are committed, the checksum list covers <code>FREEZE.md</code> and every listed checksum matches, <code>score_cell()</code> scores no 2017 cell against its result; a 2021 or 2024 cell is scored with no freeze, so versions can be compared during development (<code>harness/README.md</code>).</li>
 <li><strong>The snapshot.</strong> The harness's frozen, checksummed copy of its inputs, git-ignored under <code>harness/snapshot/</code> and checked against <code>harness/snapshot_manifest.csv</code>.</li>
-<li><strong>v2.</strong> The next forecast model, on a branch not yet merged (chapter <a href="../bias/updating.html#v2">3.1</a>; 4.2, planned).</li>
+<li><strong>v2.</strong> The next forecast model, <code>Stan/forecast_v2.stan</code>, run only by the harness; since 10 Nov 2026 one configuration, the earlier switched file at the tag <code>v2-switched-final</code> (chapter <a href="../bias/updating.html#v2">3.1</a>; 4.2, planned).</li>
 </ul>
 </section>
 

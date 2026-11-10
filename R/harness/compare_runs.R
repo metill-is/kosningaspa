@@ -2,12 +2,12 @@
 # pull request #21's record). Its adoption and permutation
 # rules (Decisions 6 and 8) ran during the P-steps and are kept, not run, in
 # R/harness/archive/compare_runs_adopt_perm.R.
-# A plain script whose definitions also load as a box module, so that R/harness/recovery.R can
-# import stop_rule_at(); the script part runs only when box::name() is NULL. Run from the project root:
+# A plain script whose definitions also load as a box module; the script part runs only when
+# box::name() is NULL. Run from the project root:
 #   LC_ALL=en_US.UTF-8 Rscript R/harness/compare_runs.R stop <arm> [run_list]
 #
 # The run list is the queue's (harness/runs/; "lane arm E F seed" per line, # for comments),
-# harness/runs/v2-steps.txt by default. Each run of an arm in it is read from
+# harness/runs/v2.txt by default. Each run of an arm in it is read from
 # results_root()/<run_id>, once its meta.json exists and names that run. A 2017 cell of the run
 # list is refused before the freeze (forecast_free(); spec section 5.7), before any run is read.
 #
@@ -45,7 +45,7 @@ box::use(
   R / harness / v2_reference[V2_LOG_CAPS]
 )
 
-DEFAULT_RUN_LIST <- "harness/runs/v2-steps.txt"
+DEFAULT_RUN_LIST <- "harness/runs/v2.txt"
 PREFIX <- "compare_runs: "
 USAGE <- "usage: Rscript R/harness/compare_runs.R stop <arm> [run_list]"
 
@@ -160,8 +160,8 @@ near_cap <- function(dir, n) {
 above <- function(value, limit, reason) if (isTRUE(value <= limit)) NULL else reason
 
 #' One run's stop rule (Decision 5), read from the directory that holds its outputs. A
-#' harness run reaches it through `stop_rule()`; a recovery replicate (`R/harness/recovery.R`),
-#' whose directory is not a `run_dir()`, calls it directly.
+#' harness run reaches it through `stop_rule()`; a directory that is not a `run_dir()` can be
+#' passed directly.
 #' @param dir the directory: its `key_diagnostics.csv` (the `lp__` row) and
 #'   `param_draws.parquet` (the bounded log concentrations' columns) are read
 #' @param meta its `meta.json`, read with `simplifyVector = TRUE`: `chains`, `iter_sampling`,

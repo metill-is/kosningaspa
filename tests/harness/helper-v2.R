@@ -1,8 +1,8 @@
-# Test fixtures for arm V2: its step configs, the 2024-eve cell and its Stan data, helpers
+# Test fixtures for arm V2: its config, the 2024-eve cell and its Stan data, helpers
 # that each plant one fault in one table of an info_set(), stage 1's data and R reference
 # (reverse_labels(), the stage1_* functions and stage1_stub()), random_sigma() for the
 # walk's covariance algebra, and the comparison of Stan/forecast_v2.stan with the R reference
-# (skip_unless_step(), v2_test_cells(), lp_points(), stan_pars(), expect_lp_matches(),
+# (v2_test_cells(), lp_points(), stan_pars(), expect_lp_matches(),
 # expect_lp_rejects(), mutant_exercised(), bounded_at(), stan_block_decls()). The model
 # methods on V2's Stan files (v2_model(), v2_methods(), n_unc(), fixed_param_run(),
 # short_fit_draws(), gq_at(), ...) are R/harness/v2_methods.R's, imported below under their
@@ -12,21 +12,14 @@
 box::use(
   R / harness / constants[project_root],
   R / harness / info_set[info_set, read_inputs],
-  # WHY: the methods machinery is a module so that R/harness/archive/v2_equivalence.R and the tests run one copy of the heap-safe code, under the same names.
+  # WHY: the methods machinery is a module so that every test runs one copy of the heap-safe code, under the same names.
   R / harness / v2_methods[
     v2_model, model_of, fixed_param_run, v2_methods, n_unc, draw_pars, project_point, OFF_SCALES, fit_values,
     data_json, short_fit_draws, gq_at, gq_draws
   ]
 )
 
-V2_M0_CONFIG <- file.path(project_root(), "harness", "configs", "steps", "v2s-m0.json")
-V2_M1_CONFIG <- file.path(project_root(), "harness", "configs", "steps", "v2s-m1.json")
-V2_M2_CONFIG <- file.path(project_root(), "harness", "configs", "steps", "v2s-m2.json")
-V2_M3_CONFIG <- file.path(project_root(), "harness", "configs", "steps", "v2s-m3.json")
-V2_M4_CONFIG <- file.path(project_root(), "harness", "configs", "steps", "v2s-m4.json")
-V2_M5_CONFIG <- file.path(project_root(), "harness", "configs", "steps", "v2s-m5.json")
-V2_M6_CONFIG <- file.path(project_root(), "harness", "configs", "steps", "v2s-m6.json")
-V2_M7_CONFIG <- file.path(project_root(), "harness", "configs", "steps", "v2s-m7.json")
+V2_CONFIG <- file.path(project_root(), "harness", "configs", "v2.json")
 
 # WHY: read_inputs() and v2_stan_data() take seconds, and the 2024-eve fixtures serve many tests.
 v2_cache <- new.env(parent = emptyenv())
@@ -35,57 +28,16 @@ cached <- function(key, value) {
   v2_cache[[key]]
 }
 
-cfg_m0 <- function() {
+# V2's config, parsed once.
+cfg_v2 <- function() {
   box::use(R / harness / v2[read_v2_config])
-  read_v2_config(V2_M0_CONFIG)
+  cached("cfg_v2", read_v2_config(V2_CONFIG))
 }
 
-# Step v2s-m1's config: the core with the epoch bias (§6.4).
-cfg_m1 <- function() {
-  box::use(R / harness / v2[read_v2_config])
-  read_v2_config(V2_M1_CONFIG)
-}
-
-# Step v2s-m2's config: v2s-m1's with the newcomer contrast's mean and scale estimated (§6.4).
-cfg_m2 <- function() {
-  box::use(R / harness / v2[read_v2_config])
-  read_v2_config(V2_M2_CONFIG)
-}
-
-# Step v2s-m3's config: v2s-m2's with the election-day shock (§6.6).
-cfg_m3 <- function() {
-  box::use(R / harness / v2[read_v2_config])
-  read_v2_config(V2_M3_CONFIG)
-}
-
-# Step v2s-m4's config: v2s-m3's with the kjördæmi deviations walking across elections (§6.7).
-cfg_m4 <- function() {
-  box::use(R / harness / v2[read_v2_config])
-  read_v2_config(V2_M4_CONFIG)
-}
-
-# Step v2s-m5's config: v2s-m4's with the fundamentals pseudo-observation (§6.5).
-cfg_m5 <- function() {
-  box::use(R / harness / v2[read_v2_config])
-  read_v2_config(V2_M5_CONFIG)
-}
-
-# Step v2s-m6's config: V2's with the post-election multiplier (§6.2).
-cfg_m6 <- function() {
-  box::use(R / harness / v2[read_v2_config])
-  read_v2_config(V2_M6_CONFIG)
-}
-
-# Step v2s-m7's config: v2s-m6's with the epoch walk replaced by the calendar drift (§6.4).
-cfg_m7 <- function() {
-  box::use(R / harness / v2[read_v2_config])
-  read_v2_config(V2_M7_CONFIG)
-}
-
-# A temporary copy of the m0 config with the named keys changed (NULL drops a key, a new
+# A temporary copy of V2's config with the named keys changed (NULL drops a key, a new
 # name adds one), deleted when the caller's frame exits; returns its path.
 config_with <- function(..., env = parent.frame()) {
-  cfg <- utils::modifyList(jsonlite::read_json(V2_M0_CONFIG), list(...))
+  cfg <- utils::modifyList(jsonlite::read_json(V2_CONFIG), list(...))
   path <- withr::local_tempfile(fileext = ".json", .local_envir = env)
   jsonlite::write_json(cfg, path, auto_unbox = TRUE, pretty = TRUE, digits = I(17))
   path
@@ -104,7 +56,7 @@ info_2024eve <- function() {
 d_2024eve <- function() {
   box::use(R / harness / v2[v2_stan_data])
   skip_without_snapshot()
-  cached("d_2024eve", v2_stan_data(info_2024eve(), cfg_m0())$data)
+  cached("d_2024eve", v2_stan_data(info_2024eve(), cfg_v2(), stage1 = stage1_stub)$data)
 }
 
 # The cell's party order with Sósíalistaflokkurinn first: it has no votes at 2016 or 2017.
@@ -199,32 +151,19 @@ stage1_eta_E_ref <- function(d, p) {
   e <- stage1_predictor(d, p, "_E")
   e - mean(e)
 }
-# Skip unless the env var V2_STEPS is unset or empty, or its comma-separated list names
-# `step` or the test's `tag`, so that one step's tests of test-v2-stan.R run on their own. The
-# one tag, `perm`, marks the Stan lp tests on reordered data, the permutation test (v2s-m0) and
-# the reversed-order test with the house walk on (v2s-m1), which the queue's lean preflight runs
-# without the rest of their steps (`harness/README.md`, Tests).
-skip_unless_step <- function(step, tag = character(0)) {
-  steps <- trimws(strsplit(Sys.getenv("V2_STEPS"), ",", fixed = TRUE)[[1]])
-  steps <- steps[nzchar(steps)]
-  if (length(steps) && !any(c(step, tag) %in% steps)) testthat::skip(paste0(step, " is not in V2_STEPS"))
-}
 
 # The three cells of the Stan lp tests, as list(data, n_post, n_off), built on first call in
 # the R session for each config and stage 1, never when the helper is sourced: `data` is
-# v2_stan_data()'s for `cfg` with walk_form and delta_form at 0, under a temporary root with
-# no freeze, so the 2017 cell is its pre-freeze form (draw_forecast = 0, and with
-# fundamentals = 1 the placeholder's mu_f). The 2017 cell gets prior points only. With
-# fundamentals = 1 the other two cells take mu_f from `stage1`: NULL runs the real
+# v2_stan_data()'s for `cfg`, under a temporary root with no freeze, so the 2017 cell is its
+# pre-freeze form (draw_forecast = 0 and the placeholder's mu_f). The 2017 cell gets prior
+# points only. The other two cells take mu_f from `stage1`: NULL runs the real
 # stage1_mu_f(), which fits stage 1 with CmdStan unless its cache under
 # results_root()/stage1/ (git-ignored) holds the fit, so a test that passes NULL there is
 # skipped unless slow; stage1_stub() gives a fast test fixed values with no fit.
 v2_test_cells <- function(cfg, stage1 = NULL) {
   box::use(R / harness / v2[v2_stan_data])
   skip_without_snapshot()
-  if (identical(as.integer(cfg$fundamentals), 1L) && is.null(stage1)) skip_unless_slow()
-  cfg$walk_form <- 0L
-  cfg$delta_form <- 0L
+  if (is.null(stage1)) skip_unless_slow()
   key <- if (is.null(stage1)) "stage1_mu_f" else digest::digest(deparse(stage1))
   cached(paste("v2_test_cells", digest::digest(cfg), key), {
     root <- withr::local_tempdir("v2-cells-root-")
@@ -365,7 +304,7 @@ bounded_at <- function(m, data, u) {
 # only blank or `//` lines gives 0 rows, with no error, but a `}` straight after `<block> {`
 # errors, naming the `}`. An error too if `<block> {` is not found exactly once, or no `}`
 # follows it. A garbled or empty result still fails the declaration test's exact comparison
-# with V2_CORE_PARS' 32 names and types.
+# with V2_CORE_PARS' 19 names and types.
 stan_block_decls <- function(lines, block) {
   start <- which(lines == paste(block, "{"))
   if (length(start) != 1) stop("stan_block_decls: block ", block, " found ", length(start), " times", call. = FALSE)

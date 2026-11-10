@@ -8,8 +8,7 @@
 #
 # It builds the config's Stan data on the 2024-eve and 2021-f180 cells (v2_stan_data(); stage 1
 # is never fitted, since μ_f is a likelihood term's data and no prior draw reads it; no 2017
-# cell is ever built), sets its walk and δ forms to the reference forms (reference_forms()),
-# and on each takes n_draws prior points with
+# cell is ever built), and on each takes n_draws prior points with
 # v2_simulate(data, seed = SEED + i, observe = FALSE): parameters only, no counts, no fit and
 # no forecast. Each row of ROWS reads one summary off every draw, in pp (the fundamentals
 # rows: a weight), and is checked against its band (by default on the 5% and 95% quantiles
@@ -27,8 +26,7 @@
 # v2_stan_data()). None of its effects is therefore replaced by a newcomer's construction
 # (§6.4), and in the default order it is Sjálfstæðisflokkurinn, a party of about that size.
 # Every prior read below is exchangeable over parties, so coordinate 1 stands for any party
-# present from the start, except Annað's industry-bias steps (industry_step), whose scale is
-# its own. The effects:
+# present from the start. The effects:
 #   - house_d: d_h = σ_γ C ε_h (pars sigma_gamma and house_raw), coordinate 1 of every house,
 #     the houses pooled (they are exchangeable).
 #   - industry_mu1: μ_1, the parameter mu1 (normal(0, prior_sd_mu1) on every element,
@@ -38,66 +36,20 @@
 #     n = 1000, sqrt(s (1 − s) / n · (n + φ) / (1 + φ)), at each house's φ_h (v2_natural()'s
 #     phi), the houses pooled.
 #   - kd_delta: δ_open,k, v2_natural()'s δ in the open epoch, coordinate 1 of every
-#     kjördæmi, the kjördæmi pooled: the core's static δ under delta_walk = 0 (proposal 2's
-#     hyperprior log s_δ0 = μ_sd + τ_sd r), and under 1 the walk's δ (§6.7), which has taken
-#     every step to the open epoch, so it is wider. Σ_k w_k δ_k = 0 makes log s0 the national
+#     kjördæmi, the kjördæmi pooled: the static δ mapped through the open epoch's M_e
+#     (hyperprior log s_δ0 = μ_sd + τ_sd r). Σ_k w_k δ_k = 0 makes log s0 the national
 #     log-ratio to first order, so the change is the kjördæmi's deviation from the party's
 #     national share to that order.
 #   - walk_180: x = √180 · C(σ ⊙ L_Ω z), with z ~ N(0, I_P) from seed SEED_AUX + i and the
 #     draw's σ and L_Ω: covariance 180 CΣCᵀ, the walk's own innovation covariance (§6.2) over
 #     180 days off the campaign (s = 1). The campaign multiplier τ_camp has a prior of its own,
 #     which this row leaves out. The change is signed, so its band reads the upper tail.
-#   - industry_step (step v2s-m1, switch epoch_bias): x = C(τ ⊙ ξ_e), an epoch's step of the
-#     industry bias (§6.4; pars mu_step_raw, tau_mu and tau_mu_A), τ_p = τ_μ but τ_μ,A for
-#     Annað (the data's annad_idx), coordinate 1 of every step, the steps pooled (they are
-#     exchangeable). It stops if the coordinate party is Annað.
-#   - newcomer_entry (step v2s-m2, switch newcomer_pool): x = (m_new + s_new η_p, 0, ..., 0),
-#     a newcomer's entry bias against the mean bias of the parties existing before its entry
-#     epoch (§6.4; pars m_new, s_new and new_raw), read on a 10% party (NEWCOMER_SHARE) beside
-#     P − 1 equal parties, the newcomers pooled (they are exchangeable). The re-centring of μ
-#     after the entry is a common shift, which cancels in the softmax. It reads no
-#     party-indexed parameter, so coordinate 1 here is the newcomer, not the coordinate party.
-#   - shock_sd_20 and shock_sd_05 (step v2s-m3, switch shock): the sd of the election-day
-#     shock's share change (§6.6) given the draw's s̄_E (par s_bar_E), on a 20% and on a 5%
-#     party: over SHOCK_INNER draws of z ~ N(0, I_P) from seed SEED_AUX + i, the sd of
-#     share_change(C(s̄_E d ⊙ z), share) on the composition (share, (1 − share) / (P − 1), ...),
-#     each element's d = √(min(0.2 / π_p, 10)) the builder's formula (shock_scaling()) on that
-#     composition. §6.10 puts the median at about 1.6 pp for a 20% party and 0.95 pp for a 5%
-#     one: the party-alone linearisation π(1 − π) s̄ d at s̄_E's median, 0.15 · qnorm(0.75).
-#     This construction also shocks the other P − 1 parties (the centring is a common shift,
-#     which cancels in the softmax), so its population medians are about 1.80 and 1.00 pp, and
-#     the ratios to §6.10's targets are expected near 1.13 and 1.05. They read no
-#     party-indexed parameter, so coordinate 1 is the 20% or 5% party.
-#   - delta_step_4y (step v2s-m4, switch delta_walk): the change in a party's kjördæmi
-#     deviation over a 4-year gap (§6.7), a step in an epoch where no party enters: row k of
-#     M_e(√(4 / Δ̄) s_ζ ⊙ ζ), the walk's step on the open epoch's weights w, with ζ ~ N(0, 1)
-#     on every kjördæmi and party from seed SEED_AUX + i and s_ζ = s̄_ζ s_zeta_raw (pars
-#     s_bar_zeta and s_zeta_raw), coordinate 1 of every kjördæmi, the kjördæmi pooled. In such
-#     an epoch M_e removes the walk's −c_{e−1} 1ᵀ, so a change δ_e − δ_{e−1} is this step plus
-#     M_e(δ_{e−1}) − δ_{e−1}, the change of kjördæmi weights, which this row leaves out.
-#     Coordinate 1's own scale is s_zeta_raw[1].
-#   - fund_weight and fund_weight_bias (step v2s-m5, switch fundamentals): no composition, and
-#     not in pp. The fundamentals pseudo-observation's weight (§6.5) for each party p of S_f
-#     (the data's sf_idx; prior draws never read μ_f, so the placeholder's suffices), the
-#     parties pooled: (1/τ_f,p²) / (1/τ_f,p² + 1/V), with τ_f and V_w,p from the draw's σ, L_Ω
-#     and τ_camp (fund_scales(), the reference's code). fund_weight takes V = V_w,p, the walk's
-#     variance over weight_time days, where the weight is `desired_weight` by construction: a
-#     check of the code, not of the model. fund_weight_bias takes V = V_w,p + V_bias,p, V_bias,p
-#     the variance over the cell's prior draws of the industry bias's open-epoch step
-#     μ_open,p − μ_{open−1},p (v2_natural()'s μ), over S_f and centred over S_f: the open-epoch
-#     bias uncertainty that §6.5's 0.22 target leaves out. V_w stays centred over all P
-#     parties, as §6.5 writes it, so the two variances differ in centring. It needs every draw,
-#     so its per-draw values are combined by SUMMARY_POOLED.
-#   - post_window (step v2s-m6, switch post_flex): x = √D (1 + τ_post) C(σ ⊙ L_Ω z), z as in
-#     walk_180 (the same seed), with D the mean length in days of the closed elections' post
-#     windows on the grid (the data's post flags; `post_days` when each window lies on the
-#     grid): a 20% party's walk change over one post window (§6.2). The change is signed, so its
-#     band reads the upper tail, as walk_180's does.
-#   - drift_4y (step v2s-m7, switch bias_drift): x = C(τ ⊙ √(bk_step_years) Σ ξ_k), the
-#     industry bias's calendar drift over the last eight half-yearly knot steps before E (§6.4;
-#     pars mu_drift_raw, tau_drift and tau_drift_A), four years, on a 20% party: τ_p = τ_drift
-#     but τ_drift,A for Annað, coordinate 1 (it stops if that is Annað, or with fewer than
-#     eight steps). It reads a term's bias change, as industry_step does for the epoch walk.
+#   - fund_weight: no composition, and not in pp. The fundamentals pseudo-observation's
+#     weight (§6.5) for each party p of S_f (the data's sf_idx; prior draws never read μ_f, so
+#     the placeholder's suffices), the parties pooled: (1/τ_f,p²) / (1/τ_f,p² + 1/V_w,p), with
+#     τ_f and V_w,p, the walk's variance over weight_time days, from the draw's σ, L_Ω and
+#     τ_camp (fund_scales(), the reference's code). The weight is `desired_weight` by
+#     construction: a check of the code, not of the model.
 #
 # The bands, each built by its constructor and checked by in_band():
 #   band_inside(lo, hi)                      the 5% quantile at least lo, the 95% at most hi
@@ -120,9 +72,8 @@
 # config row FAILs. A band catches a broken prior (a wrong scale, unit or sign), not a
 # mistuned one, and is no tuning target.
 #
-# Later steps append their rows to ROWS (keyed by summary and step; a row with a switch, one
-# of V2_SWITCHES, runs only when the config turns it on) and their summaries to SUMMARY_FUNS;
-# a summary that needs every draw adds the function that combines them to SUMMARY_POOLED.
+# A new row goes into ROWS (keyed by summary and step) and its summary into SUMMARY_FUNS; a
+# summary that needs every draw adds the function that combines them to SUMMARY_POOLED.
 if (is.null(box::name())) {
   if (!isTRUE(l10n_info()[["UTF-8"]])) {
     stop("v2_prior_predictive.R needs a UTF-8 locale: run under LC_ALL=en_US.UTF-8", call. = FALSE)
@@ -134,8 +85,8 @@ if (is.null(box::name())) {
 box::use(
   R / harness / constants[harness_path, project_root, TARGETS],
   R / harness / info_set[info_set, read_inputs],
-  R / harness / v2[read_v2_config, shock_scaling, stage1_placeholder, V2_SWITCHES, v2_stan_data],
-  R / harness / v2_reference[fund_scales, M_e, v2_simulate]
+  R / harness / v2[read_v2_config, stage1_placeholder, v2_stan_data],
+  R / harness / v2_reference[fund_scales, v2_simulate]
 )
 
 #' The share of the party whose change the composition summaries read, the poll size of
@@ -143,17 +94,6 @@ box::use(
 SHARE <- 0.2
 POLL_N <- 1000
 WALK_DAYS <- 180
-
-#' The share of the newcomer whose entry bias the newcomer row reads.
-NEWCOMER_SHARE <- 0.1
-
-#' The gap in years of the δ-walk row's step.
-DELTA_GAP_YEARS <- 4
-
-#' The shares of the parties whose shock sd the shock rows read, and the draws of z each
-#' value's sd is taken over.
-SHOCK_SHARES <- c(shock_sd_20 = 0.2, shock_sd_05 = 0.05)
-SHOCK_INNER <- 200L
 
 #' Prior draw i takes seed SEED + i; a summary that needs more randomness takes SEED_AUX + i.
 SEED <- 6000L
@@ -183,36 +123,6 @@ share_change <- function(x, share = SHARE) {
   100 * (e[1] / sum(e) - share)
 }
 
-#' The sd in pp of the first party's change under the election-day shock (§6.6) at scale
-#' `s_bar_E`: over `SHOCK_INNER` draws of z ~ N(0, I_P) from `seed`, the sd of
-#' `share_change(C(s_bar_E d ⊙ z), share)` on the composition (share, (1 − share) / (P − 1),
-#' ...), each element's d `shock_scaling()` of its share in that composition.
-#' @param s_bar_E the shock's scale, one non-negative number
-#' @param P the parties, a whole number of at least 2
-#' @param share the first party's share, in (0, 1)
-#' @param seed the seed of the z draws
-#' @return numeric(1)
-#' @export
-shock_sd <- function(s_bar_E, P, share, seed) {
-  one <- function(x) is.numeric(x) && length(x) == 1 && is.finite(x)
-  if (!(one(s_bar_E) && s_bar_E >= 0)) stop("prior predictive: shock_sd() needs s_bar_E, one non-negative number", call. = FALSE)
-  if (!(one(P) && P == round(P) && P >= 2)) stop("prior predictive: shock_sd() needs P, a whole number of at least 2", call. = FALSE)
-  if (!(one(share) && share > 0 && share < 1)) stop("prior predictive: shock_sd() needs share in (0, 1)", call. = FALSE)
-  d <- shock_scaling(c(share, rep((1 - share) / (P - 1), P - 1)))
-  z <- withr::with_seed(seed, matrix(stats::rnorm(P * SHOCK_INNER), P, SHOCK_INNER))
-  x <- s_bar_E * d * z
-  x <- x - rep(colMeans(x), each = P)
-  stats::sd(apply(x, 2, share_change, share = share))
-}
-
-#' A shock row's value for one prior draw `sim`: `shock_sd()` at the draw's s̄_E.
-shock_row <- function(sim, data, seed, share) {
-  if (length(sim$pars$s_bar_E) != 1) {
-    stop("prior predictive: the shock rows need s_bar_E, which shock = 1 puts in the model", call. = FALSE)
-  }
-  shock_sd(as.numeric(sim$pars$s_bar_E), data$P, share, seed)
-}
-
 #' The Dirichlet-multinomial sd of a share `s` in a poll of `n` at concentration `phi`, in pp:
 #' 100 sqrt(s (1 − s) / n · (n + φ) / (1 + φ)).
 #' @param phi concentrations, non-negative
@@ -233,15 +143,15 @@ fund_weight_against <- function(tau_f, V) {
 
 #' `fund_scales()` at a draw's σ, L_Ω and τ_camp, after checking the data hold S_f.
 fund_draw_scales <- function(sim, data) {
-  if (!identical(as.integer(data$fundamentals), 1L) || length(data$sf_idx) < 2) {
-    stop("prior predictive: the fundamentals rows need fundamentals = 1 and at least two parties of S_f", call. = FALSE)
+  if (length(data$sf_idx) < 2) {
+    stop("prior predictive: the fundamentals rows need at least two parties of S_f", call. = FALSE)
   }
-  fund_scales(sim$pars$sigma, sim$pars$L_Omega, sim$pars$tau_camp, data, sim$pars$tau_post)
+  fund_scales(sim$pars$sigma, sim$pars$L_Omega, sim$pars$tau_camp, data)
 }
 
 #' The summaries, each a function of a `v2_simulate()` draw `sim`, its `data` and a `seed`
 #' for any further randomness, returning the draw's values in pp (one per house,
-#' kjördæmi, epoch step or newcomer for a pooled summary), or, for a summary of
+#' kjördæmi or party of S_f for a pooled summary), or, for a summary of
 #' `SUMMARY_POOLED`, what its pooling function reads. The header comment says which coordinate each reads.
 #' @export
 SUMMARY_FUNS <- list(
@@ -259,82 +169,17 @@ SUMMARY_FUNS <- list(
     v <- sim$pars$sigma * drop(matrix(sim$pars$L_Omega, data$P, data$P) %*% z)
     share_change(sqrt(WALK_DAYS) * (v - mean(v)))
   },
-  post_window = function(sim, data, seed) {
-    if (length(sim$pars$tau_post) != 1 || !any(c(data$post) == 1L)) {
-      stop("prior predictive: post_window needs tau_post and a post step, which post_flex = 1 puts in the model", call. = FALSE)
-    }
-    days <- sum(c(data$delta_days)[c(data$post) == 1L]) / data$n_closed
-    z <- withr::with_seed(seed, stats::rnorm(data$P))
-    v <- sim$pars$sigma * drop(matrix(sim$pars$L_Omega, data$P, data$P) %*% z)
-    share_change(sqrt(days) * (1 + as.numeric(sim$pars$tau_post)) * (v - mean(v)))
-  },
-  drift_4y = function(sim, data, seed) {
-    n_step <- as.integer(data$n_bk) - 1L
-    if (length(sim$pars$tau_drift) != 1 || n_step < 8L) {
-      stop("prior predictive: drift_4y needs tau_drift and eight knot steps, which bias_drift = 1 puts in the model", call. = FALSE)
-    }
-    if (identical(as.integer(data$annad_idx), 1L)) {
-      stop("prior predictive: the coordinate party is Anna\u00f0, whose drift has its own scale", call. = FALSE)
-    }
-    xi <- matrix(sim$pars$mu_drift_raw, data$P, n_step)
-    tau <- replace(rep(as.numeric(sim$pars$tau_drift), data$P), data$annad_idx, as.numeric(sim$pars$tau_drift_A))
-    x <- tau * sqrt(data$bk_step_years) * rowSums(xi[, n_step - 0:7, drop = FALSE])
-    share_change(x - mean(x))
-  },
-  industry_step = function(sim, data, seed) {
-    if (identical(as.integer(data$annad_idx), 1L)) {
-      stop("prior predictive: the coordinate party is Anna\u00f0, whose industry-bias steps have their own scale", call. = FALSE)
-    }
-    xi <- matrix(sim$pars$mu_step_raw, data$P, data$n_epoch - 1L)
-    tau <- replace(rep(as.numeric(sim$pars$tau_mu), data$P), data$annad_idx, as.numeric(sim$pars$tau_mu_A))
-    apply(tau * xi, 2, \(x) share_change(x - mean(x)))
-  },
-  newcomer_entry = function(sim, data, seed) {
-    if (length(sim$pars$m_new) != 1 || length(sim$pars$s_new) != 1) {
-      stop("prior predictive: newcomer_entry needs m_new and s_new, which newcomer_pool = 1 puts in the model", call. = FALSE)
-    }
-    x <- as.numeric(sim$pars$m_new) + as.numeric(sim$pars$s_new) * as.numeric(sim$pars$new_raw)
-    vapply(x, \(v) share_change(c(v, rep(0, data$P - 1)), share = NEWCOMER_SHARE), numeric(1))
-  },
-  shock_sd_20 = function(sim, data, seed) shock_row(sim, data, seed, SHOCK_SHARES[["shock_sd_20"]]),
-  shock_sd_05 = function(sim, data, seed) shock_row(sim, data, seed, SHOCK_SHARES[["shock_sd_05"]]),
-  delta_step_4y = function(sim, data, seed) {
-    if (length(sim$pars$s_bar_zeta) != 1 || length(sim$pars$s_zeta_raw) != data$P) {
-      stop(
-        "prior predictive: delta_step_4y needs s_bar_zeta and s_zeta_raw, which delta_walk = 1 puts in the model",
-        call. = FALSE
-      )
-    }
-    zeta <- withr::with_seed(seed, matrix(stats::rnorm(data$K * data$P), data$K, data$P))
-    s_zeta <- as.numeric(sim$pars$s_bar_zeta) * as.numeric(sim$pars$s_zeta_raw)
-    x <- sqrt(DELTA_GAP_YEARS / data$delta_years_bar) * zeta * matrix(s_zeta, data$K, data$P, byrow = TRUE)
-    apply(M_e(x, data$w[data$n_epoch, ]), 1, share_change)
-  },
   fund_weight = function(sim, data, seed) {
     sc <- fund_draw_scales(sim, data)
     fund_weight_against(sc$tau_f, sc$V_w)
-  },
-  fund_weight_bias = function(sim, data, seed) {
-    sc <- fund_draw_scales(sim, data)
-    mu <- sim$truth$mu
-    step <- mu[data$n_epoch, c(data$sf_idx)] - mu[data$n_epoch - 1L, c(data$sf_idx)]
-    list(tau_f = sc$tau_f, V_w = sc$V_w, step = step - mean(step))
   }
 )
 
 #' The summaries whose values need every draw, by name: each takes the list of its
 #' `SUMMARY_FUNS` results over the draws (one per draw, in seed order) and the data, and
-#' returns the row's values. `fund_weight_bias`: V_bias,p is the variance over the draws of
-#' the centred open-epoch step, and each draw's value for party p is
-#' `fund_weight_against(tau_f, V_w + V_bias)`, draw by draw and party by party.
+#' returns the row's values. None of the current rows needs one.
 #' @export
-SUMMARY_POOLED <- list(
-  fund_weight_bias = function(draws, data) {
-    part <- function(n) do.call(rbind, lapply(draws, `[[`, n))
-    V_bias <- apply(part("step"), 2, stats::var)
-    c(t(fund_weight_against(part("tau_f"), part("V_w") + matrix(V_bias, length(draws), length(V_bias), byrow = TRUE))))
-  }
-)
+SUMMARY_POOLED <- list()
 
 #' `x` to 6 significant digits.
 num <- function(x) trimws(formatC(x, digits = 6, format = "g"))
@@ -413,7 +258,6 @@ band_text <- function(band) {
 #' The rows of one summary: its config row, then one comparison row per entry of `compare`.
 #' @param summary its name in SUMMARY_FUNS
 #' @param step the step that adds it
-#' @param switch NA, or the data switch (one of `V2_SWITCHES`) its component needs
 #' @param label what it is, for the report
 #' @param keys the data's prior fields its prior reads, for the report
 #' @param band its band (`band_inside()` and the other constructors)
@@ -421,10 +265,10 @@ band_text <- function(band) {
 #'   config row whose data hold it prints WIDE out of its band
 #' @param compare a list of comparison rows, each `list(set, source)`: the data fields it
 #'   changes (a named list) and where their values come from
-#' @return a tibble: summary, step, switch, label, keys, kind, set, source, held, band
-summary_rows <- function(summary, step, switch, label, keys, band, held = NULL, compare = list()) {
+#' @return a tibble: summary, step, label, keys, kind, set, source, held, band
+summary_rows <- function(summary, step, label, keys, band, held = NULL, compare = list()) {
   tibble::tibble(
-    summary = summary, step = step, switch = switch, label = label, keys = list(keys),
+    summary = summary, step = step, label = label, keys = list(keys),
     kind = c("config", rep("comparison", length(compare))),
     set = c(list(NULL), lapply(compare, `[[`, "set")),
     source = c("config", vapply(compare, `[[`, "", "source")),
@@ -433,8 +277,7 @@ summary_rows <- function(summary, step, switch, label, keys, band, held = NULL, 
   )
 }
 
-#' `rows` after checking the table: every switch NA or one of `V2_SWITCHES`, every summary
-#' in SUMMARY_FUNS, every band of a known type (`in_band()`), one config row per (summary,
+#' `rows` after checking the table: every summary in SUMMARY_FUNS, every band of a known type (`in_band()`), one config row per (summary,
 #' step), every comparison row with fields to change and none repeated within its
 #' (summary, step), and `held` only on config rows.
 #' @param rows a table of `summary_rows()`
@@ -442,8 +285,6 @@ summary_rows <- function(summary, step, switch, label, keys, band, held = NULL, 
 #' @export
 check_rows <- function(rows) {
   bad <- function(...) stop("prior predictive: ROWS: ", ..., call. = FALSE)
-  sw <- rows$switch[!is.na(rows$switch)]
-  if (!all(sw %in% V2_SWITCHES)) bad("switch not in V2_SWITCHES: ", paste(setdiff(sw, V2_SWITCHES), collapse = ", "))
   if (!all(rows$summary %in% names(SUMMARY_FUNS))) bad("summary not in SUMMARY_FUNS: ", paste(setdiff(rows$summary, names(SUMMARY_FUNS)), collapse = ", "))
   if (!all(names(SUMMARY_POOLED) %in% names(SUMMARY_FUNS))) bad("a SUMMARY_POOLED summary not in SUMMARY_FUNS")
   types <- vapply(rows$band, \(b) if (is.list(b) && is.character(b$type)) b$type else "", "")
@@ -462,21 +303,14 @@ check_rows <- function(rows) {
 
 #' Every row of the check, keyed by summary and step. The core's (step v2s-m0): the bands
 #' were written before any V2 fit; the first three rows each have the other values of the
-#' plan's Decision 1 as comparisons (§6.10's, and proposals 1 and 4). The epoch bias's (step
-#' v2s-m1, switch `epoch_bias`): an epoch's step of the industry bias, its band written before
-#' any fit of that step. The newcomer pool's (step v2s-m2, switch `newcomer_pool`): a
-#' newcomer's entry bias on a 10% party, its band written before any fit of that step. The
-#' shock's (step v2s-m3, switch `shock`): its sd on a 20% and on a 5% party, each median
-#' within [0.5×, 2×] of §6.10's 1.6 and 0.95 pp, written before any fit of that step. The δ
-#' walk's (step v2s-m4, switch `delta_walk`): the change in a 20% party's kjördæmi deviation
-#' over a 4-year gap, its band written before any fit of that step. The fundamentals
-#' pseudo-observation's (step v2s-m5, switch `fundamentals`): its weight against the walk's
-#' 180-day variance, `desired_weight` by construction and checked to 1e-8, and the same weight
-#' with the open-epoch bias's variance added, reported with no band.
+#' plan's Decision 1 as comparisons (§6.10's, and proposals 1 and 4). The fundamentals
+#' pseudo-observation's (step v2s-m5): its weight against the walk's 180-day variance,
+#' `desired_weight` by construction and checked to 1e-8, and the same weight with the
+#' open-epoch bias's variance added, reported with no band.
 #' @export
 ROWS <- check_rows(dplyr::bind_rows(
   summary_rows(
-    "house_d", "v2s-m0", NA_character_,
+    "house_d", "v2s-m0",
     "A house's deviation d from the industry, on a 20% party (d_h = \u03c3_\u03b3 C \u03b5_h, \u03c3_\u03b3 ~ exponential(`prior_rate_sigma_gamma`))",
     "prior_rate_sigma_gamma", band_inside(-10, 10),
     held = c(prior_rate_sigma_gamma = 1),
@@ -486,7 +320,7 @@ ROWS <- check_rows(dplyr::bind_rows(
     )
   ),
   summary_rows(
-    "industry_mu1", "v2s-m0", NA_character_,
+    "industry_mu1", "v2s-m0",
     "Industry bias \u03bc_1 on a 20% party (\u03bc_1 sum-to-zero, normal(0, `prior_sd_mu1`) on every element)",
     "prior_sd_mu1", band_inside(-12, 12),
     held = c(prior_sd_mu1 = 1),
@@ -496,7 +330,7 @@ ROWS <- check_rows(dplyr::bind_rows(
     )
   ),
   summary_rows(
-    "poll_sd", "v2s-m0", NA_character_,
+    "poll_sd", "v2s-m0",
     "A poll's sd around its mean, n = 1,000, 20% party, at the prior \u03c6_h (\u03bc_\u03c6 ~ N(`prior_mu_phi`, 1))",
     "prior_mu_phi", band_inside(0.8, 6),
     compare = list(
@@ -505,63 +339,17 @@ ROWS <- check_rows(dplyr::bind_rows(
     )
   ),
   summary_rows(
-    "kd_delta", "v2s-m0", NA_character_,
-    "\u03b4 in the open epoch: a party's kj\u00f6rd\u00e6mi deviation from its national share, 20% party (static under `delta_walk` = 0, log s_\u03b40 = \u03bc_sd + \u03c4_sd r; the walk's under 1)",
+    "kd_delta", "v2s-m0",
+    "\u03b4 in the open epoch: a party's kj\u00f6rd\u00e6mi deviation from its national share, 20% party (static, log s_\u03b40 = \u03bc_sd + \u03c4_sd r)",
     character(0), band_inside(-25, 25)
   ),
   summary_rows(
-    "walk_180", "v2s-m0", NA_character_,
+    "walk_180", "v2s-m0",
     "A 20% party's 180-day walk change, off the campaign (covariance 180 C\u03a3C\u1d40)",
     character(0), band_q95(2, 30)
   ),
   summary_rows(
-    "industry_step", "v2s-m1", "epoch_bias",
-    paste0(
-      "An epoch's step in the industry bias on a 20% party (C(\u03c4 \u2299 \u03be_e), \u03c4_\u03bc ~ half-N(0, `prior_tau_mu`), ",
-      "\u03c4_\u03bc,A ~ half-N(0, 0.3) for Anna\u00f0)"
-    ),
-    "prior_tau_mu", band_inside(-6, 6)
-  ),
-  summary_rows(
-    "newcomer_entry", "v2s-m2", "newcomer_pool",
-    paste0(
-      "A newcomer's entry bias against the existing parties' mean, on a 10% party (m_new + s_new \u03b7, ",
-      "m_new ~ N(0, 0.3), s_new ~ half-N(0, 0.3))"
-    ),
-    character(0), band_inside(-10, 10)
-  ),
-  summary_rows(
-    "shock_sd_20", "v2s-m3", "shock",
-    paste0(
-      "The election-day shock's sd on a 20% party: given the draw's s\u0304_E, the sd of its change ",
-      "over ", SHOCK_INNER, " draws of z, on the composition (20%, 80% / (P \u2212 1), \u2026), with \u03b5 = ",
-      "C(s\u0304_E d \u2299 z) and each d = \u221a(min(0.2 / \u03c0, 10)) of that composition ",
-      "(s\u0304_E ~ half-N(0, `prior_s_bar_E`))"
-    ),
-    "prior_s_bar_E", band_median_ratio(1.6)
-  ),
-  summary_rows(
-    "shock_sd_05", "v2s-m3", "shock",
-    paste0(
-      "The election-day shock's sd on a 5% party: given the draw's s\u0304_E, the sd of its change ",
-      "over ", SHOCK_INNER, " draws of z, on the composition (5%, 95% / (P \u2212 1), \u2026), with \u03b5 = ",
-      "C(s\u0304_E d \u2299 z) and each d = \u221a(min(0.2 / \u03c0, 10)) of that composition ",
-      "(s\u0304_E ~ half-N(0, `prior_s_bar_E`))"
-    ),
-    "prior_s_bar_E", band_median_ratio(0.95)
-  ),
-  summary_rows(
-    "delta_step_4y", "v2s-m4", "delta_walk",
-    paste0(
-      "A 20% party's change in its kj\u00f6rd\u00e6mi deviation over a 4-year gap: the walk's step ",
-      "M_e(\u221a(4 / \u0394\u0304) s_\u03b6 \u2299 \u03b6) on the open epoch's weights, ",
-      "s_\u03b6 = s\u0304_\u03b6 s_zeta_raw (s\u0304_\u03b6 ~ half-N(0, `prior_s_bar_zeta`), s_zeta_raw ~ half-N(0, 1)), ",
-      "leaving out M_e(\u03b4_{e\u22121}) \u2212 \u03b4_{e\u22121}, the change of kj\u00f6rd\u00e6mi weights"
-    ),
-    "prior_s_bar_zeta", band_inside(-15, 15)
-  ),
-  summary_rows(
-    "fund_weight", "v2s-m5", "fundamentals",
+    "fund_weight", "v2s-m5",
     paste0(
       "The fundamentals pseudo-observation's weight against the walk's 180-day variance, for every party of S_f ",
       "(a weight, not pp): (1/\u03c4_f\u00b2) / (1/\u03c4_f\u00b2 + 1/V_w), \u03c4_f = \u221a(V_w (1 \u2212 w) / w), ",
@@ -569,32 +357,6 @@ ROWS <- check_rows(dplyr::bind_rows(
       "w by construction, a check of the code"
     ),
     c("desired_weight", "weight_time", "campaign_days"), band_exact(0.22, 1e-8)
-  ),
-  summary_rows(
-    "fund_weight_bias", "v2s-m5", "fundamentals",
-    paste0(
-      "The same weight with V_w + V_bias in place of V_w, for every party of S_f (a weight, not pp): V_bias the variance ",
-      "over the prior draws of the industry bias's open-epoch step \u03bc_open \u2212 \u03bc_{open\u22121}, over S_f and ",
-      "centred over S_f, which \u00a76.5's 0.22 target leaves out; V_w is centred over all P parties, as \u00a76.5 ",
-      "writes it, and V_bias over S_f"
-    ),
-    "prior_tau_mu", band_report()
-  ),
-  summary_rows(
-    "post_window", "v2s-m6", "post_flex",
-    paste0(
-      "A 20% party's walk change over one post-election window (covariance D (1 + \u03c4_post)\u00b2 C\u03a3C\u1d40, ",
-      "D the window's days on the grid, `post_days` = 90 in V2; \u03c4_post ~ exponential(1))"
-    ),
-    character(0), band_q95(2, 30)
-  ),
-  summary_rows(
-    "drift_4y", "v2s-m7", "bias_drift",
-    paste0(
-      "The industry bias's calendar drift over four years on a 20% party (C(\u03c4 \u2299 \u221a0.5 \u03a3 \u03be_k) over ",
-      "the last eight half-yearly steps, \u03c4_drift ~ half-N(0, 0.07) per \u221ayear, \u03c4_drift,A ~ half-N(0, 0.15) for Anna\u00f0)"
-    ),
-    character(0), band_inside(-6, 6)
   )
 ))
 
@@ -667,18 +429,6 @@ quantile_cells <- function(verdict, q, err = NA_real_) {
   sprintf("%.2f", c(q[["q05"]], q[["q50"]], q[["q95"]]))
 }
 
-#' `data` with `walk_form` and `delta_form` at 0, the reference forms, and every other field
-#' as it was.
-#' @param data a `v2_stan_data()` data list
-#' @return the data list; an error if it lacks either field
-#' @export
-reference_forms <- function(data) {
-  if (!all(c("walk_form", "delta_form") %in% names(data))) stop("prior predictive: the data have no walk_form or delta_form", call. = FALSE)
-  data$walk_form <- 0L
-  data$delta_form <- 0L
-  data
-}
-
 #' `path` relative to the project root when it lies under it, else its base name: a
 #' committed report names no absolute path.
 shown_path <- function(path) {
@@ -739,19 +489,17 @@ main <- function(args) {
   config <- shown_path(args[1])
   cells <- dplyr::left_join(CELLS, TARGETS, by = c("E", "F"))
   if (anyNA(cells$tag) || any(cells$confirmatory)) stop("CELLS must be non-confirmatory forecast cells", call. = FALSE)
-  on <- vapply(ROWS$switch, \(s) is.na(s) || identical(cfg[[s]], 1L), logical(1))
-  rows <- ROWS[on, ]
+  rows <- ROWS
 
   inputs <- read_inputs()
-  # WHY: v2_stan_data() fits stage 1 when the config turns fundamentals on; a prior draw never reads mu_f.
+  # WHY: v2_stan_data() fits stage 1 unless told otherwise; a prior draw never reads mu_f.
   no_stage1 <- function(info, cfg, root) stage1_placeholder(info)
   results <- list()
   skipped <- character(0)
   designs <- character(0)
   for (ci in seq_len(nrow(cells))) {
     cell <- cells$cell[ci]
-    # WHY: a P-step form (walk_form, delta_form) reparameterises the same model, so the prior draws do not depend on it, and v2_simulate() takes the reference forms only.
-    data <- reference_forms(v2_stan_data(info_set(cells$E[ci], cells$F[ci], inputs), cfg, stage1 = no_stage1)$data)
+    data <- v2_stan_data(info_set(cells$E[ci], cells$F[ci], inputs), cfg, stage1 = no_stage1)$data
     if (c(data$entry_epoch)[1] != 0L) {
       stop(cell, ": the coordinate party enters after the window's start, so it cannot be the 20% party", call. = FALSE)
     }
@@ -801,7 +549,7 @@ main <- function(args) {
     "",
     sprintf("- Config: `%s` (sha256 `%s`)", config, digest::digest(file = args[1], algo = "sha256")),
     sprintf(
-      "- Prior draws: %d per cell and row, seeds %d to %d (the walk, shock and \u03b4-step rows' z: seeds %d to %d)",
+      "- Prior draws: %d per cell and row, seeds %d to %d (the walk row's z: seeds %d to %d)",
       n_draws, SEED + 1L, SEED + n_draws, SEED_AUX + 1L, SEED_AUX + n_draws
     ),
     paste("- Cell", designs),
@@ -810,38 +558,19 @@ main <- function(args) {
       "P \u2212 1 equal parties sharing 80%; each effect moves it on the log-ratio scale, and the summary",
       "is its change in pp. The script's header says which coordinate each effect reads."
     ),
-    if ("newcomer_entry" %in% rows$summary) {
-      sprintf(
-        paste(
-          "- `newcomer_entry` reads no coordinate party: its first party is the newcomer, at %g%% beside",
-          "P \u2212 1 equal parties sharing %g%%, moved by its entry bias against the existing parties' mean."
-        ),
-        100 * NEWCOMER_SHARE, 100 * (1 - NEWCOMER_SHARE)
-      )
-    },
-    if (any(c("shock_sd_20", "shock_sd_05") %in% rows$summary)) {
-      sprintf(
-        paste(
-          "- `shock_sd_20` and `shock_sd_05` read no coordinate party: their first party is a %g%% or a %g%% party beside",
-          "P \u2212 1 equal parties, and each value is the sd of its change over %d draws of z given the draw's s\u0304_E."
-        ),
-        100 * SHOCK_SHARES[["shock_sd_20"]], 100 * SHOCK_SHARES[["shock_sd_05"]], SHOCK_INNER
-      )
-    },
     "",
     "## Summaries",
     "",
     sprintf(
-      "- **%s** (step %s%s): %s. Band: %s.", labels$summary, labels$step,
-      ifelse(is.na(labels$switch), "", paste0(", switch `", labels$switch, "`")), labels$label,
+      "- **%s** (step %s): %s. Band: %s.", labels$summary, labels$step, labels$label,
       vapply(labels$band, band_text, "")
     ),
     "",
     "## Results",
     "",
     paste(
-      "Quantiles over the prior draws, in pp unless a row says otherwise (`Values`: draws \u00d7 houses, kj\u00f6rd\u00e6mi,",
-      "epoch steps, newcomers or parties of S_f for a pooled summary)."
+      "Quantiles over the prior draws, in pp unless a row says otherwise (`Values`: draws \u00d7 houses, kj\u00f6rd\u00e6mi",
+      "or parties of S_f for a pooled summary)."
     ),
     "",
     table_row(c("Summary", "Step", "Kind", "Prior", "Cell", "Values", "q05", "q50", "q95", "Band", "Verdict")),

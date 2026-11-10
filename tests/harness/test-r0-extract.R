@@ -123,7 +123,6 @@ test_that("r0_extract stops on a missing cell, a non-whole count, a missing eday
 
 test_that("arm() returns an arm of ARMS and refuses an unknown one", {
   expect_true("r0" %in% names(ARMS))
-  expect_identical(ARMS$r0$role, "reference")
   a <- arm("r0")
   expect_identical(a, ARMS$r0)
   expect_identical(a$stan_file, "Stan/polling_and_fundamentals_kjordaemi_r0.stan")

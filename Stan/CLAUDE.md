@@ -13,23 +13,9 @@
 
 The R0 file is the harness's pinned copy of the 2024 model; its differences from production are deliberate. Do not edit it: its sha256 keys the recorded R0 fits, and `tests/harness/test-r0-stan.R` compares it with production at a fixed commit.
 
-## forecast_v2.stan's switches
+## forecast_v2.stan
 
-Verdicts from `harness/v2/decisions.md` (the full log is `harness/archive/steps.md`).
-
-| Switch | Turns on | Verdict |
-|---|---|---|
-| `epoch_bias` | pollster bias walking across epochs | GO (m1); on in V2 |
-| `newcomer_pool` | estimated newcomer bias mean and scale | GO (m2); off beat m6 in the 8 Nov search |
-| `shock` | election-day shock per closed election | GO (m3); on in V2 |
-| `delta_walk` | kjördæmi deviations walking across elections | GO (m4); on in V2 |
-| `fundamentals` | stage 1 as a pseudo-observation | GO (m5); on in V2 |
-| `post_flex` | campaign-like multiplier after an election | m6: a fifth of the 2024 MAE gap, 2021 ties; off |
-| `bias_drift` | calendar drift of the bias | m7: no better than m6; off |
-| `walk_form` | walk anchored at elections | KEEP v2s-m0 (P1), KEEP V2 (P3, P4) |
-| `delta_form` | delta walk held centred | KEEP v2s-m4 (P2) |
-
-On 10 November 2026 the owner decided to cut the file to one configuration (only `fundamentals` on, plus the campaign multiplier on the walk step leaving an election); until that is done it holds all nine.
+One configuration, the simple core: a sum-to-zero walk with LKJ correlation and the campaign multiplier (also on the step leaving an election), a constant poll bias with constant house deviations, a static kjördæmi deviation, the closed elections' results with no election-day shock, and the fundamentals pseudo-observation. The switched file and its harness are at the tag `v2-switched-final`; `harness/v2/lp-equivalence-simple-core.md` records that this file is that one at the simple core with the leaving-step rule added, and `harness/v2/decisions.md` holds the verdicts of the removed components.
 
 ## Key Parameters
 

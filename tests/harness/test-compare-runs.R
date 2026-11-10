@@ -4,7 +4,7 @@
 box::use(
   R / harness / runs[run_id],
   R / harness / freeze[is_frozen],
-  R / harness / v2[read_v2_config, v2_variables, V2_PARAM_SWITCH],
+  R / harness / v2[V2_PARAM_VARIABLES],
   R / harness / v2_reference[V2_LOG_CAPS],
   R / harness / constants[relative]
 )
@@ -48,7 +48,7 @@ DIAG <- list(
 # The meta.json of run (arm, cell, seed) in `dir`, with `diag` as its diagnostics.
 write_meta <- function(dir, arm, cell, seed, diag = DIAG) {
   meta <- list(
-    arm = arm, role = "dev", E = cell[1], F = cell[2], id = basename(dir), seed = seed, iter_warmup = ITERS,
+    arm = arm, E = cell[1], F = cell[2], id = basename(dir), seed = seed, iter_warmup = ITERS,
     iter_sampling = ITERS, chains = CHAINS, max_treedepth = 12L, minutes = 14.2, diagnostics = diag
   )
   jsonlite::write_json(meta, file.path(dir, "meta.json"), auto_unbox = TRUE, pretty = TRUE, digits = NA, na = "string")
@@ -81,7 +81,7 @@ fake_run <- function(results, arm, cell, seed, diag = list(), lp_rhat = 1.003, s
   invisible(dir)
 }
 
-test_that("the caps the stop rule reads are Decision 4's and the Stan file's, and v2s-m0's param_draws holds each", {
+test_that("the caps the stop rule reads are Decision 4's and the Stan file's, and V2's param_draws holds each", {
   expect_identical(V2_LOG_CAPS, CAPS)
   stan <- readLines(root("Stan", "forecast_v2.stan"))
   cap <- function(name) {
@@ -90,24 +90,25 @@ test_that("the caps the stop rule reads are Decision 4's and the Stan file's, an
     as.numeric(sub("^.*= *([0-9.]+);.*$", "\\1", line))
   }
   expect_identical(c(log_phi = cap("phi_cap"), log_phi_K = cap("phi_K_cap"), log_kappa = cap("kappa_cap")), CAPS)
-  # WHY: v2_extract() writes every variable of v2_variables() that no switch removes into param_draws.parquet.
-  vars <- v2_variables(read_v2_config(root("harness", "configs", "steps", "v2s-m0.json")))
-  expect_true(all(names(CAPS) %in% vars))
-  expect_false(any(names(CAPS) %in% names(V2_PARAM_SWITCH)))
+  # WHY: v2_extract() writes every variable of V2_PARAM_VARIABLES into param_draws.parquet.
+  expect_true(all(names(CAPS) %in% V2_PARAM_VARIABLES))
 })
 
-test_that("the step run list holds v2s-m0's four sampler-check fits, and the stop rule reads it by default", {
-  lines <- trimws(readLines(root("harness", "runs", "v2-steps.txt")))
+test_that("the run list holds V2 and R0 on the three cells at seed 2701, and the stop rule reads it by default", {
+  lines <- trimws(readLines(root("harness", "runs", "v2.txt")))
   runs <- lines[nzchar(lines) & !startsWith(lines, "#")]
-  expect_identical(runs[grepl("^[AB] v2s-m0 ", runs)], c(
-    run_lines("A", "v2s-m0", EVE, c(2701L, 2702L)), run_lines("B", "v2s-m0", F180, c(2701L, 2702L))
+  eve21 <- c("2021-09-25", "2021-09-24")
+  expect_identical(runs, c(
+    run_lines("A", "v2", EVE, 2701L), run_lines("A", "r0", EVE, 2701L),
+    run_lines("B", "v2", eve21, 2701L), run_lines("B", "r0", eve21, 2701L),
+    run_lines("B", "v2", F180, 2701L), run_lines("B", "r0", F180, 2701L)
   ))
   results <- withr::local_tempdir()
   withr::local_envvar(HARNESS_RESULTS = results)
-  out <- compare(c("stop", "v2s-m0"))
+  out <- compare(c("stop", "v2"))
   expect_identical(attr(out, "status"), 1L)
   # WHY: a run directory is printed under $HARNESS_RESULTS, never as an absolute path a step log could pick up.
-  expect_match(out, "compare_runs: no meta.json in $HARNESS_RESULTS/v2s-m0_2024-11-30_2024-11-29_s2701:", fixed = TRUE, all = FALSE)
+  expect_match(out, "compare_runs: no meta.json in $HARNESS_RESULTS/v2_2024-11-30_2024-11-29_s2701:", fixed = TRUE, all = FALSE)
   expect_false(prints_path(out, results), info = shown(out))
 })
 
