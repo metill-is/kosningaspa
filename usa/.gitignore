@@ -1,3 +1,0 @@
-# Compiled Stan binaries
-stan/*
-!stan/*.stan
