@@ -1,7 +1,6 @@
-# The model-method machinery for Stan/forecast_v2.stan and the other V2 Stan files, shared by
-# the tests (tests/harness/helper-v2.R imports it under the same names) and by
-# R/harness/archive/v2_equivalence.R, so that the script and the tests run one copy of the heap-safe
-# code. cmdstanr's model methods are built with g++-16 against a
+# The model-method machinery for Stan/forecast_v2.stan and the other V2 Stan files, used by
+# the tests (tests/harness/helper-v2.R imports it under the same names), so that every test runs
+# one copy of the heap-safe code. cmdstanr's model methods are built with g++-16 against a
 # clang-built R, so a C++ exception in any of them (a reject, a bound or a sum-to-zero vector
 # violated) corrupts R's heap even when caught. Everything here therefore runs the data and
 # every point through CmdStan's executable alone first, in its own process, and catches no
@@ -116,8 +115,8 @@ n_unc <- function(m) m$.__enclos_env__$private$model_methods_env_$num_upars_
 
 #' One draw `x` (a named numeric vector of CmdStan columns) as a list of the parameters of
 #' `dims`, each in cmdstanr's shape; `scalar` names the parameters declared as scalars, and
-#' `keep_dim` those whose one-dimensional value keeps its dim when it has one element (the
-#' `array[1] real` scales of the epoch bias, a `vector[1]`).
+#' `keep_dim` those whose one-dimensional value keeps its dim when it has one element (a
+#' `vector[N_new]` with one newcomer, say).
 #' @export
 draw_pars <- function(x, dims, scalar, keep_dim = character(0)) {
   out <- list()
@@ -155,16 +154,10 @@ project_point <- function(p) {
   p
 }
 
-#' The lower-bounded scale parameters that an off-posterior point multiplies by exp(N(0, 0.5)).
-#' The epoch bias's scales come after the core's, then the newcomer pool's s_new, the shock's
-#' s_bar_E, the δ walk's s_zeta_raw and s_bar_zeta, the post-election multiplier's tau_post,
-#' and the calendar drift's tau_drift, tau_drift_A and tau_house_drift last: each is size 0 with its switch at 0 and draws nothing, so the other scales'
-#' draws are as they were before it existed.
+#' The lower-bounded scale parameters that an off-posterior point multiplies by exp(N(0, 0.5)),
+#' and that project_point() checks are positive.
 #' @export
-OFF_SCALES <- c(
-  "sigma", "tau_camp", "sigma_gamma", "sigma_phi", "tau_sd", "tau_mu", "tau_mu_A", "tau_house", "s_new", "s_bar_E",
-  "s_zeta_raw", "s_bar_zeta", "tau_post", "tau_drift", "tau_drift_A", "tau_house_drift"
-)
+OFF_SCALES <- c("sigma", "tau_camp", "sigma_gamma", "sigma_phi", "tau_sd")
 
 #' The draws in `fit` (of `model`) of the variables named in `dims`, each in cmdstanr's
 #' shape with its dims there; a list of one named list per draw. A parameter of

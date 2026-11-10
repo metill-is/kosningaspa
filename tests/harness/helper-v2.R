@@ -12,7 +12,7 @@
 box::use(
   R / harness / constants[project_root],
   R / harness / info_set[info_set, read_inputs],
-  # WHY: the methods machinery is a module so that R/harness/archive/v2_equivalence.R and the tests run one copy of the heap-safe code, under the same names.
+  # WHY: the methods machinery is a module so that every test runs one copy of the heap-safe code, under the same names.
   R / harness / v2_methods[
     v2_model, model_of, fixed_param_run, v2_methods, n_unc, draw_pars, project_point, OFF_SCALES, fit_values,
     data_json, short_fit_draws, gq_at, gq_draws

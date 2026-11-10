@@ -83,7 +83,7 @@ test_that("a stale stage-1 record is refitted, or with fit = FALSE read as a col
   # WHY: a fit would then fail with "compiled", so a read that returns shows no fit ran.
   local_mocked_bindings(cmdstan_model = function(...) stop("compiled"), .package = "cmdstanr")
   info <- info_set(as.Date("2021-09-25"), as.Date("2021-03-29"))
-  cfg <- cfg_m0()
+  cfg <- cfg_v2()
   # The key, as stage1_mu_f() computes it.
   data <- stage1_data(info)
   attributes(data) <- list(names = names(data))
@@ -136,7 +136,7 @@ test_that("stage 1 is cached by its inputs", {
   skip_unless_slow()
   withr::local_envvar(HARNESS_RESULTS = withr::local_tempdir())
   info <- info_set(as.Date("2021-09-25"), as.Date("2021-03-29"))
-  cfg <- cfg_m0()
+  cfg <- cfg_v2()
   a <- stage1_mu_f(info, cfg)
   b <- stage1_mu_f(info, cfg)
   expect_identical(a, b)
@@ -161,7 +161,7 @@ test_that("stage 1 refuses a 2017 cell before the freeze", {
   # WHY: a refusal moved after the compile would then fail with "compiled", not pass with the right message.
   local_mocked_bindings(cmdstan_model = function(...) stop("compiled"), .package = "cmdstanr")
   out <- capture.output(expect_error(
-    stage1_mu_f(info_set(as.Date("2017-10-28"), as.Date("2017-10-27")), cfg_m0(), root = withr::local_tempdir()),
+    stage1_mu_f(info_set(as.Date("2017-10-28"), as.Date("2017-10-27")), cfg_v2(), root = withr::local_tempdir()),
     "stage 1: 2017 is not fitted before the freeze"
   ))
   expect_false(any(startsWith(out, "STAGE1")))
@@ -173,7 +173,7 @@ test_that("stage 1 read from its cache only stops on a cold cache, compiling, fi
   # WHY: a cache-only read that fell through to the fit would then fail with "compiled", not pass with the right message.
   local_mocked_bindings(cmdstan_model = function(...) stop("compiled"), .package = "cmdstanr")
   out <- capture.output(expect_error(
-    stage1_mu_f(info_set(as.Date("2021-09-25"), as.Date("2021-03-29")), cfg_m0(), fit = FALSE),
+    stage1_mu_f(info_set(as.Date("2021-09-25"), as.Date("2021-03-29")), cfg_v2(), fit = FALSE),
     "stage 1: no cached fit for 2021-09-25 F 2021-03-29 under results_root()/stage1/",
     fixed = TRUE
   ))
@@ -203,7 +203,7 @@ test_that("a stage-1 fit that fails its check stops and writes no cache", {
   results <- withr::local_tempdir()
   withr::local_envvar(HARNESS_RESULTS = results)
   info <- info_set(as.Date("2021-09-25"), as.Date("2021-03-29"), v2_inputs())
-  cfg <- cfg_m0()
+  cfg <- cfg_v2()
   cfg$stage1[c("iter_warmup", "iter_sampling")] <- list(10L, 10L)
   expect_error(capture.output(stage1_mu_f(info, cfg)), "stage 1: the fit fails its check")
   expect_false(dir.exists(file.path(results, "stage1")))
