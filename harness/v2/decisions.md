@@ -22,7 +22,7 @@ narrative, with every table and command, is `harness/archive/steps.md`.
 | `v2s-m6` | The post-election multiplier: walk steps within 90 days after an election scaled by 1 + τ_post | Closes about a fifth of V2's 2024-eve MAE gap to R0 and none of the 2021 gap | 6e66f92, 4b7223a |
 | `v2s-m7` | The calendar drift of the bias on half-yearly and yearly knots, in place of the epoch walk | GO on both runs; by the lean reading m7 does not improve on m6 | 5127f5b, e585274 |
 | 8 Nov search | Exploratory variants of `v2s-m6`, fitted outside the repository; x-nn sets `newcomer_pool = 0` | The newcomer pool misleads; x-nn not yet made an arm or a committed run list | a1d2364 |
-| Simple core | The file cut to one configuration, with the campaign multiplier on the walk step leaving an election | Same model as the tagged file at that configuration: log density and gradient equal at 28 points on each of two cells | 1c3a42b |
+| Simple core | The file cut to one configuration, with the campaign multiplier on the walk step leaving an election | The cut changed nothing else: log density and gradient equal those of the tagged file at that configuration with the rule added, at 28 points on each of two cells. The rule itself is tested against the R reference (`tests/harness/test-v2-stan.R`) | 1c3a42b |
 
 Two rows have two commits: the first built the step, the second recorded its fits or scores.
 The likelihood's rewrite in matrix form (258d3c8) changed computation only and has no row.

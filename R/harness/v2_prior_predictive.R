@@ -44,20 +44,12 @@
 #     draw's σ and L_Ω: covariance 180 CΣCᵀ, the walk's own innovation covariance (§6.2) over
 #     180 days off the campaign (s = 1). The campaign multiplier τ_camp has a prior of its own,
 #     which this row leaves out. The change is signed, so its band reads the upper tail.
-#   - fund_weight and fund_weight_bias: no composition, and not in pp. The fundamentals
-#     pseudo-observation's weight (§6.5) for each party p of S_f (the data's sf_idx; prior
-#     draws never read μ_f, so the placeholder's suffices), the parties pooled:
-#     (1/τ_f,p²) / (1/τ_f,p² + 1/V), with τ_f and V_w,p from the draw's σ, L_Ω and τ_camp
-#     (fund_scales(), the reference's code). fund_weight takes V = V_w,p, the walk's variance
-#     over weight_time days, where the weight is `desired_weight` by construction: a check of
-#     the code, not of the model. fund_weight_bias takes V = V_w,p + V_bias,p, V_bias,p the
-#     variance over the cell's prior draws of the industry bias's open-epoch change
-#     μ_open,p − μ_{open−1},p (v2_natural()'s μ), over S_f and centred over S_f: the open-epoch
-#     bias uncertainty that §6.5's 0.22 target leaves out. The bias has no step between
-#     epochs, so that change is the re-centring after a newcomer enters in the open epoch, and
-#     0 when none does. V_w stays centred over all P parties, as §6.5 writes it, so the two
-#     variances differ in centring. It needs every draw, so its per-draw values are combined
-#     by SUMMARY_POOLED.
+#   - fund_weight: no composition, and not in pp. The fundamentals pseudo-observation's
+#     weight (§6.5) for each party p of S_f (the data's sf_idx; prior draws never read μ_f, so
+#     the placeholder's suffices), the parties pooled: (1/τ_f,p²) / (1/τ_f,p² + 1/V_w,p), with
+#     τ_f and V_w,p, the walk's variance over weight_time days, from the draw's σ, L_Ω and
+#     τ_camp (fund_scales(), the reference's code). The weight is `desired_weight` by
+#     construction: a check of the code, not of the model.
 #
 # The bands, each built by its constructor and checked by in_band():
 #   band_inside(lo, hi)                      the 5% quantile at least lo, the 95% at most hi
@@ -180,28 +172,14 @@ SUMMARY_FUNS <- list(
   fund_weight = function(sim, data, seed) {
     sc <- fund_draw_scales(sim, data)
     fund_weight_against(sc$tau_f, sc$V_w)
-  },
-  fund_weight_bias = function(sim, data, seed) {
-    sc <- fund_draw_scales(sim, data)
-    mu <- sim$truth$mu
-    step <- mu[data$n_epoch, c(data$sf_idx)] - mu[data$n_epoch - 1L, c(data$sf_idx)]
-    list(tau_f = sc$tau_f, V_w = sc$V_w, step = step - mean(step))
   }
 )
 
 #' The summaries whose values need every draw, by name: each takes the list of its
 #' `SUMMARY_FUNS` results over the draws (one per draw, in seed order) and the data, and
-#' returns the row's values. `fund_weight_bias`: V_bias,p is the variance over the draws of
-#' the centred open-epoch step, and each draw's value for party p is
-#' `fund_weight_against(tau_f, V_w + V_bias)`, draw by draw and party by party.
+#' returns the row's values. None of the current rows needs one.
 #' @export
-SUMMARY_POOLED <- list(
-  fund_weight_bias = function(draws, data) {
-    part <- function(n) do.call(rbind, lapply(draws, `[[`, n))
-    V_bias <- apply(part("step"), 2, stats::var)
-    c(t(fund_weight_against(part("tau_f"), part("V_w") + matrix(V_bias, length(draws), length(V_bias), byrow = TRUE))))
-  }
-)
+SUMMARY_POOLED <- list()
 
 #' `x` to 6 significant digits.
 num <- function(x) trimws(formatC(x, digits = 6, format = "g"))
@@ -379,16 +357,6 @@ ROWS <- check_rows(dplyr::bind_rows(
       "w by construction, a check of the code"
     ),
     c("desired_weight", "weight_time", "campaign_days"), band_exact(0.22, 1e-8)
-  ),
-  summary_rows(
-    "fund_weight_bias", "v2s-m5",
-    paste0(
-      "The same weight with V_w + V_bias in place of V_w, for every party of S_f (a weight, not pp): V_bias the variance ",
-      "over the prior draws of the industry bias's open-epoch change \u03bc_open \u2212 \u03bc_{open\u22121}, over S_f and ",
-      "centred over S_f (the re-centring after a newcomer enters in the open epoch, else 0), which \u00a76.5's 0.22 target ",
-      "leaves out; V_w is centred over all P parties, as \u00a76.5 writes it, and V_bias over S_f"
-    ),
-    character(0), band_report()
   )
 ))
 

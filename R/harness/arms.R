@@ -26,9 +26,7 @@ v2_arm <- function(config) {
 #' root), `read_config` (config path to config), `build` (`info_set()` and config to
 #' `list(data, meta)`), `extract` (draws, meta and directory to the parquets) and
 #' `variables` (the character vector of what `extract` reads from a fit). `r0` is the 2024
-#' model, `v2` the forecast model of `Stan/forecast_v2.stan`, and `v2-perm` `v2`'s config with
-#' `order` = `"reversed"` (both the party and the kjördæmi order), the check that must
-#' reproduce `v2`.
+#' model and `v2` the forecast model of `Stan/forecast_v2.stan`.
 #' @export
 ARMS <- local({
   box::use(R / harness / r0[r0_stan_data, read_r0_config, r0_extract, R0_EXTRACT_VARIABLES])
@@ -41,8 +39,7 @@ ARMS <- local({
       extract = r0_extract,
       variables = R0_EXTRACT_VARIABLES
     ),
-    v2 = v2_arm("harness/configs/v2.json"),
-    `v2-perm` = v2_arm("harness/configs/v2-perm.json")
+    v2 = v2_arm("harness/configs/v2.json")
   )
 })
 

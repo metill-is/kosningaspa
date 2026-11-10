@@ -15,7 +15,7 @@ The R0 file is the harness's pinned copy of the 2024 model; its differences from
 
 ## forecast_v2.stan
 
-One configuration, the simple core: a sum-to-zero walk with LKJ correlation and the campaign multiplier (also on the step leaving an election), a constant poll bias with constant house deviations, a static kjördæmi deviation, the closed elections' results with no election-day shock, and the fundamentals pseudo-observation. The switched file and its harness are at the tag `v2-switched-final`; `harness/v2/lp-equivalence-simple-core.md` records that this file is that one at the simple core, and `harness/v2/decisions.md` holds the verdicts of the removed components.
+One configuration, the simple core: a sum-to-zero walk with LKJ correlation and the campaign multiplier (also on the step leaving an election), a constant poll bias with constant house deviations, a static kjördæmi deviation, the closed elections' results with no election-day shock, and the fundamentals pseudo-observation. The switched file and its harness are at the tag `v2-switched-final`; `harness/v2/lp-equivalence-simple-core.md` records that this file is that one at the simple core with the leaving-step rule added, and `harness/v2/decisions.md` holds the verdicts of the removed components.
 
 ## Key Parameters
 

@@ -16,7 +16,6 @@ Written by `LC_ALL=en_US.UTF-8 Rscript R/harness/v2_prior_predictive.R <config> 
 - **kd_delta** (step v2s-m0): δ in the open epoch: a party's kjördæmi deviation from its national share, 20% party (static, log s_δ0 = μ_sd + τ_sd r). Band: [5%, 95%] inside [-25, 25].
 - **walk_180** (step v2s-m0): A 20% party's 180-day walk change, off the campaign (covariance 180 CΣCᵀ). Band: 95% quantile in [2, 30].
 - **fund_weight** (step v2s-m5): The fundamentals pseudo-observation's weight against the walk's 180-day variance, for every party of S_f (a weight, not pp): (1/τ_f²) / (1/τ_f² + 1/V_w), τ_f = √(V_w (1 − w) / w), V_w = diag(CΣCᵀ) [(weight_time − campaign_days) + campaign_days (1 + τ_camp)²]: w by construction, a check of the code. Band: every draw within 1e-08 of 0.22.
-- **fund_weight_bias** (step v2s-m5): The same weight with V_w + V_bias in place of V_w, for every party of S_f (a weight, not pp): V_bias the variance over the prior draws of the industry bias's open-epoch change μ_open − μ_{open−1}, over S_f and centred over S_f (the re-centring after a newcomer enters in the open epoch, else 0), which §6.5's 0.22 target leaves out; V_w is centred over all P parties, as §6.5 writes it, and V_bias over S_f. Band: none (reported).
 
 ## Results
 
@@ -42,8 +41,6 @@ Quantiles over the prior draws, in pp unless a row says otherwise (`Values`: dra
 | walk_180 | v2s-m0 | config | literals | 2021-f180 | 1000 | -10.20 | -0.82 | 12.16 | 95% quantile in [2, 30] | PASS |
 | fund_weight | v2s-m5 | config | `desired_weight` = 0.22, `weight_time` = 180, `campaign_days` = 47 | 2024-eve | 9000 | 0.22 | 0.22 | 0.22 | every draw within 1e-08 of 0.22 | PASS |
 | fund_weight | v2s-m5 | config | `desired_weight` = 0.22, `weight_time` = 180, `campaign_days` = 47 | 2021-f180 | 8000 | 0.22 | 0.22 | 0.22 | every draw within 1e-08 of 0.22 | PASS |
-| fund_weight_bias | v2s-m5 | config | literals | 2024-eve | 9000 | 0.22 | 0.22 | 0.22 | none (reported) | REPORT |
-| fund_weight_bias | v2s-m5 | config | literals | 2021-f180 | 8000 | 0.22 | 0.22 | 0.22 | none (reported) | REPORT |
 
 Skipped, as the config holds their values: house_d comparison prior_rate_sigma_gamma=1 (§6.10); industry_mu1 comparison prior_sd_mu1=1 (§6.10); poll_sd comparison prior_mu_phi=6.90776 (proposal 1).
 
@@ -68,8 +65,6 @@ PRIOR PASS walk_180/2024-eve/config
 PRIOR PASS walk_180/2021-f180/config
 PRIOR PASS fund_weight/2024-eve/config
 PRIOR PASS fund_weight/2021-f180/config
-PRIOR REPORT fund_weight_bias/2024-eve/config 0.22 0.22 0.22
-PRIOR REPORT fund_weight_bias/2021-f180/config 0.22 0.22 0.22
 ```
 
 ## Reading the verdicts
@@ -78,5 +73,4 @@ PRIOR REPORT fund_weight_bias/2021-f180/config 0.22 0.22 0.22
 - **WIDE**: a config row of a bias whose prior the config holds at §6.10's value, out of its band. §6.10 fixes that prior, so the row goes to Brynjólfur as information and does not stop the script.
 - **FAIL (stops)**: a config row out of its band. The script stops after writing this report.
 - **FAIL (comparison)**: a comparison row out of its band, reported as information; it never stops the script.
-- **REPORT**: a row with no band, reported as information; it never stops the script.
 - A band catches a broken prior (a wrong scale, unit or sign), not a mistuned one. It is wide on purpose, and no band is a tuning target: the quantiles themselves are the result.

@@ -7,7 +7,7 @@ box::use(
   R / harness / v2_prior_predictive[
     band_error, band_exact, band_inside, band_median_ratio, band_q95, band_report, check_rows, fund_weight_against,
     held_at, in_band, poll_sd_pp, quantile_cells, ROWS, row_verdict, same_as, share_change, SUMMARY_FUNS,
-    SUMMARY_POOLED, verdict_line
+    verdict_line
   ]
 )
 
@@ -98,7 +98,7 @@ test_that("the whole table checks, and the core's rows carry the bands written b
   expect_false(anyDuplicated(paste(ROWS$summary, ROWS$step)[config]) > 0)
   key <- paste(ROWS$summary, ROWS$step, ROWS$kind, vapply(ROWS$set, \(s) paste(names(s), unlist(s), collapse = ","), ""))
   expect_false(anyDuplicated(key) > 0)
-  expect_setequal(ROWS$summary[config], c("house_d", "industry_mu1", "poll_sd", "kd_delta", "walk_180", "fund_weight", "fund_weight_bias"))
+  expect_setequal(ROWS$summary[config], c("house_d", "industry_mu1", "poll_sd", "kd_delta", "walk_180", "fund_weight"))
   core <- ROWS[ROWS$step == "v2s-m0", ]
   cfg <- core[core$kind == "config", ]
   expect_setequal(cfg$summary, c("house_d", "industry_mu1", "poll_sd", "kd_delta", "walk_180"))
@@ -234,13 +234,12 @@ test_that("the script prints its lines and writes its report to out, leaving the
   res <- run_script(c(file.path("harness", "configs", "v2.json"), "20", out))
   expect_null(attr(res, "status"), label = paste(res, collapse = "\n"))
   lines <- grep("^PRIOR ", res, value = TRUE)
-  expect_length(lines, 20)
+  expect_length(lines, 18)
   expect_true("PRIOR PASS poll_sd/2024-eve/config" %in% lines)
   expect_true(any(startsWith(lines, "PRIOR WIDE house_d/2024-eve/config ")))
   expect_true(any(startsWith(lines, "PRIOR WIDE industry_mu1/2021-f180/config ")))
   expect_true(any(startsWith(lines, "PRIOR FAIL poll_sd/2021-f180/comparison:prior_mu_phi=0 ")))
   expect_true(all(c("PRIOR PASS fund_weight/2024-eve/config", "PRIOR PASS fund_weight/2021-f180/config") %in% lines))
-  expect_identical(sum(startsWith(lines, "PRIOR REPORT fund_weight_bias/")), 2L)
   report <- readLines(out)
   expect_identical(report[1], "# V2 prior predictive check")
   expect_true(all(lines %in% report))
@@ -265,22 +264,21 @@ test_that("a config row out of its band prints FAIL, still writes the report, an
   expect_identical(committed_sha(), before)
 })
 
-# A hand-built design for the fundamentals rows: P = 3 parties, S_f the first and third, three
-# epochs, and the spec's weight, days and campaign.
+# A hand-built design for the fundamentals row: P = 3 parties, S_f the first and third, and the
+# spec's weight, days and campaign.
 FUND_DATA <- list(
-  P = 3L, n_epoch = 3L, sf_idx = c(1L, 3L), weight_time = 180, campaign_days = 47L, desired_weight = 0.22
+  P = 3L, sf_idx = c(1L, 3L), weight_time = 180, campaign_days = 47L, desired_weight = 0.22
 )
 
-# A draw for the fundamentals rows: independent walk scales sigma (L_Omega = I), tau_camp, and
-# the industry bias mu by epoch (3 x 3).
-fund_sim <- function(sigma, tau_camp, mu) list(pars = list(sigma = sigma, L_Omega = diag(3), tau_camp = tau_camp), truth = list(mu = mu))
+# A draw for the fundamentals rows: independent walk scales sigma (L_Omega = I) and tau_camp.
+fund_sim <- function(sigma, tau_camp) list(pars = list(sigma = sigma, L_Omega = diag(3), tau_camp = tau_camp))
 
 test_that("fund_weight is the pseudo-observation's weight against V_w for every party of S_f, w by construction", {
   sigma <- c(0.01, 0.02, 0.015)
   C <- diag(3) - 1 / 3
   V_w <- diag(C %*% diag(sigma^2) %*% C)[c(1, 3)] * (133 + 47 * 1.5^2)
   tau_f <- sqrt(V_w * 0.78 / 0.22)
-  sim <- fund_sim(sigma, 0.5, matrix(0, 3, 3))
+  sim <- fund_sim(sigma, 0.5)
   expect_equal(SUMMARY_FUNS$fund_weight(sim, FUND_DATA, 1L), rep(0.22, 2), tolerance = 1e-12)
   expect_equal(fund_weight_against(tau_f, V_w), rep(0.22, 2), tolerance = 1e-12)
   # Against twice V_w the weight is 2w / (2w + 1 - w).
@@ -288,37 +286,12 @@ test_that("fund_weight is the pseudo-observation's weight against V_w for every 
   expect_error(SUMMARY_FUNS$fund_weight(sim, utils::modifyList(FUND_DATA, list(sf_idx = 1L)), 1L), "two parties of S_f")
 })
 
-test_that("fund_weight_bias adds the variance over the draws of the open-epoch step over S_f, centred over S_f", {
-  sigma <- c(0.01, 0.02, 0.015)
-  C <- diag(3) - 1 / 3
-  V_w <- diag(C %*% diag(sigma^2) %*% C)[c(1, 3)] * (133 + 47 * 1.5^2)
-  tau_f <- sqrt(V_w * 0.78 / 0.22)
-  # The open epoch is 3: each draw's step mu[3, ] - mu[2, ] over parties 1 and 3, centred, is
-  # (-a, a) with a = 0.1, -0.2, 0.4; a common shift (party 2's value, 5) cancels.
-  steps <- c(0.1, -0.2, 0.4)
-  mus <- lapply(steps, \(a) rbind(c(0, 0, 0), c(0.3, 1, -0.3), c(0.3 - a + 5, 6, -0.3 + a + 5)))
-  draws <- lapply(seq_along(mus), \(i) SUMMARY_FUNS$fund_weight_bias(fund_sim(sigma, 0.5, mus[[i]]), FUND_DATA, i))
-  expect_equal(draws[[2]]$step, c(0.2, -0.2), tolerance = 1e-12)
-  V_bias <- rep(stats::var(steps), 2)
-  want <- c(t(rbind(fund_weight_against(tau_f, V_w + V_bias), fund_weight_against(tau_f, V_w + V_bias), fund_weight_against(tau_f, V_w + V_bias))))
-  expect_equal(SUMMARY_POOLED$fund_weight_bias(draws, FUND_DATA), want, tolerance = 1e-12)
-  expect_true(all(want > 0.22))
-  # With no step, or a step shared by S_f, nothing is added: the weight is w.
-  flat <- lapply(1:3, \(i) SUMMARY_FUNS$fund_weight_bias(fund_sim(sigma, 0.5, rbind(0, 0, c(i, 7, i))), FUND_DATA, i))
-  expect_equal(SUMMARY_POOLED$fund_weight_bias(flat, FUND_DATA), rep(0.22, 6), tolerance = 1e-12)
-})
-
-test_that("the fundamentals rows: the construction checked to 1e-8, the bias weight reported with no band", {
+test_that("the fundamentals row: the construction checked to 1e-8", {
   rows <- ROWS[ROWS$step == "v2s-m5", ]
-  expect_identical(rows$summary, c("fund_weight", "fund_weight_bias"))
-  expect_identical(rows$kind, c("config", "config"))
+  expect_identical(rows$summary, "fund_weight")
+  expect_identical(rows$kind, "config")
   expect_identical(rows$band[[1]], band_exact(0.22, 1e-8))
-  expect_identical(rows$band[[2]], band_report())
   expect_identical(rows$keys[[1]], c("desired_weight", "weight_time", "campaign_days"))
-  expect_identical(rows$keys[[2]], character(0))
-  expect_identical(names(SUMMARY_POOLED), "fund_weight_bias")
-  # The bias row's label says what 6.5's target leaves out.
-  expect_true(grepl("0.22 target leaves out", rows$label[2], fixed = TRUE))
 })
 
 test_that("an exact band's FAIL line and table cells give its largest error, which two decimals would hide", {
