@@ -51,10 +51,10 @@ The model combines three key components:
 ## File Structure
 
 - `Stan/`
-  - `polling_and_fundamentals.stan`: Main model combining all components
-  - `polling_and_fundamentals_kjordaemi.stan`: Extended model with constituency effects
-  - `polling_and_fundamentals_historic.stan`: Model for historical analysis
-  - `base_model_no_polling_bias.stan`: Simplified version without house effects
+  - `polling_and_fundamentals_kjordaemi.stan`: the 2024 forecast model, with constituency effects
+  - `polling_watch_v5_epoch.stan`: the between-election poll model behind Fylgisvakt
+  - `polling_and_fundamentals.stan`: the national-level model without constituencies
+  - `archive/`: superseded and comparison models, kept for the record
 
 
 ## Key Model Components

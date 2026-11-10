@@ -163,10 +163,10 @@ computes marginal + precision-based partial correlations, clusters parties by co
 |---|---|
 | `Stan/polling_watch_v5_epoch.stan` | **production** model since 28 October 2026: v4 with pollster bias per epoch between election results (§10); since 5 November 2026 with the v2 forecast's entry rules for late houses and newcomer parties (§11) |
 | `Stan/polling_watch_v4.stan` | one pollster bias over the whole window; production until 28 October 2026, kept as v5's comparison |
-| `Stan/polling_watch_v2.stan`, `_v3.stan`, `_v3b.stan` | invariant alternatives (kept as documentation) |
-| `Stan/polling_watch_v4_sym.stan` | rejected (symmetric beta0); kept for the record |
-| `Stan/polling_watch_v4_gmrf.stan` | rejected (GMRF-state; reintroduced a scale funnel); kept for the record |
-| `Stan/polling_watch.stan` | original drop-one model (superseded; not invariant) |
+| `Stan/archive/polling_watch_v2.stan`, `_v3.stan`, `_v3b.stan` | invariant alternatives (kept as documentation) |
+| `Stan/archive/polling_watch_v4_sym.stan` | rejected (symmetric beta0); kept for the record |
+| `Stan/archive/polling_watch_v4_gmrf.stan` | rejected (GMRF-state; reintroduced a scale funnel); kept for the record |
+| `Stan/archive/polling_watch.stan` | original drop-one model (superseded; not invariant) |
 | `R/fit_polling_watch.R` | fits v5 to `read_polling_watch_data()` from 1 January 2016, the election forecast's window (fixed party order + locale guard), with the epochs of `prepare_polling_watch_epochs()`; writes the `pi_smooth`, `Omega` and per-epoch house-effect parquets, the epoch table, the fit, `diagnostics.json` and the polls it saw |
 | `R/sampler_check/fit_polling_watch_headless.R`, `equivalence_polling_watch.R`, `compare_polling_watch.R`, `exact_checks_polling_watch.R` | the §9–§11 checks: headless fits (optionally leave-future-out), the point-by-point equivalence check, old against new, and §11's exact checks (reference invariance, entry flatness, reductions) |
 | `R/make_correlation_plots.R` | renders the clustered marginal + partial (precision) correlation heatmap from `Omega` |
