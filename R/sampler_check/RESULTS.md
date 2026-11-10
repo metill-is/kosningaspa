@@ -1,5 +1,7 @@
 # Sampler checks
 
+This record closed on 10 November 2026; later sampler results go in commit messages.
+
 Newest first. Each section names the old and new model files by commit and sha256, the data, and the commands that reproduce it.
 
 ## Fylgisvakt: the v2 forecast's entry rules for late houses and newcomers (5 November 2026)

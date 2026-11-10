@@ -15,7 +15,7 @@ The R0 file is the harness's pinned copy of the 2024 model; its differences from
 
 ## forecast_v2.stan's switches
 
-Verdicts from `harness/v2/steps.md`.
+Verdicts from `harness/v2/decisions.md` (the full log is `harness/archive/steps.md`).
 
 | Switch | Turns on | Verdict |
 |---|---|---|

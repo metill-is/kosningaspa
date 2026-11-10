@@ -51,10 +51,10 @@ v2_arm <- function(config, role) {
 #' `fundamentals`), are its ablations. `v2-perm`, `v2`'s config with `order` = `"reversed"`
 #' (both the party and the kjördæmi order), is the check that must reproduce `v2`.
 #' `v2s-p3`, `v2`'s config with the anchored walk and `adapt_delta` 0.95, is a dev arm: P1
-#' re-tried on V2 (`harness/v2/steps.md`). `v2s-p4`, `v2`'s config with the anchored walk at
+#' re-tried on V2 (`harness/archive/steps.md`). `v2s-p4`, `v2`'s config with the anchored walk at
 #' CmdStan's default `adapt_delta` (0.8), is a dev arm too: P3 without the higher target.
 #' `v2s-m6`, `v2`'s config with the post-election multiplier (`post_flex` = 1, §6.2), is a dev
-#' arm: the first fix for V2's 2024 MAE (`harness/v2/steps.md`). `v2s-m6-noepoch`, `v2s-m6`'s
+#' arm: the first fix for V2's 2024 MAE (`harness/archive/steps.md`). `v2s-m6-noepoch`, `v2s-m6`'s
 #' config with `epoch_bias` = 0, is a dev arm: a constant bias plus the shock, the comparison
 #' that shows whether the bias needs to move at all. `v2s-m7`, `v2s-m6`'s config with the epoch
 #' walk replaced by the calendar drift (`epoch_bias` = 0, `bias_drift` = 1, §6.4), is a dev arm:

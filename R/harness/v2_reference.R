@@ -96,7 +96,7 @@ V2_CORE_PARS <- tibble::tibble(
 #' - `house_restart_absolute`: a newcomer's level in each house walking before e_p restarts
 #'   at σ_γ ε_{h,p} alone, the form `v2s-m1` built, so a drift common to the existing
 #'   parties' levels before e_p, flat in every likelihood row before it, moves each of the
-#'   newcomer's contrasts after it (`harness/v2/steps.md`, the post-review change).
+#'   newcomer's contrasts after it (`harness/archive/steps.md`, the post-review change).
 #'
 #' The newcomer pool's (`newcomer_pool`, §6.4):
 #' - `newcomer_mean_over_all`: a newcomer's entry value takes the mean of μ_{e_p} over every

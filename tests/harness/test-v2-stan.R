@@ -722,7 +722,7 @@ test_that("v2s-m3: with z_shock = 0 the results' rows are shock = 0's, and no fo
   # replicates draw for draw either: a fixed_param run's initialisation draws one uniform per
   # unconstrained parameter even when every init is given, and the two are P n_closed + 1
   # parameters apart. That shock = 0 draws exactly what the previous step's file drew is
-  # checked once and recorded in harness/v2/steps.md's v2s-m3 section, not here; that
+  # checked once and recorded in harness/archive/steps.md's v2s-m3 section, not here; that
   # votes_kd carries the shock, the next test checks. Nothing below prints a forecast draw.
   d <- v2_test_cells(cfg_m3())$eve2024$data
   expect_identical(as.integer(d$draw_forecast), 1L)

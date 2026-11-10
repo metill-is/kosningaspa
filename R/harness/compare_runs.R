@@ -1,5 +1,5 @@
-# Sampler checks between runs: the stop rule of the Phase 2 plan (its Decision 5;
-# docs/superpowers/plans/2026-10-28-v2-harness-phase2-v2-model.md). Its adoption and permutation
+# Sampler checks between runs: the stop rule of the Phase 2 plan (its Decision 5; the plan is
+# pull request #21's record). Its adoption and permutation
 # rules (Decisions 6 and 8) ran during the P-steps and are kept, not run, in
 # R/harness/archive/compare_runs_adopt_perm.R.
 # A plain script whose definitions also load as a box module, so that R/harness/recovery.R can

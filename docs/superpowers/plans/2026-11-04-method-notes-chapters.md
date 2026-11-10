@@ -393,10 +393,10 @@ Section counts include the plain picture, "What is open" and "Sources", as 3.1's
 - **Sources (branch only, read with `git show`, never checked out):**
   - `Stan/forecast_v2.stan` and `Stan/fundamentals_v2.stan`;
   - in `R/harness/`: `v2.R`, `v2_reference.R`, `v2_equivalence.R`, `v2_methods.R`, `v2_prior_predictive.R`, `stage1.R`;
-  - `harness/v2/steps.md`, `harness/v2/steps/*.md` and `harness/v2/prior_predictive.md`;
+  - `harness/archive/steps.md` (summarised in `harness/v2/decisions.md`), `harness/v2/steps/*.md` and `harness/v2/prior_predictive.md`;
   - `harness/configs/steps/*.json`;
   - `tests/harness/test-v2-*.R`;
-  - `docs/superpowers/plans/2026-10-28-v2-harness-phase2-v2-model.md` (Tasks 1–16, the proposals, the Decisions).
+  - the Phase 2 plan, in git history and pull request #21 (Tasks 1–16, the proposals, the Decisions).
 - **Sources (private):** the design note of 23 Oct, §6.
 - **Branch state (4 Nov 2026).** Tip `f7468df`: 34 commits on master's `4abc579`, the last on 29 Oct, not on origin (`git ls-remote --heads origin claude/epic-lichterman-e32cb6` is empty).
   - **Built:** the core (`v2s-m0`), P1, M1, M2, M3 and M4.
