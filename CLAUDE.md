@@ -99,3 +99,4 @@ Vault: `Metill` (MCP) / `~/Obsidian/Metill/`. Start with `load_topic` (vault `Me
 - The `data/` directory (date-stamped parquet snapshots), `data-raw/` (raw CSV from Google Sheets), `results/` (local model output cache) and all `.parquet` files are gitignored. Model outputs live locally only. `Figures/` holds generated plots shared across writing outputs.
 - The working directory must be the project root for `box::use(R/...)` imports to resolve.
 - `R/archive/` and `Stan/archive/` contain experimental/superseded code — not used in production.
+- Official election results (votes and seats per list × kjördæmi, 2016–2024) are `harness/truth/elections_official.csv`; the `Kosning` rows under `data/` are rounded (2024 kjördæmi) or unofficial, and `data/polling_data.csv` has no 2024 row.
