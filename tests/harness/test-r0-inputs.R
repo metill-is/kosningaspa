@@ -86,8 +86,11 @@ test_that("the campaign is 47 days and month_before_election marks the 47 days b
 
 test_that("the newcomers get the median debut share, centred like the others", {
   skip_without_snapshot()
-  newcomers <- list("2017-10-28" = "Miðflokkurinn", "2021-09-25" = "Sósíalistaflokkurinn", "2024-11-30" = character(0))
-  debut <- c("2017-10-28" = 0.0715, "2021-09-25" = 0.072)
+  newcomers <- list(
+    "2016-10-29" = c("Viðreisn", "Flokkur Fólksins"), "2017-10-28" = "Miðflokkurinn",
+    "2021-09-25" = "Sósíalistaflokkurinn", "2024-11-30" = character(0)
+  )
+  debut <- c("2016-10-29" = 0.0715, "2017-10-28" = 0.0715, "2021-09-25" = 0.072)
   for (i in seq_along(r0)) {
     x <- r0[[i]]
     info <- infos[[i]]
@@ -95,11 +98,13 @@ test_that("the newcomers get the median debut share, centred like the others", {
     d <- x$data
     col <- d$D_f + 1
     po <- x$meta$party_order
-    expect_identical(x$meta$newcomers, newcomers[[E]])
+    # WHY: Flokkur Fólksins is a party of only the 2016 cells with an admitted poll naming it.
+    new_here <- if (E == "2016-10-29") intersect(newcomers[[E]], info$parties) else newcomers[[E]]
+    expect_identical(x$meta$newcomers, new_here)
     expect_identical(rownames(d$y_f)[d$index_f[seq_len(d$P), col]], po)
     expect_equal(d$n_parties_f[col], d$P)
     expect_equal(sum(d$index_f[, col] > 0), d$P)
-    old <- setdiff(po, newcomers[[E]])
+    old <- setdiff(po, new_here)
     expect_equal(mean(d$x_f[old, col]), 0, tolerance = 1e-12)
 
     train <- info$fundamentals$train
@@ -110,7 +115,7 @@ test_that("the newcomers get the median debut share, centred like the others", {
     share <- share / sum(share)
     centre <- mean(qlogis(share))
     expect_equal(unname(d$x_f[old, col]), unname(qlogis(share) - centre), tolerance = 1e-12)
-    for (p in newcomers[[E]]) {
+    for (p in new_here) {
       expect_equal(x$meta$debut_share, debut[[E]], tolerance = 1e-12)
       expect_equal(d$x_f[p, col], qlogis(debut[[E]]) - centre, tolerance = 1e-12)
       for (m in c("y_f", "incumbent_f", "incumbent_years", "vnv", "growth")) {

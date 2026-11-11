@@ -61,7 +61,11 @@ test_that("snapshot_inputs copies only the files it is given, each under its bas
 })
 
 test_that("cells and previous elections are the design's", {
-  expect_equal(nrow(TARGETS), 10)
+  expect_equal(nrow(TARGETS), 14)
+  expect_equal(
+    as.character(TARGETS$F[TARGETS$E == as.Date("2016-10-29")]),
+    c("2016-05-02", "2016-09-12", "2016-10-15", "2016-10-28")
+  )
   expect_equal(
     as.character(TARGETS$F[TARGETS$E == as.Date("2024-11-30")]),
     c("2024-06-03", "2024-10-14", "2024-11-16", "2024-11-29")

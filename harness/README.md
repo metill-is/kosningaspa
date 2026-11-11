@@ -2,7 +2,7 @@
 
 The harness fits forecast models on past election cells and scores them against the results.
 It builds frozen, leak-checked inputs (official results, poll availability, fundamentals target
-rows and seat layouts) for the cells of the 2021 and 2024 elections and the held-out 2017
+rows and seat layouts) for the cells of the 2016, 2021 and 2024 elections and the held-out 2017
 cells, fits an arm on a cell, and scores two arms against each other. Code is in `R/harness/`
 (box modules and plain scripts), tests in `tests/harness/`, committed inputs and reports here.
 
@@ -159,8 +159,8 @@ result (`cell_truth()`) and the draws. With the default result reader, which rea
 this project's results, it refuses a `root` other than the project's, since the guard
 would otherwise check another repository's freeze.
 
-The guard refuses a cell that is not in `TARGETS` (check 1). A 2021 or 2024 cell passes it
-with no freeze: Brynjólfur decided on 5 November 2026 that the model is developed without
+The guard refuses a cell that is not in `TARGETS` (check 1). A 2016, 2021 or 2024 cell passes
+it with no freeze: Brynjólfur decided on 5 November 2026 that the model is developed without
 such locks, so no freeze file is read for those cells. A 2017 cell, the held-out confirmatory
 target, stops at the first of these failures:
 
@@ -216,8 +216,8 @@ fit: refit <run>" unless its parties are those `meta.json` recorded: the sha-ski
 not cover the event, so a reused run could otherwise be scored against an outdated one. It
 stops with "no list at E" if a party the run forecasts has a national result of 0, as a
 party with no list would, since the alr scores would take the log of that zero. With this
-repository unfrozen, it reads the result for every 2021 and 2024 cell and refuses every 2017
-one before any result is read; `tests/harness/test-scorer.R` checks both with a result
+repository unfrozen, it reads the result for every 2016, 2021 and 2024 cell and refuses every
+2017 one before any result is read; `tests/harness/test-scorer.R` checks both with a result
 reader that fails if it is called, and scores a 2021 cell with no freeze. The tests of a
 sealed freeze and decision run in temporary git repositories.
 

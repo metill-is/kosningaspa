@@ -61,37 +61,37 @@ national,2016-01-19,Gallup,NA,2016-02-22,house_max
 national,2016-01-29,MMR,NA,2016-02-14,house_max
 national,2016-02-13,Gallup,NA,2016-03-18,house_max
 national,2016-02-27,MMR,NA,2016-03-14,house_max
-national,2016-03-13,Gallup,NA,2016-04-16,house_max
-national,2016-04-04,MMR,NA,2016-04-20,house_max
-national,2016-04-05,Gallup,NA,2016-05-09,house_max
-national,2016-04-09,Gallup,NA,2016-05-13,house_max
-national,2016-04-21,Gallup,NA,2016-05-25,house_max
-national,2016-04-24,MMR,NA,2016-05-10,house_max
+national,2016-03-13,Gallup,NA,2016-03-31,published
+national,2016-04-04,MMR,NA,2016-04-06,published
+national,2016-04-05,Gallup,2016-04-06,2016-04-07,correction
+national,2016-04-09,Gallup,NA,2016-04-13,published
+national,2016-04-21,Gallup,NA,2016-05-02,published
+national,2016-04-24,MMR,NA,2016-05-04,published
 national,2016-05-14,Gallup,NA,2016-06-17,house_max
 national,2016-06-12,Gallup,NA,2016-07-16,house_max
 national,2016-07-01,MMR,NA,2016-07-17,house_max
-national,2016-07-13,Gallup,NA,2016-08-16,house_max
-national,2016-07-19,MMR,NA,2016-08-04,house_max
-national,2016-08-13,Gallup,NA,2016-09-16,house_max
-national,2016-08-26,MMR,NA,2016-09-11,house_max
-national,2016-09-06,"Fréttablaðið, Stöð 2 og Vísir",NA,2016-09-09,house_max
-national,2016-09-07,Gallup,NA,2016-10-11,house_max
-national,2016-09-16,MMR,NA,2016-10-02,house_max
-national,2016-09-22,Gallup,NA,2016-10-26,house_max
-national,2016-09-23,MMR,NA,2016-10-09,house_max
-national,2016-09-26,"Fréttablaðið, Stöð 2 og Vísir",NA,2016-09-29,house_max
-national,2016-09-29,Félagsvísindastofnun,NA,2016-10-08,house_max
-national,2016-10-03,"Fréttablaðið, Stöð 2 og Vísir",NA,2016-10-06,house_max
-national,2016-10-07,Gallup,NA,2016-11-10,house_max
-national,2016-10-09,Félagsvísindastofnun,NA,2016-10-18,house_max
-national,2016-10-10,"Fréttablaðið, Stöð 2 og Vísir",NA,2016-10-13,house_max
-national,2016-10-10,MMR,NA,2016-10-26,house_max
-national,2016-10-16,Félagsvísindastofnun,NA,2016-10-25,house_max
-national,2016-10-17,"Fréttablaðið, Stöð 2 og Vísir",NA,2016-10-20,house_max
-national,2016-10-23,MMR,NA,2016-11-08,house_max
-national,2016-10-24,"Fréttablaðið, Stöð 2 og Vísir",NA,2016-10-27,house_max
-national,2016-10-24,Félagsvísindastofnun,NA,2016-11-02,house_max
-national,2016-10-25,"Fréttablaðið, Stöð 2 og Vísir",NA,2016-10-28,house_max
+national,2016-07-13,Gallup,NA,2016-07-28,published
+national,2016-07-19,MMR,NA,2016-07-25,published
+national,2016-08-13,Gallup,NA,2016-09-01,published
+national,2016-08-26,MMR,NA,2016-08-30,published
+national,2016-09-06,"Fréttablaðið, Stöð 2 og Vísir",NA,2016-09-08,published
+national,2016-09-07,Gallup,NA,2016-09-15,published
+national,2016-09-16,MMR,NA,2016-09-22,published
+national,2016-09-22,Gallup,NA,2016-09-30,published
+national,2016-09-23,MMR,NA,2016-09-27,published
+national,2016-09-26,"Fréttablaðið, Stöð 2 og Vísir",NA,2016-09-28,published
+national,2016-09-29,Félagsvísindastofnun,NA,2016-10-07,published
+national,2016-10-03,"Fréttablaðið, Stöð 2 og Vísir",NA,2016-10-05,published
+national,2016-10-07,Gallup,NA,2016-10-13,published
+national,2016-10-09,Félagsvísindastofnun,NA,2016-10-14,published
+national,2016-10-10,"Fréttablaðið, Stöð 2 og Vísir",NA,2016-10-12,published
+national,2016-10-10,MMR,NA,2016-10-14,published
+national,2016-10-16,Félagsvísindastofnun,NA,2016-10-21,published
+national,2016-10-17,"Fréttablaðið, Stöð 2 og Vísir",NA,2016-10-19,published
+national,2016-10-23,MMR,2016-10-26,2016-10-27,correction
+national,2016-10-24,"Fréttablaðið, Stöð 2 og Vísir",NA,2016-10-26,published
+national,2016-10-24,Félagsvísindastofnun,NA,2016-10-28,published
+national,2016-10-25,"Fréttablaðið, Stöð 2 og Vísir",NA,2016-10-27,published
 national,2016-10-26,Gallup,NA,2016-11-29,house_max
 national,2016-10-27,MMR,NA,2016-11-12,house_max
 national,2016-10-29,Kosning,2016-10-29,2016-10-30,election
@@ -346,7 +346,7 @@ national,2024-11-26,Gallup,2024-11-29,2024-11-30,lokadagur
 national,2024-11-26,Prósent,2024-11-28,2024-11-29,lokadagur
 national,2024-11-28,Félagsvísindastofnun,2024-11-29,2024-11-30,lokadagur
 national,2024-11-28,Maskína,2024-11-29,2024-11-30,lokadagur
-kjordaemi,2016-10-24,Félagsvísindastofnun,NA,2016-11-02,twin
+kjordaemi,2016-10-24,Félagsvísindastofnun,NA,2016-10-29,published
 kjordaemi,2017-10-18,Félagsvísindastofnun,2017-10-19,2017-10-23,published
 kjordaemi,2017-10-25,Gallup,2017-10-27,2017-10-28,twin
 kjordaemi,2020-01-08,MMR,NA,2020-01-25,published

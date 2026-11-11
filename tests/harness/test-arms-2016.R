@@ -82,7 +82,7 @@ test_that("V2 builds each 2016 day with 2013 as its one closed election on the g
     expect_identical(c(d$entry_epoch), ifelse(b$meta$party_order %in% NEWCOMERS16, 2L, 0L), label = lab)
     expect_identical(b$meta$newcomers, intersect(NEWCOMERS16, x$parties), label = lab)
   }
-  expect_identical(lengths(lapply(cells, `[[`, "parties")), c(7L, 7L, 8L, 8L))
+  expect_identical(lengths(lapply(cells, `[[`, "parties")), c(7L, 8L, 8L, 8L))
 })
 
 test_that("R0 builds each 2016 day with the 2013 national result as one election row of 189 023 votes and one closed election for the older parties (a 2016 cell fitted with no anchor at all)", {
@@ -114,9 +114,10 @@ test_that("R0 builds each 2016 day with the 2013 national result as one election
   }
 })
 
-test_that("for every TARGETS cell the grid and the epochs both builders use are as recorded before the cell's own elections were read (an existing cell's walk or hedge moved)", {
+test_that("for every TARGETS cell outside 2016 the grid and the epochs both builders use are as recorded before the cell's own elections were read (an existing cell's walk or hedge moved)", {
   skip_without_snapshot()
-  expect_identical(paste(ARMS_DIGESTS$E, ARMS_DIGESTS$F), paste(TARGETS$E, TARGETS$F))
+  earlier <- TARGETS[TARGETS$E != E16, ]
+  expect_identical(paste(ARMS_DIGESTS$E, ARMS_DIGESTS$F), paste(earlier$E, earlier$F))
   for (i in seq_len(nrow(ARMS_DIGESTS))) {
     r <- ARMS_DIGESTS[i, ]
     x <- info_set(r$E, r$F, v2_inputs())

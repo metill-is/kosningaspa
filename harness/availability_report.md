@@ -11,15 +11,15 @@ The first publication is a floor: `available_from` is the later of that date and
 
 | level | rule | n |
 |---|---|---|
-| national | correction | 2 |
+| national | correction | 4 |
 | national | lokadagur | 30 |
 | national | wikipedia | 104 |
-| national | published | 25 |
-| national | house_max | 183 |
+| national | published | 51 |
+| national | house_max | 155 |
 | national | election | 3 |
 | kjordaemi | correction | 0 |
-| kjordaemi | twin | 12 |
-| kjordaemi | published | 11 |
+| kjordaemi | twin | 11 |
+| kjordaemi | published | 12 |
 | kjordaemi | house_max | 0 |
 
 ## Longest fieldwork per house
@@ -62,6 +62,30 @@ A match needs the same house, a Wikipedia midpoint within 7 days of `date`, at l
 ## Polls withheld at each forecast date
 
 The polls with `date <= F < available_from`. `fallback_near_F` marks a `house_max` poll dated within 14 days of F: one that only the fallback keeps out.
+
+### E 2016-10-29, F 2016-05-02 (f180)
+
+| level | date | fyrirtaeki | fieldwork_end | available_from | rule | fallback_near_F |
+|---|---|---|---|---|---|---|
+| national | 2016-04-24 | MMR | NA | 2016-05-04 | published |  |
+
+### E 2016-10-29, F 2016-09-12 (f47)
+
+| level | date | fyrirtaeki | fieldwork_end | available_from | rule | fallback_near_F |
+|---|---|---|---|---|---|---|
+| national | 2016-09-07 | Gallup | NA | 2016-09-15 | published |  |
+
+### E 2016-10-29, F 2016-10-15 (f14)
+
+None.
+
+### E 2016-10-29, F 2016-10-28 (eve)
+
+| level | date | fyrirtaeki | fieldwork_end | available_from | rule | fallback_near_F |
+|---|---|---|---|---|---|---|
+| national | 2016-10-26 | Gallup | NA | 2016-11-29 | house_max | yes |
+| national | 2016-10-27 | MMR | NA | 2016-11-12 | house_max | yes |
+| kjordaemi | 2016-10-24 | Félagsvísindastofnun | NA | 2016-10-29 | published |  |
 
 ### E 2017-10-28, F 2017-10-14 (f14)
 

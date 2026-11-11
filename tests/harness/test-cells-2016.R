@@ -1,6 +1,6 @@
 box::use(
   R / harness / anchors[fold_anchor],
-  R / harness / availability[merge_same_day_polls, read_polling],
+  R / harness / availability[excluded_near, merge_same_day_polls, read_polling],
   R / harness / constants[ELECTION_HOUSE, KJORDAEMI, window_elections, window_start],
   R / harness / info_set[info_set, read_inputs, validate_inputs],
   R / harness / tables[valid_votes]
@@ -8,6 +8,8 @@ box::use(
 E16 <- as.Date("2016-10-29")
 START16 <- as.Date("2013-04-27")
 DAYS16 <- as.Date(c("2016-05-02", "2016-09-12", "2016-10-15", "2016-10-28"))
+FRETT16 <- "Fr\u00e9ttabla\u00f0i\u00f0, St\u00f6\u00f0 2 og V\u00edsir"
+FEL16 <- "F\u00e9lagsv\u00edsindastofnun"
 inp <- if (snapshot_present()) read_inputs()
 cells16 <- if (snapshot_present()) lapply(DAYS16, \(F) info_set(E16, F, inp))
 
@@ -26,20 +28,21 @@ cell_digest <- function(info) {
   text <- unlist(lapply(DIGEST_FIELDS, \(f) c(f, canon_text(info[[f]]))))
   digest::digest(paste(text, collapse = "\n"), algo = "sha256", serialize = FALSE)
 }
-# WHY: recorded on 2026-11-11 with cell_digest() from the tree at b91407d, before the
-# per-election window existed, so a change that reaches an existing cell shows here.
+# WHY: re-recorded on 2026-11-11 with cell_digest() once the 2016 cells became targets, so a
+# change that reaches an existing cell shows here. The 2016 publication rows moved only the
+# available_from of rows dated before 2017; ADMITTED_DIGESTS ties each cell to the tree at b507364.
 TARGET_DIGESTS <- tibble::tribble(
   ~E, ~F, ~digest,
-  "2017-10-28", "2017-10-14", "77a87250ef1cc9e843a9ee9d891fd6fc8a12f48f6eb1744f6b87f140ac41095e",
-  "2017-10-28", "2017-10-27", "763fe67c4117afda87425f596ef56d129cc34c154a2280cf2afc7f8c955bbc93",
-  "2021-09-25", "2021-03-29", "8890c41ff415cbdd00e2ae890c6d01893528d02fccdd37dd9c41ac3e6356d37a",
-  "2021-09-25", "2021-08-09", "e117d3290e7dd1aa926d3cb3674516a8853bbf0ac6abaecbba92bc71bf4cae9b",
-  "2021-09-25", "2021-09-11", "7285a2eecd8148250c8236e92878d6e6054b3033f67f3a48cafba8768e308571",
-  "2021-09-25", "2021-09-24", "480c17780a8aba3c3d17a6c77a54fc9876eb77c2d52cd27863b263e9262895a8",
-  "2024-11-30", "2024-06-03", "1532ef8871dd57a48c2fe76acbd267aee2d2f84d7a1de8650234f38ca4f2722e",
-  "2024-11-30", "2024-10-14", "29fde3dd720394ca905edc85c07441d055b0ed32b75449a5a4250c7b2f888db8",
-  "2024-11-30", "2024-11-16", "cb179220045e6cc87a3f97493834bbc99a3021f507e975912c8f187430f9ff46",
-  "2024-11-30", "2024-11-29", "b3cd8adac136088b91722ca7c7fad278f897719ab61c62502ad05d0129c5c144"
+  "2017-10-28", "2017-10-14", "fa33ba350ff48d1109022fd9eb9f9d2759d28a43005b1792937e620db2fe1edd",
+  "2017-10-28", "2017-10-27", "c736805cc373fe9b42f342d9a99cf100525cc9910e66edf2aef2978fed36ebb3",
+  "2021-09-25", "2021-03-29", "6fba4135c3af3c3ffee1c4aa896ac50e3832d886a1609ada6fc3ba8c9c2848da",
+  "2021-09-25", "2021-08-09", "bdbacb99cd217e613dec2f8f051df2f5b5de7ffcdb10d96af6bca4b0edfc6183",
+  "2021-09-25", "2021-09-11", "56a4e6f393aea99a50967b5922e22d031ba2ea9ce845a4d971d05732d40d68a4",
+  "2021-09-25", "2021-09-24", "a59c3b270e65826566e9482cfd9a126427500613dc3a7401c8a4a2d2c223ff27",
+  "2024-11-30", "2024-06-03", "ebe32a604cb18c2aee3f357f9bb18d9041f2f5ae2ca4bbe16f5d21aa50f7af82",
+  "2024-11-30", "2024-10-14", "1a7edb9dbd89617452e19db079b88799aed7b4145ccee2346e046e84f3a2c59b",
+  "2024-11-30", "2024-11-16", "36d02956448fdc44076836ab96034183542456f950dae0b87f0bcfda35202a98",
+  "2024-11-30", "2024-11-29", "4cc4187ed09d0f903a089b367eb89caad10f4f41ea309001a3d5eee93f253037"
 )
 
 test_that("2016's window opens at 2013-04-27 with 2013 and 2016 as its elections, and every other window is as before (a global window moved, which would change every finished run's data)", {
@@ -179,10 +182,118 @@ test_that("a 2016 forecast before the 2015 GDP figure's first release is refused
   expect_identical(x$economy$first_release, as.Date(c("2015-07-23", "2016-03-10")))
 })
 
-test_that("every recorded TARGETS cell has the polls, results and entry table it had before the 2016 window (an input change that reaches an existing cell)", {
+test_that("every recorded TARGETS cell has the polls, results and entry table it had when the 2016 cells became targets (an input change that reaches an existing cell)", {
   skip_without_snapshot()
   for (i in seq_len(nrow(TARGET_DIGESTS))) {
     d <- TARGET_DIGESTS[i, ]
     expect_identical(cell_digest(info_set(d$E, d$F, inp)), d$digest, label = paste(d$E, d$F))
+  }
+})
+
+test_that("TARGETS holds the four 2016 cells, 180, 47, 14 and 1 days before E, ahead of the ten earlier cells, which keep their days, tags and the 2017 hold-out (a 2016 cell on the wrong day, or a 2017 cell no longer confirmatory)", {
+  earlier <- tibble::tibble(
+    E = as.Date(rep(c("2017-10-28", "2021-09-25", "2024-11-30"), c(2, 4, 4))),
+    F = as.Date(c(
+      "2017-10-14", "2017-10-27",
+      "2021-03-29", "2021-08-09", "2021-09-11", "2021-09-24",
+      "2024-06-03", "2024-10-14", "2024-11-16", "2024-11-29"
+    )),
+    tag = c("f14", "eve", rep(c("f180", "f47", "f14", "eve"), 2)),
+    confirmatory = rep(c(TRUE, FALSE), c(2, 8))
+  )
+  expect_identical(nrow(TARGETS), 14L)
+  expect_identical(TARGETS[-(1:4), ], earlier)
+  t16 <- TARGETS[1:4, ]
+  expect_identical(t16$E, rep(E16, 4))
+  expect_identical(t16$F, DAYS16)
+  expect_identical(as.integer(E16 - t16$F), c(180L, 47L, 14L, 1L))
+  expect_identical(t16$tag, c("f180", "f47", "f14", "eve"))
+  expect_identical(t16$confirmatory, rep(FALSE, 4))
+})
+
+test_that("each 2016 cell admits, by house, only polls first published by F, withholds MMR 2016-04-24 at f180 and the two eve polls whose fieldwork ended on F, and dates the polls published on their last fieldwork day end + 1 (a poll admitted before it was public, or on its last fieldwork day)", {
+  skip_without_snapshot()
+  pub <- readr::read_csv(root("harness", "sources", "poll_publication.csv"),
+    col_types = readr::cols(date = "D", published = "D", .default = "c"), progress = FALSE
+  )
+  pub <- pub[pub$level == "national", c("date", "fyrirtaeki", "published")]
+  admitted <- list(
+    stats::setNames(c(38L, 29L), c("Gallup", "MMR")),
+    stats::setNames(c(1L, 42L, 33L), c(FRETT16, "Gallup", "MMR")),
+    stats::setNames(c(2L, 4L, 45L, 36L), c(FEL16, FRETT16, "Gallup", "MMR")),
+    stats::setNames(c(4L, 7L, 45L, 37L), c(FEL16, FRETT16, "Gallup", "MMR"))
+  )
+  # Dated by F but not admitted. Publication keeps out two polls whose fieldwork had ended: MMR
+  # 2016-04-24 (ended 26 April, first published 4 May) and the kjordaemi poll of
+  # Felagsvisindastofnun 2016-10-24 (ended 27 October, first published by kjordaemi on 29 October).
+  # Gallup 2016-09-07 was in the field until 14 September. Gallup 2016-10-26 and MMR 2016-10-27
+  # ended on the eve itself; they have no publication row, and the fallback dates them.
+  withheld <- list(
+    "national 2016-04-24 MMR published",
+    "national 2016-09-07 Gallup published",
+    character(0),
+    c("national 2016-10-26 Gallup house_max", "national 2016-10-27 MMR house_max", paste("kjordaemi 2016-10-24", FEL16, "published"))
+  )
+  for (i in seq_along(cells16)) {
+    x <- cells16[[i]]
+    lab <- format(x$F)
+    polls <- dplyr::distinct(x$polls_nat, date, fyrirtaeki, available_from)
+    expect_setequal(unique(polls$fyrirtaeki), names(admitted[[i]]))
+    expect_identical(vapply(names(admitted[[i]]), \(h) sum(polls$fyrirtaeki == h), integer(1)), admitted[[i]], label = lab)
+    seen <- dplyr::inner_join(polls, pub, by = c("date", "fyrirtaeki"))
+    expect_true(all(seen$published <= x$F), label = lab)
+    near <- polls[polls$available_from > x$F - 45, ]
+    expect_identical(nrow(dplyr::anti_join(near, pub, by = c("date", "fyrirtaeki"))), 0L, label = lab)
+    ex <- excluded_near(inp$availability, x$F)
+    ex <- ex[ex$fyrirtaeki != ELECTION_HOUSE, ]
+    expect_identical(paste(ex$level, format(ex$date), ex$fyrirtaeki, ex$rule), withheld[[i]], label = lab)
+  }
+  # WHY: Gallup 2016-04-21 was first published at 19:16 UTC on the f180 day, and the rule works in days.
+  f180 <- cells16[[1]]$polls_nat
+  expect_identical(unique(f180$available_from[f180$date == as.Date("2016-04-21") & f180$fyrirtaeki == "Gallup"]), DAYS16[1])
+  mmr <- inp$availability[inp$availability$date == as.Date("2016-04-24") & inp$availability$fyrirtaeki == "MMR", ]
+  expect_identical(mmr$available_from, as.Date("2016-05-04"))
+  # WHY: Gallup 2016-04-05 and MMR 2016-10-23 were first published on their last fieldwork day, which
+  # their publication rows alone would make the day they are admitted.
+  av <- inp$availability
+  last_day <- av[av$level == "national" & paste(format(av$date), av$fyrirtaeki) %in% c("2016-04-05 Gallup", "2016-10-23 MMR"), ]
+  expect_identical(last_day$rule, c("correction", "correction"))
+  expect_identical(last_day$fieldwork_end, as.Date(c("2016-04-06", "2016-10-26")))
+  expect_identical(last_day$available_from, last_day$fieldwork_end + 1)
+  expect_identical(unique(f180$available_from[f180$date == as.Date("2016-04-05") & f180$fyrirtaeki == "Gallup"]), as.Date("2016-04-07"))
+  eve <- cells16[[4]]$polls_nat
+  expect_identical(unique(eve$available_from[eve$date == as.Date("2016-10-23") & eve$fyrirtaeki == "MMR"]), as.Date("2016-10-27"))
+})
+
+# WHY: recorded on 2026-11-11 with admitted_digest() from the tree at b507364, before the 2016
+# publication rows. Those rows move the available_from of 2016 polls, which every earlier cell's
+# window holds; this digest blanks available_from on rows dated before 2017, so it pins which polls
+# each earlier cell admits, their n, and the date of every poll from 2017.
+admitted_digest <- function(info) {
+  for (f in c("polls_nat", "polls_kd", "kosning_nat")) {
+    info[[f]]$available_from[info[[f]]$date < as.Date("2017-01-01")] <- as.Date(NA)
+  }
+  cell_digest(info)
+}
+ADMITTED_DIGESTS <- tibble::tribble(
+  ~E, ~F, ~digest,
+  "2017-10-28", "2017-10-14", "0dd4c1b9a6dc2ab17ed551cd75fff4b33eb4575212aeddcb0926342109324798",
+  "2017-10-28", "2017-10-27", "b7df959a45e17471df5bba72ac21fd46187c09f0141680c5f4dac3ca78c67076",
+  "2021-09-25", "2021-03-29", "375c61220c7d28099af60f3f85c22e752c6c949b27fcc39dc036efcf0e01d306",
+  "2021-09-25", "2021-08-09", "db4533954a49528b53b37380e10e4721886bc43c7bff0cf4638f2b74b53e5fab",
+  "2021-09-25", "2021-09-11", "086611013720dd6b99417506fe39a21ab29c612c060fa39bb9d4be844b76f8e5",
+  "2021-09-25", "2021-09-24", "3aa25173fd0cf7788910c89e3a221472d5698f230d8a520437c13f84b349f93d",
+  "2024-11-30", "2024-06-03", "728279013dd37c50f3ac802d18ec1fde11ea64f1d1d6e2521ab092abcc1ecafe",
+  "2024-11-30", "2024-10-14", "fcff6df683a2b2b6f86748a942a582e99acb97033187cd5c127d389b319a464e",
+  "2024-11-30", "2024-11-16", "168fc9ceb3b0c4b7ff2916645a36cd73d81dc306f84a4f6cd58848d484d33e84",
+  "2024-11-30", "2024-11-29", "fcd72a23a06324bb3d785e526beca97e45465147fce186bb0c436b5082c7a4d9"
+)
+
+test_that("every recorded TARGETS cell admits the polls it admitted before the 2016 publication rows, with the same n, and dates every poll from 2017 as it did (a publication row that admits or drops a poll in an existing cell)", {
+  skip_without_snapshot()
+  expect_identical(paste(ADMITTED_DIGESTS$E, ADMITTED_DIGESTS$F), paste(TARGET_DIGESTS$E, TARGET_DIGESTS$F))
+  for (i in seq_len(nrow(ADMITTED_DIGESTS))) {
+    d <- ADMITTED_DIGESTS[i, ]
+    expect_identical(admitted_digest(info_set(d$E, d$F, inp)), d$digest, label = paste(d$E, d$F))
   }
 })
