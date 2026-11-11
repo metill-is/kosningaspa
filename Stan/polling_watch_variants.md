@@ -272,3 +272,48 @@ With both taus at 0 v5 is still v4. `R/sampler_check/exact_checks_polling_watch.
 invariance and both rules exactly; on the production window the shares at the last date move by
 at most 0.06 pp and P(S ahead) stays at 0.86 (`R/sampler_check/RESULTS.md`, Fylgisvakt: the v2
 forecast's entry rules). The §10 backtests ran the model before this change and were not rerun.
+
+## 12. A faster walk step leaving each election: tried, not adopted (11 November 2026)
+
+v5's walk has no multiplier, so a real move in support just after an election can only go into
+the open epoch's poll bias. The v2 forecast lets the step leaving each result move faster, and
+that rule was its largest measured gain. The trial `polling_watch_v5_post.stan` gave v5 the same
+rule with a multiplier of its own: the standard deviation of the step into the grid date after
+each result is multiplied by 1 + `tau_post`, with `tau_post` ~ exponential(1). v5 indexes a step
+by its end date, so that is the step leaving the result. The forecast's pre-election campaign
+multiplier was not part of the trial.
+
+**Exact check.** The trial's log density and gradient equal v5's on data whose leaving gaps are
+multiplied by (1 + `tau_post`)², at 60 points in three windows (largest difference 4.7e-10), and a
+copy with the multiplier on the step into each result misses by 0.26 or more
+(`R/sampler_check/exact_checks_polling_watch_post.R` at the tag below).
+
+**Backtest.** The rule set before any fit: switch only if the trial is better by the
+election-level reading, a CRPS10 difference beyond twice its outcome noise. Both models were
+fitted with `R/sampler_check/fit_polling_watch_headless.R --start=2016-01-01 --cutoff=<E>
+--seed=4100` (4 × (1000 + 1000); no divergence and no transition at the depth cap in any fit),
+scored with `score_polling_watch_backtest.R` and read with `election_reading_polling_watch.R`:
+
+| Election | CRPS10, v5 | CRPS10, trial | Difference | Outcome noise | Reading |
+|---|---|---|---|---|---|
+| 2021-09-25 | 0.882 | 0.820 | −0.062 | 0.049 | indistinguishable |
+| 2024-11-30 | 0.608 | 0.699 | +0.090 | 0.134 | indistinguishable |
+| Both, equal weight | | | +0.014 | 0.071 | indistinguishable |
+
+The mean absolute error of the medians went from 1.31 to 1.21 points in 2021 and from 0.85 to
+1.00 in 2024; the 90% intervals covered 10 and then 9 of ten parties in 2021 and 7 of ten in 2024
+under both models, at mean widths of 6.2 and 6.4 points (2021) and 2.9 and 3.5 (2024). These are
+the two elections that chose v5, so neither model is tested out of sample here.
+
+**What the trial showed.** The data do favour larger steps after an election: `tau_post` has a
+posterior median of 0.63 (90% interval 0.08 to 1.65) at the 2021 cutoff, 0.91 (0.30 to 1.74) at
+the 2024 cutoff and 0.90 (0.36 to 1.55) on the whole window, against a prior median of 0.69 and
+a prior 90% interval of 0.05 to 3.0. On the whole window, with both models fitted to one data
+file (315 dates), the shares at the last date move by up to 0.96 points and P(Samfylkingin ahead
+of Sjálfstæðisflokkurinn) goes from 0.830 to 0.777.
+
+**Verdict.** The trial is not better by the reading, so v5 stays. The trial file and its exact
+check are removed at the tag `fylgisvakt-v5-post-trial`; the fits are local. Two things from the
+trial stay: the headless fitter refuses a cutoff that would fit a forecast of the held-out 2017
+election, and `R/sampler_check/election_reading_polling_watch.R` gives the election-level
+reading of any two Fylgisvakt backtests.
