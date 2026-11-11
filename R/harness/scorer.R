@@ -81,13 +81,58 @@ draws_se <- function(long, score) {
   batch_se(\(x) score(long[long$.draw %in% x[, 1], ]), matrix(ids$.draw), batch_of(ids$.chain, ids$.iteration))
 }
 
+# The parties info_set() gives the cell (E, F), or NULL with no harness snapshot to build it from.
+parties_of_cell <- function(E, F) {
+  box::use(R / harness / constants[harness_path], R / harness / info_set[info_set])
+  if (!dir.exists(harness_path("snapshot"))) {
+    return(NULL)
+  }
+  info_set(E, F)$parties
+}
+
+#' The poll parties whose result a run of the cell (E, F) is scored with folded into Annað.
+#' @param E,F the cell's election and forecast date (Dates)
+#' @param party_order the parties the run forecasts
+#' @param truth an official results table (`read_truth()`)
+#' @param cell_parties a function of E and F giving the cell's parties, or NULL when they
+#'   cannot be read; by default `info_set(E, F)$parties`, NULL without the harness snapshot
+#' @return the `POLL_PARTIES`, in that order and other than Annað, that have votes at E,
+#'   that `party_order` leaves out and that are not parties of the cell, having had no
+#'   admitted poll by F (Flokkur Fólksins at 2016-05-02); character(0), without calling
+#'   `cell_parties`, when `party_order` leaves out no party with votes at E. A left-out
+#'   party that is one of the cell's is not named, so `cell_truth()` still refuses the run.
+#'   An error, "truth has votes for parties the run does not forecast", when the run
+#'   leaves out a party with votes at E and `cell_parties` gives NULL.
+#' @export
+fold_parties <- function(E, F, party_order, truth = read_truth(), cell_parties = parties_of_cell) {
+  # WHY: the default argument is a promise, forced after this import.
+  box::use(R / harness / constants[POLL_PARTIES], R / harness / truth[read_truth])
+  E <- as.Date(E)
+  te <- truth[which(truth$election == E), ]
+  votes <- tapply(te$votes, te$flokkur, sum)
+  voted <- POLL_PARTIES[POLL_PARTIES %in% names(votes)[votes > 0]]
+  left_out <- setdiff(voted, c(party_order, "Anna\u00f0"))
+  if (!length(left_out)) {
+    return(character(0))
+  }
+  cell <- cell_parties(E, as.Date(F))
+  if (is.null(cell)) {
+    stop(
+      "truth has votes for parties the run does not forecast: ", paste(left_out, collapse = ", "),
+      "; whether to fold them into Anna\u00f0 depends on the cell's parties, which need the harness snapshot"
+    )
+  }
+  setdiff(left_out, cell)
+}
+
 #' Score one forecast cell against its election result: the only function that may.
 #' @param run_dir a run directory with `meta.json` (`read_run_meta()`),
 #'   `eday_kjordaemi.parquet` (`.chain`, `.iteration`, `.draw`, `kjordaemi`, `flokkur`,
 #'   `votes`; `.draw` numbered across chains) and `eday_national.parquet` (`.chain`,
 #'   `.iteration`, `.draw`, `flokkur`, `share`)
-#' @param truth the result reader, called once as `truth(E, party_order)` and returning a
-#'   list as `cell_truth()` does
+#' @param truth the result reader, called once as `truth(E, party_order)`, or as
+#'   `truth(E, party_order, fold = fold)` when the default reader has parties to fold, and
+#'   returning a list as `cell_truth()` does
 #' @param root the root whose `harness/` holds the freeze, decision and confirm files; the
 #'   coalitions, seat layouts and every other source are the project's
 #' @return a list:
@@ -108,7 +153,12 @@ draws_se <- function(long, score) {
 #'   - `seats` and `seats_per_party`: `seat_scores()` of
 #'   `seat_draws(eday_kjordaemi, layout_for(E), ineligible = "Annað")`, for the coalition
 #'   `coalition_event$parties`, with `formed = formed_coalition(E, read_coalitions())`;
-#'   `seats` adds the batch SEs `se_seat_crps`, `se_seat_cov90` and `se_brier`.
+#'   `seats` adds the batch SEs `se_seat_crps`, `se_seat_cov90` and `se_brier`;
+#'   - `seats_not_comparable`, only for a cell whose result, after any fold, gives Annað
+#'   official seats (2016-10-29, where Annað holds Björt framtíð's 4): why the seat
+#'   scores, the Brier score and `p_formed`, still returned, are not comparable. Every
+#'   draw's seats are allocated with Annað ineligible, so they carry a miss no forecast
+#'   can avoid; `score_report.R` marks them and leaves them out of criterion 4.
 #'
 #'   Every batch SE is `batch_se()` over the same 16 blocks of `batch_of()` of the draws'
 #'   chain and iteration, the score recomputed on each block's draws.
@@ -119,8 +169,11 @@ draws_se <- function(long, score) {
 #'   cells are scored by the Tier C runbook, which writes harness/CONFIRM.md"), stops with
 #'   "coalition event changed since the fit: refit <run>" unless `coalition_event(F,
 #'   read_coalitions())$parties` and meta.json's are the same set (the sha-skip does not
-#'   cover the event), calls `truth()`, stops with "no list at E: <party>" for a party of
-#'   `party_order` whose national result is 0, and only then reads the draws.
+#'   cover the event), calls `truth()` (with the default reader, after
+#'   `fold_parties(E, F, party_order)`, so a party with votes at E that the cell has none
+#'   of is folded into Annað and any other party the run leaves out is refused), stops
+#'   with "no list at E: <party>" for a party of `party_order` whose national result is 0,
+#'   and only then reads the draws.
 #' @export
 score_cell <- function(run_dir, truth = cell_truth, root = project_root()) {
   # WHY: the default arguments are promises, forced after this import.
@@ -147,7 +200,8 @@ score_cell <- function(run_dir, truth = cell_truth, root = project_root()) {
     stop("coalition event changed since the fit: refit ", basename(run_dir))
   }
 
-  result <- truth(E, meta$party_order)
+  fold <- if (identical(truth, cell_truth)) fold_parties(E, meta$F, meta$party_order) else character(0)
+  result <- if (length(fold)) truth(E, meta$party_order, fold = fold) else truth(E, meta$party_order)
   y <- result$nat
   no_list <- meta$party_order[which(y[meta$party_order] == 0)]
   if (length(no_list)) stop("no list at E: ", paste(no_list, collapse = ", "))
@@ -178,7 +232,7 @@ score_cell <- function(run_dir, truth = cell_truth, root = project_root()) {
   })
   scored_seats$summary[c("se_seat_crps", "se_seat_cov90", "se_brier")] <-
     as.list(unname(seat_se[c("seat_crps", "seat_cov90", "brier")]))
-  list(
+  out <- list(
     cell = tibble::tibble(arm = meta$arm, E = E, F = meta$F, tag = cell$tag),
     national = national,
     gap_pp = 100 * max(abs(colMeans(X) - colMeans(X_nat)[colnames(X)])),
@@ -188,4 +242,13 @@ score_cell <- function(run_dir, truth = cell_truth, root = project_root()) {
     seats = scored_seats$summary,
     seats_per_party = scored_seats$per_party
   )
+  # WHY: the field is added only to such a cell, so every other cell's value keeps its names.
+  annad_seats <- sum(result$seats[names(result$seats) == "Anna\u00f0"])
+  if (annad_seats > 0) {
+    out$seats_not_comparable <- paste0(
+      "Anna\u00f0 holds ", annad_seats, " official seat", if (annad_seats == 1) "" else "s",
+      " at E, which no draw gives it, since every draw allocates the seats with Anna\u00f0 ineligible"
+    )
+  }
+  out
 }

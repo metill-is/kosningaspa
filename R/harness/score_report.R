@@ -36,6 +36,8 @@
 # cell, a coalition event changed since the fit, a party with no list at the election). The run
 # table lists each run's diagnostics flags (the gate's reasons). The thresholds are for the long fits behind a
 # published forecast; a short development fit that misses them is flagged, not failed.
+# A cell whose seat scores score_cell() marks not comparable (`seats_not_comparable`: Annað holds official seats, as in
+# 2016) has its seat rows and seat errors printed marked so, and its seat CRPS left out of criterion 4.
 if (is.null(box::name())) {
   if (!isTRUE(l10n_info()[["UTF-8"]])) stop("score_report: needs a UTF-8 locale: run under LC_ALL=en_US.UTF-8", call. = FALSE)
   # WHY: the box path below is the working directory, so check it is the project root first.
@@ -59,6 +61,7 @@ MARGINS <- c(crps10 = 0.05, kd_crps = 0.10, seat_crps_pp = 0.05)
 GATE_P <- 0.01
 
 DEFAULT_OUT <- "harness/v2/scoring.md"
+NOT_COMPARABLE <- "(not comparable)"
 PREFIX <- "score_report: "
 fail <- function(...) stop(PREFIX, ..., call. = FALSE)
 
@@ -96,8 +99,9 @@ d2_p <- function(d2, n_parties) stats::pchisq(d2, n_parties - 1, lower.tail = FA
 #' One run's scores as the criteria read them, from score_cell()'s value.
 #' @param s score_cell()'s value
 #' @return a list: the national `kd_aggregate` row's `crps10`, `mdss`, `d2`, `n_parties` and
-#'   their SEs, the kjordaemi CRPS and its SE, and seat CRPS per party (the per-party sum
-#'   over the parties of `seats_per_party`) and its SE
+#'   their SEs, the kjordaemi CRPS and its SE, seat CRPS per party (the per-party sum
+#'   over the parties of `seats_per_party`) and its SE, and `seats_comparable`, FALSE when
+#'   `score_cell()` marks the seat scores not comparable (`seats_not_comparable`)
 #' @export
 cell_scores <- function(s) {
   nat <- s$national[s$national$reading == "kd_aggregate", ]
@@ -107,7 +111,8 @@ cell_scores <- function(s) {
     crps10 = nat$crps10, se_crps10 = nat$se_crps10, mdss = nat$mdss, se_mdss = nat$se_mdss,
     d2 = nat$d2, se_d2 = nat$se_d2, n_parties = nat$n_parties,
     kd_crps = s$kjordaemi$kd_crps, se_kd_crps = s$kjordaemi$se_kd_crps,
-    seat_crps_pp = s$seats$seat_crps / p_seats, se_seat_crps_pp = s$seats$se_seat_crps / p_seats
+    seat_crps_pp = s$seats$seat_crps / p_seats, se_seat_crps_pp = s$seats$se_seat_crps / p_seats,
+    seats_comparable = is.null(s$seats_not_comparable)
   )
 }
 
@@ -116,7 +121,8 @@ cell_scores <- function(s) {
 #' @return a named logical vector: `gate` (new's d2 has p > GATE_P), `accuracy` (CRPS10 at
 #'   most `MARGINS["crps10"]` worse, or a tie), `distribution` (mDSS lower beyond a tie, or
 #'   ref's d2 has p <= GATE_P) and `regional` (kjordaemi CRPS and seat CRPS per party each at
-#'   most their margin worse, or a tie)
+#'   most their margin worse, or a tie; the seat part left out when either run's
+#'   `seats_comparable` is FALSE)
 #' @export
 adoption_criteria <- function(ref, new) {
   within <- function(d, margin) identical(d$reading, "tie") || isTRUE(d$diff <= margin)
@@ -128,7 +134,8 @@ adoption_criteria <- function(ref, new) {
     gate = isTRUE(d2_p(new$d2, new$n_parties) > GATE_P),
     accuracy = within(crps, MARGINS[["crps10"]]),
     distribution = identical(dss$reading, "better") || !isTRUE(d2_p(ref$d2, ref$n_parties) > GATE_P),
-    regional = within(kd, MARGINS[["kd_crps"]]) && within(seat, MARGINS[["seat_crps_pp"]])
+    regional = within(kd, MARGINS[["kd_crps"]]) &&
+      (isFALSE(ref$seats_comparable) || isFALSE(new$seats_comparable) || within(seat, MARGINS[["seat_crps_pp"]]))
   )
 }
 
@@ -205,18 +212,23 @@ cell_section <- function(cell, ref, new, s_ref, s_new) {
   b <- cell_scores(s_new)
   nat_a <- s_ref$national[s_ref$national$reading == "kd_aggregate", ]
   nat_b <- s_new$national[s_new$national$reading == "kd_aggregate", ]
-  scored <- function(label, x, y, se_x, se_y, digits) {
+  seat_note <- s_ref$seats_not_comparable %||% s_new$seats_not_comparable
+  seat_label <- function(label, seat) if (seat && !is.null(seat_note)) paste(label, NOT_COMPARABLE) else label
+  seat_reading <- function(reading, seat) if (seat && !is.null(seat_note)) "not comparable" else reading
+  scored <- function(label, x, y, se_x, se_y, digits, seat = FALSE) {
     d <- read_diff(x, y, se_x, se_y)
     row(
-      label, paste0(num(x, digits), " (", num(se_x, digits), ")"), paste0(num(y, digits), " (", num(se_y, digits), ")"),
-      num(d$diff, digits), num(d$se_diff, digits), d$reading
+      seat_label(label, seat), paste0(num(x, digits), " (", num(se_x, digits), ")"), paste0(num(y, digits), " (", num(se_y, digits), ")"),
+      num(d$diff, digits), num(d$se_diff, digits), seat_reading(d$reading, seat)
     )
   }
-  reported <- function(label, x, y, digits) row(label, num(x, digits), num(y, digits), num(y - x, digits), "", "reported")
-  count <- function(label, x, y, of_x, of_y, se_x, se_y) {
+  reported <- function(label, x, y, digits, seat = FALSE) {
+    row(seat_label(label, seat), num(x, digits), num(y, digits), num(y - x, digits), "", seat_reading("reported", seat))
+  }
+  count <- function(label, x, y, of_x, of_y, se_x, se_y, seat = FALSE) {
     row(
-      label, paste0(x, " of ", of_x, " (", num(se_x, 2), ")"), paste0(y, " of ", of_y, " (", num(se_y, 2), ")"),
-      num(y - x, 0), num(sqrt(se_x^2 + se_y^2), 2), "reported"
+      seat_label(label, seat), paste0(x, " of ", of_x, " (", num(se_x, 2), ")"), paste0(y, " of ", of_y, " (", num(se_y, 2), ")"),
+      num(y - x, 0), num(sqrt(se_x^2 + se_y^2), 2), seat_reading("reported", seat)
     )
   }
   p_a <- d2_p(a$d2, a$n_parties)
@@ -238,14 +250,15 @@ cell_section <- function(cell, ref, new, s_ref, s_new) {
       s_ref$kjordaemi$kd_cells, s_new$kjordaemi$kd_cells, s_ref$kjordaemi$se_kd_cov90, s_new$kjordaemi$se_kd_cov90
     ),
     reported("Kj\u00f6rd\u00e6mi MAE over the named cells, pp", s_ref$kjordaemi$kd_mae_named, s_new$kjordaemi$kd_mae_named, 3),
-    scored("Seat CRPS per party", a$seat_crps_pp, b$seat_crps_pp, a$se_seat_crps_pp, b$se_seat_crps_pp, 3),
-    reported("Seat absolute error, summed over parties", s_ref$seats$seat_abs_err, s_new$seats$seat_abs_err, 0),
+    scored("Seat CRPS per party", a$seat_crps_pp, b$seat_crps_pp, a$se_seat_crps_pp, b$se_seat_crps_pp, 3, seat = TRUE),
+    reported("Seat absolute error, summed over parties", s_ref$seats$seat_abs_err, s_new$seats$seat_abs_err, 0, seat = TRUE),
     count(
       "Seat 90% coverage (higher is better)", s_ref$seats$seat_cov90, s_new$seats$seat_cov90,
-      nrow(s_ref$seats_per_party), nrow(s_new$seats_per_party), s_ref$seats$se_seat_cov90, s_new$seats$se_seat_cov90
+      nrow(s_ref$seats_per_party), nrow(s_new$seats_per_party), s_ref$seats$se_seat_cov90, s_new$seats$se_seat_cov90,
+      seat = TRUE
     ),
-    scored("Brier score of the incumbents' majority", s_ref$seats$brier, s_new$seats$brier, s_ref$seats$se_brier, s_new$seats$se_brier, 3),
-    reported("P(majority for the coalition that formed), report only (higher is better)", s_ref$seats$p_formed, s_new$seats$p_formed, 3)
+    scored("Brier score of the incumbents' majority", s_ref$seats$brier, s_new$seats$brier, s_ref$seats$se_brier, s_new$seats$se_brier, 3, seat = TRUE),
+    reported("P(majority for the coalition that formed), report only (higher is better)", s_ref$seats$p_formed, s_new$seats$p_formed, 3, seat = TRUE)
   )
   crit <- adoption_criteria(a, b)
   eve <- identical(cell$tag, "eve")
@@ -268,11 +281,18 @@ cell_section <- function(cell, ref, new, s_ref, s_new) {
       "3. Better distribution: mDSS %s @MINUS@ %s = %s (SE_diff %s, %s), lower beyond a tie or %s failing the gate: %s.",
       new, ref, num(dss$diff, 2), num(dss$se_diff, 2), dss$reading, ref, yes(crit[["distribution"]])
     ),
-    sprintf(
-      "4. No regional loss: kj\u00f6rd\u00e6mi CRPS %s pp (%s), at most %s worse or a tie; seat CRPS per party %s (%s), at most %s worse or a tie: %s.",
-      num(kd$diff, 3), kd$reading, format(MARGINS[["kd_crps"]]), num(seat$diff, 3), seat$reading,
-      format(MARGINS[["seat_crps_pp"]]), yes(crit[["regional"]])
-    )
+    if (is.null(seat_note)) {
+      sprintf(
+        "4. No regional loss: kj\u00f6rd\u00e6mi CRPS %s pp (%s), at most %s worse or a tie; seat CRPS per party %s (%s), at most %s worse or a tie: %s.",
+        num(kd$diff, 3), kd$reading, format(MARGINS[["kd_crps"]]), num(seat$diff, 3), seat$reading,
+        format(MARGINS[["seat_crps_pp"]]), yes(crit[["regional"]])
+      )
+    } else {
+      sprintf(
+        "4. No regional loss: kj\u00f6rd\u00e6mi CRPS %s pp (%s), at most %s worse or a tie; seat CRPS per party left out, not comparable: %s.",
+        num(kd$diff, 3), kd$reading, format(MARGINS[["kd_crps"]]), yes(crit[["regional"]])
+      )
+    }
   )
   cols <- c("flokkur", "actual", "median", "abs_err", "crps")
   pp <- merge(s_ref$per_party[, cols], s_new$per_party[, cols], by = "flokkur", all = TRUE, suffixes = c("_ref", "_new"), sort = FALSE)
@@ -305,6 +325,7 @@ cell_section <- function(cell, ref, new, s_ref, s_new) {
       a$n_parties, ref, b$n_parties, new, num(s_ref$gap_pp, 3), ref, num(s_new$gap_pp, 3), new
     ), "",
     criteria, "",
+    if (is.null(seat_note)) character(0) else c(sprintf("Seat scores not comparable on this cell: %s. They are reported, marked, and left out of criterion 4.", seat_note), ""),
     sprintf("All four on this cell: %s.", yes(all(crit[if (eve) names(crit) else setdiff(names(crit), "gate")]))),
     if (eve) character(0) else "(Criterion 1 left out: the cell is not an eve.)",
     "",
@@ -401,12 +422,15 @@ main <- function(args) {
       noise = noise$sd, if_ref = noise$mean_if_ref, if_new = noise$mean_if_new
     ))
     m <- mae_summary(s_ref, s_new)
+    seat_err <- function(x) {
+      if (is.null(s_ref$seats_not_comparable %||% s_new$seats_not_comparable)) num(x, 0) else paste(num(x, 0), NOT_COMPARABLE)
+    }
     mae_rows <- c(mae_rows, row(
       label,
       paste0(num(m$mae8[["ref"]], 2), " (", num(m$se_mae8[["ref"]], 2), ")"),
       paste0(num(m$mae8[["new"]], 2), " (", num(m$se_mae8[["new"]], 2), ")"),
       num(m$mae8_diff$diff, 2), m$mae8_diff$reading, num(m$mae_all[["ref"]], 2), num(m$mae_all[["new"]], 2),
-      num(m$kd_mae[["ref"]], 2), num(m$kd_mae[["new"]], 2), num(m$seat_err[["ref"]], 0), num(m$seat_err[["new"]], 0)
+      num(m$kd_mae[["ref"]], 2), num(m$kd_mae[["new"]], 2), seat_err(m$seat_err[["ref"]]), seat_err(m$seat_err[["new"]])
     ))
   }
   text <- c(

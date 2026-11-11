@@ -331,24 +331,43 @@ read_truth <- function(path = harness_path("truth", "elections_official.csv")) {
 #' @param parties the poll parties the run forecasts: `POLL_PARTIES` labels, no repeats,
 #'   in the run's order
 #' @param truth an official results table (`read_truth()`)
-#' @return `list(nat, kd, seats)`, all from `fold_truth(truth)` at E: `nat`, each party's
+#' @param fold poll parties, none of `parties`, whose votes and seats at E count as
+#'   Annað's; empty by default. `score_cell()` names the parties with votes at E that the
+#'   cell has none of, having had no admitted poll at its forecast date (`fold_parties()`)
+#' @return `list(nat, kd, seats)`, all from `fold_truth(truth)` at E, with the votes and
+#'   seats of `fold` added to Annað's nationally and in each kjördæmi: `nat`, each party's
 #'   share of the national valid vote, a numeric vector named by `parties`; `kd`, a tibble
 #'   (kjordaemi, flokkur, votes, share) with one row per kjördæmi × party of `parties`,
 #'   `share` being the party's share of its kjördæmi's valid vote; `seats`, the official
 #'   seats, an integer vector named by `parties`. A party of `parties` with no list at E
-#'   has 0 votes, shares and seats. An error if a poll party outside `parties` has votes
-#'   at E, since a scorer would otherwise drop them silently.
+#'   has 0 votes, shares and seats. An error if a poll party outside `parties` and `fold`
+#'   has votes at E, since a scorer would otherwise drop them silently, and an error if
+#'   `fold` names a party of `parties` or a party with no votes at E, or `parties` has no
+#'   Annað, since such a fold would hide a mismatch.
 #' @export
-cell_truth <- function(E, parties, truth = read_truth()) {
-  box::use(R / harness / constants[POLL_PARTIES], dplyr[filter, mutate, select, summarise])
+cell_truth <- function(E, parties, truth = read_truth(), fold = character(0)) {
+  box::use(R / harness / constants[POLL_PARTIES], dplyr[arrange, filter, mutate, select, summarise])
   E <- as.Date(E)
   stopifnot(length(E) == 1, !is.na(E), is.character(parties), length(parties) > 0, !anyDuplicated(parties))
-  unknown <- setdiff(parties, POLL_PARTIES)
+  stopifnot(is.character(fold), !anyDuplicated(fold))
+  unknown <- setdiff(c(parties, fold), POLL_PARTIES)
   if (length(unknown)) stop("not poll parties: ", paste(unknown, collapse = ", "))
   te <- truth[which(truth$election == E), ]
   if (!nrow(te)) stop("no results for ", format(E))
 
   folded <- fold_truth(te)
+  if (length(fold)) {
+    annad <- "Anna\u00f0"
+    forecast <- intersect(fold, parties)
+    if (length(forecast)) stop("cannot fold parties the run forecasts: ", paste(forecast, collapse = ", "))
+    if (!annad %in% parties) stop("cannot fold into ", annad, ", which the run does not forecast: ", paste(fold, collapse = ", "))
+    votes <- tapply(folded$votes, folded$flokkur, sum)
+    none <- fold[unname(votes[fold]) == 0]
+    if (length(none)) stop("cannot fold parties with no votes at ", format(E), ": ", paste(none, collapse = ", "))
+    folded$flokkur[folded$flokkur %in% fold] <- annad
+    folded <- summarise(folded, votes = sum(votes), seats = sum(seats), .by = c(election, kjordaemi, flokkur)) |>
+      arrange(kjordaemi_order(kjordaemi), match(flokkur, POLL_PARTIES))
+  }
   nat <- summarise(folded, votes = sum(votes), seats = sum(seats), .by = flokkur)
   extra <- nat$flokkur[nat$votes > 0 & !nat$flokkur %in% parties]
   if (length(extra)) {

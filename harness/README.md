@@ -139,6 +139,14 @@ spec's adoption rule with the tie rule. The tie rule's SE_diff is Monte Carlo er
 per-cell "better" or "worse" says that a difference is computed precisely, not that one model
 forecasts better.
 
+A party with votes at E but no admitted poll at F, so that the cell has none of it (Flokkur
+Fólksins at 2016-05-02), is scored as part of Annað on that cell: `fold_parties()` names it,
+reading the snapshot, and `cell_truth(..., fold =)` adds its votes and seats to Annað's. A run
+that leaves out a party the cell does have is still refused. Where Annað holds official seats
+(2016: Björt framtíð's 4), no draw can give it them, so the report marks that cell's seat
+scores "(not comparable)" and leaves them out of criterion 4; the election-level reading is
+CRPS10 alone and does not change.
+
 To compare two commits rather than two arms, fit the old model in a worktree of its own with a
 copy of `harness/snapshot/` and its own `HARNESS_RESULTS`, passing the run list by absolute
 path: two fits of the same arm, cell and seed in one results root would retire each other to
@@ -204,6 +212,8 @@ What `score_cell()` returns, per cell:
   `meta.json`, with the majority probability of the coalition that formed after E
   (`formed_coalition()`, hindsight that only `score_cell()` reads). `seats` carries the
   batch SEs `se_seat_crps`, `se_seat_cov90` and `se_brier`.
+- `seats_not_comparable`, only for a cell whose result gives Annað official seats (2016):
+  why its seat scores, Brier score and `p_formed`, returned as usual, are not comparable.
 
 Every batch SE is over the same 16 blocks: the score is recomputed on each block's draws,
 and its SE is their standard deviation over √16. So the tie rule of spec §5.7 (a
