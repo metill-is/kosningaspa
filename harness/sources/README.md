@@ -145,3 +145,7 @@ Dating notes:
 | Kristrún Frostadóttir, from 2024-12-21, S;C;F, PM S | Wikipedia oldid 1347053364: infobox `date_formed` 2024-12-21; parties S, C and F. Register: "Ráðuneyti Kristrúnar Frostadóttur: 21. desember 2024", with no end date and only changes within a party. |
 
 For October 2024 the sources differ in emphasis: RÚV says the caretaker government took over formally on 17 October, when the state council met, while the government's own notice dates the accepted resignation and the caretaker request to 15 October. The table follows the notice, which fits the meaning of `caretaker` above.
+
+## Older polls
+
+`older_polls/` holds what `harness/older_polls.csv` is built from, the national polls of July 2012 to December 2015 that the snapshot lacks: the pins of the pages they come from, the parsers and parsed tables, the figures read from print, the judgements and the builder. Its README gives the commands and the conventions.
