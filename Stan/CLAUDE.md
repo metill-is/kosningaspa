@@ -8,8 +8,6 @@
 | `forecast_v2.stan` | harness (arm V2) | `R/harness/fit_cell.R` via `R/harness/arms.R` |
 | `fundamentals_v2.stan` | harness (V2 stage 1) | `R/harness/stage1.R` |
 | `polling_watch_v4.stan` | comparison (for v5) | `R/fit_polling_watch_epoch.R` |
-| `polling_and_fundamentals.stan` | no live caller | none |
-| `fundamentals.stan` | no live caller | none |
 
 The R0 file is the harness's pinned copy of the 2024 model; its differences from production are deliberate. Do not edit it: its sha256 keys the recorded R0 fits, and `tests/harness/test-r0-stan.R` compares it with production at a fixed commit.
 

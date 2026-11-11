@@ -40,7 +40,7 @@ stan_data$n_votes <- rep(1e4, ncol(stan_data$y_f) + 1)
 
 # Initialize model
 model <- cmdstan_model(
-  here("Stan", "fundamentals.stan")
+  here("Stan", "archive", "fundamentals.stan")
 )
 
 # Fit model

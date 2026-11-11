@@ -53,7 +53,6 @@ The model combines three key components:
 - `Stan/`
   - `polling_and_fundamentals_kjordaemi.stan`: the 2024 forecast model, with constituency effects
   - `polling_watch_v5_epoch.stan`: the between-election poll model behind Fylgisvakt
-  - `polling_and_fundamentals.stan`: the national-level model without constituencies
   - `archive/`: superseded and comparison models, kept for the record
 
 

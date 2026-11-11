@@ -79,7 +79,7 @@ rownames(stan_data$y_f)
 levels(polling_data$flokkur)
 
 model <- cmdstan_model(
-  here("Stan", "polling_and_fundamentals.stan")
+  here("Stan", "archive", "polling_and_fundamentals.stan")
 )
 
 
