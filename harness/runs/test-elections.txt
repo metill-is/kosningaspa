@@ -1,6 +1,7 @@
 # lane arm E F seed
 # Both arms, V2 and R0, on every scored cell that has been fitted: the four 2016 cells in lane A,
-# 2024 eve, 2021 eve and 2021 f180 in lane B, seed 2701.
+# 2021 f180, 2021 eve and 2024 eve in lane B, seed 2701. In order of election and forecast day, which
+# is the order of the cells in the scoring report.
 A v2 2016-10-29 2016-05-02 2701
 A r0 2016-10-29 2016-05-02 2701
 A v2 2016-10-29 2016-09-12 2701
@@ -9,9 +10,9 @@ A v2 2016-10-29 2016-10-15 2701
 A r0 2016-10-29 2016-10-15 2701
 A v2 2016-10-29 2016-10-28 2701
 A r0 2016-10-29 2016-10-28 2701
-B v2 2024-11-30 2024-11-29 2701
-B r0 2024-11-30 2024-11-29 2701
-B v2 2021-09-25 2021-09-24 2701
-B r0 2021-09-25 2021-09-24 2701
 B v2 2021-09-25 2021-03-29 2701
 B r0 2021-09-25 2021-03-29 2701
+B v2 2021-09-25 2021-09-24 2701
+B r0 2021-09-25 2021-09-24 2701
+B v2 2024-11-30 2024-11-29 2701
+B r0 2024-11-30 2024-11-29 2701
