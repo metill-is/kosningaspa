@@ -43,14 +43,22 @@ ARMS <- local({
   )
 })
 
-#' One arm.
-#' @param name the arm's name
-#' @return `ARMS[[name]]`; an error, "unknown arm: <name>", unless `name` is one name of
-#'   `ARMS`
+#' One arm, or a warm run of one.
+#' @param name the arm's name: a name of `ARMS`, or `<base>-w<ref_seed>`, a warm run of the arm
+#'   `<base>` from the same cell's seed-`<ref_seed>` run of `<base>` (R/harness/warm.R)
+#' @return `ARMS[[name]]`; for a warm run, `ARMS[[base]]` with `warm = list(base, ref_seed)`
+#'   added, `ref_seed` an integer; an error, "unknown arm: <name>", for any other name
 #' @export
 arm <- function(name) {
-  if (!is.character(name) || length(name) != 1 || !name %in% names(ARMS)) {
+  one <- is.character(name) && length(name) == 1 && !is.na(name)
+  warm <- one && grepl("^.+-w(0|[1-9][0-9]{0,9})$", name)
+  base <- if (warm) sub("-w[0-9]+$", "", name) else name
+  ref_seed <- if (warm) as.numeric(sub("^.*-w", "", name)) else NA
+  if (!one || !base %in% names(ARMS) || isTRUE(ref_seed > .Machine$integer.max)) {
     stop("unknown arm: ", paste(name, collapse = ", "), "; the arms are ", paste(names(ARMS), collapse = ", "), call. = FALSE)
   }
-  ARMS[[name]]
+  if (!warm) {
+    return(ARMS[[name]])
+  }
+  c(ARMS[[base]], list(warm = list(base = base, ref_seed = as.integer(ref_seed))))
 }
