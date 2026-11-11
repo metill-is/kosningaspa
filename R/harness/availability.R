@@ -50,6 +50,35 @@ read_polling <- function() {
   )
 }
 
+#' Merge the national polls that one house holds under one date before `WINDOW_START` into
+#' one poll per key, summing their rows per party, as `R/data.R` merges same-day polls of
+#' one house for Fylgisvakt. The snapshot holds one such key, MMR 2013-05-16: two polls
+#' (`harness/sources/README.md`, Known data discrepancies). Availability and
+#' `cell_polls()` read the polls through it.
+#' @param polling national poll rows (date, fyrirtaeki, flokkur, n, ...)
+#' @return `polling` itself when no (date, fyrirtaeki, flokkur) dated before `WINDOW_START`
+#'   has two rows; otherwise `polling` with each such key's rows replaced by its first row,
+#'   whose n is the sum. Rows dated from `WINDOW_START` are never merged. An error if the
+#'   polls under one key report different parties (a party with n > 0 in one and 0 in
+#'   another)
+#' @export
+merge_same_day_polls <- function(polling) {
+  box::use(R / harness / constants[WINDOW_START])
+  key <- paste(format(polling$date), polling$fyrirtaeki, polling$flokkur, sep = "\r")
+  early <- polling$date < WINDOW_START
+  twice <- early & key %in% key[early][duplicated(key[early])]
+  if (!any(twice)) {
+    return(polling)
+  }
+  mixed <- tapply(polling$n[twice] > 0, key[twice], \(x) length(unique(x)) > 1)
+  if (any(mixed)) {
+    polls <- paste(format(polling$date), polling$fyrirtaeki)[twice & key %in% names(mixed)[mixed]]
+    stop("same-day polls by one house report different parties: ", paste(unique(polls), collapse = "; "))
+  }
+  polling$n[twice] <- unname(tapply(polling$n[twice], key[twice], sum)[key[twice]])
+  polling[!twice | !duplicated(key), ]
+}
+
 #' The snapshot's kjördæmi polls, every row (`Kosning` rows included).
 #' @return a tibble (date, fyrirtaeki, flokkur, kjordaemi, n); an error on an unparsable
 #'   value or a missing one
@@ -241,13 +270,15 @@ house_max_fieldwork <- function(spans) {
 # Everything poll_availability() computes; write_availability() reports from the parts.
 availability_parts <- function(polling, constituency, sources_dir) {
   box::use(
-    R / harness / constants[ELECTION_HOUSE, WINDOW_START],
+    R / harness / constants[ELECTION_HOUSE, ELECTIONS, window_start],
     dplyr[anti_join, arrange, bind_rows, case_when, filter, if_else, left_join, mutate, rename, select, transmute]
   )
   src <- read_sources(sources_dir)
-  # WHY: the window is cut before poll_list(), whose checks would otherwise reject
-  # pre-window rows such as the two MMR polls the data keys as one on 2013-05-16.
-  polls <- poll_list(filter(polling, date >= WINDOW_START), filter(constituency, date >= WINDOW_START)) |>
+  start <- min(window_start(ELECTIONS))
+  # WHY: poll_list() keys a poll by date and house, so the polls one house holds under one
+  # date are merged first; rows before the earliest window start get no row at all.
+  polling <- merge_same_day_polls(polling)
+  polls <- poll_list(filter(polling, date >= start), filter(constituency, date >= start)) |>
     filter(!(level == "kjordaemi" & fyrirtaeki == ELECTION_HOUSE))
 
   # WHY: a Kosning row is always `election`, so a source row naming one would be ignored.
@@ -378,7 +409,9 @@ availability_parts <- function(polling, constituency, sources_dir) {
 #' @param sources_dir the directory holding the Wikipedia tables, the house map,
 #'   `fieldwork_corrections.csv` and `poll_publication.csv`
 #' @return a tibble (level, date, fyrirtaeki, fieldwork_end, available_from, rule): one row
-#'   per poll dated from `WINDOW_START`, plus the national `Kosning` rows, which are always
+#'   per poll dated from the earliest window start (`min(window_start(ELECTIONS))`,
+#'   2013-04-27; national polls read through `merge_same_day_polls()`), plus the national
+#'   `Kosning` rows, which are always
 #'   `election` (`date` + 1). Any other poll first gets the date of the first rule of its
 #'   level that applies. National: `correction` (end + 1), `lokadagur` (+ 1), `wikipedia`
 #'   (matched end + 1), `published` (that day), `house_max` (`date` + the house's longest

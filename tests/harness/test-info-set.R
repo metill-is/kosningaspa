@@ -372,7 +372,7 @@ test_that("info_set() stops on a release table that disagrees with the snapshot 
 test_that("the economy release table is read strictly", {
   x <- read_economy_release()
   expect_identical(names(x), c("election", "covariate", "period", "value", "first_release", "source", "note"))
-  expect_identical(paste(x$election, x$covariate), paste(rep(ELECTIONS[-1], each = 2), c("vnv", "growth")))
+  expect_identical(paste(x$election, x$covariate), paste(rep(ELECTIONS, each = 2), c("vnv", "growth")))
   header <- "election,covariate,period,value,first_release,source,note"
   bad <- withr::local_tempfile(fileext = ".csv")
   readr::write_lines(c(header, "2021-09-25,growth,2020,-7.8,,s,n"), bad)

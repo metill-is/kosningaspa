@@ -43,6 +43,33 @@ previous_election <- function(E) {
   c(as.Date("2013-04-27"), ELECTIONS)[i]
 }
 
+#' First day of each window election's polling window: the election before it
+#' (2013-04-27) for the first window election, 2016-10-29, and `WINDOW_START` for every
+#' other one.
+#' @param E a Date (or ISO string) vector of window elections; anything else is an error
+#' @return a Date vector
+#' @export
+window_start <- function(E) {
+  prev <- previous_election(E)
+  first <- as.Date(E) == ELECTIONS[1]
+  out <- rep(WINDOW_START, length(prev))
+  out[first] <- prev[first]
+  out
+}
+
+#' The elections that close the epochs of one window election's window, for `epoch_of()`:
+#' the election before it (2013-04-27) and E itself for the first window election,
+#' 2016-10-29, and `ELECTIONS` for every other one.
+#' @param E one window election (Date or ISO string); anything else is an error
+#' @return a Date vector
+#' @export
+window_elections <- function(E) {
+  if (length(E) != 1) stop("window_elections: E must be one date")
+  prev <- previous_election(E)
+  E <- as.Date(E)
+  if (E == ELECTIONS[1]) c(prev, E) else ELECTIONS
+}
+
 #' Forecast cells: election E, forecast date F, horizon tag and whether the cell is the
 #' held-out confirmatory 2017 target.
 #' @export

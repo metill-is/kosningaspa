@@ -15,7 +15,7 @@ The first publication is a floor: `available_from` is the later of that date and
 | national | lokadagur | 30 |
 | national | wikipedia | 104 |
 | national | published | 25 |
-| national | house_max | 126 |
+| national | house_max | 183 |
 | national | election | 3 |
 | kjordaemi | correction | 0 |
 | kjordaemi | twin | 12 |

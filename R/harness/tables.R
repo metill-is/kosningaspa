@@ -56,19 +56,21 @@ read_houses <- function(path = harness_path("sources", "house_table.csv")) {
 #' @param polling national polls (date, fyrirtaeki, flokkur, n), pre-window rows included;
 #'   the `Kosning` rows (official results) are ignored
 #' @param window_start first day of the polling window
+#' @param elections the elections that close the window's epochs (`window_elections()`)
 #' @return a tibble (flokkur, first_nonzero, entry_epoch, newcomer) sorted by
 #'   first_nonzero, then flokkur; a newcomer has no n > 0 poll dated before window_start.
-#'   A party polled before the window gets epoch 1, and `epoch_of(E) - entry_epoch`
-#'   counts the window elections it contested before E.
+#'   `entry_epoch` is `epoch_of(first_nonzero, elections)`, so a party polled before the
+#'   window gets epoch 1, and `epoch_of(E, elections) - entry_epoch` counts the window
+#'   elections it contested before E.
 #' @export
-entry_table <- function(polling, window_start = WINDOW_START) {
-  # WHY: the default argument is a promise, forced after this import.
-  box::use(R / harness / constants[ELECTION_HOUSE, WINDOW_START])
+entry_table <- function(polling, window_start = WINDOW_START, elections = ELECTIONS) {
+  # WHY: the default arguments are promises, forced after this import.
+  box::use(R / harness / constants[ELECTION_HOUSE, ELECTIONS, WINDOW_START])
   polling |>
     dplyr::filter(fyrirtaeki != ELECTION_HOUSE, n > 0) |>
     dplyr::summarise(first_nonzero = min(as.Date(date)), .by = flokkur) |>
     dplyr::mutate(
-      entry_epoch = epoch_of(first_nonzero),
+      entry_epoch = epoch_of(first_nonzero, elections),
       newcomer = first_nonzero >= as.Date(window_start)
     ) |>
     dplyr::arrange(first_nonzero, flokkur)
