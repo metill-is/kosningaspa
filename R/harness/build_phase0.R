@@ -5,6 +5,7 @@
 # that builds offline, through its own writer and each after the files it reads:
 #   harness/sources/seats_2021_official.csv   harness/sources/althingi/seats_2021_official.R
 #   harness/truth/elections_official.csv      write_truth()
+#   harness/truth/anchor_2013.csv             write_anchor_2013()
 #   harness/availability.csv and availability_report.md   write_availability()
 #   harness/entry_table.csv                   write_entry_table()
 # It then prints the polls per availability rule and each forecast cell's admitted polls.
@@ -17,6 +18,7 @@ if (!isTRUE(l10n_info()[["UTF-8"]])) stop("build_phase0.R needs a UTF-8 locale: 
 stopifnot("run from the project root (no R/harness/constants.R here)" = file.exists("R/harness/constants.R"))
 options(box.path = normalizePath("."), width = 120)
 box::use(
+  R / harness / anchors[write_anchor_2013],
   R / harness / availability[availability_counts, read_constituency, read_polling, write_availability],
   R / harness / constants[ELECTION_HOUSE, TARGETS, WINDOW_START],
   R / harness / info_set[info_set, read_inputs, validate_inputs],
@@ -33,10 +35,12 @@ seats_script <- file.path("harness", "sources", "althingi", "seats_2021_official
 status <- system2(file.path(R.home("bin"), "Rscript"), shQuote(seats_script))
 if (!identical(as.integer(status), 0L)) stop(seats_script, " exited with status ", status)
 write_truth()
+write_anchor_2013()
 av <- write_availability()
 write_entry_table()
 cat(
   "Rewrote harness/sources/seats_2021_official.csv, harness/truth/elections_official.csv,",
+  "harness/truth/anchor_2013.csv,",
   "harness/availability.csv, harness/availability_report.md, harness/entry_table.csv\n"
 )
 

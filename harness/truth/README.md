@@ -25,6 +25,23 @@ Letters come from the list labels, `Name (L)`, never from codes. B, C, D, F, J, 
 - Folded to poll parties, 2016–2021 equal the constituency `Kosning` rows in all 180 cells, and 2024 equals `harness/sources/hagstofa/official_2024_kjordaemi.csv` in all 60 cells, votes and seats.
 - `calculate_seats()` on unfolded lists, with no ineligible list, reproduces every official seat 2016–2024 (Björt framtíð's 4 in 2016 included), and in 2021 it places each adjustment seat where the Alþingi page does.
 
+## The 2013 anchor (`anchor_2013.csv`)
+
+`anchor_2013.csv` holds the 2013-04-27 election, the election before 2016: votes and seats per list × kjördæmi (0 votes and `ran = FALSE` where a list did not run), with `flokkur` the list's poll party. A 2016 cell's window opens at 2013, so its arms need this result as the closed election before E, which `elections_official.csv` holds for every later election. It is kept out of `build_truth()`, so the scoring truth and its checks stay 2016–2024. `R/harness/anchors.R` builds it (`write_anchor_2013()`, run by `R/harness/build_phase0.R`; the rebuild is byte-identical), and `fold_anchor()` and `anchor_national()` give the votes per kjördæmi × poll party and nationally. `prev_national_shares()` still takes 2016's previous shares from `fundamentals_data.csv`.
+
+- **Source.** Hagstofa's table KOS02118c ("Úrslit alþingiskosninga eftir kjördæmum 2013"), fetched on 2026-11-11 with the same body as 2016's KOS02118b and stored unchanged as `harness/sources/hagstofa/KOS02118c_2013.json` (sha256 `c50bb3e119c6acfa21ad470234fe9ef91c45fcba9b51c4a826de6f8fb445197b`, which `tests/harness/test-anchors.R` checks). The fetch command:
+
+  ```sh
+  curl -sS -A 'kosningaspa-harness/0.1' -H 'Content-Type: application/json' -X POST \
+    --data '{"query":[{"code":"Atriði","selection":{"filter":"item","values":["0","2"]}}],"response":{"format":"json-stat2"}}' \
+    -o KOS02118c_2013.json https://px.hagstofa.is/pxis/api/v1/is/Ibuar/kosningar/althingi/althurslit/KOS02118c.px
+  ```
+
+- **Hagstofa's count.** The table holds 189 023 valid votes, 28 more than the count announced in April 2013. Hagstofa's note to the table (in its spreadsheet export; the JSON-stat response carries no notes) says it includes the ruling of Alþingi's credentials committee of 6 June 2013, which counted 28 ballots as valid that the district boards had rejected. The harness uses Hagstofa's count, as for 2016, whose table counts the 22 ballots ruled valid on 6 December 2016 (the note in `gild_atkvaedi_2016.xlsx`); it equals `total_valid_votes` in the 2013 rows of `fundamentals_data.csv`.
+- **Lists by name, not by letter.** The list labels carry no letters, and in 2013 the letters J and M belonged to other parties than today, while Píratar ran under another letter, so the letter rule would give two lists to Sósíalistaflokkurinn and Miðflokkurinn and put Píratar in Annað. `harness/sources/lists_2013.csv` gives each of the 15 lists, named exactly as Hagstofa labels it, its poll party: Sjálfstæðisflokkur, Framsóknarflokkur, Samfylkingin, Vinstrihreyfingin - grænt framboð and Píratar by identity, and the other ten, Björt framtíð among them, Annað. It holds no letters, since no primary source for the 2013 letters was fetched. The build stops if it and the JSON file name different lists.
+- **Ran.** A list ran in a kjördæmi when its vote cell is not ".". The seat cells agree except in one cell: Landsbyggðarflokkurinn's seat cell in Norðvestur is "." although its vote cell there holds 326 votes. The vote cell decides, so the list ran in Norðvestur only, and won no seat.
+- **Checks.** The build stops unless the cells add up to the file's own totals, the kjördæmi labels are those of `KJORDAEMI$hagstofa`, the valid votes are 189 023, the seats sum to 63, and no list that did not run has votes or seats. The tests add the six kjördæmi totals, the seats per kjördæmi against `seats_layout_2021()`, `calculate_seats()` reproducing the seats of all 90 list × kjördæmi cells, and the national shares of D, B, S, V and P against the 2013 rows of `fundamentals_data.csv` to their rounding.
+
 ## Hagstofa's 2021 seat tables (documented, not used)
 
 Both disagree with Alþingi's page, and with D'Hondt on their own vote counts. Seats in the six cells where any of the three differ:
