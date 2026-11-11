@@ -17,7 +17,9 @@
 # to identical data; --start, --cutoff or a tau option with an existing --data-json is an
 # error. Writes <out>/cmdstan/*.csv, <out>/timing.rds, <out>/diagnostics.csv and <out>/DONE,
 # and, when it builds the data, <out>/meta.rds (party, house and date labels, and the epoch
-# table for v5).
+# table for v5). A --cutoff after 2016-10-29 and on or before 2017-10-28 is a forecast of the
+# held-out 2017 election and is refused, before anything is built, until harness/DECISION.md
+# exists.
 Sys.setlocale("LC_ALL", "en_US.UTF-8")
 options(width = 160, warn = 1)
 suppressPackageStartupMessages({
@@ -31,6 +33,17 @@ args <- commandArgs(trailingOnly = TRUE)
 arg <- function(name, default = NULL) {
   hit <- grep(paste0("^--", name, "="), args, value = TRUE)
   if (length(hit)) sub(paste0("^--", name, "="), "", hit[1]) else default
+}
+# WHY: a cutoff in (2016-10-29, 2017-10-28] would fit a forecast of the held-out 2017 election
+# (harness/README.md, the 2017 locks)
+cutoff_2017 <- arg("cutoff")
+if (!is.null(cutoff_2017) && as.Date(cutoff_2017) > as.Date("2016-10-29") &&
+  as.Date(cutoff_2017) <= as.Date("2017-10-28") && !file.exists(here("harness", "DECISION.md"))) {
+  stop(
+    "2017 is a locked hold-out: --cutoff=", cutoff_2017, " fits a forecast of the 2017-10-28 election, ",
+    "refused until harness/DECISION.md exists",
+    call. = FALSE
+  )
 }
 out <- arg("out")
 stopifnot("--out is required" = !is.null(out))
