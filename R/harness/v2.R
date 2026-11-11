@@ -145,11 +145,12 @@ reported <- function(y) {
 #' @return `list(data, meta)`. `data` holds the fields of the Stan file's data block, in its
 #'   order (`stan_data_sha()` depends on it), with no dimnames and each one-dimensional field
 #'   a 1-d array (`V2_VECTOR_FIELDS`):
-#'   - sizes and the grid: `P`, `K`, `H`, `G`, `n_epoch` (`epoch_of(E)`), `delta_days`
-#'     (the G - 1 steps of `grid_dates()`), `campaign` (1 for a step starting on or after
-#'     an election - `campaign_days` and ending on or before it, for an election before E
-#'     or E itself), `grid_epoch` (`epoch_of()` of each grid date: an election day belongs
-#'     to the epoch it closes), `exists` (G × P, 1 from a party's first non-zero poll in
+#'   - sizes and the grid: `P`, `K`, `H`, `G`, `n_epoch` (`epoch_of(E, info$elections)`,
+#'     the epochs counted from the cell's window elections), `delta_days` (the G - 1 steps
+#'     of `grid_dates()`), `campaign` (1 for a step starting on or after an election -
+#'     `campaign_days` and ending on or before it, for an election before E or E itself),
+#'     `grid_epoch` (`epoch_of()` of each grid date with `info$elections`: an election day
+#'     belongs to the epoch it closes), `exists` (G × P, 1 from a party's first non-zero poll in
 #'     the entry table on) and `w` (n_epoch × K: each closed epoch's closing election's
 #'     valid vote shares, the open epoch's from `info$valid_votes_open`, the previous
 #'     election's);
@@ -161,7 +162,8 @@ reported <- function(y) {
 #'   - kjördæmi polls: `J` polls, one per (date, fyrirtaeki), numbered 1..J in date order
 #'     (ties by fyrirtaeki), and `N_kd` rows, one per poll and kjördæmi, sorted by poll and
 #'     kjördæmi: `poll_kd`, `kd_kd`, `grid_kd`, `house_kd`, `y_kd`, `n_rep_kd`, `idx_kd`;
-#'   - results of the `n_closed` window elections before E: `grid_res`, `y_res`
+#'   - results of the `n_closed` window elections before E (`info$elections` before E):
+#'     `grid_res`, `y_res`
 #'     (n_closed × K × P, the official kjördæmi votes from `info$results`), `n_rep_res`
 #'     and `idx_res` (the parties with national votes);
 #'   - `entry_epoch` (0 for a party present at the window's start, else its entry epoch);
@@ -184,7 +186,7 @@ reported <- function(y) {
 #'   `stage1_sha256`.
 #'
 #'   An error, "v2 input: ...", if `party_order` is not a permutation of the cell's
-#'   parties; no national poll is admitted; a national or kjördæmi poll lists a party (and
+#'   parties; `info$elections` does not hold E; no national poll is admitted; a national or kjördæmi poll lists a party (and
 #'   kjördæmi) twice; a count is missing or negative; a poll row's party is outside the
 #'   cell or its kjördæmi outside `KJORDAEMI`; a poll is a Kosning row; a pollster has no
 #'   house or a party no entry row; a closed election lacks kjördæmi results, gives votes
@@ -200,7 +202,7 @@ reported <- function(y) {
 v2_stan_data <- function(info, cfg, stage1 = stage1_mu_f, party_order = NULL, root = project_root()) {
   # WHY: the default argument is a promise, forced after this import.
   box::use(
-    R / harness / constants[ELECTION_HOUSE, ELECTIONS, KJORDAEMI, POLL_PARTIES, project_root],
+    R / harness / constants[ELECTION_HOUSE, KJORDAEMI, POLL_PARTIES, project_root],
     R / harness / freeze[forecast_free],
     R / harness / stage1[stage1_mu_f],
     R / harness / tables[epoch_of, grid_dates, valid_votes]
@@ -248,8 +250,10 @@ v2_stan_data <- function(info, cfg, stage1 = stage1_mu_f, party_order = NULL, ro
   if (length(no_entry)) fail("a party has no entry row: ", listed(no_entry))
   entry_date <- as.Date(entry$first_nonzero)
 
-  n_epoch <- epoch_of(E)
-  closed <- ELECTIONS[ELECTIONS < E]
+  window <- info$elections
+  check(inherits(window, "Date") && isTRUE(E %in% window), "info$elections does not hold E")
+  n_epoch <- epoch_of(E, window)
+  closed <- window[window < E]
   n_closed <- length(closed)
   check(n_closed >= 1 && n_closed == n_epoch - 1L, "E is not a window election after the first")
   y_res <- array(0L, c(n_closed, K, P))
@@ -350,7 +354,7 @@ v2_stan_data <- function(info, cfg, stage1 = stage1_mu_f, party_order = NULL, ro
   check(all(colSums(exists) > 0L), "a party exists at no grid date")
   data <- list(
     P = P, K = K, H = length(house_levels), G = G, n_epoch = n_epoch,
-    delta_days = steps, campaign = campaign, grid_epoch = epoch_of(g), exists = exists, w = w,
+    delta_days = steps, campaign = campaign, grid_epoch = epoch_of(g, window), exists = exists, w = w,
     N_nat = nrow(units_nat), grid_nat = grid_nat, house_nat = match(house_of(units_nat$fyrirtaeki), house_levels),
     y_nat = y_nat, n_rep_nat = as.integer(rowSums(y_nat > 0)), idx_nat = reported(y_nat),
     J = nrow(polls_kd), N_kd = nrow(units_kd), poll_kd = units_kd$poll, kd_kd = units_kd$k, grid_kd = grid_kd,

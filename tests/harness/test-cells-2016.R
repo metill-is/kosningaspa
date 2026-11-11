@@ -73,7 +73,14 @@ test_that("each 2016 forecast day builds and validates, reads no poll before 201
     expect_equal(x$results, anchor)
     expect_equal(x$valid_votes_open, valid_votes(anchor, START16))
     expect_equal(sum(x$valid_votes_open$votes), 189023)
-    expect_identical(nrow(x$kosning_nat), 0L, label = lab)
+    # WHY: the polling data hold no 2013 Kosning row, so info_set() builds one from the anchor
+    # for R0; without it R0 fits a 2016 cell with no national 2013 result.
+    k <- x$kosning_nat
+    expect_identical(unique(k$date), START16, label = lab)
+    expect_identical(unique(k$fyrirtaeki), ELECTION_HOUSE, label = lab)
+    expect_identical(anyDuplicated(k$flokkur), 0L, label = lab)
+    expect_setequal(k$flokkur, x$parties)
+    expect_equal(sum(k$n), 189023, label = lab)
   }
 })
 

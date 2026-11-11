@@ -359,7 +359,8 @@ transformed data {
     for (k in 1:K) u_res[(e - 1) * K + k + 1] = u_res[(e - 1) * K + k] + n_rep_res[e];
   }
   array[n_flat] int v_nat = linspaced_int_array(n_flat, 1, n_flat);
-  array[n_flat_kd] int v_kd = linspaced_int_array(n_flat_kd, 1, n_flat_kd);
+  array[n_flat_kd] int v_kd;
+  if (N_kd > 0) v_kd = linspaced_int_array(n_flat_kd, 1, n_flat_kd);
   array[n_flat_res] int v_res = linspaced_int_array(n_flat_res, 1, n_flat_res);
   // The data terms that dirichlet_multinomial keeps inside its lbeta() calls even in a sampling
   // statement, lgamma(N) - sum of lgamma(y) over the nonzero counts, row by row. The flattened
@@ -514,7 +515,7 @@ model {
 
   // Kjordaemi polls (§6.7): y_jk ~ DirMult(kappa phi_h softmax over S of (nu_j + delta_{e,k})),
   // flattened as the national polls, the softmax as exp(nu_j) .* exp(delta_ek) masked to S.
-  {
+  if (N_kd > 0) {
     matrix[P, J] Enu;
     for (j in 1:J) Enu[ : , j] = nu[j];
     matrix[P, n_epoch * K] Dm;

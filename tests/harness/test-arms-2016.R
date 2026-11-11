@@ -1,0 +1,205 @@
+box::use(
+  R / harness / anchors[anchor_national],
+  R / harness / info_set[info_set, validate_inputs],
+  R / harness / r0[r0_stan_data, read_r0_config],
+  R / harness / runs[run_id],
+  R / harness / tables[grid_dates],
+  R / harness / v2[v2_stan_data],
+  R / harness / v2_reference[v2_mutants]
+)
+E16 <- as.Date("2016-10-29")
+ANCHOR16 <- as.Date("2013-04-27")
+DAYS16 <- as.Date(c("2016-05-02", "2016-09-12", "2016-10-15", "2016-10-28"))
+NEWCOMERS16 <- POLL_PARTIES[6:7]
+OLDER16 <- POLL_PARTIES[c(1:5, 10)]
+
+# The four 2016 cells and both arms' builds of them, built on first call and kept for the run;
+# V2 takes stage1_stub()'s mu_f, so no stage-1 fit runs.
+cells16 <- function() {
+  skip_without_snapshot()
+  cached("arms16_cells", lapply(DAYS16, \(F) info_set(E16, F, v2_inputs())))
+}
+v2_16 <- function() cached("arms16_v2", lapply(cells16(), \(x) v2_stan_data(x, cfg_v2(), stage1 = stage1_stub)))
+r0_16 <- function() cached("arms16_r0", lapply(cells16(), \(x) r0_stan_data(x, read_r0_config())))
+
+# The grid and the epochs the two builders use for one cell, as text lines, and their sha256.
+arms_text <- function(info, v2, r0) {
+  line <- function(name, x) paste0(name, ": ", paste(if (inherits(x, "Date")) format(x) else as.character(x), collapse = " "))
+  c(
+    line("grid", grid_dates(info, v2$data$campaign_days)),
+    line("v2 G", v2$data$G),
+    line("v2 delta_days", sprintf("%.17g", c(v2$data$delta_days))),
+    line("v2 n_epoch", v2$data$n_epoch),
+    line("v2 closed", v2$meta$closed_elections),
+    line("v2 grid_res", c(v2$data$grid_res)),
+    line("v2 grid_epoch", c(v2$data$grid_epoch)),
+    line("v2 campaign", c(v2$data$campaign)),
+    line("v2 entry_epoch", paste(v2$meta$party_order, c(v2$data$entry_epoch))),
+    line("r0 n_e", paste(names(r0$meta$n_e), r0$meta$n_e)),
+    line("r0 mu_gamma_scale", sprintf("%.17g", r0$data$mu_gamma_scale))
+  )
+}
+arms_digest <- function(info, v2, r0) {
+  digest::digest(paste(arms_text(info, v2, r0), collapse = "\n"), algo = "sha256", serialize = FALSE)
+}
+# WHY: recorded on 2026-11-11 with arms_digest() from the tree at 23a0b77, before the builders
+# read the cell's own elections, so a change that reaches an existing cell's grid or epochs shows here.
+ARMS_DIGESTS <- tibble::tribble(
+  ~E, ~F, ~G, ~n_epoch, ~digest,
+  "2017-10-28", "2017-10-14", 71L, 2L, "380a13e65de60b4b668f9ba3bf43be7d32c6ea8d4369fe1eaa01865ceac7bab7",
+  "2017-10-28", "2017-10-27", 77L, 2L, "e56e4d2466225afbf8717fe5095d6eeb311386d522ad7baff73fa5635ff15fb1",
+  "2021-09-25", "2021-03-29", 162L, 3L, "a4357160be4795cc43d03661e8128a2e169d88d246dfa9fd0b9187fbe7e5f25f",
+  "2021-09-25", "2021-08-09", 174L, 3L, "c9142a135dfb6a9a0fea1698b1aa23ebb69a132a56e2d294e7c81e04dddf9867",
+  "2021-09-25", "2021-09-11", 182L, 3L, "5bc54e9af27cfd9ccdc54047b0ec8c86e991cb91e95fb70b6383d9ee197a702c",
+  "2021-09-25", "2021-09-24", 190L, 3L, "2720e030bb208e5c9f276d1b238b7bc1a5800aa3a57d9c8877288ab9ee3d051b",
+  "2024-11-30", "2024-06-03", 251L, 4L, "c1dd90a8133a497303f81f41a5aaa6a3011420cd1db043cedaa7d5c6ac902c01",
+  "2024-11-30", "2024-10-14", 258L, 4L, "c4207fd99cb1d94e49e9310e90d3b127e9d0f6f5af8a31c7302aae513aa02658",
+  "2024-11-30", "2024-11-16", 273L, 4L, "b363e0d8c9e36ede7852b37ba47e190633dc09d2d4bcb12fad8eb2404afe18e9",
+  "2024-11-30", "2024-11-29", 278L, 4L, "cb5a3753d97c353948fdc3d1c2267cddd9e121e9cc1057ef81ee73b1371fbd23"
+)
+
+test_that("V2 builds each 2016 day with 2013 as its one closed election on the grid's first date, no kjordaemi poll, the cell's parties and the newcomers entering in epoch 2 (a builder that counts epochs from the global list, which finds no closed election before 2016 and stops)", {
+  cells <- cells16()
+  for (i in seq_along(cells)) {
+    x <- cells[[i]]
+    b <- v2_16()[[i]]
+    d <- b$data
+    lab <- format(x$F)
+    expect_identical(d$n_closed, 1L, label = lab)
+    expect_identical(d$n_epoch, 2L, label = lab)
+    expect_identical(b$meta$closed_elections, format(ANCHOR16), label = lab)
+    expect_identical(grid_dates(x, d$campaign_days)[1], ANCHOR16, label = lab)
+    expect_identical(c(d$grid_res), 1L, label = lab)
+    expect_identical(c(d$grid_epoch), c(1L, rep(2L, d$G - 1L)), label = lab)
+    expect_equal(sum(d$y_res), 189023, label = lab)
+    expect_identical(c(d$N_kd, d$J), c(0L, 0L), label = lab)
+    expect_identical(dim(d$y_kd), c(0L, d$P), label = lab)
+    expect_identical(b$meta$party_order, intersect(POLL_PARTIES, x$parties), label = lab)
+    expect_true(all(OLDER16 %in% x$parties), label = lab)
+    expect_identical(d$P, length(x$parties), label = lab)
+    e <- x$entry[match(b$meta$party_order, x$entry$flokkur), ]
+    expect_identical(e$entry_epoch, ifelse(e$flokkur %in% NEWCOMERS16, 2L, 1L), label = lab)
+    expect_identical(c(d$entry_epoch), ifelse(b$meta$party_order %in% NEWCOMERS16, 2L, 0L), label = lab)
+    expect_identical(b$meta$newcomers, intersect(NEWCOMERS16, x$parties), label = lab)
+  }
+  expect_identical(lengths(lapply(cells, `[[`, "parties")), c(7L, 7L, 8L, 8L))
+})
+
+test_that("R0 builds each 2016 day with the 2013 national result as one election row of 189 023 votes and one closed election for the older parties (a 2016 cell fitted with no anchor at all)", {
+  cells <- cells16()
+  nat <- anchor_national(v2_inputs()$anchor_2013)
+  for (i in seq_along(cells)) {
+    x <- cells[[i]]
+    b <- r0_16()[[i]]
+    d <- b$data
+    po <- b$meta$party_order
+    lab <- format(x$F)
+    k <- x$kosning_nat
+    expect_identical(unique(k$date), ANCHOR16, label = lab)
+    expect_identical(unique(k$fyrirtaeki), "Kosning", label = lab)
+    expect_identical(k$flokkur, intersect(POLL_PARTIES, x$parties), label = lab)
+    expect_equal(k$n, nat$votes[match(k$flokkur, nat$flokkur)], label = lab)
+    expect_no_error(validate_inputs(x))
+    row <- which(d$house_n == 1)
+    expect_length(row, 1)
+    expect_identical(as.integer(d$date_n[row]), 1L, label = lab)
+    expect_equal(sum(d$y_n[row, ]), 189023, label = lab)
+    expect_equal(unname(d$y_n[row, ]), nat$votes[match(po, nat$flokkur)], label = lab)
+    expect_equal(sum(d$y_k[d$house_k == 1, ]), 189023, label = lab)
+    expect_equal(c(d$N_k, d$N_obs_k), c(6, 1), label = lab)
+    expect_equal(unname(b$meta$n_e), as.numeric(!po %in% NEWCOMERS16), label = lab)
+    expect_equal(unname(b$meta$n_e), vapply(po, \(p) sum(k$flokkur == p & k$n > 0), numeric(1), USE.NAMES = FALSE), label = lab)
+    expect_equal(d$mu_gamma_scale, as.numeric(!po[-1] %in% NEWCOMERS16), label = lab)
+    expect_identical(b$meta$newcomers, intersect(NEWCOMERS16, x$parties), label = lab)
+  }
+})
+
+test_that("for every TARGETS cell the grid and the epochs both builders use are as recorded before the cell's own elections were read (an existing cell's walk or hedge moved)", {
+  skip_without_snapshot()
+  expect_identical(paste(ARMS_DIGESTS$E, ARMS_DIGESTS$F), paste(TARGETS$E, TARGETS$F))
+  for (i in seq_len(nrow(ARMS_DIGESTS))) {
+    r <- ARMS_DIGESTS[i, ]
+    x <- info_set(r$E, r$F, v2_inputs())
+    expect_identical(x$elections, ELECTIONS)
+    v2 <- v2_stan_data(x, cfg_v2(), stage1 = stage1_stub)
+    r0 <- r0_stan_data(x, read_r0_config())
+    lab <- paste(r$E, r$F)
+    expect_identical(c(v2$data$G, v2$data$n_epoch), c(r$G, r$n_epoch), label = lab)
+    expect_identical(arms_digest(x, v2, r0), r$digest, label = lab)
+  }
+})
+
+test_that("an information set without its elections is refused by grid_dates() and both builders (a builder that falls back to the global list)", {
+  x <- cells16()[[4]]
+  x$elections <- NULL
+  expect_error(grid_dates(x), "grid_dates: info has no elections", fixed = TRUE)
+  expect_error(v2_stan_data(x, cfg_v2(), stage1 = stage1_stub), "v2 input: info$elections does not hold E", fixed = TRUE)
+  expect_error(r0_stan_data(x, read_r0_config()), "R0 input: info$elections holds E", fixed = TRUE)
+  x$elections <- ELECTIONS
+  expect_error(v2_stan_data(x, cfg_v2(), stage1 = stage1_stub), "v2 input: E is not a window election after the first", fixed = TRUE)
+})
+
+test_that("a 2013 Kosning row in the polling data is refused rather than doubled, and a 2013 list given to a party outside the cell is refused rather than dropped (two election rows on one date; the letter rule's J and M lists)", {
+  inp <- v2_inputs()
+  planted <- inp
+  k16 <- inp$polling[inp$polling$fyrirtaeki == "Kosning" & inp$polling$date == E16, ]
+  k16$date <- ANCHOR16
+  planted$polling <- rbind(inp$polling, k16)
+  av <- inp$availability[inp$availability$fyrirtaeki == "Kosning" & inp$availability$date == E16, ]
+  av$date <- ANCHOR16
+  av$available_from <- ANCHOR16 + 1
+  planted$availability <- rbind(inp$availability, av)
+  expect_error(
+    info_set(E16, DAYS16[4], planted),
+    "the polling data hold a Kosning row for 2013-04-27, which the 2013 anchor's row would duplicate",
+    fixed = TRUE
+  )
+  moved <- inp
+  i <- which(moved$anchor_2013$flokkur == POLL_PARTIES[10] & moved$anchor_2013$votes > 0)[1]
+  moved$anchor_2013$flokkur[moved$anchor_2013$list_name == moved$anchor_2013$list_name[i]] <- POLL_PARTIES[8]
+  expect_error(
+    info_set(E16, DAYS16[4], moved),
+    paste0("would drop Kosning row(s) with n > 0: Kosning 2013-04-27 ", POLL_PARTIES[8]),
+    fixed = TRUE
+  )
+})
+
+test_that("V2's Stan log density on the 2016 eve cell, which has no kjordaemi poll, matches the reference at posterior, off-posterior and prior points, and each mutant it exercises is rejected (a guard that drops or double-counts a term when N_kd is 0)", {
+  skip_unless_slow()
+  d <- v2_16()[[4]]$data
+  expect_identical(c(d$N_kd, d$J), c(0L, 0L))
+  m <- v2_methods("Stan/forecast_v2.stan", d)
+  pts <- lp_points(m, d, n_post = 20, n_off = 10)
+  ok <- expect_lp_matches(m, d, pts)
+  ratios <- c()
+  for (mu in v2_mutants(d)) if (mutant_exercised(d, pts, mu)) ratios[mu] <- expect_lp_rejects(m, d, pts, mu)
+  expect_true(all(c("no_leaving_step", "fund_uncentred") %in% names(ratios)))
+  message(sprintf(
+    "lp 2016 eve (N_kd 0, J 0): %d points, lp constant range %.3g (tol %.3g); exercised mutants, range / (100 tol): %s",
+    length(pts), ok$range, ok$tol, paste(sprintf("%s %.3g", names(ratios), ratios), collapse = ", ")
+  ))
+})
+
+test_that("a short fit of each arm on the 2016 eve cell runs to DONE through fit_cell.R (data that build but that CmdStan cannot read or sample, such as V2's zero-row kjordaemi matrices)", {
+  skip_unless_slow()
+  skip_without_snapshot()
+  results <- withr::local_tempdir()
+  withr::local_envvar(HARNESS_RESULTS = results)
+  for (a in c("r0", "v2")) {
+    out <- withr::with_dir(root(), suppressWarnings(system2(
+      file.path(R.home("bin"), "Rscript"), c("R/harness/fit_cell.R", a, format(E16), format(DAYS16[4]), "1", "20", "10"),
+      stdout = TRUE, stderr = TRUE, env = "LC_ALL=en_US.UTF-8"
+    )))
+    expect_null(attr(out, "status"), info = paste(utils::tail(out, 30), collapse = "\n"))
+    dir <- file.path(results, run_id(a, E16, DAYS16[4], 1))
+    expect_true(paste("DONE", dir) %in% out, label = a)
+    expect_true(file.exists(file.path(dir, "meta.json")), label = a)
+    meta <- jsonlite::read_json(file.path(dir, "meta.json"))
+    expect_identical(c(meta$E, meta$F), c(format(E16), format(DAYS16[4])))
+    expect_identical(meta$n_polls_kd, 0L, label = a)
+    if (a == "v2") {
+      expect_identical(c(meta$n_closed, meta$n_kd_polls), c(1L, 0L))
+      expect_identical(unlist(meta$closed_elections), format(ANCHOR16))
+    }
+  }
+})

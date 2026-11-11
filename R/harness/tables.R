@@ -17,21 +17,22 @@ epoch_of <- function(date, elections = ELECTIONS) {
 
 #' The time grid of a cell's latent walk (spec §6.2): every admitted national and
 #' kjördæmi poll date, the window elections before E, the campaign starts, F and E.
-#' @param info an `info_set()` list
+#' @param info an `info_set()` list; its `elections` are the cell's window elections
 #' @param campaign_days the campaign length in days
-#' @return a sorted Date vector without repeats, starting at the first admitted poll date.
-#'   The campaign starts are election - `campaign_days` for the elections before E and for
-#'   E, kept when on or after the first poll date. For a valid `info` every observation date
-#'   is on or before F, so the only dates after F are E - `campaign_days` (when after F) and E,
-#'   which is last. `v2_stan_data()` checks that; this only builds. An error if `info` has no admitted
-#'   poll
+#' @return a sorted Date vector without repeats, starting at the first admitted poll date or
+#'   at the first window election before E, whichever is earlier (2013-04-27 for
+#'   2016-10-29). The campaign starts are election - `campaign_days` for the elections before
+#'   E and for E, kept when on or after the first poll date. For a valid `info` every
+#'   observation date is on or before F, so the only dates after F are E - `campaign_days`
+#'   (when after F) and E, which is last. `v2_stan_data()` checks that; this only builds. An
+#'   error if `info` has no admitted poll or no `elections`
 #' @export
 grid_dates <- function(info, campaign_days = 47L) {
-  box::use(R / harness / constants[ELECTIONS])
   E <- as.Date(info$E)
   obs <- as.Date(c(info$polls_nat$date, info$polls_kd$date))
   if (!length(obs)) stop("grid_dates: no admitted poll")
-  closed <- ELECTIONS[ELECTIONS < E]
+  if (!length(info$elections)) stop("grid_dates: info has no elections")
+  closed <- info$elections[info$elections < E]
   starts <- c(closed, E) - campaign_days
   starts <- starts[starts >= min(obs)]
   sort(unique(c(obs, closed, starts, as.Date(info$F), E)))

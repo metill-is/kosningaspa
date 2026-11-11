@@ -336,7 +336,10 @@ cell_economy <- function(E, F, release, econ) {
 #'   - `window_start`, `elections`: `window_start(E)` and `window_elections(E)`, the first
 #'     day of E's window and the elections that close its epochs;
 #'   - `parties`, `polls_nat`, `polls_kd`, `kosning_nat`: as `cell_polls()` from
-#'     `window_start`, with the n corrections applied;
+#'     `window_start`, with the n corrections applied; for 2016-10-29, since the polling
+#'     data hold no `Kosning` row for 2013, `kosning_nat` is one row per party of `parties`
+#'     built from `anchor_national()`: date 2013-04-27, house `Kosning`, n the party's 2013
+#'     votes (189 023 in all) and `available_from` the next day;
 #'   - `results`: the `fold_truth()` rows of the elections before E; for 2016-10-29, whose
 #'     previous election the truth file does not hold, `fold_anchor()`'s rows of the 2013
 #'     election;
@@ -361,11 +364,15 @@ cell_economy <- function(E, F, release, econ) {
 #'     (`polls_nat` or `polls_kd`) and for `ELECTION_HOUSE`;
 #'   - `availability`: the `poll_availability()` rows of the polls in `polls_nat` and
 #'     `polls_kd`, for `validate_inputs()`'s overlap report.
+#'
+#'   For 2016-10-29 also an error if the polling data hold a `Kosning` row for 2013-04-27,
+#'   which the built row would duplicate, or if the 2013 anchor gives votes to a party
+#'   outside `parties`.
 #' @export
 info_set <- function(E, F, inp = read_inputs()) {
   box::use(
     R / election_utils[layout_for],
-    R / harness / anchors[fold_anchor],
+    R / harness / anchors[anchor_national, fold_anchor],
     R / harness / availability[merge_same_day_polls],
     R / harness / constants[ELECTION_HOUSE, ELECTIONS, POLL_PARTIES, previous_election, window_elections, window_start],
     R / harness / fundamentals[fundamentals_inputs],
@@ -391,6 +398,7 @@ info_set <- function(E, F, inp = read_inputs()) {
   coalitions <- inp$coalitions[inp$coalitions$from <= F, ]
   coalitions$to[!is.na(coalitions$to) & coalitions$to > F] <- NA
 
+  kosning_nat <- polls$kosning_nat
   results <- fold_truth(inp$truth)
   results <- results[results$election < E, ]
   # WHY: the truth file starts at 2016-10-29, so the election before it comes from the 2013 anchor.
@@ -401,6 +409,17 @@ info_set <- function(E, F, inp = read_inputs()) {
     if (!all(anchor$election == prev)) stop("no kj\u00f6rd\u00e6mi results for ", format(prev), ", the election before ", format(E))
     results <- dplyr::bind_rows(anchor, results)
     valid_votes_open <- valid_votes(anchor, prev)
+    # WHY: R0 reads each election's national result from a Kosning row, and the polling data never held one for 2013.
+    if (any(kosning_nat$date == prev)) {
+      stop("the polling data hold a Kosning row for ", format(prev), ", which the 2013 anchor's row would duplicate")
+    }
+    nat <- anchor_national(inp$anchor_2013)
+    # WHY: available_from is the day after, as availability.R's `election` rule dates every Kosning row.
+    row <- tibble::tibble(
+      date = nat$election, fyrirtaeki = ELECTION_HOUSE, flokkur = nat$flokkur, n = as.numeric(nat$votes),
+      available_from = nat$election + 1
+    )
+    kosning_nat <- dplyr::bind_rows(keep_parties(row, parties, "Kosning"), kosning_nat)
   }
   # WHY: the committed entry table numbers epochs from ELECTIONS; another window numbers its own.
   entry <- if (identical(elections, ELECTIONS)) inp$entry else entry_table(merge_same_day_polls(inp$polling), start, elections)
@@ -423,7 +442,7 @@ info_set <- function(E, F, inp = read_inputs()) {
     parties = parties,
     polls_nat = polls$polls_nat,
     polls_kd = polls$polls_kd,
-    kosning_nat = polls$kosning_nat,
+    kosning_nat = kosning_nat,
     results = results,
     fundamentals = fundamentals_inputs(E, F, inp$fundamentals, inp$economy, coalitions, parties),
     economy = economy,
