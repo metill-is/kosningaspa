@@ -10,7 +10,10 @@ box::use(
 E16 <- as.Date("2016-10-29")
 ANCHOR16 <- as.Date("2013-04-27")
 DAYS16 <- as.Date(c("2016-05-02", "2016-09-12", "2016-10-15", "2016-10-28"))
+# The date of the window's first poll, Gallup's of July 2012 in the older polls table.
+FIRST16 <- as.Date("2012-07-12")
 NEWCOMERS16 <- POLL_PARTIES[6:7]
+PIRATAR16 <- POLL_PARTIES[5]
 OLDER16 <- POLL_PARTIES[c(1:5, 10)]
 
 # The four 2016 cells and both arms' builds of them, built on first call and kept for the run;
@@ -58,19 +61,22 @@ ARMS_DIGESTS <- tibble::tribble(
   "2024-11-30", "2024-11-29", 278L, 4L, "cb5a3753d97c353948fdc3d1c2267cddd9e121e9cc1057ef81ee73b1371fbd23"
 )
 
-test_that("V2 builds each 2016 day with 2013 as its one closed election on the grid's first date, no kjordaemi poll, the cell's parties and the newcomers entering in epoch 2 (a builder that counts epochs from the global list, which finds no closed election before 2016 and stops)", {
+test_that("V2 builds each 2016 day with 2013 as its one closed election after the window's first 40 polls, no kjordaemi poll, the cell's parties, each party existing from its entry date, Piratar entering in epoch 1 and the newcomers in epoch 2 (a grid that still starts at the election, or a builder that counts epochs from the global list)", {
   cells <- cells16()
   for (i in seq_along(cells)) {
     x <- cells[[i]]
     b <- v2_16()[[i]]
     d <- b$data
     lab <- format(x$F)
+    g <- grid_dates(x, d$campaign_days)
+    res <- c(d$grid_res)
     expect_identical(d$n_closed, 1L, label = lab)
     expect_identical(d$n_epoch, 2L, label = lab)
     expect_identical(b$meta$closed_elections, format(ANCHOR16), label = lab)
-    expect_identical(grid_dates(x, d$campaign_days)[1], ANCHOR16, label = lab)
-    expect_identical(c(d$grid_res), 1L, label = lab)
-    expect_identical(c(d$grid_epoch), c(1L, rep(2L, d$G - 1L)), label = lab)
+    expect_identical(g[1], FIRST16, label = lab)
+    expect_identical(g[res], ANCHOR16, label = lab)
+    expect_identical(c(d$grid_epoch), rep(1:2, c(res, d$G - res)), label = lab)
+    expect_identical(sum(c(d$grid_nat) < res), 40L, label = lab)
     expect_equal(sum(d$y_res), 189023, label = lab)
     expect_identical(c(d$N_kd, d$J), c(0L, 0L), label = lab)
     expect_identical(dim(d$y_kd), c(0L, d$P), label = lab)
@@ -79,13 +85,16 @@ test_that("V2 builds each 2016 day with 2013 as its one closed election on the g
     expect_identical(d$P, length(x$parties), label = lab)
     e <- x$entry[match(b$meta$party_order, x$entry$flokkur), ]
     expect_identical(e$entry_epoch, ifelse(e$flokkur %in% NEWCOMERS16, 2L, 1L), label = lab)
-    expect_identical(c(d$entry_epoch), ifelse(b$meta$party_order %in% NEWCOMERS16, 2L, 0L), label = lab)
-    expect_identical(b$meta$newcomers, intersect(NEWCOMERS16, x$parties), label = lab)
+    expect_identical(c(d$entry_epoch), ifelse(e$flokkur %in% NEWCOMERS16, 2L, ifelse(e$flokkur == PIRATAR16, 1L, 0L)), label = lab)
+    expect_identical(b$meta$newcomers, intersect(c(PIRATAR16, NEWCOMERS16), x$parties), label = lab)
+    first <- apply(d$exists, 2, \(col) which(col == 1L)[1])
+    expect_identical(g[first], e$first_nonzero, label = lab)
+    for (p in seq_len(d$P)) expect_identical(as.integer(d$exists[, p]), as.integer(seq_len(d$G) >= first[p]), label = paste(lab, e$flokkur[p]))
   }
   expect_identical(lengths(lapply(cells, `[[`, "parties")), c(7L, 8L, 8L, 8L))
 })
 
-test_that("R0 builds each 2016 day with the 2013 national result as one election row of 189 023 votes and one closed election for the older parties (a 2016 cell fitted with no anchor at all)", {
+test_that("R0 builds each 2016 day with the 2013 national result as one election row of 189 023 votes after the window's first 40 polls, and one closed election for the older parties (a 2016 cell fitted with no anchor at all, or with no poll before it)", {
   cells <- cells16()
   nat <- anchor_national(v2_inputs()$anchor_2013)
   for (i in seq_along(cells)) {
@@ -102,7 +111,8 @@ test_that("R0 builds each 2016 day with the 2013 national result as one election
     expect_no_error(validate_inputs(x))
     row <- which(d$house_n == 1)
     expect_length(row, 1)
-    expect_identical(as.integer(d$date_n[row]), 1L, label = lab)
+    expect_identical(as.integer(d$date_n[row]), match(ANCHOR16, sort(unique(c(k$date, x$polls_nat$date)))), label = lab)
+    expect_identical(sum(d$date_n < d$date_n[row]), 40L, label = lab)
     expect_equal(sum(d$y_n[row, ]), 189023, label = lab)
     expect_equal(unname(d$y_n[row, ]), nat$votes[match(po, nat$flokkur)], label = lab)
     expect_equal(sum(d$y_k[d$house_k == 1, ]), 189023, label = lab)

@@ -20,9 +20,9 @@ epoch_of <- function(date, elections = ELECTIONS) {
 #' @param info an `info_set()` list; its `elections` are the cell's window elections
 #' @param campaign_days the campaign length in days
 #' @return a sorted Date vector without repeats, starting at the first admitted poll date or
-#'   at the first window election before E, whichever is earlier (2013-04-27 for
-#'   2016-10-29). The campaign starts are election - `campaign_days` for the elections before
-#'   E and for E, kept when on or after the first poll date. For a valid `info` every
+#'   at the first window election before E, whichever is earlier. The campaign starts are
+#'   election - `campaign_days` for the elections before E and for E, kept when on or after
+#'   the first poll date. For a valid `info` every
 #'   observation date is on or before F, so the only dates after F are E - `campaign_days`
 #'   (when after F) and E, which is last. `v2_stan_data()` checks that; this only builds. An
 #'   error if `info` has no admitted poll or no `elections`
@@ -58,21 +58,33 @@ read_houses <- function(path = harness_path("sources", "house_table.csv")) {
 #'   the `Kosning` rows (official results) are ignored
 #' @param window_start first day of the polling window
 #' @param elections the elections that close the window's epochs (`window_elections()`)
+#' @param first_poll_present for a window that no poll precedes (the 2016 cells'): TRUE
+#'   counts the parties of the window's first poll as present at its start, standing in for
+#'   the polls before it
 #' @return a tibble (flokkur, first_nonzero, entry_epoch, newcomer) sorted by
-#'   first_nonzero, then flokkur; a newcomer has no n > 0 poll dated before window_start.
+#'   first_nonzero, then flokkur; a newcomer has no n > 0 poll dated before window_start
+#'   (with `first_poll_present`, none dated on or before the first poll's date).
 #'   `entry_epoch` is `epoch_of(first_nonzero, elections)`, so a party polled before the
 #'   window gets epoch 1, and `epoch_of(E, elections) - entry_epoch` counts the window
-#'   elections it contested before E.
+#'   elections it contested before E. An error if `first_poll_present` is TRUE and a poll is
+#'   dated before window_start
 #' @export
-entry_table <- function(polling, window_start = WINDOW_START, elections = ELECTIONS) {
+entry_table <- function(polling, window_start = WINDOW_START, elections = ELECTIONS, first_poll_present = FALSE) {
   # WHY: the default arguments are promises, forced after this import.
   box::use(R / harness / constants[ELECTION_HOUSE, ELECTIONS, WINDOW_START])
-  polling |>
-    dplyr::filter(fyrirtaeki != ELECTION_HOUSE, n > 0) |>
+  polls <- dplyr::filter(polling, fyrirtaeki != ELECTION_HOUSE, n > 0)
+  present_until <- as.Date(window_start)
+  if (isTRUE(first_poll_present)) {
+    if (any(as.Date(polls$date) < present_until)) {
+      stop("entry_table: a poll is dated before window_start, so the window's first poll does not stand in for the polls before it")
+    }
+    present_until <- min(as.Date(polls$date)) + 1
+  }
+  polls |>
     dplyr::summarise(first_nonzero = min(as.Date(date)), .by = flokkur) |>
     dplyr::mutate(
       entry_epoch = epoch_of(first_nonzero, elections),
-      newcomer = first_nonzero >= as.Date(window_start)
+      newcomer = first_nonzero >= present_until
     ) |>
     dplyr::arrange(first_nonzero, flokkur)
 }

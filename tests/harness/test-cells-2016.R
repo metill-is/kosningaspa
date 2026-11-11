@@ -1,13 +1,18 @@
 box::use(
   R / harness / anchors[fold_anchor],
-  R / harness / availability[excluded_near, merge_same_day_polls, read_polling],
+  R / harness / availability[excluded_near, read_polling, with_older_polls],
   R / harness / constants[ELECTION_HOUSE, KJORDAEMI, window_elections, window_start],
-  R / harness / info_set[info_set, read_inputs, validate_inputs],
-  R / harness / tables[valid_votes]
+  R / harness / info_set[cell_polls, info_set, read_inputs, validate_inputs],
+  R / harness / older_polls[read_older_polls],
+  R / harness / tables[entry_table, valid_votes]
 )
 E16 <- as.Date("2016-10-29")
-START16 <- as.Date("2013-04-27")
+START16 <- as.Date("2012-07-01")
+ANCHOR16 <- as.Date("2013-04-27")
 DAYS16 <- as.Date(c("2016-05-02", "2016-09-12", "2016-10-15", "2016-10-28"))
+# The snapshot keys (date and house) that the older polls table's replacement polls name.
+REPLACED16 <- c("2013-01-09 MMR", "2013-05-16 MMR", "2014-03-30 MMR", "2014-05-08 MMR", "2014-06-20 MMR")
+older16 <- read_older_polls()
 FRETT16 <- "Fr\u00e9ttabla\u00f0i\u00f0, St\u00f6\u00f0 2 og V\u00edsir"
 FEL16 <- "F\u00e9lagsv\u00edsindastofnun"
 inp <- if (snapshot_present()) read_inputs()
@@ -45,41 +50,41 @@ TARGET_DIGESTS <- tibble::tribble(
   "2024-11-30", "2024-11-29", "4cc4187ed09d0f903a089b367eb89caad10f4f41ea309001a3d5eee93f253037"
 )
 
-test_that("2016's window opens at 2013-04-27 with 2013 and 2016 as its elections, and every other window is as before (a global window moved, which would change every finished run's data)", {
+test_that("2016's window opens on 2012-07-01, ten months before the 2013 election, with 2013 and 2016 as its elections, and every other window is as before (a window still opening at the 2013 election, which leaves it no poll before that election, or a global window moved, which would change every finished run's data)", {
   expect_identical(window_start(E16), START16)
-  expect_identical(window_elections(E16), as.Date(c("2013-04-27", "2016-10-29")))
+  expect_identical(window_elections(E16), c(ANCHOR16, E16))
   expect_identical(WINDOW_START, as.Date("2016-01-01"))
   expect_identical(ELECTIONS, as.Date(c("2016-10-29", "2017-10-28", "2021-09-25", "2024-11-30")))
   others <- ELECTIONS[-1]
   expect_identical(window_start(others), rep(WINDOW_START, 3))
   for (E in format(others)) expect_identical(window_elections(E), ELECTIONS, label = E)
-  expect_identical(window_start(c("2024-11-30", "2016-10-29")), as.Date(c("2016-01-01", "2013-04-27")))
+  expect_identical(window_start(c("2024-11-30", "2016-10-29")), as.Date(c("2016-01-01", "2012-07-01")))
   expect_identical(min(window_start(ELECTIONS)), START16)
   expect_error(window_start("2013-04-27"), "not a window election: 2013-04-27", fixed = TRUE)
   expect_error(window_elections(ELECTIONS), "E must be one date", fixed = TRUE)
 })
 
-test_that("each 2016 forecast day builds and validates, reads no poll before 2013-04-27 or past F, and takes its previous results from the 2013 anchor (a cell that silently reads no previous result, or 2016's own)", {
+test_that("each 2016 forecast day builds and validates, reads no poll before 2012-07-01 or past F, and takes its previous results from the 2013 anchor (a cell that silently reads no previous result, or 2016's own)", {
   skip_without_snapshot()
   anchor <- fold_anchor(inp$anchor_2013)
   for (x in cells16) {
     lab <- format(x$F)
     expect_no_error(validate_inputs(x))
     expect_identical(x$window_start, START16)
-    expect_identical(x$elections, as.Date(c("2013-04-27", "2016-10-29")))
+    expect_identical(x$elections, c(ANCHOR16, E16))
     polls <- rbind(x$polls_nat[c("date", "available_from")], x$polls_kd[c("date", "available_from")])
     expect_true(all(polls$date >= START16), label = lab)
     expect_true(all(polls$available_from <= x$F), label = lab)
-    expect_identical(unique(x$results$election), START16)
+    expect_identical(unique(x$results$election), ANCHOR16)
     expect_setequal(x$results$kjordaemi, KJORDAEMI$kjordaemi)
     expect_equal(sum(x$results$votes), 189023)
     expect_equal(x$results, anchor)
-    expect_equal(x$valid_votes_open, valid_votes(anchor, START16))
+    expect_equal(x$valid_votes_open, valid_votes(anchor, ANCHOR16))
     expect_equal(sum(x$valid_votes_open$votes), 189023)
     # WHY: the polling data hold no 2013 Kosning row, so info_set() builds one from the anchor
     # for R0; without it R0 fits a 2016 cell with no national 2013 result.
     k <- x$kosning_nat
-    expect_identical(unique(k$date), START16, label = lab)
+    expect_identical(unique(k$date), ANCHOR16, label = lab)
     expect_identical(unique(k$fyrirtaeki), ELECTION_HOUSE, label = lab)
     expect_identical(anyDuplicated(k$flokkur), 0L, label = lab)
     expect_setequal(k$flokkur, x$parties)
@@ -87,60 +92,118 @@ test_that("each 2016 forecast day builds and validates, reads no poll before 201
   }
 })
 
-test_that("each 2016 cell admits every national poll the snapshot dates from 2013-04-27 to 2015-12-31 (a window cut at 2016-01-01, or one that drops the early polls)", {
+# The national rows of `rows` dated before 2016, for `parties`, sorted; and the poll key of each row.
+early_rows <- function(rows, parties) {
+  rows <- rows[rows$date < WINDOW_START & rows$fyrirtaeki != ELECTION_HOUSE & rows$flokkur %in% parties, c("date", "fyrirtaeki", "flokkur", "n")]
+  rows[order(rows$date, rows$fyrirtaeki, match(rows$flokkur, POLL_PARTIES), method = "radix"), ]
+}
+poll_key <- function(rows) paste(format(rows$date), rows$fyrirtaeki)
+
+test_that("each 2016 cell reads every poll of the older polls table with the table's counts, replacements included, the snapshot's other polls before 2016 with their own, no row of a replaced snapshot key and no poll twice (a misdated or doubled MMR row read beside its replacement, a table poll dropped, or a poll read twice)", {
   skip_without_snapshot()
   raw <- read_polling()
-  early <- dplyr::distinct(raw[raw$date >= START16 & raw$date < WINDOW_START & raw$fyrirtaeki != ELECTION_HOUSE, ], date, fyrirtaeki)
-  expect_identical(nrow(early), 57L)
-  key <- function(rows) sort(unique(paste(format(rows$date), rows$fyrirtaeki)), method = "radix")
+  polls <- dplyr::distinct(older16, poll_id, date, fyrirtaeki, replaces)
+  expect_identical(nrow(polls), 77L)
+  expect_identical(sum(!is.na(polls$replaces)), 6L)
+  expect_identical(sort(unique(paste(format(polls$replaces), polls$fyrirtaeki)[!is.na(polls$replaces)]), method = "radix"), REPLACED16)
+  snap <- raw[!poll_key(raw) %in% REPLACED16, ]
+  expect_length(unique(poll_key(early_rows(raw, POLL_PARTIES))), 58)
+  expect_length(unique(poll_key(early_rows(snap, POLL_PARTIES))), 53)
   for (x in cells16) {
-    expect_identical(key(x$polls_nat[x$polls_nat$date < WINDOW_START, ]), key(early), label = format(x$F))
+    lab <- format(x$F)
+    got <- early_rows(x$polls_nat, x$parties)
+    expect_identical(anyDuplicated(got[c("date", "fyrirtaeki", "flokkur")]), 0L, label = lab)
+    from_table <- poll_key(got) %in% poll_key(polls)
+    expect_setequal(unique(poll_key(got)[from_table]), poll_key(polls))
+    expect_equal(got[from_table, ], early_rows(older16, x$parties), ignore_attr = TRUE, label = lab)
+    expect_equal(got[!from_table, ], early_rows(snap, x$parties), ignore_attr = TRUE, label = lab)
+    expect_false("2013-01-09 MMR" %in% poll_key(got), label = lab)
   }
 })
 
-test_that("MMR's two polls keyed 2013-05-16 enter a 2016 cell as one poll whose n per party is the sum of the two (a duplicate key that stops the build, or a half dropped)", {
+test_that("each 2016 cell admits 40 national polls dated before the 2013 election, all from the older polls table: Gallup 13, MMR 15, Frettabladid 7 and Felagsvisindastofnun 5 (a window still opening at the election, which leaves that election no poll before it)", {
   skip_without_snapshot()
-  raw <- read_polling()
-  halves <- raw[raw$date == as.Date("2013-05-16") & raw$fyrirtaeki == "MMR", ]
-  expect_identical(nrow(halves), 20L)
-  expect_true(all(table(halves$flokkur) == 2))
-  sums <- c(tapply(halves$n, halves$flokkur, sum))
+  want <- stats::setNames(c(5L, 7L, 13L, 15L), c(FEL16, FRETT16, "Gallup", "MMR"))
   for (x in cells16) {
-    m <- x$polls_nat[x$polls_nat$date == as.Date("2013-05-16") & x$polls_nat$fyrirtaeki == "MMR", ]
-    expect_identical(anyDuplicated(m$flokkur), 0L)
-    expect_identical(m$flokkur, x$parties)
-    expect_equal(m$n, unname(sums[m$flokkur]))
-    expect_equal(sum(m$n), sum(halves$n))
+    pre <- dplyr::distinct(x$polls_nat[x$polls_nat$date < ANCHOR16, ], date, fyrirtaeki)
+    expect_identical(vapply(names(want), \(h) sum(pre$fyrirtaeki == h), integer(1)), want, label = format(x$F))
+    expect_true(all(poll_key(pre) %in% poll_key(older16)), label = format(x$F))
   }
-  av <- inp$availability[inp$availability$date == as.Date("2013-05-16") & inp$availability$fyrirtaeki == "MMR", ]
-  expect_identical(nrow(av), 1L)
 })
 
-test_that("the merge sums only same-day polls dated before 2016, and stops on polls that report different parties (a merge that reaches the window's rows, or sums unlike polls)", {
+test_that("MMR's doubled key 2013-05-16 enters a 2016 cell as the table's two polls of 17 May and 18 June 2013, each with its own row per party and its own availability row (two polls summed under one key, or read beside their replacements)", {
+  skip_without_snapshot()
+  two <- older16[older16$replaces %in% as.Date("2013-05-16"), ]
+  expect_identical(sort(unique(two$poll_id)), c("M-2013-05-16", "M-2013-06-17"))
+  for (x in cells16) {
+    for (id in unique(two$poll_id)) {
+      t <- two[two$poll_id == id & two$flokkur %in% x$parties, ]
+      m <- x$polls_nat[x$polls_nat$date == t$date[1] & x$polls_nat$fyrirtaeki == "MMR", ]
+      expect_identical(m$flokkur, x$parties, label = id)
+      expect_equal(m$n, t$n[match(m$flokkur, t$flokkur)], label = id)
+    }
+  }
+  av <- inp$availability[inp$availability$fyrirtaeki == "MMR" & inp$availability$date %in% unique(two$date), ]
+  expect_identical(av$date, sort(unique(two$date)))
+  expect_identical(av$rule, rep("older_polls", 2))
+  expect_identical(av$available_from, av$fieldwork_end + 1)
+})
+
+test_that("with_older_polls drops the rows of each replaced key and adds the table's, and stops on a table poll from 2016, two table polls on one key, a replaced key naming no poll, or a table poll on a kept poll's key (a replacement read beside the row it replaces, or a snapshot row corrected by a refresh read twice)", {
   p <- tibble::tibble(
-    date = as.Date(rep(c("2013-05-16", "2016-03-01"), c(4, 2))), fyrirtaeki = "H",
-    flokkur = c("A", "B", "A", "B", "A", "A"), n = c(1, 2, 3, 4, 5, 6), lokadagur = "NA"
+    date = as.Date(rep(c("2013-01-09", "2013-06-01", "2016-03-01"), each = 2)), fyrirtaeki = "H",
+    flokkur = rep(c("A", "B"), 3), n = c(1, 2, 3, 4, 5, 6), lokadagur = "NA"
   )
-  out <- merge_same_day_polls(p)
-  expect_identical(out$flokkur, c("A", "B", "A", "A"))
-  expect_equal(out$n, c(4, 6, 5, 6))
-  expect_identical(out[3:4, ], p[5:6, ])
-  expect_identical(merge_same_day_polls(p[c(1, 2, 5, 6), ]), p[c(1, 2, 5, 6), ])
-  q <- p[1:4, ]
-  q$n[3] <- 0
-  expect_error(merge_same_day_polls(q), "same-day polls by one house report different parties: 2013-05-16 H", fixed = TRUE)
+  o <- tibble::tibble(
+    date = as.Date(rep(c("2013-07-10", "2012-08-01"), each = 2)), fyrirtaeki = "H", flokkur = rep(c("A", "B"), 2),
+    n = c(10, 20, 30, 40), poll_id = rep(c("H1", "H2"), each = 2), replaces = as.Date(rep(c("2013-01-09", NA), each = 2))
+  )
+  out <- with_older_polls(p, o)
+  expect_identical(out[1:4, ], p[3:6, ])
+  expect_identical(out$date[5:8], o$date)
+  expect_equal(out$n, c(3, 4, 5, 6, 10, 20, 30, 40))
+  expect_identical(out$lokadagur, c(rep("NA", 4), rep(NA_character_, 4)))
+  late <- o
+  late$date[3:4] <- as.Date("2016-01-01")
+  expect_error(with_older_polls(p, late), "the older polls table holds polls dated from 2016-01-01: H2", fixed = TRUE)
+  same <- o
+  same$date[3:4] <- as.Date("2013-07-10")
+  expect_error(with_older_polls(p, same), "older polls share a date and house: 2013-07-10 H", fixed = TRUE)
+  gone <- o
+  gone$replaces[1:2] <- as.Date("2013-01-10")
+  expect_error(with_older_polls(p, gone), "replaced key(s) naming no poll: 2013-01-10 H", fixed = TRUE)
+  clash <- o
+  clash$date[3:4] <- as.Date("2013-06-01")
+  expect_error(with_older_polls(p, clash), "older poll(s) with the date and house of a poll they do not replace: 2013-06-01 H", fixed = TRUE)
 })
 
-test_that("a 2016 cell numbers entry epochs from 2013, Vi\u00f0reisn and Flokkur f\u00f3lksins in epoch 2 and the six older parties in epoch 1, while a 2024 cell keeps the committed epochs (epochs counted from the wrong elections)", {
+test_that("a cell's national polls stop on a poll that lists a party twice (two polls under one key read as one, as the snapshot's MMR 2013-05-16 would be)", {
+  nat <- tibble::tibble(date = as.Date("2013-05-16"), fyrirtaeki = "H", flokkur = rep(POLL_PARTIES[c(1, 10)], 2), n = c(1, 2, 3, 4))
+  kd <- tibble::tibble(date = as.Date(character()), fyrirtaeki = character(), flokkur = character(), kjordaemi = character(), n = numeric())
+  av <- tibble::tibble(
+    level = "national", date = as.Date("2013-05-16"), fyrirtaeki = "H", fieldwork_end = as.Date("2013-05-17"),
+    available_from = as.Date("2013-05-18"), rule = "older_polls"
+  )
+  expect_error(cell_polls(E16, DAYS16[1], nat, kd, av, START16), "national poll(s) listing a party twice: H 2013-05-16", fixed = TRUE)
+  expect_identical(nrow(cell_polls(E16, DAYS16[1], nat[1:2, ], kd, av, START16)$polls_nat), 2L)
+})
+
+test_that("a 2016 cell takes its entry dates from the polls it reads and numbers epochs from 2013: the five older lists present from the window's first poll, Piratar entering with its first reported share in the older polls table, Vidreisn and Flokkur folksins in epoch 2, while a 2024 cell keeps the committed table (an entry date taken from the misdated snapshot row, epochs counted from the wrong elections, or every party a newcomer for want of a poll before the window)", {
   skip_without_snapshot()
+  pirates <- POLL_PARTIES[5]
+  lists5 <- POLL_PARTIES[c(1:4, 10)]
   newcomers <- POLL_PARTIES[6:7]
-  older <- POLL_PARTIES[c(1:5, 10)]
+  first_poll <- min(older16$date)
+  first_p <- min(older16$date[older16$flokkur == pirates & older16$n > 0])
+  expect_identical(c(first_poll, first_p), as.Date(c("2012-07-12", "2012-12-13")))
   for (x in cells16) {
+    lab <- format(x$F)
     e <- x$entry
     expect_setequal(e$flokkur, x$parties)
-    expect_true(all(older %in% e$flokkur), label = format(x$F))
-    expect_identical(e$entry_epoch, ifelse(e$flokkur %in% newcomers, 2L, 1L), label = format(x$F))
-    expect_identical(e$newcomer, e$flokkur %in% newcomers)
+    expect_true(all(c(lists5, pirates) %in% e$flokkur), label = lab)
+    expect_identical(e$first_nonzero[match(c(lists5, pirates), e$flokkur)], c(rep(first_poll, 5), first_p), label = lab)
+    expect_identical(e$entry_epoch, ifelse(e$flokkur %in% newcomers, 2L, 1L), label = lab)
+    expect_identical(e$newcomer, e$flokkur %in% c(pirates, newcomers), label = lab)
   }
   expect_true(all(newcomers %in% cells16[[4]]$parties))
   committed <- readr::read_csv(
@@ -152,11 +215,35 @@ test_that("a 2016 cell numbers entry epochs from 2013, Vi\u00f0reisn and Flokkur
   expect_identical(x$entry$entry_epoch[match(newcomers, x$entry$flokkur)], c(1L, 1L))
 })
 
-test_that("a 2016 cell with a poll from before 2013-04-27, or any cell whose window is not its election's, is refused (a pre-window poll admitted, or a moved window handed to the arms)", {
+test_that("entry_table with first_poll_present counts the parties of the window's first poll as present and later ones as newcomers, and stops if a poll precedes the window (old lists made newcomers for want of a poll before the window, or the stand-in used where such polls exist)", {
+  p <- tibble::tibble(
+    date = as.Date(c("2012-07-12", "2012-07-12", "2012-12-13", "2013-04-27")), fyrirtaeki = c("G", "G", "G", "Kosning"),
+    flokkur = c("A", "B", "C", "D"), n = c(5, 5, 1, 9)
+  )
+  el <- c(ANCHOR16, E16)
+  e <- entry_table(p, START16, el, first_poll_present = TRUE)
+  expect_identical(e$flokkur, c("A", "B", "C"))
+  expect_identical(e$newcomer, c(FALSE, FALSE, TRUE))
+  expect_identical(e$entry_epoch, c(1L, 1L, 1L))
+  expect_identical(entry_table(p, START16, el)$newcomer, c(TRUE, TRUE, TRUE))
+  early <- rbind(p, tibble::tibble(date = as.Date("2012-06-30"), fyrirtaeki = "G", flokkur = "A", n = 1))
+  expect_error(entry_table(early, START16, el, first_poll_present = TRUE), "a poll is dated before window_start", fixed = TRUE)
+  expect_identical(entry_table(early, START16, el)$newcomer, c(FALSE, TRUE, TRUE))
+})
+
+test_that("a 2016 cell with a poll from before 2012-07-01, a table poll admitted before it was public, or any cell whose window is not its election's, is refused (a pre-window poll admitted, a leak through the older polls table, or a moved window handed to the arms)", {
   skip_without_snapshot()
   x <- cells16[[1]]
-  x$polls_nat$date[1] <- as.Date("2013-04-26")
-  expect_error(validate_inputs(x), paste("poll before the window: national 2013-04-26", x$polls_nat$fyrirtaeki[1]), fixed = TRUE)
+  x$polls_nat$date[1] <- as.Date("2012-06-30")
+  expect_error(validate_inputs(x), paste("poll before the window: national 2012-06-30", x$polls_nat$fyrirtaeki[1]), fixed = TRUE)
+  table_poll <- cells16[[1]]$polls_nat$date == as.Date("2013-01-16") & cells16[[1]]$polls_nat$fyrirtaeki == FRETT16
+  expect_true(any(table_poll))
+  x <- cells16[[1]]
+  x$polls_nat$available_from[table_poll] <- x$F + 1
+  expect_error(validate_inputs(x), paste("poll available after F: national 2013-01-16", FRETT16), fixed = TRUE)
+  x <- cells16[[1]]
+  x$polls_nat$available_from[table_poll] <- as.Date("2013-01-16")
+  expect_error(validate_inputs(x), paste("poll available on or before its midpoint: national 2013-01-16", FRETT16), fixed = TRUE)
   x <- cells16[[1]]
   x$window_start <- WINDOW_START
   expect_error(validate_inputs(x), "window not E's: window_start 2016-01-01", fixed = TRUE)
@@ -165,7 +252,7 @@ test_that("a 2016 cell with a poll from before 2013-04-27, or any cell whose win
   expect_error(validate_inputs(x), "window not E's: elections 2016-10-29 2017-10-28 2021-09-25 2024-11-30", fixed = TRUE)
   y <- info_set("2024-11-30", "2024-11-29", inp)
   y$window_start <- START16
-  expect_error(validate_inputs(y), "window not E's: window_start 2013-04-27", fixed = TRUE)
+  expect_error(validate_inputs(y), "window not E's: window_start 2012-07-01", fixed = TRUE)
   y$window_start <- NULL
   expect_error(validate_inputs(y), "window not E's: window_start none", fixed = TRUE)
 })
@@ -217,11 +304,14 @@ test_that("each 2016 cell admits, by house, only polls first published by F, wit
     col_types = readr::cols(date = "D", published = "D", .default = "c"), progress = FALSE
   )
   pub <- pub[pub$level == "national", c("date", "fyrirtaeki", "published")]
+  # WHY: the snapshot's polls plus the table's (Felagsvisindastofnun 7, Frettabladid 17, Gallup 13, MMR 40)
+  # less the four replaced snapshot keys in the window, all MMR.
+  houses <- c(FEL16, FRETT16, "Gallup", "MMR")
   admitted <- list(
-    stats::setNames(c(38L, 29L), c("Gallup", "MMR")),
-    stats::setNames(c(1L, 42L, 33L), c(FRETT16, "Gallup", "MMR")),
-    stats::setNames(c(2L, 4L, 45L, 36L), c(FEL16, FRETT16, "Gallup", "MMR")),
-    stats::setNames(c(4L, 7L, 45L, 37L), c(FEL16, FRETT16, "Gallup", "MMR"))
+    stats::setNames(c(7L, 17L, 51L, 65L), houses),
+    stats::setNames(c(7L, 18L, 55L, 69L), houses),
+    stats::setNames(c(9L, 21L, 58L, 72L), houses),
+    stats::setNames(c(11L, 24L, 58L, 73L), houses)
   )
   # Dated by F but not admitted. Publication keeps out two polls whose fieldwork had ended: MMR
   # 2016-04-24 (ended 26 April, first published 4 May) and the kjordaemi poll of
@@ -296,4 +386,30 @@ test_that("every recorded TARGETS cell admits the polls it admitted before the 2
     d <- ADMITTED_DIGESTS[i, ]
     expect_identical(admitted_digest(info_set(d$E, d$F, inp)), d$digest, label = paste(d$E, d$F))
   }
+})
+
+# WHY: recorded on 2026-11-11 from harness/availability.csv at a6e2cf7, before the older polls were
+# read, without the national rows of the four replaced keys it held (MMR 2013-05-16, 2014-03-30,
+# 2014-05-08 and 2014-06-20): the header and its 366 other lines.
+AVAILABILITY_KEPT_DIGEST <- "ec06fd8fab47c232e6f599d861beb64e6912f4de03bfda1ecfc30384fab387ef"
+
+test_that("availability.csv keeps every row it held before the older polls but those of the replaced keys, and gives each of the table's 77 polls one row, dated by its fieldwork end and publication day, or the house fallback where it has neither (a snapshot row moved, a replaced row left in, or a table poll admitted before it was public)", {
+  lines <- readLines(root("harness", "availability.csv"), encoding = "UTF-8")
+  av <- readr::read_csv(I(lines), col_types = readr::cols(date = "D", fieldwork_end = "D", available_from = "D", .default = "c"), progress = FALSE)
+  polls <- dplyr::distinct(older16, date, fyrirtaeki, fieldwork_end, published)
+  expect_identical(nrow(polls), 77L)
+  from_table <- av$level == "national" & poll_key(av) %in% poll_key(polls)
+  expect_identical(sum(from_table), 77L)
+  kept <- c(lines[1], lines[-1][!from_table])
+  expect_identical(digest::digest(paste(kept, collapse = "\n"), algo = "sha256", serialize = FALSE), AVAILABILITY_KEPT_DIGEST)
+  expect_false(any(poll_key(av[av$level == "national", ]) %in% setdiff(REPLACED16, poll_key(polls))))
+  t <- av[from_table, ]
+  t <- t[match(poll_key(polls), poll_key(t)), ]
+  known <- !is.na(polls$fieldwork_end) | !is.na(polls$published)
+  expect_identical(sum(!known), 2L)
+  expect_identical(t$available_from[known], pmax(polls$fieldwork_end + 1, polls$published, na.rm = TRUE)[known])
+  rule <- ifelse(is.na(polls$fieldwork_end), "published", ifelse(!is.na(polls$published) & polls$published > polls$fieldwork_end + 1, "published", "older_polls"))
+  expect_identical(t$rule[known], rule[known])
+  expect_identical(t$rule[!known], rep("house_max", 2))
+  expect_true(all(t$available_from > t$date & t$available_from < as.Date("2016-01-01")))
 })

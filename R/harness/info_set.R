@@ -147,9 +147,9 @@ apply_n_corrections <- function(polling, constituency, corrections) {
 #' @return a list:
 #'   - `polling`, `constituency`: `read_polling()` and `read_constituency()`, the
 #'     snapshot's national and kjördæmi poll rows as availability.R reads them, after
-#'     `apply_n_corrections()` with `harness/sources/poll_n_corrections.csv`; the polls
-#'     one house holds under one date stay apart here, and `cell_polls()` merges them
-#'     (`merge_same_day_polls()`);
+#'     `apply_n_corrections()` with `harness/sources/poll_n_corrections.csv`;
+#'   - `older_polls`: `read_older_polls()`, the older polls table, which `info_set()`
+#'     merges into `polling` with `with_older_polls()`;
 #'   - `fundamentals`: the snapshot's fundamentals table, after
 #'     `apply_fundamentals_corrections()` with `harness/sources/fundamentals_corrections.csv`;
 #'   - `economy`: the snapshot's economy table;
@@ -158,9 +158,9 @@ apply_n_corrections <- function(polling, constituency, corrections) {
 #'   - `anchor_2013`: `build_anchor_2013()`, the 2013 election, the election before
 #'     2016-10-29, which `truth` does not hold;
 #'   - `availability`: `poll_availability()` of the snapshot's polls as they are, before
-#'     the n corrections, so it is the table `write_availability()` commits;
-#'   - `entry`: `entry_table()` of the snapshot's national polls as they are, through
-#'     `merge_same_day_polls()`;
+#'     the n corrections, with `older_polls` merged in, so it is the table
+#'     `write_availability()` commits;
+#'   - `entry`: `entry_table()` of the snapshot's national polls as they are;
 #'   - `houses`: `read_houses()`; `coalitions`: `read_coalitions()`;
 #'   - `n_corrections`, `fundamentals_corrections`: `read_n_corrections()` and
 #'     `read_fundamentals_corrections()`.
@@ -176,19 +176,21 @@ read_inputs <- function() {
   }
   box::use(
     R / harness / anchors[build_anchor_2013],
-    R / harness / availability[merge_same_day_polls, poll_availability, read_constituency, read_polling],
+    R / harness / availability[poll_availability, read_constituency, read_polling],
     R / harness / inputs[snapshot_file, verify_snapshot],
+    R / harness / older_polls[read_older_polls],
     R / harness / tables[entry_table, read_coalitions, read_houses],
     R / harness / truth[build_truth]
   )
   verify_snapshot()
   polling <- read_polling()
   constituency <- read_constituency()
+  older_polls <- read_older_polls()
   # WHY: availability and entry come from the snapshot as it is, so the committed
   # availability.csv and entry_table.csv stay rebuilds of it; only the rows a cell reads
   # carry the n corrections.
-  availability <- poll_availability(polling, constituency)
-  entry <- entry_table(merge_same_day_polls(polling))
+  availability <- poll_availability(polling, constituency, older = older_polls)
+  entry <- entry_table(polling)
   n_corrections <- read_n_corrections()
   fixed <- apply_n_corrections(polling, constituency, n_corrections)
   fund <- readr::read_csv(snapshot_file("fundamentals_data"), show_col_types = FALSE, progress = FALSE)
@@ -196,6 +198,7 @@ read_inputs <- function() {
   list(
     polling = fixed$polling,
     constituency = fixed$constituency,
+    older_polls = older_polls,
     fundamentals = apply_fundamentals_corrections(fund, fundamentals_corrections),
     economy = readr::read_csv(snapshot_file("economy_data"), show_col_types = FALSE, progress = FALSE),
     economy_release = read_economy_release(),
@@ -228,8 +231,7 @@ keep_parties <- function(rows, parties, what) {
 #' @param polling,constituency national and kjördæmi poll rows, as `read_inputs()`
 #' @param availability a `poll_availability()` table
 #' @param window_start the first day of the cell's window, `window_start(E)`
-#' @return `list(parties, polls_nat, polls_kd, kosning_nat)`, the national rows read
-#'   through `merge_same_day_polls()`:
+#' @return `list(parties, polls_nat, polls_kd, kosning_nat)`:
 #'   - `parties`: the `POLL_PARTIES` (in that order) with n > 0 in an admitted national
 #'     poll: dated from `window_start`, not `Kosning`, `available_from <= F`;
 #'   - `polls_nat`: the rows of those polls for `parties`, a tibble (date, fyrirtaeki,
@@ -240,15 +242,13 @@ keep_parties <- function(rows, parties, what) {
 #'     for `parties`, with polls_nat's columns.
 #'
 #'   Rows are sorted by date, fyrirtaeki, `KJORDAEMI` order and `POLL_PARTIES` order. An
-#'   error if a poll dated from `window_start` has no `availability` row, or if keeping
-#'   only `parties` would drop a national, kjördæmi or `Kosning` row with n > 0.
+#'   error if a national poll dated from `window_start` lists a party twice, if a poll
+#'   dated from `window_start` has no `availability` row, or if keeping only `parties`
+#'   would drop a national, kjördæmi or `Kosning` row with n > 0.
 #' @export
 cell_polls <- function(E, F, polling, constituency, availability, window_start = WINDOW_START) {
   # WHY: the default argument is a promise, forced after this import.
-  box::use(
-    R / harness / availability[merge_same_day_polls],
-    R / harness / constants[ELECTION_HOUSE, KJORDAEMI, POLL_PARTIES, WINDOW_START]
-  )
+  box::use(R / harness / constants[ELECTION_HOUSE, KJORDAEMI, POLL_PARTIES, WINDOW_START])
   with_availability <- function(rows, level) {
     av <- availability[availability$level == level, c("date", "fyrirtaeki", "available_from")]
     none <- dplyr::distinct(dplyr::anti_join(rows, av, by = c("date", "fyrirtaeki")), date, fyrirtaeki)
@@ -266,8 +266,13 @@ cell_polls <- function(E, F, polling, constituency, availability, window_start =
   nat_cols <- c("date", "fyrirtaeki", "flokkur", "n", "available_from")
   kd_cols <- c("date", "fyrirtaeki", "kjordaemi", "flokkur", "n", "available_from")
 
-  polling <- merge_same_day_polls(polling)
-  nat <- with_availability(polling[polling$date >= window_start, ], "national")
+  nat <- polling[polling$date >= window_start, ]
+  # WHY: two polls under one key, as the snapshot's MMR 2013-05-16 holds, would read as one poll listing each party twice.
+  twice <- duplicated(nat[c("date", "fyrirtaeki", "flokkur")])
+  if (any(twice)) {
+    stop("national poll(s) listing a party twice: ", paste(unique(paste(nat$fyrirtaeki[twice], format(nat$date[twice]))), collapse = "; "))
+  }
+  nat <- with_availability(nat, "national")
   kd <- with_availability(
     constituency[constituency$date >= window_start & constituency$fyrirtaeki != ELECTION_HOUSE, ], "kjordaemi"
   )
@@ -336,7 +341,9 @@ cell_economy <- function(E, F, release, econ) {
 #'   - `window_start`, `elections`: `window_start(E)` and `window_elections(E)`, the first
 #'     day of E's window and the elections that close its epochs;
 #'   - `parties`, `polls_nat`, `polls_kd`, `kosning_nat`: as `cell_polls()` from
-#'     `window_start`, with the n corrections applied; for 2016-10-29, since the polling
+#'     `window_start`, of the national polls with the n corrections applied and the older
+#'     polls table merged in (`with_older_polls()`, which changes nothing dated from
+#'     `WINDOW_START`, so only a 2016 cell reads it); for 2016-10-29, since the polling
 #'     data hold no `Kosning` row for 2013, `kosning_nat` is one row per party of `parties`
 #'     built from `anchor_national()`: date 2013-04-27, house `Kosning`, n the party's 2013
 #'     votes (189 023 in all) and `available_from` the next day;
@@ -359,7 +366,9 @@ cell_economy <- function(E, F, release, econ) {
 #'     with no list);
 #'   - `entry`: the entry table's rows for `parties`: `read_inputs()`'s, whose epochs count
 #'     from `ELECTIONS`, or, where `elections` is not `ELECTIONS` (2016-10-29),
-#'     `entry_table()` of the polls with E's `window_start` and `elections`;
+#'     `entry_table()` of the national polls above with E's `window_start` and `elections`,
+#'     the parties of the window's first poll counting as present at its start, since no
+#'     poll precedes it;
 #'   - `houses`: the house table's rows for the houses with an admitted poll
 #'     (`polls_nat` or `polls_kd`) and for `ELECTION_HOUSE`;
 #'   - `availability`: the `poll_availability()` rows of the polls in `polls_nat` and
@@ -373,7 +382,7 @@ info_set <- function(E, F, inp = read_inputs()) {
   box::use(
     R / election_utils[layout_for],
     R / harness / anchors[anchor_national, fold_anchor],
-    R / harness / availability[merge_same_day_polls],
+    R / harness / availability[with_older_polls],
     R / harness / constants[ELECTION_HOUSE, ELECTIONS, POLL_PARTIES, previous_election, window_elections, window_start],
     R / harness / fundamentals[fundamentals_inputs],
     R / harness / tables[coalition_event, entry_table, expected_valid_votes, valid_votes],
@@ -392,7 +401,8 @@ info_set <- function(E, F, inp = read_inputs()) {
   economy <- cell_economy(E, F, inp$economy_release, inp$economy)
   start <- window_start(E)
   elections <- window_elections(E)
-  polls <- cell_polls(E, F, inp$polling, inp$constituency, inp$availability, start)
+  polling <- with_older_polls(inp$polling, inp$older_polls)
+  polls <- cell_polls(E, F, polling, inp$constituency, inp$availability, start)
   parties <- polls$parties
 
   coalitions <- inp$coalitions[inp$coalitions$from <= F, ]
@@ -421,8 +431,9 @@ info_set <- function(E, F, inp = read_inputs()) {
     )
     kosning_nat <- dplyr::bind_rows(keep_parties(row, parties, "Kosning"), kosning_nat)
   }
-  # WHY: the committed entry table numbers epochs from ELECTIONS; another window numbers its own.
-  entry <- if (identical(elections, ELECTIONS)) inp$entry else entry_table(merge_same_day_polls(inp$polling), start, elections)
+  # WHY: the committed entry table numbers epochs from ELECTIONS; another window numbers its own,
+  # and the 2016 window, which no poll precedes, takes its first poll's parties as present at its start.
+  entry <- if (identical(elections, ELECTIONS)) inp$entry else entry_table(polling, start, elections, first_poll_present = TRUE)
   window <- ELECTIONS[ELECTIONS <= E]
   prev_shares <- dplyr::bind_rows(lapply(seq_along(window), \(i) {
     s <- prev_national_shares(window[i], inp$truth, inp$fundamentals)

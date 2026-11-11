@@ -1,6 +1,6 @@
 # Older polls
 
-`harness/older_polls.csv` holds national polls of July 2012 to December 2015 that the harness snapshot lacks, for the 2016 cells, whose window opens at the 2013 election. The snapshot holds no poll from before that election and, before 2016, only Gallup's and MMR's. Nothing reads the table yet: a later stage decides how `info_set()` takes it, so it changes no existing cell. Every source was retrieved on 11 November 2026.
+`harness/older_polls.csv` holds national polls of July 2012 to December 2015 that the harness snapshot lacks, for the 2016 cells, whose window opens on 2012-07-01, about ten months before the 2013 election. The snapshot holds no poll from before that election and, before 2016, only Gallup's and MMR's. `info_set()` adds the table's polls to the snapshot's and leaves out the snapshot rows that a table poll replaces; the table holds nothing dated from 2016-01-01, so it changes no cell of 2017, 2021 or 2024. Every source was retrieved on 11 November 2026.
 
 ## Commands
 

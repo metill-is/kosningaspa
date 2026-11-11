@@ -6,7 +6,8 @@
 #   harness/sources/seats_2021_official.csv   harness/sources/althingi/seats_2021_official.R
 #   harness/truth/elections_official.csv      write_truth()
 #   harness/truth/anchor_2013.csv             write_anchor_2013()
-#   harness/availability.csv and availability_report.md   write_availability()
+#   harness/availability.csv and availability_report.md   write_availability(), which also reads
+#                                                         harness/older_polls.csv
 #   harness/entry_table.csv                   write_entry_table()
 # It then prints the polls per availability rule and each forecast cell's admitted polls.
 # It does not rebuild the Wikipedia fieldwork tables (their parser needs page revisions
@@ -19,10 +20,11 @@ stopifnot("run from the project root (no R/harness/constants.R here)" = file.exi
 options(box.path = normalizePath("."), width = 120)
 box::use(
   R / harness / anchors[write_anchor_2013],
-  R / harness / availability[availability_counts, read_constituency, read_polling, write_availability],
+  R / harness / availability[availability_counts, read_constituency, read_polling, with_older_polls, write_availability],
   R / harness / constants[ELECTION_HOUSE, ELECTIONS, TARGETS, window_start],
   R / harness / info_set[info_set, read_inputs, validate_inputs],
   R / harness / inputs[verify_snapshot],
+  R / harness / older_polls[read_older_polls],
   R / harness / tables[write_entry_table],
   R / harness / truth[write_truth]
 )
@@ -44,10 +46,11 @@ cat(
   "harness/availability.csv, harness/availability_report.md, harness/entry_table.csv\n"
 )
 
-# WHY: availability starts at the earliest window start, so the polls are counted from it too.
+# WHY: availability starts at the earliest window start and reads the older polls table, so the polls are counted the same way.
 start <- min(window_start(ELECTIONS))
+national <- with_older_polls(read_polling(), read_older_polls())
 polls <- dplyr::bind_rows(
-  national = dplyr::distinct(dplyr::filter(read_polling(), date >= start), date, fyrirtaeki),
+  national = dplyr::distinct(dplyr::filter(national, date >= start), date, fyrirtaeki),
   kjordaemi = dplyr::distinct(
     dplyr::filter(read_constituency(), date >= start, fyrirtaeki != ELECTION_HOUSE), date, fyrirtaeki
   ),
@@ -59,7 +62,7 @@ show(counts)
 per_level <- c(national = sum(polls$level == "national"), kjordaemi = sum(polls$level == "kjordaemi"))
 counted <- as.vector(tapply(counts$n, counts$level, sum)[names(per_level)])
 cat(sprintf(
-  "Counts sum to %d; the snapshot holds %d polls from %s (national %d, kjordaemi %d)\n",
+  "Counts sum to %d; the snapshot and harness/older_polls.csv hold %d polls from %s (national %d, kjordaemi %d)\n",
   sum(counts$n), nrow(polls), format(start), per_level[["national"]], per_level[["kjordaemi"]]
 ))
 stopifnot("the availability counts do not sum to the polls" = identical(counted, unname(per_level)))

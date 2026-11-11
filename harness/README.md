@@ -12,7 +12,10 @@ The harness never reads the live `data/`. `snapshot_inputs(src_root)` (`R/harnes
 copies the files in `SNAPSHOT_FILES` from the main checkout into `harness/snapshot/`
 (gitignored) and writes `harness/snapshot_manifest.csv` (committed). Every read goes through
 `snapshot_file(name)`, which checks the file's sha256 against the manifest; `verify_snapshot()`
-checks them all.
+checks them all. The 2016 cells, whose window opens on 2012-07-01, also read
+`harness/older_polls.csv`, the national polls of July 2012 to December 2015 that the snapshot
+lacks, in place of the snapshot rows its replacement polls name (`with_older_polls()` in
+`R/harness/availability.R`; `harness/sources/older_polls/README.md`).
 
 To refresh it, delete `harness/snapshot/` by hand (`snapshot_inputs()` refuses an existing
 one), re-run it from the project root, and commit the new manifest:
@@ -23,8 +26,15 @@ box::use(R/harness/inputs[snapshot_inputs])
 snapshot_inputs("<path to the main checkout>")
 ```
 
-Then rebuild the generated tables, which reads the snapshot and rewrites
-`harness/truth/elections_official.csv`, `harness/availability.csv`,
+Then rebuild the older polls table's extract of the snapshot, and the table, which reads it:
+
+```
+python3 -I harness/sources/older_polls/build.py --snapshot-sizes
+python3 -I harness/sources/older_polls/build.py
+```
+
+Then rebuild the generated tables, which reads the snapshot and `harness/older_polls.csv` and
+rewrites `harness/truth/elections_official.csv`, `harness/availability.csv`,
 `harness/availability_report.md`, `harness/entry_table.csv` and
 `harness/sources/seats_2021_official.csv`; on unchanged inputs `git status harness/` stays
 clean:
