@@ -33,7 +33,7 @@ dir.create(out, recursive = TRUE, showWarnings = FALSE)
 
 KEY <- c(
   "sigma", "Omega", "phi", "mu_phi", "sigma_phi", "gamma", "mu_gamma", "sigma_gamma", "tau_mu", "tau_house",
-  "tau_post", "pi_smooth"
+  "pi_smooth"
 )
 
 read_fit <- function(dir) {
