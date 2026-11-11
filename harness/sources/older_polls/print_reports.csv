@@ -1,0 +1,609 @@
+report,house,figure,value,qualifier,paper,issue_date,page_no,page_id
+M-2010-07-12,MMR,first_print,2010-07-22,,Fréttablaðið,2010-07-22,8,5080967
+M-2010-07-12,MMR,fieldwork_start,2010-07-07,,Fréttablaðið,2010-07-22,8,5080967
+M-2010-07-12,MMR,fieldwork_end,2010-07-12,,Fréttablaðið,2010-07-22,8,5080967
+M-2010-07-12,MMR,n_answering,859,,Fréttablaðið,2010-07-22,8,5080967
+G-2010-08,Gallup,first_print,2010-09-02,,Fréttablaðið,2010-09-02,4,5083385
+G-2010-08,Gallup,fieldwork_start,2010-07-28,,Morgunblaðið,2010-09-02,2,5337127
+G-2010-08,Gallup,fieldwork_end,2010-08-29,,Morgunblaðið,2010-09-02,2,5337127
+G-2010-08,Gallup,sample,6300,,Fréttablaðið,2010-09-02,4,5083385
+G-2010-08,Gallup,response_rate,63.3,,Fréttablaðið,2010-09-02,4,5083385
+G-2010-08,Gallup,D,35,,Fréttablaðið,2010-09-02,4,5083385
+G-2010-08,Gallup,B,12,,Morgunblaðið,2010-09-02,2,5337127
+G-2010-08,Gallup,S,25,,Fréttablaðið,2010-09-02,4,5083385
+G-2010-08,Gallup,V,21,,Fréttablaðið,2010-09-02,4,5083385
+M-2010-09-16,MMR,first_print,2010-09-18,,Morgunblaðið,2010-09-18,6,5338497
+M-2010-09-16,MMR,fieldwork_start,2010-09-14,,Morgunblaðið,2010-09-18,6,5338497
+M-2010-09-16,MMR,fieldwork_end,2010-09-16,,Morgunblaðið,2010-09-18,6,5338497
+M-2010-09-16,MMR,n_answering,854,,Morgunblaðið,2010-09-18,6,5338497
+M-2010-10-08,MMR,first_print,2010-10-16,,Fréttablaðið,2010-10-16,4,5085697
+M-2010-10-08,MMR,fieldwork_start,2010-10-05,,Fréttablaðið,2010-10-16,4,5085697
+M-2010-10-08,MMR,fieldwork_end,2010-10-08,,Fréttablaðið,2010-10-16,4,5085697
+M-2010-10-08,MMR,n_answering,830,,Fréttablaðið,2010-10-16,4,5085697
+G-2010-11,Gallup,first_print,2010-12-02,,Fréttablaðið,2010-12-02,8,5121303
+G-2010-11,Gallup,response_rate,67,,Fréttablaðið,2010-12-02,8,5121303
+G-2010-11,Gallup,n_answering,6800,approximate,Fréttablaðið,2010-12-02,8,5121303
+G-2010-11,Gallup,D,34,chart,Fréttablaðið,2010-12-02,8,5121303
+G-2010-11,Gallup,B,13,,Fréttablaðið,2010-12-02,8,5121303
+G-2010-11,Gallup,S,22,just under,Fréttablaðið,2010-12-02,8,5121303
+G-2010-11,Gallup,V,18,just under,Fréttablaðið,2010-12-02,8,5121303
+M-2010-11-05,MMR,first_print,2010-11-12,,Dagblaðið Vísir - DV,2010-11-12,4,6377196
+M-2010-11-05,MMR,fieldwork_start,2010-11-03,,Dagblaðið Vísir - DV,2010-11-12,4,6377196
+M-2010-11-05,MMR,fieldwork_end,2010-11-05,,Dagblaðið Vísir - DV,2010-11-12,4,6377196
+M-2010-11-05,MMR,n_answering,813,,Dagblaðið Vísir - DV,2010-11-12,4,6377196
+M-2010-12-09,MMR,first_print,2010-12-18,,Fréttablaðið,2010-12-18,38,5124121
+M-2010-12-09,MMR,fieldwork_start,2010-12-07,,Fréttablaðið,2010-12-18,38,5124121
+M-2010-12-09,MMR,fieldwork_end,2010-12-09,,Fréttablaðið,2010-12-18,38,5124121
+M-2010-12-09,MMR,n_answering,850,,Fréttablaðið,2010-12-18,38,5124121
+M-2010-12-09,MMR,D,40.4,,Fréttablaðið,2010-12-18,38,5124121
+M-2010-12-09,MMR,B,14.7,,Fréttablaðið,2010-12-18,38,5124121
+M-2010-12-09,MMR,S,20.9,,Fréttablaðið,2010-12-18,38,5124121
+M-2010-12-09,MMR,V,16.4,,Fréttablaðið,2010-12-18,38,5124121
+M-2011-01-14,MMR,first_print,2011-01-19,,Fréttablaðið,2011-01-19,8,5105881
+M-2011-01-14,MMR,fieldwork_start,2011-01-11,,Fréttablaðið,2011-01-19,8,5105881
+M-2011-01-14,MMR,fieldwork_end,2011-01-14,,Fréttablaðið,2011-01-19,8,5105881
+M-2011-01-14,MMR,n_answering,890,,Fréttablaðið,2011-01-19,8,5105881
+M-2011-02-11,MMR,first_print,2011-02-17,,Morgunblaðið,2011-02-17,4,5354040
+M-2011-02-11,MMR,fieldwork_start,2011-02-08,,Morgunblaðið,2011-02-17,4,5354040
+M-2011-02-11,MMR,fieldwork_end,2011-02-11,,Morgunblaðið,2011-02-17,4,5354040
+M-2011-02-11,MMR,n_answering,865,,Morgunblaðið,2011-02-17,4,5354040
+M-2011-02-21,MMR,first_print,2011-02-22,,Morgunblaðið,2011-02-22,2,5354302
+M-2011-02-21,MMR,fieldwork_start,2011-02-20,,Morgunblaðið,2011-02-22,2,5354302
+M-2011-02-21,MMR,fieldwork_end,2011-02-21,,Morgunblaðið,2011-02-22,2,5354302
+M-2011-02-21,MMR,n_answering,771,,Morgunblaðið,2011-02-22,2,5354302
+G-2011-03,Gallup,first_print,2011-04-04,,Morgunblaðið,2011-04-04,2,5365653
+G-2011-03,Gallup,sample,4900,,Morgunblaðið,2011-04-04,2,5365653
+G-2011-03,Gallup,D,36,just under,Morgunblaðið,2011-04-04,2,5365653
+G-2011-03,Gallup,B,13.6,,Morgunblaðið,2011-04-04,2,5365653
+G-2011-03,Gallup,S,22.4,,Morgunblaðið,2011-04-04,2,5365653
+G-2011-03,Gallup,V,16.9,,Morgunblaðið,2011-04-04,2,5365653
+M-2011-03-11,MMR,first_print,2011-03-17,,Morgunblaðið,2011-03-17,2,5361727
+M-2011-03-11,MMR,fieldwork_start,2011-03-08,,Morgunblaðið,2011-03-17,2,5361727
+M-2011-03-11,MMR,fieldwork_end,2011-03-11,,Morgunblaðið,2011-03-17,2,5361727
+M-2011-03-11,MMR,sample,902,,Fréttablaðið,2011-03-28,4,5139933
+M-2011-03-11,MMR,n_answering,902,,Dagblaðið Vísir - DV,2011-03-18,6,6379441
+M-2011-04-07,MMR,first_print,2011-04-08,,Morgunblaðið,2011-04-08,2,5365853
+M-2011-04-07,MMR,fieldwork_start,2011-04-04,,Morgunblaðið,2011-04-08,2,5365853
+M-2011-04-07,MMR,fieldwork_end,2011-04-07,,Morgunblaðið,2011-04-08,2,5365853
+M-2011-04-07,MMR,sample,944,,Morgunblaðið,2011-04-08,2,5365853
+M-2011-05-12,MMR,first_print,2011-05-27,,Fréttablaðið,2011-05-27,6,5153383
+M-2011-05-12,MMR,fieldwork_start,2011-05-09,,Fréttablaðið,2011-05-27,6,5153383
+M-2011-05-12,MMR,fieldwork_end,2011-05-12,,Fréttablaðið,2011-05-27,6,5153383
+M-2011-05-12,MMR,n_answering,837,,Fréttablaðið,2011-05-27,6,5153383
+M-2011-06-15,MMR,first_print,2011-06-22,,Dagblaðið Vísir - DV,2011-06-22,6,6386227
+M-2011-06-15,MMR,fieldwork_start,2011-06-09,,Dagblaðið Vísir - DV,2011-06-22,6,6386227
+M-2011-06-15,MMR,fieldwork_end,2011-06-15,,Dagblaðið Vísir - DV,2011-06-22,6,6386227
+M-2011-06-15,MMR,n_answering,867,,Dagblaðið Vísir - DV,2011-06-22,6,6386227
+M-2011-08-18,MMR,first_print,2012-04-30,,Dagblaðið Vísir - DV,2012-04-30,3,6382160
+M-2011-08-18,MMR,fieldwork_start,2011-08-15,,Dagblaðið Vísir - DV,2012-04-30,3,6382160
+M-2011-08-18,MMR,fieldwork_end,2011-08-18,,Dagblaðið Vísir - DV,2012-04-30,3,6382160
+M-2011-08-18,MMR,n_answering,818,,Dagblaðið Vísir - DV,2012-04-30,3,6382160
+M-2011-09-14,MMR,first_print,2011-09-16,,Dagblaðið Vísir - DV,2011-09-16,10,6387674
+M-2011-09-14,MMR,fieldwork_start,2011-09-09,,Dagblaðið Vísir - DV,2011-09-16,10,6387674
+M-2011-09-14,MMR,fieldwork_end,2011-09-14,,Dagblaðið Vísir - DV,2011-09-16,10,6387674
+M-2011-09-14,MMR,n_answering,893,,Morgunblaðið,2011-09-17,9,5377901
+G-2011-10,Gallup,first_print,2011-11-09,,Morgunblaðið,2011-11-09,18,6003383
+G-2011-10,Gallup,sample,8257,,Morgunblaðið,2011-11-09,18,6003383
+G-2011-10,Gallup,n_answering,5078,,Morgunblaðið,2011-11-09,18,6003383
+G-2011-10,Gallup,D,36,,Morgunblaðið,2011-11-09,18,6003383
+G-2011-10,Gallup,V,15,in words,Morgunblaðið,2011-11-09,18,6003383
+M-2011-11-14,MMR,first_print,2011-11-17,,Morgunblaðið,2011-11-17,9,6003666
+M-2011-11-14,MMR,fieldwork_start,2011-11-10,,Morgunblaðið,2011-11-17,9,6003666
+M-2011-11-14,MMR,fieldwork_end,2011-11-14,,Morgunblaðið,2011-11-17,9,6003666
+M-2011-11-14,MMR,n_answering,879,,Morgunblaðið,2011-11-17,9,6003666
+M-2011-11-23,MMR,first_print,2011-11-26,,Fréttablaðið,2011-11-26,10,5331033
+M-2011-11-23,MMR,fieldwork_start,2011-11-21,,Fréttablaðið,2011-11-26,10,5331033
+M-2011-11-23,MMR,fieldwork_end,2011-11-23,,Fréttablaðið,2011-11-26,10,5331033
+M-2011-11-23,MMR,n_answering,963,,Fréttablaðið,2011-11-26,10,5331033
+M-2011-12-09,MMR,first_print,2011-12-17,,Fréttablaðið,2011-12-17,40,5333221
+M-2011-12-09,MMR,fieldwork_start,2011-12-06,,Fréttablaðið,2011-12-17,40,5333221
+M-2011-12-09,MMR,fieldwork_end,2011-12-09,,Fréttablaðið,2011-12-17,40,5333221
+M-2011-12-09,MMR,n_answering,865,,Fréttablaðið,2011-12-17,40,5333221
+M-2011-12-09,MMR,D,38.5,,Fréttablaðið,2011-12-17,40,5333221
+M-2011-12-09,MMR,B,15.9,,Fréttablaðið,2011-12-17,40,5333221
+M-2011-12-09,MMR,S,18.1,,Fréttablaðið,2011-12-17,40,5333221
+M-2011-12-09,MMR,V,13,,Fréttablaðið,2011-12-17,40,5333221
+G-2012-01,Gallup,first_print,2012-02-03,,Fréttablaðið,2012-02-03,2,5764062
+G-2012-01,Gallup,D,36,,Fréttablaðið,2012-02-03,2,5764062
+G-2012-01,Gallup,B,15,in words,Fréttablaðið,2012-02-03,2,5764062
+G-2012-01,Gallup,S,22,,Fréttablaðið,2012-02-03,2,5764062
+G-2012-01,Gallup,V,14,in words,Fréttablaðið,2012-02-03,2,5764062
+M-2012-01-17,MMR,first_print,2012-03-21,,Dagblaðið Vísir - DV,2012-03-21,2,6381474
+M-2012-01-17,MMR,fieldwork_start,2012-01-12,,Dagblaðið Vísir - DV,2012-03-21,2,6381474
+M-2012-01-17,MMR,fieldwork_end,2012-01-17,,Dagblaðið Vísir - DV,2012-03-21,2,6381474
+M-2012-01-17,MMR,n_answering,855,,Dagblaðið Vísir - DV,2012-03-21,2,6381474
+G-2012-02,Gallup,first_print,2012-03-05,,Morgunblaðið,2012-03-05,12,6012789
+G-2012-02,Gallup,fieldwork_start,2012-02-02,,Dagblaðið Vísir - DV,2012-03-21,2,6381474
+G-2012-02,Gallup,fieldwork_end,2012-02-29,,Dagblaðið Vísir - DV,2012-03-21,2,6381474
+G-2012-02,Gallup,sample,5378,,Dagblaðið Vísir - DV,2012-03-21,2,6381474
+G-2012-02,Gallup,response_rate,61.7,,Dagblaðið Vísir - DV,2012-03-21,2,6381474
+G-2012-02,Gallup,D,33.3,,Morgunblaðið,2012-03-05,12,6012789
+G-2012-02,Gallup,B,13,,Morgunblaðið,2012-03-05,12,6012789
+G-2012-02,Gallup,S,18.7,,Morgunblaðið,2012-03-05,12,6012789
+G-2012-02,Gallup,V,12,,Morgunblaðið,2012-03-05,12,6012789
+G-2012-03,Gallup,first_print,2012-04-03,,Morgunblaðið,2012-04-03,2,6014815
+G-2012-03,Gallup,D,38,,Dagblaðið Vísir - DV,2012-04-04,32,6381741
+G-2012-03,Gallup,B,13,,Morgunblaðið,2012-04-03,2,6014815
+G-2012-03,Gallup,S,17,,Dagblaðið Vísir - DV,2012-04-04,32,6381741
+G-2012-03,Gallup,V,11,,Dagblaðið Vísir - DV,2012-04-04,32,6381741
+G-2012-04,Gallup,first_print,2012-05-03,,Fréttablaðið,2012-05-03,2,5768926
+G-2012-04,Gallup,sample,5400,,Fréttablaðið,2012-05-03,2,5768926
+G-2012-04,Gallup,response_rate,62,approximate,Fréttablaðið,2012-05-03,2,5768926
+G-2012-04,Gallup,D,37,,Fréttablaðið,2012-05-03,2,5768926
+G-2012-04,Gallup,B,12.5,,Fréttablaðið,2012-05-03,2,5768926
+G-2012-04,Gallup,S,18.7,,Fréttablaðið,2012-05-03,2,5768926
+G-2012-04,Gallup,V,11.5,,Fréttablaðið,2012-05-03,2,5768926
+M-2012-04-17,MMR,first_print,2012-04-27,,Fréttatíminn,2012-04-27,8,5861155
+M-2012-04-17,MMR,fieldwork_start,2012-04-12,,Fréttatíminn,2012-04-27,8,5861155
+M-2012-04-17,MMR,fieldwork_end,2012-04-17,,Fréttatíminn,2012-04-27,8,5861155
+M-2012-04-17,MMR,n_answering,870,,Fréttatíminn,2012-04-27,8,5861155
+G-2012-05,Gallup,first_print,2012-06-04,,Fréttablaðið,2012-06-04,2,5770615
+G-2012-05,Gallup,response_rate,60.9,,Fréttablaðið,2012-06-04,2,5770615
+G-2012-05,Gallup,D,39.3,,Fréttablaðið,2012-06-04,2,5770615
+G-2012-05,Gallup,B,12.9,,Fréttablaðið,2012-06-04,2,5770615
+G-2012-05,Gallup,S,17.7,,Fréttablaðið,2012-06-04,2,5770615
+G-2012-05,Gallup,V,10.4,,Fréttablaðið,2012-06-04,2,5770615
+M-2012-05-24,MMR,first_print,2012-05-26,,Fréttablaðið,2012-05-26,2,5770223
+M-2012-05-24,MMR,fieldwork_start,2012-05-21,,Fréttablaðið,2012-05-26,2,5770223
+M-2012-05-24,MMR,fieldwork_end,2012-05-24,,Fréttablaðið,2012-05-26,2,5770223
+M-2012-05-24,MMR,n_answering,856,,Fréttablaðið,2012-05-26,2,5770223
+G-2012-06,Gallup,first_print,2012-07-04,,Morgunblaðið,2012-07-04,2,6020535
+G-2012-06,Gallup,fieldwork_start,2012-05-31,,Morgunblaðið,2012-07-04,2,6020535
+G-2012-06,Gallup,fieldwork_end,2012-06-28,,Morgunblaðið,2012-07-04,2,6020535
+G-2012-06,Gallup,sample,5400,,Morgunblaðið,2012-07-04,2,6020535
+G-2012-06,Gallup,response_rate,60.2,,Morgunblaðið,2012-07-04,2,6020535
+G-2012-06,Gallup,D,38.2,,Dagblaðið Vísir - DV,2012-07-06,25,6383307
+G-2012-06,Gallup,B,12.7,,Dagblaðið Vísir - DV,2012-07-06,25,6383307
+G-2012-06,Gallup,S,18.8,,Dagblaðið Vísir - DV,2012-07-06,25,6383307
+G-2012-06,Gallup,V,11.9,,Dagblaðið Vísir - DV,2012-07-06,25,6383307
+M-2012-06-19,MMR,first_print,2012-06-23,,Fréttablaðið,2012-06-23,4,5771601
+M-2012-06-19,MMR,fieldwork_start,2012-06-13,,Fréttablaðið,2012-06-23,4,5771601
+M-2012-06-19,MMR,fieldwork_end,2012-06-19,,Fréttablaðið,2012-06-23,4,5771601
+M-2012-06-19,MMR,n_answering,1816,,Fréttablaðið,2012-06-23,4,5771601
+G-2012-08,Gallup,first_print,2012-09-05,,Fréttablaðið,2012-09-05,2,5774982
+G-2012-08,Gallup,D,36,,Fréttablaðið,2012-09-05,2,5774982
+G-2012-08,Gallup,B,14,in words,Fréttablaðið,2012-09-05,2,5774982
+G-2012-08,Gallup,S,21,,Fréttablaðið,2012-09-05,2,5774982
+G-2012-08,Gallup,V,13,in words,Fréttablaðið,2012-09-05,2,5774982
+G-2012-09,Gallup,first_print,2012-10-03,,Fréttablaðið,2012-10-03,2,5777178
+G-2012-09,Gallup,fieldwork_start,2012-08-30,,Fréttablaðið,2012-10-03,2,5777178
+G-2012-09,Gallup,fieldwork_end,2012-09-27,,Fréttablaðið,2012-10-03,2,5777178
+G-2012-09,Gallup,sample,5591,,Fréttablaðið,2012-10-03,2,5777178
+G-2012-09,Gallup,response_rate,60,approximate,Fréttablaðið,2012-10-03,2,5777178
+G-2012-09,Gallup,D,37.1,,Fréttablaðið,2012-10-03,2,5777178
+G-2012-09,Gallup,B,14.2,,Fréttablaðið,2012-10-03,2,5777178
+G-2012-09,Gallup,S,19.4,,Fréttablaðið,2012-10-03,2,5777178
+G-2012-09,Gallup,V,12.4,,Fréttablaðið,2012-10-03,2,5777178
+G-2012-10,Gallup,first_print,2012-11-02,,Morgunblaðið,2012-11-02,2,6031821
+G-2012-10,Gallup,D,36.2,,Morgunblaðið,2012-11-02,2,6031821
+G-2012-10,Gallup,B,12.1,,Morgunblaðið,2012-11-02,2,6031821
+G-2012-10,Gallup,S,22.1,,Morgunblaðið,2012-11-02,2,6031821
+G-2012-10,Gallup,V,11.7,,Morgunblaðið,2012-11-02,2,6031821
+M-2012-10-12,MMR,first_print,2012-12-12,,Dagblaðið Vísir - DV,2012-12-12,2,6385909
+M-2012-10-12,MMR,fieldwork_start,2012-10-09,,Dagblaðið Vísir - DV,2012-12-12,2,6385909
+M-2012-10-12,MMR,fieldwork_end,2012-10-12,,Dagblaðið Vísir - DV,2012-12-12,2,6385909
+M-2012-10-12,MMR,n_answering,829,,Dagblaðið Vísir - DV,2012-12-12,2,6385909
+G-2012-12,Gallup,first_print,2013-01-03,,Fréttablaðið,2013-01-03,4,5782588
+G-2012-12,Gallup,D,36.3,,Fréttablaðið,2013-01-03,4,5782588
+G-2012-12,Gallup,B,13.1,,Fréttablaðið,2013-01-03,4,5782588
+G-2012-12,Gallup,S,19.1,,Fréttablaðið,2013-01-03,4,5782588
+G-2012-12,Gallup,V,9.1,,Fréttablaðið,2013-01-03,4,5782588
+G-2012-12,Gallup,P,2.5,,Morgunblaðið,2013-01-03,9,6037706
+M-2012-12-11,MMR,first_print,2013-01-12,,Fréttablaðið,2013-01-12,34,7199876
+M-2012-12-11,MMR,fieldwork_start,2012-12-07,,Fréttablaðið,2013-01-12,36,7199878
+M-2012-12-11,MMR,fieldwork_end,2012-12-11,,Fréttablaðið,2013-01-12,36,7199878
+M-2012-12-11,MMR,n_answering,877,,Fréttablaðið,2013-01-12,36,7199878
+M-2012-12-11,MMR,D,37.4,,Fréttablaðið,2013-01-12,34,7199876
+M-2012-12-11,MMR,B,13.7,,Fréttablaðið,2013-01-12,34,7199876
+M-2012-12-11,MMR,S,17.5,,Fréttablaðið,2013-01-12,34,7199876
+M-2012-12-11,MMR,V,11.3,,Fréttablaðið,2013-01-12,34,7199876
+G-2013-01,Gallup,first_print,2013-02-02,,Morgunblaðið,2013-02-02,2,6039615
+G-2013-01,Gallup,fieldwork_start,2013-01-03,,Morgunblaðið,2013-02-02,2,6039615
+G-2013-01,Gallup,fieldwork_end,2013-01-31,,Morgunblaðið,2013-02-02,2,6039615
+G-2013-01,Gallup,sample,9798,,Morgunblaðið,2013-02-02,2,6039615
+G-2013-01,Gallup,response_rate,60.1,,Morgunblaðið,2013-02-02,2,6039615
+G-2013-01,Gallup,D,36,,Morgunblaðið,2013-02-02,2,6039615
+G-2013-01,Gallup,B,14,just over,Morgunblaðið,2013-02-02,2,6039615
+G-2013-01,Gallup,S,16,over,Morgunblaðið,2013-02-02,2,6039615
+G-2013-01,Gallup,V,8,almost,Morgunblaðið,2013-02-02,2,6039615
+G-2013-01,Gallup,P,2,in words,Morgunblaðið,2013-02-02,2,6039615
+F-2013-01-17,"Fréttablaðið, Stöð 2 og Vísir",first_print,2013-01-18,,Fréttablaðið,2013-01-18,1,5783322
+F-2013-01-17,"Fréttablaðið, Stöð 2 og Vísir",fieldwork_start,2013-01-16,,Fréttablaðið,2013-01-18,1,5783322
+F-2013-01-17,"Fréttablaðið, Stöð 2 og Vísir",fieldwork_end,2013-01-17,,Fréttablaðið,2013-01-18,1,5783322
+F-2013-01-17,"Fréttablaðið, Stöð 2 og Vísir",sample,1342,,Fréttablaðið,2013-01-19,6,5783391
+F-2013-01-17,"Fréttablaðið, Stöð 2 og Vísir",response_rate,59,approximate,Morgunblaðið,2013-01-19,2,6038339
+F-2013-01-17,"Fréttablaðið, Stöð 2 og Vísir",n_answering,800,,Fréttablaðið,2013-01-18,1,5783322
+F-2013-01-17,"Fréttablaðið, Stöð 2 og Vísir",D,40.7,,Fréttablaðið,2013-01-19,6,5783391
+F-2013-01-17,"Fréttablaðið, Stöð 2 og Vísir",B,11.9,,Fréttablaðið,2013-01-19,6,5783391
+F-2013-01-17,"Fréttablaðið, Stöð 2 og Vísir",S,19.2,,Fréttablaðið,2013-01-19,6,5783391
+F-2013-01-17,"Fréttablaðið, Stöð 2 og Vísir",V,7.3,,Fréttablaðið,2013-01-19,6,5783391
+F-2013-01-31,"Fréttablaðið, Stöð 2 og Vísir",first_print,2013-02-01,,Fréttablaðið,2013-02-01,1,5784106
+F-2013-01-31,"Fréttablaðið, Stöð 2 og Vísir",fieldwork_start,2013-01-30,,Fréttablaðið,2013-02-01,1,5784106
+F-2013-01-31,"Fréttablaðið, Stöð 2 og Vísir",fieldwork_end,2013-01-31,,Fréttablaðið,2013-02-01,1,5784106
+F-2013-01-31,"Fréttablaðið, Stöð 2 og Vísir",sample,1382,,Fréttablaðið,2013-02-02,6,5784175
+F-2013-01-31,"Fréttablaðið, Stöð 2 og Vísir",n_answering,800,,Fréttablaðið,2013-02-01,1,5784106
+F-2013-01-31,"Fréttablaðið, Stöð 2 og Vísir",D,32,,Fréttablaðið,2013-02-02,6,5784175
+F-2013-01-31,"Fréttablaðið, Stöð 2 og Vísir",B,20.8,,Fréttablaðið,2013-02-02,6,5784175
+F-2013-01-31,"Fréttablaðið, Stöð 2 og Vísir",S,11.9,,Fréttablaðið,2013-02-02,6,5784175
+F-2013-01-31,"Fréttablaðið, Stöð 2 og Vísir",V,11.4,,Fréttablaðið,2013-02-02,6,5784175
+F-2013-01-31,"Fréttablaðið, Stöð 2 og Vísir",P,0.9,,Fréttablaðið,2013-02-02,6,5784175
+M-2013-02-06,MMR,first_print,2013-02-09,,Morgunblaðið,2013-02-09,8,6039869
+M-2013-02-06,MMR,fieldwork_start,2013-01-31,,Morgunblaðið,2013-02-09,8,6039869
+M-2013-02-06,MMR,fieldwork_end,2013-02-06,,Morgunblaðið,2013-02-09,8,6039869
+M-2013-02-06,MMR,D,33,,Morgunblaðið,2013-02-09,8,6039869
+M-2013-02-06,MMR,B,19.5,,Morgunblaðið,2013-02-09,8,6039869
+M-2013-02-06,MMR,S,16.2,,Morgunblaðið,2013-02-09,8,6039869
+M-2013-02-06,MMR,V,8.6,,Morgunblaðið,2013-02-09,8,6039869
+M-2013-02-21,MMR,first_print,2013-02-27,,Fréttablaðið,2013-02-27,4,6128948
+M-2013-02-21,MMR,fieldwork_start,2013-02-19,,Fréttablaðið,2013-02-27,4,6128948
+M-2013-02-21,MMR,fieldwork_end,2013-02-21,,Fréttablaðið,2013-02-27,4,6128948
+M-2013-02-21,MMR,sample,814,,Fréttablaðið,2013-02-27,4,6128948
+M-2013-02-21,MMR,n_answering,814,,Fréttablaðið,2013-03-06,4,6129380
+M-2013-02-21,MMR,D,28.5,,Fréttablaðið,2013-02-27,4,6128948
+M-2013-02-21,MMR,B,23.8,,Fréttablaðið,2013-02-27,4,6128948
+M-2013-02-21,MMR,S,12.8,,Fréttablaðið,2013-02-27,4,6128948
+M-2013-02-21,MMR,V,9.5,,Fréttablaðið,2013-02-27,4,6128948
+M-2013-02-21,MMR,P,2.4,,Fréttablaðið,2013-02-27,4,6128948
+F-2013-02-28,"Fréttablaðið, Stöð 2 og Vísir",first_print,2013-03-01,,Fréttablaðið,2013-03-01,1,6129097
+F-2013-02-28,"Fréttablaðið, Stöð 2 og Vísir",fieldwork_start,2013-02-27,,Fréttablaðið,2013-03-01,6,6129102
+F-2013-02-28,"Fréttablaðið, Stöð 2 og Vísir",fieldwork_end,2013-02-28,,Fréttablaðið,2013-03-01,6,6129102
+F-2013-02-28,"Fréttablaðið, Stöð 2 og Vísir",sample,1329,,Fréttablaðið,2013-03-01,6,6129102
+F-2013-02-28,"Fréttablaðið, Stöð 2 og Vísir",n_answering,800,,Fréttablaðið,2013-03-01,6,6129102
+F-2013-02-28,"Fréttablaðið, Stöð 2 og Vísir",D,29,,Fréttablaðið,2013-03-01,1,6129097
+F-2013-02-28,"Fréttablaðið, Stöð 2 og Vísir",B,26.1,,Fréttablaðið,2013-03-01,1,6129097
+F-2013-02-28,"Fréttablaðið, Stöð 2 og Vísir",S,12.8,,Fréttablaðið,2013-03-01,1,6129097
+F-2013-02-28,"Fréttablaðið, Stöð 2 og Vísir",V,11.8,,Fréttablaðið,2013-03-01,1,6129097
+F-2013-02-28,"Fréttablaðið, Stöð 2 og Vísir",P,1.5,,Fréttablaðið,2013-03-01,6,6129102
+FEL-2013-03-04,Félagsvísindastofnun,first_print,2013-03-28,,Morgunblaðið,2013-03-28,20,6042431
+FEL-2013-03-04,Félagsvísindastofnun,fieldwork_start,2013-02-19,,Morgunblaðið,2013-03-28,20,6042431
+FEL-2013-03-04,Félagsvísindastofnun,fieldwork_end,2013-03-04,,Morgunblaðið,2013-03-28,20,6042431
+FEL-2013-03-04,Félagsvísindastofnun,sample,2400,,Morgunblaðið,2013-03-28,20,6042431
+FEL-2013-03-04,Félagsvísindastofnun,response_rate,55,,Morgunblaðið,2013-03-28,20,6042431
+M-2013-03-12,MMR,first_print,2013-03-14,,Morgunblaðið,2013-03-14,2,6041821
+M-2013-03-12,MMR,fieldwork_start,2013-03-07,,Morgunblaðið,2013-03-14,2,6041821
+M-2013-03-12,MMR,fieldwork_end,2013-03-12,,Morgunblaðið,2013-03-14,2,6041821
+M-2013-03-12,MMR,n_answering,875,,Morgunblaðið,2013-03-14,2,6041821
+M-2013-03-12,MMR,D,27.2,,Morgunblaðið,2013-03-14,2,6041821
+M-2013-03-12,MMR,B,25.9,,Morgunblaðið,2013-03-14,2,6041821
+M-2013-03-12,MMR,S,12.4,,Morgunblaðið,2013-03-14,2,6041821
+M-2013-03-12,MMR,V,9.6,,Morgunblaðið,2013-03-14,2,6041821
+M-2013-03-12,MMR,P,3.6,,Morgunblaðið,2013-03-14,2,6041821
+F-2013-03-14,"Fréttablaðið, Stöð 2 og Vísir",first_print,2013-03-16,,Morgunblaðið,2013-03-16,2,6041937
+F-2013-03-14,"Fréttablaðið, Stöð 2 og Vísir",fieldwork_start,2013-03-13,,Fréttablaðið,2013-03-16,10,6129962
+F-2013-03-14,"Fréttablaðið, Stöð 2 og Vísir",fieldwork_end,2013-03-14,,Fréttablaðið,2013-03-16,10,6129962
+F-2013-03-14,"Fréttablaðið, Stöð 2 og Vísir",sample,1295,,Fréttablaðið,2013-03-16,10,6129962
+F-2013-03-14,"Fréttablaðið, Stöð 2 og Vísir",n_answering,801,,Fréttablaðið,2013-03-16,10,6129962
+F-2013-03-14,"Fréttablaðið, Stöð 2 og Vísir",D,27.6,,Morgunblaðið,2013-03-16,2,6041937
+F-2013-03-14,"Fréttablaðið, Stöð 2 og Vísir",B,31.9,,Morgunblaðið,2013-03-16,2,6041937
+F-2013-03-14,"Fréttablaðið, Stöð 2 og Vísir",S,13.8,,Morgunblaðið,2013-03-16,2,6041937
+F-2013-03-14,"Fréttablaðið, Stöð 2 og Vísir",V,7.1,,Morgunblaðið,2013-03-16,2,6041937
+F-2013-03-14,"Fréttablaðið, Stöð 2 og Vísir",P,1.8,,Fréttablaðið,2013-03-18,1,6130073
+G-2013-03-14,Gallup,first_print,2013-03-16,,Morgunblaðið,2013-03-16,2,6041937
+G-2013-03-14,Gallup,D,26.8,,Morgunblaðið,2013-03-16,2,6041937
+G-2013-03-14,Gallup,B,25.5,,Morgunblaðið,2013-03-16,2,6041937
+G-2013-03-14,Gallup,S,14,,Morgunblaðið,2013-03-16,2,6041937
+G-2013-03-14,Gallup,V,8.9,,Morgunblaðið,2013-03-16,2,6041937
+M-2013-03-25,MMR,first_print,2013-03-27,,Fréttablaðið,2013-03-27,2,5784491
+M-2013-03-25,MMR,fieldwork_start,2013-03-22,,Morgunblaðið,2013-03-27,14,6042373
+M-2013-03-25,MMR,fieldwork_end,2013-03-25,,Morgunblaðið,2013-03-27,14,6042373
+M-2013-03-25,MMR,n_answering,893,,Morgunblaðið,2013-03-27,14,6042373
+M-2013-03-25,MMR,D,24.4,,Fréttablaðið,2013-03-27,2,5784491
+M-2013-03-25,MMR,B,29.5,,Fréttablaðið,2013-03-27,2,5784491
+M-2013-03-25,MMR,S,12.5,,Fréttablaðið,2013-03-27,2,5784491
+M-2013-03-25,MMR,V,8.7,,Fréttablaðið,2013-03-27,2,5784491
+M-2013-03-25,MMR,P,3.9,,Fréttablaðið,2013-03-27,2,5784491
+FEL-2013-03-26,Félagsvísindastofnun,first_print,2013-03-28,,Morgunblaðið,2013-03-28,1,6042412
+FEL-2013-03-26,Félagsvísindastofnun,fieldwork_start,2013-03-18,,Morgunblaðið,2013-03-28,1,6042412
+FEL-2013-03-26,Félagsvísindastofnun,fieldwork_end,2013-03-26,,Morgunblaðið,2013-03-28,1,6042412
+FEL-2013-03-26,Félagsvísindastofnun,sample,3400,,Morgunblaðið,2013-03-28,1,6042412
+FEL-2013-03-26,Félagsvísindastofnun,response_rate,60,,Morgunblaðið,2013-03-28,20,6042431
+FEL-2013-03-26,Félagsvísindastofnun,n_answering,2014,,Morgunblaðið,2013-03-28,1,6042412
+FEL-2013-03-26,Félagsvísindastofnun,D,26.1,,Morgunblaðið,2013-03-28,1,6042412
+FEL-2013-03-26,Félagsvísindastofnun,B,28.5,,Morgunblaðið,2013-03-28,1,6042412
+FEL-2013-03-26,Félagsvísindastofnun,S,12.8,,Morgunblaðið,2013-03-28,1,6042412
+FEL-2013-03-26,Félagsvísindastofnun,V,8,,Morgunblaðið,2013-03-28,1,6042412
+G-2013-04-01,Gallup,first_print,2013-04-03,,Morgunblaðið,2013-04-03,2,6043381
+G-2013-04-01,Gallup,fieldwork_start,2013-03-14,,Morgunblaðið,2013-04-06,18,6043549
+G-2013-04-01,Gallup,fieldwork_end,2013-04-01,,Morgunblaðið,2013-04-06,18,6043549
+G-2013-04-01,Gallup,sample,7290,,Morgunblaðið,2013-04-06,18,6043549
+G-2013-04-01,Gallup,response_rate,60.2,,Morgunblaðið,2013-04-06,18,6043549
+G-2013-04-01,Gallup,D,22.4,,Morgunblaðið,2013-04-03,2,6043381
+G-2013-04-01,Gallup,B,28.3,,Morgunblaðið,2013-04-03,2,6043381
+G-2013-04-01,Gallup,S,15,,Morgunblaðið,2013-04-03,2,6043381
+G-2013-04-01,Gallup,V,8.5,,Morgunblaðið,2013-04-03,2,6043381
+G-2013-04-01,Gallup,P,4.4,,Morgunblaðið,2013-04-03,2,6043381
+F-2013-04-04,"Fréttablaðið, Stöð 2 og Vísir",first_print,2013-04-05,,Fréttablaðið,2013-04-05,1,6130945
+F-2013-04-04,"Fréttablaðið, Stöð 2 og Vísir",fieldwork_start,2013-04-03,,Fréttablaðið,2013-04-05,4,6130948
+F-2013-04-04,"Fréttablaðið, Stöð 2 og Vísir",fieldwork_end,2013-04-04,,Fréttablaðið,2013-04-05,4,6130948
+F-2013-04-04,"Fréttablaðið, Stöð 2 og Vísir",sample,1231,,Fréttablaðið,2013-04-05,4,6130948
+F-2013-04-04,"Fréttablaðið, Stöð 2 og Vísir",n_answering,800,,Fréttablaðið,2013-04-05,4,6130948
+F-2013-04-04,"Fréttablaðið, Stöð 2 og Vísir",D,17.8,,Fréttablaðið,2013-04-05,1,6130945
+F-2013-04-04,"Fréttablaðið, Stöð 2 og Vísir",B,40,,Fréttablaðið,2013-04-05,4,6130948
+F-2013-04-04,"Fréttablaðið, Stöð 2 og Vísir",S,9.5,,Fréttablaðið,2013-04-05,1,6130945
+F-2013-04-04,"Fréttablaðið, Stöð 2 og Vísir",V,5.6,,Fréttablaðið,2013-04-05,1,6130945
+F-2013-04-04,"Fréttablaðið, Stöð 2 og Vísir",P,5.6,,Fréttablaðið,2013-04-05,1,6130945
+FEL-2013-04-08,Félagsvísindastofnun,first_print,2013-04-10,,Morgunblaðið,2013-04-10,1,6043668
+FEL-2013-04-08,Félagsvísindastofnun,fieldwork_start,2013-04-02,,Morgunblaðið,2013-04-10,1,6043668
+FEL-2013-04-08,Félagsvísindastofnun,fieldwork_end,2013-04-08,,Morgunblaðið,2013-04-10,1,6043668
+FEL-2013-04-08,Félagsvísindastofnun,sample,3700,,Morgunblaðið,2013-04-10,1,6043668
+FEL-2013-04-08,Félagsvísindastofnun,response_rate,61,,Morgunblaðið,2013-04-10,1,6043668
+FEL-2013-04-08,Félagsvísindastofnun,n_answering,2141,,Morgunblaðið,2013-04-10,16,6043683
+FEL-2013-04-08,Félagsvísindastofnun,D,18.9,,Morgunblaðið,2013-04-10,1,6043668
+FEL-2013-04-08,Félagsvísindastofnun,B,30.9,,Morgunblaðið,2013-04-10,1,6043668
+FEL-2013-04-08,Félagsvísindastofnun,S,12.6,,Morgunblaðið,2013-04-10,1,6043668
+FEL-2013-04-08,Félagsvísindastofnun,V,8.8,,Morgunblaðið,2013-04-10,1,6043668
+FEL-2013-04-08,Félagsvísindastofnun,P,5.6,,Morgunblaðið,2013-04-10,1,6043668
+M-2013-04-08,MMR,first_print,2013-04-10,,Morgunblaðið,2013-04-10,9,6043676
+M-2013-04-08,MMR,fieldwork_start,2013-04-05,,Fréttablaðið,2013-04-10,4,6131204
+M-2013-04-08,MMR,fieldwork_end,2013-04-08,,Fréttablaðið,2013-04-10,4,6131204
+M-2013-04-08,MMR,n_answering,906,,Fréttablaðið,2013-04-10,4,6131204
+M-2013-04-08,MMR,D,21.2,,Morgunblaðið,2013-04-10,9,6043676
+M-2013-04-08,MMR,B,30.2,,Morgunblaðið,2013-04-10,9,6043676
+M-2013-04-08,MMR,S,12.7,,Morgunblaðið,2013-04-10,9,6043676
+M-2013-04-08,MMR,V,8.1,,Morgunblaðið,2013-04-10,9,6043676
+M-2013-04-08,MMR,P,7.8,,Morgunblaðið,2013-04-10,9,6043676
+G-2013-04-10,Gallup,first_print,2013-04-12,,Morgunblaðið,2013-04-12,2,6043761
+G-2013-04-10,Gallup,fieldwork_start,2013-04-02,,Morgunblaðið,2013-04-12,2,6043761
+G-2013-04-10,Gallup,fieldwork_end,2013-04-10,,Morgunblaðið,2013-04-12,2,6043761
+G-2013-04-10,Gallup,D,22,,Morgunblaðið,2013-04-12,2,6043761
+G-2013-04-10,Gallup,B,29,,Morgunblaðið,2013-04-12,2,6043761
+G-2013-04-10,Gallup,S,12,,Morgunblaðið,2013-04-12,2,6043761
+G-2013-04-10,Gallup,V,7.3,,Morgunblaðið,2013-04-12,2,6043761
+G-2013-04-10,Gallup,P,7,just under,Morgunblaðið,2013-04-12,2,6043761
+M-2013-04-14,MMR,first_print,2013-04-16,,Morgunblaðið,2013-04-16,6,6043917
+M-2013-04-14,MMR,fieldwork_start,2013-04-11,,Morgunblaðið,2013-04-16,6,6043917
+M-2013-04-14,MMR,fieldwork_end,2013-04-14,,Morgunblaðið,2013-04-16,6,6043917
+M-2013-04-14,MMR,n_answering,930,,Fréttablaðið,2013-04-16,4,6131540
+M-2013-04-14,MMR,D,22.9,,Morgunblaðið,2013-04-16,6,6043917
+M-2013-04-14,MMR,B,32.7,,Morgunblaðið,2013-04-16,6,6043917
+M-2013-04-14,MMR,S,10.4,,Morgunblaðið,2013-04-16,6,6043917
+M-2013-04-14,MMR,V,6.7,,Morgunblaðið,2013-04-16,6,6043917
+M-2013-04-14,MMR,P,9.0,,Morgunblaðið,2013-04-16,6,6043917
+F-2013-04-16,"Fréttablaðið, Stöð 2 og Vísir",first_print,2013-04-18,,Morgunblaðið,2013-04-18,21,6044020
+F-2013-04-16,"Fréttablaðið, Stöð 2 og Vísir",fieldwork_start,2013-04-15,,Fréttablaðið,2013-04-18,16,6131648
+F-2013-04-16,"Fréttablaðið, Stöð 2 og Vísir",fieldwork_end,2013-04-16,,Fréttablaðið,2013-04-18,16,6131648
+F-2013-04-16,"Fréttablaðið, Stöð 2 og Vísir",sample,1899,,Fréttablaðið,2013-04-18,16,6131648
+F-2013-04-16,"Fréttablaðið, Stöð 2 og Vísir",response_rate,63.2,,Fréttablaðið,2013-04-18,16,6131648
+F-2013-04-16,"Fréttablaðið, Stöð 2 og Vísir",n_answering,1200,,Fréttablaðið,2013-04-18,16,6131648
+F-2013-04-16,"Fréttablaðið, Stöð 2 og Vísir",D,26.9,,Morgunblaðið,2013-04-18,21,6044020
+F-2013-04-16,"Fréttablaðið, Stöð 2 og Vísir",B,30.3,,Morgunblaðið,2013-04-18,21,6044020
+F-2013-04-16,"Fréttablaðið, Stöð 2 og Vísir",S,13.7,,Morgunblaðið,2013-04-18,21,6044020
+F-2013-04-16,"Fréttablaðið, Stöð 2 og Vísir",V,7.9,,Morgunblaðið,2013-04-18,21,6044020
+F-2013-04-16,"Fréttablaðið, Stöð 2 og Vísir",P,5.6,,Morgunblaðið,2013-04-18,21,6044020
+FEL-2013-04-17,Félagsvísindastofnun,first_print,2013-04-19,,Morgunblaðið,2013-04-19,1,6044056
+FEL-2013-04-17,Félagsvísindastofnun,fieldwork_start,2013-04-14,,Morgunblaðið,2013-04-19,1,6044056
+FEL-2013-04-17,Félagsvísindastofnun,fieldwork_end,2013-04-17,,Morgunblaðið,2013-04-19,1,6044056
+FEL-2013-04-17,Félagsvísindastofnun,sample,3800,,Morgunblaðið,2013-04-19,1,6044056
+FEL-2013-04-17,Félagsvísindastofnun,response_rate,57,,Morgunblaðið,2013-04-19,1,6044056
+FEL-2013-04-17,Félagsvísindastofnun,n_answering,2053,,Morgunblaðið,2013-04-19,20,6044075
+FEL-2013-04-17,Félagsvísindastofnun,D,24.4,,Morgunblaðið,2013-04-19,1,6044056
+FEL-2013-04-17,Félagsvísindastofnun,B,28.1,,Morgunblaðið,2013-04-19,1,6044056
+FEL-2013-04-17,Félagsvísindastofnun,S,12.2,,Morgunblaðið,2013-04-19,1,6044056
+FEL-2013-04-17,Félagsvísindastofnun,V,9.3,,Morgunblaðið,2013-04-19,1,6044056
+FEL-2013-04-17,Félagsvísindastofnun,P,6.3,,Morgunblaðið,2013-04-19,1,6044056
+G-2013-04-17,Gallup,first_print,2013-04-19,,Morgunblaðið,2013-04-19,18,6044073
+G-2013-04-17,Gallup,fieldwork_start,2013-04-10,,Fréttablaðið,2013-04-19,6,6131718
+G-2013-04-17,Gallup,fieldwork_end,2013-04-17,,Fréttablaðið,2013-04-19,6,6131718
+G-2013-04-17,Gallup,D,24.1,,Morgunblaðið,2013-04-19,18,6044073
+G-2013-04-17,Gallup,B,26.7,,Morgunblaðið,2013-04-19,18,6044073
+G-2013-04-17,Gallup,S,15.2,,Morgunblaðið,2013-04-19,18,6044073
+G-2013-04-17,Gallup,V,8.8,,Morgunblaðið,2013-04-19,18,6044073
+G-2013-04-17,Gallup,P,8.4,,Morgunblaðið,2013-04-19,18,6044073
+M-2013-04-18,MMR,first_print,2013-04-19,,Morgunblaðið,2013-04-19,18,6044073
+M-2013-04-18,MMR,fieldwork_start,2013-04-17,,Morgunblaðið,2013-04-19,18,6044073
+M-2013-04-18,MMR,fieldwork_end,2013-04-18,,Morgunblaðið,2013-04-19,18,6044073
+M-2013-04-18,MMR,D,27.5,,Morgunblaðið,2013-04-19,18,6044073
+M-2013-04-18,MMR,B,25.6,,Morgunblaðið,2013-04-19,18,6044073
+M-2013-04-18,MMR,S,13.5,,Morgunblaðið,2013-04-19,18,6044073
+M-2013-04-18,MMR,V,8.1,,Morgunblaðið,2013-04-19,18,6044073
+M-2013-04-18,MMR,P,6.7,,Morgunblaðið,2013-04-19,18,6044073
+F-2013-04-23,"Fréttablaðið, Stöð 2 og Vísir",first_print,2013-04-24,,Fréttablaðið,2013-04-24,1,6132017
+F-2013-04-23,"Fréttablaðið, Stöð 2 og Vísir",fieldwork_start,2013-04-22,,Fréttablaðið,2013-04-24,4,6132020
+F-2013-04-23,"Fréttablaðið, Stöð 2 og Vísir",fieldwork_end,2013-04-23,,Fréttablaðið,2013-04-24,4,6132020
+F-2013-04-23,"Fréttablaðið, Stöð 2 og Vísir",sample,1390,,Fréttablaðið,2013-04-24,4,6132020
+F-2013-04-23,"Fréttablaðið, Stöð 2 og Vísir",response_rate,71.9,,Fréttablaðið,2013-04-24,4,6132020
+F-2013-04-23,"Fréttablaðið, Stöð 2 og Vísir",n_answering,1000,,Fréttablaðið,2013-04-24,4,6132020
+F-2013-04-23,"Fréttablaðið, Stöð 2 og Vísir",D,23.8,,Fréttablaðið,2013-04-24,1,6132017
+F-2013-04-23,"Fréttablaðið, Stöð 2 og Vísir",B,25.9,,Fréttablaðið,2013-04-24,1,6132017
+F-2013-04-23,"Fréttablaðið, Stöð 2 og Vísir",S,13.3,,Fréttablaðið,2013-04-24,1,6132017
+F-2013-04-23,"Fréttablaðið, Stöð 2 og Vísir",V,10.4,,Fréttablaðið,2013-04-24,1,6132017
+F-2013-04-23,"Fréttablaðið, Stöð 2 og Vísir",P,6.3,,Fréttablaðið,2013-04-24,1,6132017
+FEL-2013-04-23,Félagsvísindastofnun,first_print,2013-04-25,,Morgunblaðið,2013-04-25,1,6044316
+FEL-2013-04-23,Félagsvísindastofnun,fieldwork_start,2013-04-17,,Morgunblaðið,2013-04-25,1,6044316
+FEL-2013-04-23,Félagsvísindastofnun,fieldwork_end,2013-04-23,,Morgunblaðið,2013-04-25,1,6044316
+FEL-2013-04-23,Félagsvísindastofnun,response_rate,62,,Morgunblaðið,2013-04-25,1,6044316
+FEL-2013-04-23,Félagsvísindastofnun,n_answering,2396,,Morgunblaðið,2013-04-25,22,6044337
+FEL-2013-04-23,Félagsvísindastofnun,D,24.8,,Morgunblaðið,2013-04-25,1,6044316
+FEL-2013-04-23,Félagsvísindastofnun,B,24.4,,Morgunblaðið,2013-04-25,1,6044316
+FEL-2013-04-23,Félagsvísindastofnun,S,13.6,,Morgunblaðið,2013-04-25,1,6044316
+FEL-2013-04-23,Félagsvísindastofnun,V,10.8,,Morgunblaðið,2013-04-25,1,6044316
+FEL-2013-04-23,Félagsvísindastofnun,P,6.4,,Morgunblaðið,2013-04-25,1,6044316
+F-2013-04-24,"Fréttablaðið, Stöð 2 og Vísir",first_print,2013-04-26,,Fréttablaðið,2013-04-26,1,6132169
+F-2013-04-24,"Fréttablaðið, Stöð 2 og Vísir",fieldwork_start,2013-04-22,,Fréttablaðið,2013-04-26,12,6132180
+F-2013-04-24,"Fréttablaðið, Stöð 2 og Vísir",fieldwork_end,2013-04-24,,Fréttablaðið,2013-04-26,12,6132180
+F-2013-04-24,"Fréttablaðið, Stöð 2 og Vísir",sample,2699,,Fréttablaðið,2013-04-26,12,6132180
+F-2013-04-24,"Fréttablaðið, Stöð 2 og Vísir",response_rate,74.1,,Fréttablaðið,2013-04-26,12,6132180
+F-2013-04-24,"Fréttablaðið, Stöð 2 og Vísir",n_answering,2000,,Fréttablaðið,2013-04-26,12,6132180
+F-2013-04-24,"Fréttablaðið, Stöð 2 og Vísir",D,22.9,,Fréttablaðið,2013-04-26,1,6132169
+F-2013-04-24,"Fréttablaðið, Stöð 2 og Vísir",B,25.4,,Fréttablaðið,2013-04-26,1,6132169
+F-2013-04-24,"Fréttablaðið, Stöð 2 og Vísir",S,14.7,,Fréttablaðið,2013-04-26,1,6132169
+F-2013-04-24,"Fréttablaðið, Stöð 2 og Vísir",V,10.9,,Fréttablaðið,2013-04-26,1,6132169
+F-2013-04-24,"Fréttablaðið, Stöð 2 og Vísir",P,6.3,,Fréttablaðið,2013-04-26,1,6132169
+M-2013-04-25,MMR,first_print,2013-04-26,,Fréttatíminn,2013-04-26,26,5822570
+M-2013-04-25,MMR,fieldwork_start,2013-04-22,,Fréttablaðið,2013-04-30,10,6132402
+M-2013-04-25,MMR,fieldwork_end,2013-04-25,,Fréttablaðið,2013-04-30,10,6132402
+M-2013-04-25,MMR,D,26.7,,Fréttatíminn,2013-04-26,26,5822570
+M-2013-04-25,MMR,B,22.4,,Fréttatíminn,2013-04-26,26,5822570
+M-2013-04-25,MMR,S,13,,Fréttatíminn,2013-04-26,26,5822570
+M-2013-04-25,MMR,V,11.6,,Fréttatíminn,2013-04-26,26,5822570
+M-2013-04-25,MMR,P,7.5,,Fréttatíminn,2013-04-26,26,5822570
+G-2013-04-26,Gallup,first_print,2013-04-27,,Morgunblaðið,2013-04-27,4,6044419
+G-2013-04-26,Gallup,fieldwork_start,2013-04-18,,Fréttablaðið,2013-04-30,10,6132402
+G-2013-04-26,Gallup,fieldwork_end,2013-04-25,,Fréttablaðið,2013-04-30,10,6132402
+G-2013-04-26,Gallup,D,27.9,,Morgunblaðið,2013-04-27,4,6044419
+G-2013-04-26,Gallup,B,24.7,,Morgunblaðið,2013-04-27,4,6044419
+G-2013-04-26,Gallup,S,14.6,,Morgunblaðið,2013-04-27,4,6044419
+G-2013-04-26,Gallup,V,10,,Morgunblaðið,2013-04-27,4,6044419
+G-2013-04-26,Gallup,P,6.1,,Morgunblaðið,2013-04-27,4,6044419
+F-2013-06-27,"Fréttablaðið, Stöð 2 og Vísir",first_print,2013-06-28,,Fréttablaðið,2013-06-28,1,6135762
+F-2013-06-27,"Fréttablaðið, Stöð 2 og Vísir",fieldwork_start,2013-06-26,,Fréttablaðið,2013-06-28,1,6135762
+F-2013-06-27,"Fréttablaðið, Stöð 2 og Vísir",fieldwork_end,2013-06-27,,Fréttablaðið,2013-06-28,1,6135762
+F-2013-06-27,"Fréttablaðið, Stöð 2 og Vísir",sample,1077,,Fréttablaðið,2013-07-01,1,6135906
+F-2013-06-27,"Fréttablaðið, Stöð 2 og Vísir",n_answering,800,,Fréttablaðið,2013-06-28,1,6135762
+F-2013-06-27,"Fréttablaðið, Stöð 2 og Vísir",D,31.3,,Fréttablaðið,2013-07-01,1,6135906
+F-2013-06-27,"Fréttablaðið, Stöð 2 og Vísir",B,21,,Fréttablaðið,2013-07-01,1,6135906
+F-2013-06-27,"Fréttablaðið, Stöð 2 og Vísir",S,14.4,,Fréttablaðið,2013-07-01,1,6135906
+F-2013-06-27,"Fréttablaðið, Stöð 2 og Vísir",V,15.3,,Fréttablaðið,2013-07-01,1,6135906
+FEL-2013-10-16,Félagsvísindastofnun,first_print,2013-10-21,,Fréttablaðið,2013-10-21,4,6141797
+FEL-2013-10-16,Félagsvísindastofnun,fieldwork_start,2013-10-03,,Dagblaðið Vísir - DV,2013-11-06,2,6397085
+FEL-2013-10-16,Félagsvísindastofnun,fieldwork_end,2013-10-16,,Dagblaðið Vísir - DV,2013-11-06,2,6397085
+FEL-2013-10-16,Félagsvísindastofnun,D,23.2,,Fréttablaðið,2013-10-21,4,6141797
+FEL-2013-10-16,Félagsvísindastofnun,B,14.8,,Fréttablaðið,2013-10-21,4,6141797
+FEL-2013-10-16,Félagsvísindastofnun,S,19.7,,Dagblaðið Vísir - DV,2013-11-06,2,6397085
+FEL-2013-10-16,Félagsvísindastofnun,V,14.5,,Fréttablaðið,2013-10-21,4,6141797
+FEL-2013-10-16,Félagsvísindastofnun,P,8.5,,Fréttablaðið,2013-10-21,4,6141797
+F-2013-10-31,"Fréttablaðið, Stöð 2 og Vísir",first_print,2013-11-01,,Fréttablaðið,2013-11-01,1,6142442
+F-2013-10-31,"Fréttablaðið, Stöð 2 og Vísir",fieldwork_start,2013-10-30,,Fréttablaðið,2013-11-01,1,6142442
+F-2013-10-31,"Fréttablaðið, Stöð 2 og Vísir",fieldwork_end,2013-10-31,,Fréttablaðið,2013-11-01,1,6142442
+F-2013-10-31,"Fréttablaðið, Stöð 2 og Vísir",sample,1809,,Fréttablaðið,2013-11-01,1,6142442
+F-2013-10-31,"Fréttablaðið, Stöð 2 og Vísir",response_rate,64,,Fréttablaðið,2013-11-01,1,6142442
+F-2013-10-31,"Fréttablaðið, Stöð 2 og Vísir",n_answering,1158,,Fréttablaðið,2013-11-01,1,6142442
+F-2013-10-31,"Fréttablaðið, Stöð 2 og Vísir",D,26.7,,Fréttablaðið,2013-11-04,1,6142642
+F-2013-10-31,"Fréttablaðið, Stöð 2 og Vísir",B,16.7,,Fréttablaðið,2013-11-04,1,6142642
+F-2013-10-31,"Fréttablaðið, Stöð 2 og Vísir",S,20.8,,Fréttablaðið,2013-11-04,1,6142642
+F-2013-10-31,"Fréttablaðið, Stöð 2 og Vísir",V,13.6,,Fréttablaðið,2013-11-04,1,6142642
+F-2013-10-31,"Fréttablaðið, Stöð 2 og Vísir",P,7.2,,Fréttablaðið,2013-11-04,1,6142642
+FEL-2013-12-03,Félagsvísindastofnun,first_print,2013-12-05,,Morgunblaðið,2013-12-05,1,6066774
+FEL-2013-12-03,Félagsvísindastofnun,fieldwork_start,2013-12-02,,Morgunblaðið,2013-12-05,1,6066774
+FEL-2013-12-03,Félagsvísindastofnun,fieldwork_end,2013-12-03,,Morgunblaðið,2013-12-05,1,6066774
+FEL-2013-12-03,Félagsvísindastofnun,sample,1950,,Morgunblaðið,2013-12-05,6,6066779
+FEL-2013-12-03,Félagsvísindastofnun,response_rate,42,,Morgunblaðið,2013-12-05,6,6066779
+FEL-2013-12-03,Félagsvísindastofnun,n_answering,811,,Morgunblaðið,2013-12-05,6,6066779
+FEL-2013-12-03,Félagsvísindastofnun,D,23.3,,Morgunblaðið,2013-12-05,1,6066774
+FEL-2013-12-03,Félagsvísindastofnun,B,20.1,,Morgunblaðið,2013-12-05,1,6066774
+FEL-2013-12-03,Félagsvísindastofnun,S,15.8,,Morgunblaðið,2013-12-05,6,6066779
+FEL-2013-12-03,Félagsvísindastofnun,V,14.1,,Morgunblaðið,2013-12-05,6,6066779
+FEL-2013-12-03,Félagsvísindastofnun,P,7.7,,Morgunblaðið,2013-12-05,6,6066779
+F-2014-01-30,"Fréttablaðið, Stöð 2 og Vísir",first_print,2014-02-01,,Fréttablaðið,2014-02-01,4,6147981
+F-2014-01-30,"Fréttablaðið, Stöð 2 og Vísir",fieldwork_start,2014-01-29,,Fréttablaðið,2014-02-01,4,6147981
+F-2014-01-30,"Fréttablaðið, Stöð 2 og Vísir",fieldwork_end,2014-01-30,,Fréttablaðið,2014-02-01,4,6147981
+F-2014-01-30,"Fréttablaðið, Stöð 2 og Vísir",sample,1322,,Fréttablaðið,2014-02-01,4,6147981
+F-2014-01-30,"Fréttablaðið, Stöð 2 og Vísir",response_rate,61,,Fréttablaðið,2014-02-01,4,6147981
+F-2014-01-30,"Fréttablaðið, Stöð 2 og Vísir",n_answering,800,,Fréttablaðið,2014-02-01,4,6147981
+F-2014-01-30,"Fréttablaðið, Stöð 2 og Vísir",D,30.5,,Fréttablaðið,2014-02-01,4,6147981
+F-2014-01-30,"Fréttablaðið, Stöð 2 og Vísir",B,15.1,,Fréttablaðið,2014-02-01,4,6147981
+F-2014-01-30,"Fréttablaðið, Stöð 2 og Vísir",S,20.2,,Fréttablaðið,2014-02-01,4,6147981
+F-2014-01-30,"Fréttablaðið, Stöð 2 og Vísir",V,10,,Fréttablaðið,2014-02-01,4,6147981
+F-2014-01-30,"Fréttablaðið, Stöð 2 og Vísir",P,9.2,,Fréttablaðið,2014-02-01,4,6147981
+G-2014-02,Gallup,first_print,2014-03-01,,Fréttablaðið,2014-03-01,6,6149496
+G-2014-02,Gallup,D,24,in words,Fréttablaðið,2014-03-01,6,6149496
+G-2014-02,Gallup,B,15,,Fréttablaðið,2014-03-01,6,6149496
+F-2014-02-27,"Fréttablaðið, Stöð 2 og Vísir",first_print,2014-02-28,,Fréttablaðið,2014-02-28,4,6149398
+F-2014-02-27,"Fréttablaðið, Stöð 2 og Vísir",fieldwork_start,2014-02-26,,Fréttablaðið,2014-02-28,4,6149398
+F-2014-02-27,"Fréttablaðið, Stöð 2 og Vísir",fieldwork_end,2014-02-27,,Fréttablaðið,2014-02-28,4,6149398
+F-2014-02-27,"Fréttablaðið, Stöð 2 og Vísir",sample,1309,,Fréttablaðið,2014-02-28,4,6149398
+F-2014-02-27,"Fréttablaðið, Stöð 2 og Vísir",response_rate,61.5,,Fréttablaðið,2014-02-28,4,6149398
+F-2014-02-27,"Fréttablaðið, Stöð 2 og Vísir",n_answering,805,,Fréttablaðið,2014-02-28,4,6149398
+F-2014-02-27,"Fréttablaðið, Stöð 2 og Vísir",D,26.8,,Fréttablaðið,2014-03-03,1,6149603
+F-2014-02-27,"Fréttablaðið, Stöð 2 og Vísir",B,13.9,,Fréttablaðið,2014-03-03,1,6149603
+F-2014-02-27,"Fréttablaðið, Stöð 2 og Vísir",S,18,in words,Fréttablaðið,2014-03-03,4,6149606
+F-2014-02-27,"Fréttablaðið, Stöð 2 og Vísir",V,11.3,,Fréttablaðið,2014-03-03,1,6149603
+F-2014-02-27,"Fréttablaðið, Stöð 2 og Vísir",P,10.2,,Fréttablaðið,2014-03-03,1,6149603
+F-2014-04-15,"Fréttablaðið, Stöð 2 og Vísir",first_print,2014-04-19,,Fréttablaðið,2014-04-19,4,6152300
+F-2014-04-15,"Fréttablaðið, Stöð 2 og Vísir",fieldwork_start,2014-04-14,,Fréttablaðið,2014-04-19,4,6152300
+F-2014-04-15,"Fréttablaðið, Stöð 2 og Vísir",fieldwork_end,2014-04-15,,Fréttablaðið,2014-04-19,4,6152300
+F-2014-04-15,"Fréttablaðið, Stöð 2 og Vísir",sample,1332,,Fréttablaðið,2014-04-19,4,6152300
+F-2014-04-15,"Fréttablaðið, Stöð 2 og Vísir",response_rate,60.1,,Fréttablaðið,2014-04-19,4,6152300
+F-2014-04-15,"Fréttablaðið, Stöð 2 og Vísir",n_answering,801,,Fréttablaðið,2014-04-19,4,6152300
+F-2014-04-15,"Fréttablaðið, Stöð 2 og Vísir",D,25.6,,Fréttablaðið,2014-04-19,4,6152300
+F-2014-04-15,"Fréttablaðið, Stöð 2 og Vísir",B,17,in words,Fréttablaðið,2014-04-19,4,6152300
+F-2014-04-15,"Fréttablaðið, Stöð 2 og Vísir",S,19.3,,Fréttablaðið,2014-04-19,4,6152300
+F-2014-04-15,"Fréttablaðið, Stöð 2 og Vísir",V,10.9,,Fréttablaðið,2014-04-19,4,6152300
+F-2014-04-15,"Fréttablaðið, Stöð 2 og Vísir",P,6.8,,Fréttablaðið,2014-04-19,4,6152300
+F-2014-09-01,"Fréttablaðið, Stöð 2 og Vísir",first_print,2014-09-02,,Fréttablaðið,2014-09-02,1,6161439
+F-2014-09-01,"Fréttablaðið, Stöð 2 og Vísir",fieldwork_start,2014-08-27,,Fréttablaðið,2014-09-03,8,6161494
+F-2014-09-01,"Fréttablaðið, Stöð 2 og Vísir",fieldwork_end,2014-09-01,,Fréttablaðið,2014-09-03,8,6161494
+F-2014-09-01,"Fréttablaðið, Stöð 2 og Vísir",sample,1875,,Fréttablaðið,2014-09-03,8,6161494
+F-2014-09-01,"Fréttablaðið, Stöð 2 og Vísir",response_rate,64,,Fréttablaðið,2014-09-03,8,6161494
+F-2014-09-01,"Fréttablaðið, Stöð 2 og Vísir",n_answering,1200,,Fréttablaðið,2014-09-03,8,6161494
+F-2014-09-01,"Fréttablaðið, Stöð 2 og Vísir",D,31,just under,Fréttablaðið,2014-09-02,1,6161439
+F-2014-09-01,"Fréttablaðið, Stöð 2 og Vísir",B,12,in words,Fréttablaðið,2014-09-02,1,6161439
+F-2014-09-01,"Fréttablaðið, Stöð 2 og Vísir",S,20,,Fréttablaðið,2014-09-02,1,6161439
+F-2014-09-01,"Fréttablaðið, Stöð 2 og Vísir",V,12,in words,Fréttablaðið,2014-09-02,1,6161439
+F-2014-09-01,"Fréttablaðið, Stöð 2 og Vísir",P,9,just over,Fréttablaðið,2014-09-02,1,6161439
+F-2014-10-22,"Fréttablaðið, Stöð 2 og Vísir",first_print,2014-10-24,,Fréttablaðið,2014-10-24,1,6164511
+F-2014-10-22,"Fréttablaðið, Stöð 2 og Vísir",fieldwork_start,2014-10-21,,Fréttablaðið,2014-10-24,1,6164511
+F-2014-10-22,"Fréttablaðið, Stöð 2 og Vísir",fieldwork_end,2014-10-22,,Fréttablaðið,2014-10-24,1,6164511
+F-2014-10-22,"Fréttablaðið, Stöð 2 og Vísir",sample,1241,,Fréttablaðið,2014-10-24,11,6164521
+F-2014-10-22,"Fréttablaðið, Stöð 2 og Vísir",response_rate,64.5,,Fréttablaðið,2014-10-24,11,6164521
+F-2014-10-22,"Fréttablaðið, Stöð 2 og Vísir",n_answering,801,,Fréttablaðið,2014-10-24,11,6164521
+F-2014-10-22,"Fréttablaðið, Stöð 2 og Vísir",D,30.3,,Fréttablaðið,2014-10-24,1,6164511
+F-2014-10-22,"Fréttablaðið, Stöð 2 og Vísir",B,8.7,,Fréttablaðið,2014-10-24,1,6164511
+F-2014-10-22,"Fréttablaðið, Stöð 2 og Vísir",S,23.1,,Fréttablaðið,2014-10-24,1,6164511
+F-2014-11-13,"Fréttablaðið, Stöð 2 og Vísir",first_print,2014-11-14,,Fréttablaðið,2014-11-14,1,6463175
+F-2014-11-13,"Fréttablaðið, Stöð 2 og Vísir",fieldwork_start,2014-11-12,,Fréttablaðið,2014-11-14,1,6463175
+F-2014-11-13,"Fréttablaðið, Stöð 2 og Vísir",fieldwork_end,2014-11-13,,Fréttablaðið,2014-11-14,1,6463175
+F-2014-11-13,"Fréttablaðið, Stöð 2 og Vísir",sample,1244,,Fréttablaðið,2014-11-14,1,6463175
+F-2014-11-13,"Fréttablaðið, Stöð 2 og Vísir",response_rate,64.3,,Fréttablaðið,2014-11-14,1,6463175
+F-2014-11-13,"Fréttablaðið, Stöð 2 og Vísir",n_answering,800,,Fréttablaðið,2014-11-14,1,6463175
+F-2014-11-13,"Fréttablaðið, Stöð 2 og Vísir",D,32.9,,Fréttablaðið,2014-11-17,1,6463351
+F-2014-11-13,"Fréttablaðið, Stöð 2 og Vísir",B,12.8,,Fréttablaðið,2014-11-17,1,6463351
+F-2014-11-13,"Fréttablaðið, Stöð 2 og Vísir",S,19.2,,Fréttablaðið,2014-11-17,1,6463351
+F-2014-11-13,"Fréttablaðið, Stöð 2 og Vísir",P,9.2,,Fréttablaðið,2014-11-17,1,6463351
+F-2015-03-11,"Fréttablaðið, Stöð 2 og Vísir",first_print,2015-03-13,,Fréttablaðið,2015-03-13,12,6169815
+F-2015-03-11,"Fréttablaðið, Stöð 2 og Vísir",fieldwork_start,2015-03-10,,Fréttablaðið,2015-03-13,12,6169815
+F-2015-03-11,"Fréttablaðið, Stöð 2 og Vísir",fieldwork_end,2015-03-11,,Fréttablaðið,2015-03-13,12,6169815
+F-2015-03-11,"Fréttablaðið, Stöð 2 og Vísir",sample,1024,,Fréttablaðið,2015-03-13,12,6169815
+F-2015-03-11,"Fréttablaðið, Stöð 2 og Vísir",response_rate,78.1,,Fréttablaðið,2015-03-13,12,6169815
+F-2015-03-11,"Fréttablaðið, Stöð 2 og Vísir",n_answering,800,,Fréttablaðið,2015-03-13,12,6169815
+F-2015-03-11,"Fréttablaðið, Stöð 2 og Vísir",P,22,just under,Fréttablaðið,2015-03-13,12,6169815
+F-2015-03-19,"Fréttablaðið, Stöð 2 og Vísir",first_print,2015-03-20,,Fréttablaðið,2015-03-20,1,6169572
+F-2015-03-19,"Fréttablaðið, Stöð 2 og Vísir",fieldwork_start,2015-03-18,,Fréttablaðið,2015-03-20,1,6169572
+F-2015-03-19,"Fréttablaðið, Stöð 2 og Vísir",fieldwork_end,2015-03-19,,Fréttablaðið,2015-03-20,1,6169572
+F-2015-03-19,"Fréttablaðið, Stöð 2 og Vísir",sample,1078,,Fréttablaðið,2015-03-20,1,6169572
+F-2015-03-19,"Fréttablaðið, Stöð 2 og Vísir",response_rate,74.3,,Fréttablaðið,2015-03-20,1,6169572
+F-2015-03-19,"Fréttablaðið, Stöð 2 og Vísir",n_answering,801,,Fréttablaðið,2015-03-20,1,6169572
+F-2015-03-19,"Fréttablaðið, Stöð 2 og Vísir",P,29.1,,Fréttablaðið,2015-03-21,10,6170421
+F-2015-06-16,"Fréttablaðið, Stöð 2 og Vísir",first_print,2015-06-17,,Fréttablaðið,2015-06-17,1,7201408
+F-2015-06-16,"Fréttablaðið, Stöð 2 og Vísir",fieldwork_start,2015-06-15,,Fréttablaðið,2015-06-17,1,7201408
+F-2015-06-16,"Fréttablaðið, Stöð 2 og Vísir",fieldwork_end,2015-06-16,,Fréttablaðið,2015-06-17,1,7201408
+F-2015-06-16,"Fréttablaðið, Stöð 2 og Vísir",sample,1249,,Fréttablaðið,2015-06-18,1,6295443
+F-2015-06-16,"Fréttablaðið, Stöð 2 og Vísir",response_rate,64.1,,Fréttablaðið,2015-06-19,18,6295396
+F-2015-06-16,"Fréttablaðið, Stöð 2 og Vísir",n_answering,800,,Fréttablaðið,2015-06-18,1,6295443
+F-2015-06-16,"Fréttablaðið, Stöð 2 og Vísir",D,29.5,,Fréttablaðið,2015-06-19,18,6295396
+F-2015-06-16,"Fréttablaðið, Stöð 2 og Vísir",P,37.5,,Fréttablaðið,2015-06-19,1,6295379
+M-2015-06-24,MMR,first_print,2015-06-26,,Fréttablaðið,2015-06-26,10,6423304
+M-2015-06-24,MMR,fieldwork_start,2015-06-16,,Fréttablaðið,2015-06-26,10,6423304
+M-2015-06-24,MMR,fieldwork_end,2015-06-24,,Fréttablaðið,2015-06-26,10,6423304
+M-2015-06-24,MMR,n_answering,931,,Fréttablaðið,2015-06-26,10,6423304
+M-2015-06-24,MMR,D,23.3,,Fréttablaðið,2015-06-26,10,6423304
+M-2015-06-24,MMR,B,10,,Fréttablaðið,2015-06-26,10,6423304
+M-2015-06-24,MMR,S,11.6,,Fréttablaðið,2015-06-26,10,6423304
+M-2015-06-24,MMR,V,10.5,,Fréttablaðið,2015-06-26,10,6423304
+M-2015-06-24,MMR,P,32.4,,Fréttablaðið,2015-06-26,10,6423304
+F-2015-11-11,"Fréttablaðið, Stöð 2 og Vísir",first_print,2015-11-12,,Fréttablaðið,2015-11-12,1,6344365
+F-2015-11-11,"Fréttablaðið, Stöð 2 og Vísir",fieldwork_start,2015-11-10,,Fréttablaðið,2015-11-12,1,6344365
+F-2015-11-11,"Fréttablaðið, Stöð 2 og Vísir",fieldwork_end,2015-11-11,,Fréttablaðið,2015-11-12,1,6344365
+F-2015-11-11,"Fréttablaðið, Stöð 2 og Vísir",sample,1215,,Fréttablaðið,2015-11-12,1,6344365
+F-2015-11-11,"Fréttablaðið, Stöð 2 og Vísir",response_rate,65.8,,Fréttablaðið,2015-11-12,1,6344365
+F-2015-11-11,"Fréttablaðið, Stöð 2 og Vísir",n_answering,800,,Fréttablaðið,2015-11-12,1,6344365
+F-2015-11-11,"Fréttablaðið, Stöð 2 og Vísir",D,29.3,,Fréttablaðið,2015-11-12,1,6344365
+F-2015-11-11,"Fréttablaðið, Stöð 2 og Vísir",B,9.9,,Fréttablaðið,2015-11-12,1,6344365
+F-2015-11-11,"Fréttablaðið, Stöð 2 og Vísir",S,8.2,,Fréttablaðið,2015-11-12,1,6344365
+F-2015-11-11,"Fréttablaðið, Stöð 2 og Vísir",V,9.9,,Fréttablaðið,2015-11-12,1,6344365
+F-2015-11-11,"Fréttablaðið, Stöð 2 og Vísir",P,36,just under,Fréttablaðið,2015-11-12,1,6344365
+M-p2010-09-01,MMR,first_print,2010-09-01,,Dagblaðið Vísir - DV,2010-09-01,4,6375913
+M-p2010-09-01,MMR,n_answering,876,,Dagblaðið Vísir - DV,2010-09-01,4,6375913
+M-p2011-01-25,MMR,first_print,2011-01-25,,Fréttablaðið,2011-01-25,6,5126798
+M-p2011-01-25,MMR,response_rate,60,approximate,Fréttablaðið,2011-01-25,6,5126798
+M-p2011-01-25,MMR,n_answering,890,,Fréttablaðið,2011-01-25,6,5126798
+M-p2011-09-16,MMR,first_print,2011-09-16,,Fréttablaðið,2011-09-16,6,5160273
+M-p2011-09-16,MMR,n_answering,893,,Fréttablaðið,2011-09-16,6,5160273
+M-p2011-11-25,MMR,first_print,2011-11-25,,Fréttablaðið,2011-11-25,13,5330964
+M-p2011-11-25,MMR,n_answering,879,,Fréttablaðið,2011-11-25,13,5330964
+M-p2012-01-07,MMR,first_print,2012-01-07,,Morgunblaðið,2012-01-07,29,6008200
+M-p2012-01-07,MMR,n_answering,879,,Morgunblaðið,2012-01-07,29,6008200
+M-p2012-01-24,MMR,first_print,2012-01-24,,Fréttablaðið,2012-01-24,13,5763537
+M-p2012-01-24,MMR,n_answering,785,,Fréttablaðið,2012-01-24,13,5763537
+M-p2012-12-04,MMR,first_print,2012-12-04,,Fréttablaðið,2012-12-04,16,5780752
+M-p2012-12-04,MMR,n_answering,879,,Fréttablaðið,2012-12-04,16,5780752
