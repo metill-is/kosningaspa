@@ -1,7 +1,7 @@
 # The guarded scorer (spec §5.6, §5.7): the only code that puts an arm's draws next to a
 # result. It reads the run's meta.json, passes the freeze guard (which holds back a 2017 cell
-# only; a 2021 or 2024 cell is scored with no freeze, R/harness/freeze.R), and only then reads
-# the result and, after it, the draws.
+# only; a 2016, 2021 or 2024 cell is scored with no freeze, R/harness/freeze.R), and only then
+# reads the result and, after it, the draws.
 
 #' The national scores that carry a batch-means standard error (`se_` prefix).
 #' @export

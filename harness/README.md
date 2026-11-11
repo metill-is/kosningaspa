@@ -34,8 +34,8 @@ python3 -I harness/sources/older_polls/build.py
 ```
 
 Then rebuild the generated tables, which reads the snapshot and `harness/older_polls.csv` and
-rewrites `harness/truth/elections_official.csv`, `harness/availability.csv`,
-`harness/availability_report.md`, `harness/entry_table.csv` and
+rewrites `harness/truth/elections_official.csv`, `harness/truth/anchor_2013.csv`,
+`harness/availability.csv`, `harness/availability_report.md`, `harness/entry_table.csv` and
 `harness/sources/seats_2021_official.csv`; on unchanged inputs `git status harness/` stays
 clean:
 
@@ -83,7 +83,8 @@ checks its kind needs, and the wider suite waits for a published or frozen forec
 
 - *A change meant to improve forecasts:* fit the old and the new model once each on 2024 eve
   and 2021 f180 and score them (Scoring a comparison). The working model's run list is
-  `harness/runs/v2.txt`.
+  `harness/runs/v2.txt`; `harness/runs/test-elections.txt` holds both arms on every fitted
+  scored cell, 2016's included.
 - *Before a published forecast or the freeze:* the full slow suite, two seeds per arm and cell,
   and a recovery study, which has to be rebuilt for this model first (`R/harness/archive/README.md`).
 
@@ -166,7 +167,7 @@ Every arm fitted on a scored cell gets a row in `harness/trials.csv`: the arm, t
 first fitted, its config, the cells it has draws for, how it was conceived (`planned` before
 any forecast was scored, `after-scores`, or `sampler` for another form of the same posterior)
 and what it changes. The number of rows is the number of comparisons behind any choice, and an
-`after-scores` arm is exploratory on 2021 and 2024 until another election confirms it.
+`after-scores` arm is exploratory on 2016, 2021 and 2024 until another election confirms it.
 
 ## The freeze and the 2017 locks
 

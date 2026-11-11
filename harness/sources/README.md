@@ -79,12 +79,16 @@ LC_ALL=en_US.UTF-8 Rscript harness/sources/wikipedia/poll_fieldwork.R "$dir"
 
 ## Known data discrepancies (not corrected)
 
-The publication-date gathering of 23 Oct 2026 compared 68 national polls in the frozen snapshot with their first public reports. This section lists the differences the harness does **not** correct, so a reader knows what the backtest's inputs contain. Two discrepancies are corrected harness-side. In `poll_n_corrections.csv`, Fréttablaðið's 2017-10-10 poll has n = 8 038 in the data against the 804 respondents reported (see Respondent-count corrections above). In `fundamentals_corrections.csv`, Sjálfstæðisflokkurinn's `incumbent_years` at 2017-10-28 is 5 in the data against the 4 its rule gives (see Fundamentals corrections above).
+The publication-date gathering of 23 Oct 2026 compared 68 national polls in the frozen snapshot with their first public reports. The gathering of 11 Nov 2026 compared the snapshot's 35 national polls of February to October 2016 the same way: the rows dated 2016 below are its differences, each linked to the report, and none of them is corrected. The 2016 polls the snapshot lacks are listed in `harness/sources/older_polls/README.md` (What the sources show about the snapshot). This section lists the differences the harness does **not** correct, so a reader knows what the backtest's inputs contain. Two discrepancies are corrected harness-side. In `poll_n_corrections.csv`, Fréttablaðið's 2017-10-10 poll has n = 8 038 in the data against the 804 respondents reported (see Respondent-count corrections above). In `fundamentals_corrections.csv`, Sjálfstæðisflokkurinn's `incumbent_years` at 2017-10-28 is 5 in the data against the 4 its rule gives (see Fundamentals corrections above).
 
 Respondent counts (`n` summed over a poll's rows) that differ from the source:
 
 | Poll (date, house) | Data n | Source | Note |
 |---|---|---|---|
+| 2016-05-14 Gallup | 4 178,9 | [RÚV](https://web.archive.org/web/20160609023739/http://www.ruv.is/frett/taep-38-stydja-rikisstjornina): 7 047 sampled, participation 59,9% (= 4 221); [Gallup's Þjóðarpúls of June 2016](https://www.mbl.is/media/95/9895.pdf): participation 59,3% | the two sources give different rates; the data follow Gallup's, 7 047 × 59,3% |
+| 2016-09-29 Félagsvísindastofnun | 997,5 | [mbl.is](https://www.mbl.is/frettir/kosning/2016/10/07/sjalfstaedisflokkur_fengi_26_prosent/): 1 750 sampled, 977 answered, response 57% | the report's count and rate disagree (977 / 1 750 = 55,8%); the data take 1 750 × 57% |
+| 2016-10-17 Fréttablaðið | 807,9 | [Vísir](https://www.visir.is/g/2016161018631): 801 reached | the house's six other 2016 polls are within 2,3 of their reports |
+| 2016-10-26 Gallup | 1 929,4 | [RÚV](https://web.archive.org/web/20161028220632/http://www.ruv.is/frett/gallup-sjalfstaedisflokkurinn-langstaerstur): sample 3 508, participation 55,0%, or 1 728 | the printed count and rate disagree (1 728 / 3 508 = 49,3%); the data take 3 508 × 55,0% |
 | 2021-07-14 Gallup | 4 590 | RÚV: "tæplega 3800" answered | the 3 800 may count only those naming a party |
 | 2021-09-15 Prósent | 746 | Fréttablaðið: 1 493 took part, 1 329 named a party | about half the participants |
 | 2024-09-15 Prósent | 2 025 | mbl.is: 1 093 | |
@@ -99,6 +103,9 @@ Shares that differ from the source:
 
 | Poll (date, house) | Data | Source |
 |---|---|---|
+| 2016-04-24 MMR | P 29,87, D 25,37, V 14,49, S 10,09, B 11,49 | P 28,9, D 27,8, V 14,0, S 9,7, B 11,2 as first published on 4 May 2016 ([MMR's page](https://web.archive.org/web/20160506070400/http://mmr.is:80/frettir/birtar-nieurstoeeur/541-fylgi-pirata-laekkar-um-7-8-milli-maelinga)); the data hold MMR's later correction, P 29,9, D 25,4, V 14,5, S 10,1, B 11,5, which the same page carries in its [capture of 12 Aug 2016](https://web.archive.org/web/20160812231713/http://mmr.is/frettir/birtar-nieurstoeeur/541-fylgi-pirata-laekkar-um-7-8-milli-maelinga) (see Publication dates) |
+| 2016-10-03 Fréttablaðið | V 12,9, Annað 14,9 | V 12,6, Annað (Björt framtíð and the rest) 15,2 ([Vísir](https://www.visir.is/g/2016161009466)); 12,9 is V's share in the house's previous poll, 2016-09-26 |
+| 2016-10-26 Gallup | B 9,5 | B 9,3 ([RÚV](https://web.archive.org/web/20161028220632/http://www.ruv.is/frett/gallup-sjalfstaedisflokkurinn-langstaerstur)) |
 | 2024-10-25 Maskína | J 5,2, Annað 2,1 | J 4,0 (RÚV poll API; Maskína 21 Nov report) |
 | 2024-11-04 Prósent | B 5,7, P 5,8 | B 5,8, P 5,7 (swapped) |
 | 2024-09-26 Prósent (the misdated duplicate of 2024-10-15) | D 15,1 | D 15,6 |

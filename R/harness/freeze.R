@@ -1,4 +1,4 @@
-# The freeze guard (spec §5.7): a 2021 or 2024 target cell may be scored at any time during
+# The freeze guard (spec §5.7): a 2016, 2021 or 2024 target cell may be scored at any time during
 # development (Brynjólfur, 5 November 2026: no arbitrary locks while the model is being
 # developed); a 2017 cell, the held-out confirmatory target, not before harness/FREEZE.md and
 # harness/DECISION.md are each committed with their sha256 lists, and never once
@@ -143,7 +143,7 @@ forecast_free <- function(E, root = project_root()) {
 }
 
 #' The freeze guard: whether forecast cell (E, F) may be scored under `root`. A cell that is
-#' not confirmatory (2021 or 2024) passes once check 1 does, and no freeze file is read for
+#' not confirmatory (2016, 2021 or 2024) passes once check 1 does, and no freeze file is read for
 #' it; checks 2–7 hold back a confirmatory (2017) cell only.
 #' @param E,F the cell's election and forecast date (Date or ISO string)
 #' @param root the project root whose `harness/` holds the freeze files
