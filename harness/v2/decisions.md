@@ -132,31 +132,39 @@ read the same rows as the data hold them), and the eight 2016 runs were refitted
 keeps polls from 2016 out of the assumed sample sizes of the older polls (eight MMR polls moved,
 by at most 10.5 respondents) and takes a 2016 cell's previous shares from the official 2013
 result, which reaches no Stan field. The rule was chosen after the second reading's scores were
-seen, and after a diagnostic refit of both arms on the eve had sized it (the core's CRPS10 1.310
-and R0's 1.449, which the third reading's eve reproduces), so the third reading is exploratory.
+seen, and after a diagnostic refit of both arms on the eve, with the rule alone, had sized it (the
+core's CRPS10 1.310 and R0's 1.449; its fits are not in the repository, and the third reading's
+eve, 1.317 and 1.453, agrees with it within Monte Carlo error), so the third reading is
+exploratory.
 
-What the rule did. It left the core's mean over the four cells where it was and made R0's worse,
-so the core's larger lead on 2016 (0.030 pp, now 0.086) is R0's loss at 47 days and not a gain of
-the core's. On the eve and at 14 days, by when Flokkur fólksins polled 1 to 4% where it was
-reported, the rule did what it was meant to: the core's median for Annað fell from 12.95 to 12.26
-and from 15.40 to 14.74, against a result of 9.36. At 47 days it cost both arms. That cell's three
-latest polls are Gallup's of 13 August, the first to report Flokkur fólksins, at 0.10% (3 of 3,164
-respondents), MMR's of 26 August and Fréttablaðið's of 6 September, which leave the party blank
-and have an Annað of 12.0% and 4.7% (the snapshot's rows). The rule reads those two as not
-reporting Annað, which leaves Gallup's 3.9% as the only late reading, and MMR's Annað ran well
-above Gallup's that summer (8.2 and 10.3% in MMR's two July polls against 4.4 and 5.2% in Gallup's
-of June and July, with every party reported by both). Both models then put Annað about 1.5 points
-lower (R0's median from 5.61 to 4.08, the core's from 8.08 to 6.40), further from the result; the
-cell's change sits on Annað and, as it falls, on Píratar. The rule's trigger is any earlier
-positive share, however small.
+What the rule did. The refit carries the rule and the eight moved sample sizes together, so a
+cell's change is theirs jointly. The core's mean over the four cells stayed where it was, its
+gains at 14 days and on the eve (0.077 and 0.069 pp) offsetting its losses at 180 and 47 days
+(0.054 and 0.102), and R0's mean got worse, by 0.217 pp at 47 days and by 0.011 or less elsewhere.
+So the core's larger mean lead on 2016 (0.030 pp, now 0.086) is R0's loss at 47 days and not a net
+gain of the core's. On the eve and at 14 days, where the polls that reported Flokkur fólksins from
+29 September on had it at 1.2 to 3.8%, the rule did what it was meant to: the core's median for
+Annað fell from 12.95 to 12.26 and from 15.40 to 14.74, against a result of 9.36. At 47 days it
+cost both arms. That cell's three latest polls are Gallup's of 13 August, the first to report
+Flokkur fólksins, at 0.10% (3 of 3,164 respondents), MMR's of 26 August and Fréttablaðið's of 6
+September, which leave the party blank and have an Annað of 12.0% and 4.7% (the snapshot's rows).
+The rule reads those two as not reporting Annað, which leaves Gallup's 3.9% as the only late
+reading, and MMR's Annað ran well above Gallup's that summer (8.2 and 10.3% in MMR's two July
+polls against 4.4 and 5.2% in Gallup's of June and July, with every party reported by both). Both
+models then put Annað about 1.5 points lower (R0's median from 5.61 to 4.08, the core's from 8.08
+to 6.40), further from the result; the cell's change sits on Annað and, as it falls, on Píratar.
+At 180 days the rule changes two polls (MMR's of January 2013 and of 4 April 2016) and also moved
+Annað away from its result there, 12.90 with Flokkur fólksins folded in: R0's median from 5.57 to
+5.37 and the core's from 9.33 to 9.00, with the core's CRPS10 0.054 pp worse, about twice its
+Monte Carlo error. The rule's trigger is any earlier positive share, however small.
 
 The core's excess on Annað at the eve is still 2.9 points. Part of it is the constant poll bias:
 with one closed election in the window it is what the polls' miss in 2013 taught, and in the
 core's eve fit it scales Annað up by about 13% against the polls (a posterior median of −0.13 on
-the log scale, 90% interval −0.29 to 0.04, from the run's draws). The rest is the polls: every
-national poll from 3 October puts Annað between 9.5 and 15.2%, above the result, whether or not
-it reports Flokkur fólksins (the snapshot's rows). The core follows them, and R0's median of 8.06
-sits below every one of them.
+the log scale, 90% interval −0.29 to 0.04, from the run's draws, which are not in the repository).
+The rest is the polls: every national poll from 3 October puts Annað between 9.5 and 15.2%, above
+the result, whether or not it reports Flokkur fólksins (the snapshot's rows). The core follows
+them, and R0's median of 8.06 sits below every one of them.
 
 No model is adopted or changed on the strength of 2016. `Stan/forecast_v2.stan` changed once for it
 (b507364: a guard for a cell with no kjördæmi poll; `harness/v2/lp-equivalence-simple-core.md`
