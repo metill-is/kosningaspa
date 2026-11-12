@@ -6,7 +6,7 @@
 > that opened at the 2013 election; the report was written by `R/harness/score_report.R` at commit
 > ae0b808. It cannot be regenerated at a later commit, where the 2016 cells also read
 > `harness/older_polls.csv`, and its wording is that of the script at the time. Two lines are
-> edited by hand: this title and the run-list line. `harness/v2/decisions.md` sets the two
+> edited by hand: this title and the run-list line. `harness/v2/decisions.md` sets the
 > readings side by side.
 
 Written by `R/harness/score_report.R` from `score_cell()` on each run, against the official results.

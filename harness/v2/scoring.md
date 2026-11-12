@@ -13,14 +13,14 @@ of the election's outcome, and is the reading to rank the two arms by.
 
 | Cell (E, F) | Arm | Run | Iterations (warmup + sampling) | Seed | Commit | Diagnostics flags |
 | --- | --- | --- | --- | --- | --- | --- |
-| 2016-10-29, 2016-05-02 | r0 | `r0_2016-10-29_2016-05-02_s2701` | 1000 + 1000 | 2701 | 698e0a902b69f960f4c32451feeac40257425b05 | flags: max R-hat 1.0400 > 1.01; divergent 5 > 0; min scored bulk ESS 301 < 400 |
-| 2016-10-29, 2016-05-02 | v2 | `v2_2016-10-29_2016-05-02_s2701` | 1000 + 1000 | 2701 | 698e0a902b69f960f4c32451feeac40257425b05 | flags: max R-hat 1.0215 > 1.01; divergent 1 > 0 |
-| 2016-10-29, 2016-09-12 | r0 | `r0_2016-10-29_2016-09-12_s2701` | 1000 + 1000 | 2701 | 698e0a902b69f960f4c32451feeac40257425b05 | flags: max R-hat 1.0152 > 1.01; divergent 57 > 0 |
-| 2016-10-29, 2016-09-12 | v2 | `v2_2016-10-29_2016-09-12_s2701` | 1000 + 1000 | 2701 | 698e0a902b69f960f4c32451feeac40257425b05 | flags: max R-hat 1.0268 > 1.01 |
-| 2016-10-29, 2016-10-15 | r0 | `r0_2016-10-29_2016-10-15_s2701` | 1000 + 1000 | 2701 | 698e0a902b69f960f4c32451feeac40257425b05 | flags: max R-hat 1.0219 > 1.01; divergent 55 > 0 |
-| 2016-10-29, 2016-10-15 | v2 | `v2_2016-10-29_2016-10-15_s2701` | 1000 + 1000 | 2701 | 698e0a902b69f960f4c32451feeac40257425b05 | flags: max R-hat 1.0138 > 1.01 |
-| 2016-10-29, 2016-10-28 | r0 | `r0_2016-10-29_2016-10-28_s2701` | 1000 + 1000 | 2701 | 698e0a902b69f960f4c32451feeac40257425b05 | flags: max R-hat 1.2986 > 1.01; divergent 55 > 0 |
-| 2016-10-29, 2016-10-28 | v2 | `v2_2016-10-29_2016-10-28_s2701` | 1000 + 1000 | 2701 | 698e0a902b69f960f4c32451feeac40257425b05 | flags: max R-hat 1.0220 > 1.01; divergent 1 > 0 |
+| 2016-10-29, 2016-05-02 | r0 | `r0_2016-10-29_2016-05-02_s2701` | 1000 + 1000 | 2701 | e7a60aa880f806a50cf5f7341650a077f93d3e28 | flags: max R-hat 1.0112 > 1.01; divergent 17 > 0 |
+| 2016-10-29, 2016-05-02 | v2 | `v2_2016-10-29_2016-05-02_s2701` | 1000 + 1000 | 2701 | e7a60aa880f806a50cf5f7341650a077f93d3e28 | flags: max R-hat 1.0221 > 1.01 |
+| 2016-10-29, 2016-09-12 | r0 | `r0_2016-10-29_2016-09-12_s2701` | 1000 + 1000 | 2701 | e7a60aa880f806a50cf5f7341650a077f93d3e28 | flags: max R-hat 1.0862 > 1.01; divergent 54 > 0 |
+| 2016-10-29, 2016-09-12 | v2 | `v2_2016-10-29_2016-09-12_s2701` | 1000 + 1000 | 2701 | e7a60aa880f806a50cf5f7341650a077f93d3e28 | flags: max R-hat 1.0122 > 1.01; divergent 1 > 0 |
+| 2016-10-29, 2016-10-15 | r0 | `r0_2016-10-29_2016-10-15_s2701` | 1000 + 1000 | 2701 | e7a60aa880f806a50cf5f7341650a077f93d3e28 | flags: max R-hat 1.0590 > 1.01; divergent 57 > 0 |
+| 2016-10-29, 2016-10-15 | v2 | `v2_2016-10-29_2016-10-15_s2701` | 1000 + 1000 | 2701 | e7a60aa880f806a50cf5f7341650a077f93d3e28 | flags: max R-hat 1.0108 > 1.01 |
+| 2016-10-29, 2016-10-28 | r0 | `r0_2016-10-29_2016-10-28_s2701` | 1000 + 1000 | 2701 | e7a60aa880f806a50cf5f7341650a077f93d3e28 | flags: max R-hat 1.0152 > 1.01; divergent 55 > 0 |
+| 2016-10-29, 2016-10-28 | v2 | `v2_2016-10-29_2016-10-28_s2701` | 1000 + 1000 | 2701 | e7a60aa880f806a50cf5f7341650a077f93d3e28 | flags: max R-hat 1.0215 > 1.01; divergent 1 > 0 |
 | 2021-09-25, 2021-03-29 | r0 | `r0_2021-09-25_2021-03-29_s2701` | 400 + 400 | 2701 | b507364835250094f7da852328b97c163640824c | flags: max R-hat 1.0329 > 1.01; divergent 1 > 0; min scored bulk ESS 294 < 400 |
 | 2021-09-25, 2021-03-29 | v2 | `v2_2021-09-25_2021-03-29_s2701` | 400 + 400 | 2701 | b507364835250094f7da852328b97c163640824c | flags: max R-hat 1.0281 > 1.01 |
 | 2021-09-25, 2021-09-24 | r0 | `r0_2021-09-25_2021-09-24_s2701` | 400 + 400 | 2701 | b5cd2b741ec63f4813cdef981960073c27667582 | flags: max R-hat 1.0553 > 1.01; min scored bulk ESS 386 < 400 |
@@ -39,21 +39,21 @@ The noise is an estimate, not a bound: it holds both forecasts fixed and takes o
 
 | Cell | v2 − r0 | SE_diff (Monte Carlo) | Outcome noise | Expected if r0 is right | Expected if v2 is right |
 | --- | --- | --- | --- | --- | --- |
-| 2016 f180 | -0.058 | 0.023 | 0.804 | 0.901 | -0.842 |
-| 2016 f47 | -0.338 | 0.022 | 0.620 | 0.458 | -0.486 |
-| 2016 f14 | 0.344 | 0.015 | 0.435 | 0.326 | -0.362 |
-| 2016 eve | -0.067 | 0.013 | 0.437 | 0.571 | -0.554 |
+| 2016 f180 | -0.015 | 0.031 | 0.813 | 0.785 | -0.707 |
+| 2016 f47 | -0.453 | 0.016 | 0.613 | 0.489 | -0.529 |
+| 2016 f14 | 0.260 | 0.020 | 0.420 | 0.318 | -0.318 |
+| 2016 eve | -0.137 | 0.013 | 0.410 | 0.532 | -0.524 |
 | 2021 f180 | -0.157 | 0.021 | 0.200 | 0.125 | -0.139 |
 | 2021 eve | -0.300 | 0.016 | 0.222 | 0.351 | -0.352 |
 | 2024 eve | 0.002 | 0.009 | 0.060 | 0.034 | -0.025 |
 
 | Election | Cells | Mean v2 − r0 | Outcome noise |
 | --- | --- | --- | --- |
-| 2016-10-29 | 4 | -0.030 | 0.574 |
+| 2016-10-29 | 4 | -0.086 | 0.564 |
 | 2021-09-25 | 2 | -0.229 | 0.211 |
 | 2024-11-30 | 1 | 0.002 | 0.060 |
 
-Over the 3 elections: mean -0.086 pp, outcome noise 0.205 pp, ratio -0.42: indistinguishable (a mean difference under twice its noise).
+Over the 3 elections: mean -0.104 pp, outcome noise 0.202 pp, ratio -0.52: indistinguishable (a mean difference under twice its noise).
 
 ## MAE
 
@@ -67,10 +67,10 @@ is over the named parties' kjördæmi cells; seat error is the sum over parties 
 
 | Cell | r0: MAE8, pp (SE) | v2: MAE8, pp (SE) | v2 − r0 | Reading | r0: MAE, all parties | v2: MAE, all parties | r0: kjördæmi MAE | v2: kjördæmi MAE | r0: seat error | v2: seat error |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 2016 f180 | 2.93 (0.04) | 2.41 (0.03) | -0.52 | better | 3.56 | 2.58 | 3.08 | 2.86 | 17 (not comparable) | 19 (not comparable) |
-| 2016 f47 | 3.33 (0.03) | 2.26 (0.03) | -1.07 | better | 3.39 | 2.14 | 3.29 | 2.55 | 22 (not comparable) | 14 (not comparable) |
-| 2016 f14 | 2.13 (0.02) | 1.98 (0.02) | -0.15 | better | 2.04 | 2.49 | 2.52 | 2.67 | 15 (not comparable) | 14 (not comparable) |
-| 2016 eve | 1.96 (0.03) | 1.56 (0.02) | -0.40 | better | 1.81 | 1.81 | 2.45 | 2.30 | 20 (not comparable) | 13 (not comparable) |
+| 2016 f180 | 2.93 (0.04) | 2.42 (0.03) | -0.51 | better | 3.58 | 2.63 | 3.01 | 2.88 | 17 (not comparable) | 19 (not comparable) |
+| 2016 f47 | 3.31 (0.03) | 2.20 (0.03) | -1.11 | better | 3.56 | 2.30 | 3.30 | 2.54 | 22 (not comparable) | 14 (not comparable) |
+| 2016 f14 | 2.13 (0.03) | 1.93 (0.02) | -0.20 | better | 2.01 | 2.36 | 2.53 | 2.63 | 15 (not comparable) | 13 (not comparable) |
+| 2016 eve | 1.87 (0.02) | 1.61 (0.02) | -0.26 | better | 1.80 | 1.77 | 2.41 | 2.32 | 18 (not comparable) | 13 (not comparable) |
 | 2021 f180 | 2.08 (0.05) | 2.11 (0.02) | 0.03 | tie | 2.00 | 1.71 | 2.66 | 2.39 | 12.5 | 13 |
 | 2021 eve | 1.53 (0.01) | 1.28 (0.01) | -0.25 | better | 1.63 | 1.19 | 1.81 | 1.34 | 9 | 11 |
 | 2024 eve | 1.18 (0.01) | 1.33 (0.01) | 0.15 | worse | 1.02 | 1.15 | 1.59 | 1.51 | 7 | 8 |
@@ -79,29 +79,29 @@ is over the named parties' kjördæmi cells; seat error is the sum over parties 
 
 | Score (lower is better unless marked) | r0 (SE) | v2 (SE) | v2 − r0 | SE_diff | Reading (Monte Carlo error only) |
 | --- | --- | --- | --- | --- | --- |
-| CRPS10, pp (co-primary) | 2.422 (0.017) | 2.364 (0.015) | -0.058 | 0.023 | better |
-| mDSS (co-primary) | -1.21 (0.31) | 4.19 (0.60) | 5.40 | 0.67 | worse |
-| d² (p: 0.126, 0.019) | 9.96 (0.28) | 15.11 (0.63) | 5.15 | 0.69 | worse |
-| MAE8, pp (over the 6 named parties scored) | 2.934 (0.043) | 2.411 (0.029) | -0.523 | 0.052 | better |
-| MAE over all parties, pp | 3.563 | 2.577 | -0.986 |  | reported |
-| IS90 | 16.76 (0.43) | 23.89 (0.65) | 7.13 | 0.78 | worse |
-| National 50% coverage (higher is better) | 3 of 7 (0.16) | 4 of 7 (0.00) | 1 | 0.16 | reported |
-| National 90% coverage (higher is better) | 6 of 7 (0.13) | 5 of 7 (0.06) | -1 | 0.14 | reported |
-| Kjördæmi CRPS, pp | 2.475 (0.016) | 2.337 (0.014) | -0.138 | 0.021 | better |
-| Kjördæmi 90% coverage (higher is better) | 37 of 42 (0.41) | 35 of 42 (0.14) | -2 | 0.43 | reported |
-| Kjördæmi MAE over the named cells, pp | 3.079 | 2.857 | -0.221 |  | reported |
-| Seat CRPS per party (not comparable) | 1.872 (0.014) | 2.419 (0.015) | 0.547 | 0.021 | not comparable |
+| CRPS10, pp (co-primary) | 2.433 (0.024) | 2.418 (0.019) | -0.015 | 0.031 | tie |
+| mDSS (co-primary) | -1.28 (0.42) | 4.68 (0.68) | 5.96 | 0.80 | worse |
+| d² (p: 0.132, 0.016) | 9.83 (0.46) | 15.60 (0.81) | 5.77 | 0.93 | worse |
+| MAE8, pp (over the 6 named parties scored) | 2.927 (0.042) | 2.419 (0.026) | -0.508 | 0.049 | better |
+| MAE over all parties, pp | 3.584 | 2.630 | -0.954 |  | reported |
+| IS90 | 17.71 (0.56) | 23.78 (1.03) | 6.07 | 1.17 | worse |
+| National 50% coverage (higher is better) | 3 of 7 (0.12) | 4 of 7 (0.00) | 1 | 0.12 | reported |
+| National 90% coverage (higher is better) | 6 of 7 (0.11) | 5 of 7 (0.10) | -1 | 0.15 | reported |
+| Kjördæmi CRPS, pp | 2.483 (0.023) | 2.386 (0.016) | -0.097 | 0.028 | better |
+| Kjördæmi 90% coverage (higher is better) | 35 of 42 (0.26) | 35 of 42 (0.28) | 0 | 0.38 | reported |
+| Kjördæmi MAE over the named cells, pp | 3.011 | 2.878 | -0.133 |  | reported |
+| Seat CRPS per party (not comparable) | 1.871 (0.013) | 2.438 (0.022) | 0.567 | 0.025 | not comparable |
 | Seat absolute error, summed over parties (not comparable) | 17 | 19 | 2 |  | not comparable |
-| Seat 90% coverage (higher is better) (not comparable) | 6 of 7 (0.06) | 4 of 7 (0.10) | -2 | 0.12 | not comparable |
-| Brier score of the incumbents' majority (not comparable) | 0.022 (0.002) | 0.129 (0.005) | 0.107 | 0.006 | not comparable |
-| P(majority for the coalition that formed), report only (higher is better) (not comparable) | 0.025 | 0.024 | -0.002 |  | not comparable |
+| Seat 90% coverage (higher is better) (not comparable) | 6 of 7 (0.06) | 4 of 7 (0.11) | -2 | 0.13 | not comparable |
+| Brier score of the incumbents' majority (not comparable) | 0.025 (0.002) | 0.129 (0.003) | 0.103 | 0.004 | not comparable |
+| P(majority for the coalition that formed), report only (higher is better) (not comparable) | 0.025 | 0.021 | -0.004 |  | not comparable |
 
-National parties: 7 (r0), 7 (v2). The gap between each run's two national readings (the kjördæmi aggregate scored here and the model's own) is at most 0.598 pp (r0) and 0.000 pp (v2).
+National parties: 7 (r0), 7 (v2). The gap between each run's two national readings (the kjördæmi aggregate scored here and the model's own) is at most 0.578 pp (r0) and 0.000 pp (v2).
 
-1. Calibration gate: v2's d² has p = 0.019 against χ² with 6 degrees of freedom, above 0.01: yes, reported only: the gate is an eve criterion (r0's p = 0.126).
-2. No loss of accuracy: CRPS10 v2 − r0 = -0.058 pp (SE_diff 0.023, better), at most 0.05 pp worse or a tie: yes.
-3. Better distribution: mDSS v2 − r0 = 5.40 (SE_diff 0.67, worse), lower beyond a tie or r0 failing the gate: no.
-4. No regional loss: kjördæmi CRPS -0.138 pp (better), at most 0.1 worse or a tie; seat CRPS per party left out, not comparable: yes.
+1. Calibration gate: v2's d² has p = 0.016 against χ² with 6 degrees of freedom, above 0.01: yes, reported only: the gate is an eve criterion (r0's p = 0.132).
+2. No loss of accuracy: CRPS10 v2 − r0 = -0.015 pp (SE_diff 0.031, tie), at most 0.05 pp worse or a tie: yes.
+3. Better distribution: mDSS v2 − r0 = 5.96 (SE_diff 0.80, worse), lower beyond a tie or r0 failing the gate: no.
+4. No regional loss: kjördæmi CRPS -0.097 pp (better), at most 0.1 worse or a tie; seat CRPS per party left out, not comparable: yes.
 
 On this cell Flokkur Fólksins is scored inside Annað, having had no admitted poll by F, so Annað's result includes its share.
 
@@ -112,13 +112,13 @@ All four on this cell: no.
 
 | Party | Result, % | r0: median, % | v2: median, % | r0: absolute error, pp | v2: absolute error, pp | r0: CRPS, pp | v2: CRPS, pp |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Sjálfstæðisflokkurinn | 29.00 | 24.94 | 28.80 | 4.06 | 0.20 | 2.400 | 1.084 |
-| Vinstri Græn | 15.91 | 15.40 | 15.86 | 0.50 | 0.05 | 1.020 | 1.013 |
-| Píratar | 14.48 | 20.36 | 16.52 | 5.87 | 2.04 | 3.710 | 2.034 |
-| Annað | 12.90 | 5.57 | 9.33 | 7.33 | 3.57 | 5.296 | 2.088 |
-| Framsóknarflokkurinn | 11.49 | 13.82 | 11.64 | 2.33 | 0.15 | 1.519 | 1.036 |
-| Viðreisn | 10.48 | 8.03 | 3.41 | 2.45 | 7.07 | 1.443 | 5.549 |
-| Samfylkingin | 5.74 | 8.13 | 10.71 | 2.39 | 4.96 | 1.564 | 3.744 |
+| Sjálfstæðisflokkurinn | 29.00 | 25.13 | 28.85 | 3.87 | 0.15 | 2.286 | 1.089 |
+| Vinstri Græn | 15.91 | 15.40 | 15.99 | 0.51 | 0.08 | 1.045 | 1.028 |
+| Píratar | 14.48 | 20.34 | 16.48 | 5.85 | 2.00 | 3.691 | 2.049 |
+| Annað | 12.90 | 5.37 | 9.00 | 7.53 | 3.90 | 5.426 | 2.293 |
+| Framsóknarflokkurinn | 11.49 | 13.69 | 11.62 | 2.20 | 0.13 | 1.459 | 1.058 |
+| Viðreisn | 10.48 | 7.79 | 3.34 | 2.69 | 7.14 | 1.517 | 5.613 |
+| Samfylkingin | 5.74 | 8.19 | 10.76 | 2.45 | 5.01 | 1.607 | 3.798 |
 
 Of the 7 parties both arms forecast, v2's median is closer to the result on 5 and its CRPS lower on 5 (no MC error per party; consistency evidence only).
 
@@ -126,29 +126,29 @@ Of the 7 parties both arms forecast, v2's median is closer to the result on 5 an
 
 | Score (lower is better unless marked) | r0 (SE) | v2 (SE) | v2 − r0 | SE_diff | Reading (Monte Carlo error only) |
 | --- | --- | --- | --- | --- | --- |
-| CRPS10, pp (co-primary) | 2.116 (0.018) | 1.778 (0.013) | -0.338 | 0.022 | better |
-| mDSS (co-primary) | 1.46 (0.32) | 5.34 (0.49) | 3.88 | 0.59 | worse |
-| d² (p: 0.055, 0.025) | 13.81 (0.37) | 16.03 (0.53) | 2.21 | 0.65 | worse |
-| MAE8, pp (over the 7 named parties scored) | 3.334 (0.028) | 2.263 (0.029) | -1.071 | 0.040 | better |
-| MAE over all parties, pp | 3.387 | 2.141 | -1.246 |  | reported |
-| IS90 | 12.31 (0.09) | 22.30 (0.25) | 10.00 | 0.27 | worse |
-| National 50% coverage (higher is better) | 2 of 8 (0.12) | 6 of 8 (0.00) | 4 | 0.12 | reported |
-| National 90% coverage (higher is better) | 7 of 8 (0.12) | 7 of 8 (0.09) | 0 | 0.15 | reported |
-| Kjördæmi CRPS, pp | 2.150 (0.014) | 1.953 (0.012) | -0.197 | 0.018 | better |
-| Kjördæmi 90% coverage (higher is better) | 45 of 48 (0.26) | 41 of 48 (0.21) | -4 | 0.33 | reported |
-| Kjördæmi MAE over the named cells, pp | 3.291 | 2.555 | -0.737 |  | reported |
-| Seat CRPS per party (not comparable) | 1.874 (0.013) | 1.494 (0.009) | -0.380 | 0.016 | not comparable |
+| CRPS10, pp (co-primary) | 2.333 (0.014) | 1.880 (0.008) | -0.453 | 0.016 | better |
+| mDSS (co-primary) | 5.27 (0.49) | 6.16 (0.58) | 0.89 | 0.76 | tie |
+| d² (p: 0.014, 0.020) | 17.50 (0.46) | 16.61 (0.63) | -0.89 | 0.78 | tie |
+| MAE8, pp (over the 7 named parties scored) | 3.314 (0.033) | 2.203 (0.033) | -1.111 | 0.047 | better |
+| MAE over all parties, pp | 3.561 | 2.299 | -1.262 |  | reported |
+| IS90 | 14.37 (0.35) | 22.35 (0.15) | 7.98 | 0.38 | worse |
+| National 50% coverage (higher is better) | 3 of 8 (0.15) | 5 of 8 (0.00) | 2 | 0.15 | reported |
+| National 90% coverage (higher is better) | 7 of 8 (0.18) | 7 of 8 (0.09) | 0 | 0.20 | reported |
+| Kjördæmi CRPS, pp | 2.346 (0.013) | 2.015 (0.007) | -0.331 | 0.015 | better |
+| Kjördæmi 90% coverage (higher is better) | 42 of 48 (0.52) | 40 of 48 (0.24) | -2 | 0.57 | reported |
+| Kjördæmi MAE over the named cells, pp | 3.298 | 2.544 | -0.754 |  | reported |
+| Seat CRPS per party (not comparable) | 1.871 (0.012) | 1.493 (0.008) | -0.378 | 0.015 | not comparable |
 | Seat absolute error, summed over parties (not comparable) | 22 | 14 | -8 |  | not comparable |
-| Seat 90% coverage (higher is better) (not comparable) | 6 of 8 (0.12) | 7 of 8 (0.06) | 1 | 0.14 | not comparable |
-| Brier score of the incumbents' majority (not comparable) | 0.032 (0.002) | 0.040 (0.003) | 0.009 | 0.003 | not comparable |
-| P(majority for the coalition that formed), report only (higher is better) (not comparable) | 0.033 | 0.192 | 0.159 |  | not comparable |
+| Seat 90% coverage (higher is better) (not comparable) | 7 of 8 (0.11) | 7 of 8 (0.10) | 0 | 0.15 | not comparable |
+| Brier score of the incumbents' majority (not comparable) | 0.024 (0.002) | 0.036 (0.002) | 0.012 | 0.003 | not comparable |
+| P(majority for the coalition that formed), report only (higher is better) (not comparable) | 0.040 | 0.184 | 0.144 |  | not comparable |
 
-National parties: 8 (r0), 8 (v2). The gap between each run's two national readings (the kjördæmi aggregate scored here and the model's own) is at most 0.581 pp (r0) and 0.000 pp (v2).
+National parties: 8 (r0), 8 (v2). The gap between each run's two national readings (the kjördæmi aggregate scored here and the model's own) is at most 0.610 pp (r0) and 0.000 pp (v2).
 
-1. Calibration gate: v2's d² has p = 0.025 against χ² with 7 degrees of freedom, above 0.01: yes, reported only: the gate is an eve criterion (r0's p = 0.055).
-2. No loss of accuracy: CRPS10 v2 − r0 = -0.338 pp (SE_diff 0.022, better), at most 0.05 pp worse or a tie: yes.
-3. Better distribution: mDSS v2 − r0 = 3.88 (SE_diff 0.59, worse), lower beyond a tie or r0 failing the gate: no.
-4. No regional loss: kjördæmi CRPS -0.197 pp (better), at most 0.1 worse or a tie; seat CRPS per party left out, not comparable: yes.
+1. Calibration gate: v2's d² has p = 0.020 against χ² with 7 degrees of freedom, above 0.01: yes, reported only: the gate is an eve criterion (r0's p = 0.014).
+2. No loss of accuracy: CRPS10 v2 − r0 = -0.453 pp (SE_diff 0.016, better), at most 0.05 pp worse or a tie: yes.
+3. Better distribution: mDSS v2 − r0 = 0.89 (SE_diff 0.76, tie), lower beyond a tie or r0 failing the gate: no.
+4. No regional loss: kjördæmi CRPS -0.331 pp (better), at most 0.1 worse or a tie; seat CRPS per party left out, not comparable: yes.
 
 Seat scores not comparable on this cell: Annað holds 4 official seats at E, which no draw gives it, since every draw allocates the seats with Annað ineligible. They are reported, marked, and left out of criterion 4.
 
@@ -157,14 +157,14 @@ All four on this cell: no.
 
 | Party | Result, % | r0: median, % | v2: median, % | r0: absolute error, pp | v2: absolute error, pp | r0: CRPS, pp | v2: CRPS, pp |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Sjálfstæðisflokkurinn | 29.00 | 26.15 | 27.12 | 2.85 | 1.88 | 1.719 | 1.446 |
-| Vinstri Græn | 15.91 | 14.43 | 14.09 | 1.48 | 1.82 | 0.981 | 1.212 |
-| Píratar | 14.48 | 21.80 | 17.05 | 7.31 | 2.57 | 4.675 | 2.018 |
-| Framsóknarflokkurinn | 11.49 | 12.84 | 10.81 | 1.35 | 0.68 | 1.001 | 0.979 |
-| Viðreisn | 10.48 | 4.58 | 8.18 | 5.90 | 2.30 | 3.359 | 2.259 |
-| Annað | 9.36 | 5.61 | 8.08 | 3.75 | 1.28 | 2.332 | 0.915 |
-| Samfylkingin | 5.74 | 8.38 | 8.95 | 2.64 | 3.21 | 1.845 | 2.157 |
-| Flokkur Fólksins | 3.54 | 1.72 | 0.14 | 1.81 | 3.39 | 1.015 | 3.238 |
+| Sjálfstæðisflokkurinn | 29.00 | 26.51 | 27.47 | 2.48 | 1.52 | 1.556 | 1.354 |
+| Vinstri Græn | 15.91 | 14.83 | 14.39 | 1.08 | 1.52 | 0.891 | 1.127 |
+| Píratar | 14.48 | 22.58 | 17.68 | 8.10 | 3.19 | 5.219 | 2.304 |
+| Framsóknarflokkurinn | 11.49 | 12.93 | 11.07 | 1.43 | 0.43 | 1.051 | 0.957 |
+| Viðreisn | 10.48 | 4.70 | 8.22 | 5.77 | 2.25 | 3.284 | 2.208 |
+| Annað | 9.36 | 4.08 | 6.40 | 5.29 | 2.97 | 3.915 | 1.765 |
+| Samfylkingin | 5.74 | 8.24 | 8.85 | 2.50 | 3.11 | 1.711 | 2.080 |
+| Flokkur Fólksins | 3.54 | 1.70 | 0.14 | 1.84 | 3.40 | 1.036 | 3.243 |
 
 Of the 8 parties both arms forecast, v2's median is closer to the result on 5 and its CRPS lower on 5 (no MC error per party; consistency evidence only).
 
@@ -172,29 +172,29 @@ Of the 8 parties both arms forecast, v2's median is closer to the result on 5 an
 
 | Score (lower is better unless marked) | r0 (SE) | v2 (SE) | v2 − r0 | SE_diff | Reading (Monte Carlo error only) |
 | --- | --- | --- | --- | --- | --- |
-| CRPS10, pp (co-primary) | 1.562 (0.011) | 1.906 (0.009) | 0.344 | 0.015 | worse |
-| mDSS (co-primary) | -6.33 (0.28) | -3.13 (0.43) | 3.19 | 0.51 | worse |
-| d² (p: 0.181, 0.111) | 10.14 (0.32) | 11.69 (0.47) | 1.55 | 0.57 | worse |
-| MAE8, pp (over the 7 named parties scored) | 2.130 (0.022) | 1.981 (0.024) | -0.149 | 0.033 | better |
-| MAE over all parties, pp | 2.040 | 2.488 | 0.448 |  | reported |
-| IS90 | 15.96 (0.40) | 14.89 (0.32) | -1.08 | 0.51 | better |
-| National 50% coverage (higher is better) | 6 of 8 (0.00) | 4 of 8 (0.18) | -2 | 0.18 | reported |
-| National 90% coverage (higher is better) | 7 of 8 (0.09) | 6 of 8 (0.10) | -1 | 0.13 | reported |
-| Kjördæmi CRPS, pp | 1.855 (0.010) | 2.199 (0.009) | 0.344 | 0.013 | worse |
-| Kjördæmi 90% coverage (higher is better) | 40 of 48 (0.31) | 38 of 48 (0.35) | -2 | 0.47 | reported |
-| Kjördæmi MAE over the named cells, pp | 2.519 | 2.671 | 0.152 |  | reported |
-| Seat CRPS per party (not comparable) | 1.664 (0.009) | 1.413 (0.007) | -0.251 | 0.012 | not comparable |
-| Seat absolute error, summed over parties (not comparable) | 15 | 14 | -1 |  | not comparable |
-| Seat 90% coverage (higher is better) (not comparable) | 6 of 8 (0.14) | 6 of 8 (0.11) | 0 | 0.18 | not comparable |
+| CRPS10, pp (co-primary) | 1.569 (0.017) | 1.829 (0.012) | 0.260 | 0.020 | worse |
+| mDSS (co-primary) | -7.48 (0.34) | -4.10 (0.32) | 3.38 | 0.47 | worse |
+| d² (p: 0.337, 0.156) | 7.95 (0.38) | 10.61 (0.33) | 2.67 | 0.51 | worse |
+| MAE8, pp (over the 7 named parties scored) | 2.128 (0.027) | 1.933 (0.017) | -0.195 | 0.032 | better |
+| MAE over all parties, pp | 2.007 | 2.364 | 0.357 |  | reported |
+| IS90 | 16.34 (0.38) | 14.49 (0.34) | -1.86 | 0.51 | better |
+| National 50% coverage (higher is better) | 6 of 8 (0.00) | 4 of 8 (0.19) | -2 | 0.19 | reported |
+| National 90% coverage (higher is better) | 7 of 8 (0.06) | 6 of 8 (0.10) | -1 | 0.12 | reported |
+| Kjördæmi CRPS, pp | 1.855 (0.014) | 2.126 (0.011) | 0.271 | 0.017 | worse |
+| Kjördæmi 90% coverage (higher is better) | 41 of 48 (0.26) | 38 of 48 (0.31) | -3 | 0.41 | reported |
+| Kjördæmi MAE over the named cells, pp | 2.526 | 2.627 | 0.101 |  | reported |
+| Seat CRPS per party (not comparable) | 1.672 (0.011) | 1.412 (0.008) | -0.260 | 0.014 | not comparable |
+| Seat absolute error, summed over parties (not comparable) | 15 | 13 | -2 |  | not comparable |
+| Seat 90% coverage (higher is better) (not comparable) | 7 of 8 (0.18) | 6 of 8 (0.13) | -1 | 0.22 | not comparable |
 | Brier score of the incumbents' majority (not comparable) | 0.000 (0.000) | 0.001 (0.000) | 0.001 | 0.000 | not comparable |
-| P(majority for the coalition that formed), report only (higher is better) (not comparable) | 0.091 | 0.097 | 0.006 |  | not comparable |
+| P(majority for the coalition that formed), report only (higher is better) (not comparable) | 0.088 | 0.112 | 0.024 |  | not comparable |
 
-National parties: 8 (r0), 8 (v2). The gap between each run's two national readings (the kjördæmi aggregate scored here and the model's own) is at most 0.528 pp (r0) and 0.000 pp (v2).
+National parties: 8 (r0), 8 (v2). The gap between each run's two national readings (the kjördæmi aggregate scored here and the model's own) is at most 0.548 pp (r0) and 0.000 pp (v2).
 
-1. Calibration gate: v2's d² has p = 0.111 against χ² with 7 degrees of freedom, above 0.01: yes, reported only: the gate is an eve criterion (r0's p = 0.181).
-2. No loss of accuracy: CRPS10 v2 − r0 = 0.344 pp (SE_diff 0.015, worse), at most 0.05 pp worse or a tie: no.
-3. Better distribution: mDSS v2 − r0 = 3.19 (SE_diff 0.51, worse), lower beyond a tie or r0 failing the gate: no.
-4. No regional loss: kjördæmi CRPS 0.344 pp (worse), at most 0.1 worse or a tie; seat CRPS per party left out, not comparable: no.
+1. Calibration gate: v2's d² has p = 0.156 against χ² with 7 degrees of freedom, above 0.01: yes, reported only: the gate is an eve criterion (r0's p = 0.337).
+2. No loss of accuracy: CRPS10 v2 − r0 = 0.260 pp (SE_diff 0.020, worse), at most 0.05 pp worse or a tie: no.
+3. Better distribution: mDSS v2 − r0 = 3.38 (SE_diff 0.47, worse), lower beyond a tie or r0 failing the gate: no.
+4. No regional loss: kjördæmi CRPS 0.271 pp (worse), at most 0.1 worse or a tie; seat CRPS per party left out, not comparable: no.
 
 Seat scores not comparable on this cell: Annað holds 4 official seats at E, which no draw gives it, since every draw allocates the seats with Annað ineligible. They are reported, marked, and left out of criterion 4.
 
@@ -203,44 +203,44 @@ All four on this cell: no.
 
 | Party | Result, % | r0: median, % | v2: median, % | r0: absolute error, pp | v2: absolute error, pp | r0: CRPS, pp | v2: CRPS, pp |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Sjálfstæðisflokkurinn | 29.00 | 22.45 | 22.65 | 6.55 | 6.35 | 4.928 | 4.682 |
-| Vinstri Græn | 15.91 | 14.85 | 14.26 | 1.06 | 1.65 | 0.724 | 1.011 |
-| Píratar | 14.48 | 15.95 | 15.02 | 1.47 | 0.53 | 1.137 | 1.112 |
-| Framsóknarflokkurinn | 11.49 | 10.61 | 9.77 | 0.88 | 1.72 | 0.617 | 1.021 |
-| Viðreisn | 10.48 | 8.53 | 10.21 | 1.94 | 0.27 | 1.763 | 1.250 |
-| Annað | 9.36 | 10.77 | 15.40 | 1.41 | 6.03 | 1.066 | 4.172 |
-| Samfylkingin | 5.74 | 7.41 | 7.38 | 1.67 | 1.64 | 1.112 | 1.033 |
-| Flokkur Fólksins | 3.54 | 4.88 | 1.83 | 1.35 | 1.71 | 1.153 | 0.969 |
+| Sjálfstæðisflokkurinn | 29.00 | 22.42 | 22.80 | 6.58 | 6.20 | 4.955 | 4.511 |
+| Vinstri Græn | 15.91 | 14.89 | 14.30 | 1.02 | 1.60 | 0.745 | 0.988 |
+| Píratar | 14.48 | 16.00 | 15.00 | 1.51 | 0.51 | 1.225 | 1.117 |
+| Framsóknarflokkurinn | 11.49 | 10.61 | 9.82 | 0.88 | 1.67 | 0.653 | 1.004 |
+| Viðreisn | 10.48 | 8.53 | 10.32 | 1.95 | 0.15 | 1.736 | 1.290 |
+| Annað | 9.36 | 10.52 | 14.74 | 1.16 | 5.38 | 1.002 | 3.682 |
+| Samfylkingin | 5.74 | 7.33 | 7.43 | 1.59 | 1.68 | 1.028 | 1.077 |
+| Flokkur Fólksins | 3.54 | 4.90 | 1.83 | 1.36 | 1.71 | 1.207 | 0.962 |
 
-Of the 8 parties both arms forecast, v2's median is closer to the result on 4 and its CRPS lower on 5 (no MC error per party; consistency evidence only).
+Of the 8 parties both arms forecast, v2's median is closer to the result on 3 and its CRPS lower on 4 (no MC error per party; consistency evidence only).
 
 ## 2016, eve (E 2016-10-29, F 2016-10-28)
 
 | Score (lower is better unless marked) | r0 (SE) | v2 (SE) | v2 − r0 | SE_diff | Reading (Monte Carlo error only) |
 | --- | --- | --- | --- | --- | --- |
-| CRPS10, pp (co-primary) | 1.453 (0.009) | 1.386 (0.009) | -0.067 | 0.013 | better |
-| mDSS (co-primary) | -8.23 (0.45) | -8.18 (0.20) | 0.06 | 0.50 | tie |
-| d² (p: 0.071, 0.079) | 13.04 (0.49) | 12.72 (0.20) | -0.32 | 0.53 | tie |
-| MAE8, pp (over the 7 named parties scored) | 1.957 (0.030) | 1.561 (0.019) | -0.396 | 0.036 | better |
-| MAE over all parties, pp | 1.813 | 1.815 | 0.002 |  | reported |
-| IS90 | 16.81 (0.18) | 13.04 (0.19) | -3.77 | 0.27 | better |
-| National 50% coverage (higher is better) | 4 of 8 (0.16) | 4 of 8 (0.19) | 0 | 0.25 | reported |
-| National 90% coverage (higher is better) | 7 of 8 (0.00) | 6 of 8 (0.00) | -1 | 0.00 | reported |
-| Kjördæmi CRPS, pp | 1.808 (0.006) | 1.794 (0.008) | -0.014 | 0.010 | tie |
-| Kjördæmi 90% coverage (higher is better) | 36 of 48 (0.19) | 37 of 48 (0.18) | 1 | 0.26 | reported |
-| Kjördæmi MAE over the named cells, pp | 2.447 | 2.301 | -0.147 |  | reported |
-| Seat CRPS per party (not comparable) | 1.744 (0.006) | 1.394 (0.007) | -0.350 | 0.009 | not comparable |
-| Seat absolute error, summed over parties (not comparable) | 20 | 13 | -7 |  | not comparable |
-| Seat 90% coverage (higher is better) (not comparable) | 6 of 8 (0.00) | 7 of 8 (0.13) | 1 | 0.13 | not comparable |
+| CRPS10, pp (co-primary) | 1.453 (0.012) | 1.317 (0.006) | -0.137 | 0.013 | better |
+| mDSS (co-primary) | -9.25 (0.29) | -9.77 (0.37) | -0.52 | 0.47 | tie |
+| d² (p: 0.123, 0.139) | 11.37 (0.31) | 11.00 (0.40) | -0.37 | 0.51 | tie |
+| MAE8, pp (over the 7 named parties scored) | 1.867 (0.021) | 1.611 (0.018) | -0.256 | 0.028 | better |
+| MAE over all parties, pp | 1.796 | 1.772 | -0.025 |  | reported |
+| IS90 | 16.52 (0.29) | 12.04 (0.15) | -4.48 | 0.32 | better |
+| National 50% coverage (higher is better) | 5 of 8 (0.24) | 3 of 8 (0.12) | -2 | 0.27 | reported |
+| National 90% coverage (higher is better) | 7 of 8 (0.00) | 7 of 8 (0.10) | 0 | 0.10 | reported |
+| Kjördæmi CRPS, pp | 1.791 (0.010) | 1.727 (0.006) | -0.064 | 0.012 | better |
+| Kjördæmi 90% coverage (higher is better) | 37 of 48 (0.27) | 39 of 48 (0.32) | 2 | 0.42 | reported |
+| Kjördæmi MAE over the named cells, pp | 2.414 | 2.321 | -0.093 |  | reported |
+| Seat CRPS per party (not comparable) | 1.712 (0.009) | 1.404 (0.004) | -0.308 | 0.010 | not comparable |
+| Seat absolute error, summed over parties (not comparable) | 18 | 13 | -5 |  | not comparable |
+| Seat 90% coverage (higher is better) (not comparable) | 6 of 8 (0.00) | 7 of 8 (0.18) | 1 | 0.18 | not comparable |
 | Brier score of the incumbents' majority (not comparable) | 0.000 (0.000) | 0.000 (0.000) | 0.000 | 0.000 | not comparable |
-| P(majority for the coalition that formed), report only (higher is better) (not comparable) | 0.086 | 0.025 | -0.061 |  | not comparable |
+| P(majority for the coalition that formed), report only (higher is better) (not comparable) | 0.101 | 0.025 | -0.076 |  | not comparable |
 
-National parties: 8 (r0), 8 (v2). The gap between each run's two national readings (the kjördæmi aggregate scored here and the model's own) is at most 0.599 pp (r0) and 0.000 pp (v2).
+National parties: 8 (r0), 8 (v2). The gap between each run's two national readings (the kjördæmi aggregate scored here and the model's own) is at most 0.572 pp (r0) and 0.000 pp (v2).
 
-1. Calibration gate: v2's d² has p = 0.079 against χ² with 7 degrees of freedom, above 0.01: yes (r0's p = 0.071).
-2. No loss of accuracy: CRPS10 v2 − r0 = -0.067 pp (SE_diff 0.013, better), at most 0.05 pp worse or a tie: yes.
-3. Better distribution: mDSS v2 − r0 = 0.06 (SE_diff 0.50, tie), lower beyond a tie or r0 failing the gate: no.
-4. No regional loss: kjördæmi CRPS -0.014 pp (tie), at most 0.1 worse or a tie; seat CRPS per party left out, not comparable: yes.
+1. Calibration gate: v2's d² has p = 0.139 against χ² with 7 degrees of freedom, above 0.01: yes (r0's p = 0.123).
+2. No loss of accuracy: CRPS10 v2 − r0 = -0.137 pp (SE_diff 0.013, better), at most 0.05 pp worse or a tie: yes.
+3. Better distribution: mDSS v2 − r0 = -0.52 (SE_diff 0.47, tie), lower beyond a tie or r0 failing the gate: no.
+4. No regional loss: kjördæmi CRPS -0.064 pp (better), at most 0.1 worse or a tie; seat CRPS per party left out, not comparable: yes.
 
 Seat scores not comparable on this cell: Annað holds 4 official seats at E, which no draw gives it, since every draw allocates the seats with Annað ineligible. They are reported, marked, and left out of criterion 4.
 
@@ -248,16 +248,16 @@ All four on this cell: no.
 
 | Party | Result, % | r0: median, % | v2: median, % | r0: absolute error, pp | v2: absolute error, pp | r0: CRPS, pp | v2: CRPS, pp |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Sjálfstæðisflokkurinn | 29.00 | 22.75 | 23.29 | 6.25 | 5.71 | 5.126 | 4.485 |
-| Vinstri Græn | 15.91 | 16.51 | 16.14 | 0.60 | 0.23 | 0.483 | 0.465 |
-| Píratar | 14.48 | 16.47 | 16.13 | 1.99 | 1.65 | 1.181 | 1.058 |
-| Framsóknarflokkurinn | 11.49 | 10.55 | 10.52 | 0.94 | 0.97 | 0.570 | 0.601 |
-| Viðreisn | 10.48 | 9.47 | 10.89 | 1.01 | 0.42 | 1.668 | 0.768 |
-| Annað | 9.36 | 8.56 | 12.95 | 0.80 | 3.59 | 0.589 | 2.557 |
-| Samfylkingin | 5.74 | 6.49 | 6.42 | 0.75 | 0.68 | 0.443 | 0.415 |
-| Flokkur Fólksins | 3.54 | 5.69 | 2.27 | 2.15 | 1.27 | 1.566 | 0.740 |
+| Sjálfstæðisflokkurinn | 29.00 | 22.87 | 23.41 | 6.12 | 5.59 | 4.924 | 4.375 |
+| Vinstri Græn | 15.91 | 16.68 | 16.26 | 0.77 | 0.35 | 0.548 | 0.493 |
+| Píratar | 14.48 | 16.49 | 16.34 | 2.00 | 1.85 | 1.201 | 1.167 |
+| Framsóknarflokkurinn | 11.49 | 10.56 | 10.60 | 0.93 | 0.90 | 0.568 | 0.579 |
+| Viðreisn | 10.48 | 9.80 | 11.03 | 0.68 | 0.55 | 1.733 | 0.828 |
+| Annað | 9.36 | 8.06 | 12.26 | 1.30 | 2.89 | 0.790 | 1.903 |
+| Samfylkingin | 5.74 | 6.37 | 6.44 | 0.63 | 0.70 | 0.376 | 0.416 |
+| Flokkur Fólksins | 3.54 | 5.48 | 2.20 | 1.94 | 1.34 | 1.488 | 0.774 |
 
-Of the 8 parties both arms forecast, v2's median is closer to the result on 6 and its CRPS lower on 6 (no MC error per party; consistency evidence only).
+Of the 8 parties both arms forecast, v2's median is closer to the result on 6 and its CRPS lower on 5 (no MC error per party; consistency evidence only).
 
 ## 2021, f180 (E 2021-09-25, F 2021-03-29)
 
