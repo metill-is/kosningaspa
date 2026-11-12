@@ -7,6 +7,8 @@ GALLUP <- OLDER_POLL_HOUSES[1]
 MMR <- OLDER_POLL_HOUSES[2]
 FEL <- OLDER_POLL_HOUSES[4]
 POOL_DAYS <- 730
+# The size rule pools only polls dated before this day, the day after the table's period (J08).
+POOL_END <- as.Date("2016-01-01")
 SHARE_CODES <- c("D", "B", "S", "V", "P")
 FIELDWORK_ORDER <- c("mmr_item", "print", "is2013", "chart")
 
@@ -141,6 +143,37 @@ pool_date <- function(m) {
 
 table_polls <- function(x) dplyr::distinct(x, poll_id, date, fyrirtaeki, n_total, n_source, pins, replaces)
 
+# The published sizes and printed response rates the size rule (J08) pools, each a tibble
+# (fyrirtaeki, date, n or rr) dated before POOL_END: the snapshot's polls, the table's ordinary
+# polls and the register's pool polls.
+size_pools <- function(polls, facts) {
+  register <- read_chr("polls.csv")
+  pool_rows <- register[register$status == "pool", ]
+  pool_m <- lapply(pool_rows$sources, members_of, facts = facts)
+  pool_polls <- tibble::tibble(
+    fyrirtaeki = pool_rows$fyrirtaeki, date = do.call(c, lapply(pool_m, pool_date)),
+    n = mapply(rule_published, pool_m, pool_rows$fyrirtaeki),
+    rr = vapply(pool_m, printed, 0, what = "rr")
+  )
+  ordinary <- dplyr::filter(polls, is.na(replaces))
+  ordinary_m <- lapply(ordinary$pins, members_of, facts = facts)
+  # WHY: the two half-sample sets under one key (J28) are not published sizes
+  snap <- snapshot_polls() |>
+    dplyr::filter(parts == 1) |>
+    dplyr::group_by(date, fyrirtaeki) |>
+    dplyr::summarise(n = sum(n), .groups = "drop")
+  sizes <- dplyr::bind_rows(
+    snap,
+    dplyr::filter(ordinary, n_source == "published") |> dplyr::select(date, fyrirtaeki, n = n_total),
+    dplyr::filter(pool_polls, !is.na(n)) |> dplyr::select(date, fyrirtaeki, n)
+  ) |> dplyr::filter(date < POOL_END)
+  rates <- dplyr::bind_rows(
+    tibble::tibble(fyrirtaeki = ordinary$fyrirtaeki, date = ordinary$date, rr = vapply(ordinary_m, printed, 0, what = "rr")),
+    dplyr::select(pool_polls, fyrirtaeki, date, rr)
+  ) |> dplyr::filter(!is.na(rr), date < POOL_END)
+  list(sizes = sizes, rates = rates)
+}
+
 shares_long <- function(x) {
   dplyr::filter(x, !is.na(share), flokkur != ANNAD) |>
     dplyr::select(poll = poll_id, date, fyrirtaeki, flokkur, share)
@@ -262,30 +295,9 @@ test_that("every published size is printed by a source the poll cites, and every
     }
   }
   skip_without_snapshot()
-  register <- read_chr("polls.csv")
-  pool_rows <- register[register$status == "pool", ]
-  pool_m <- lapply(pool_rows$sources, members_of, facts = facts)
-  pool_polls <- tibble::tibble(
-    fyrirtaeki = pool_rows$fyrirtaeki, date = do.call(c, lapply(pool_m, pool_date)),
-    n = mapply(rule_published, pool_m, pool_rows$fyrirtaeki),
-    rr = vapply(pool_m, printed, 0, what = "rr")
-  )
-  ordinary <- dplyr::filter(polls, is.na(replaces))
-  ordinary_m <- lapply(ordinary$pins, members_of, facts = facts)
-  # WHY: the two half-sample sets under one key (J28) are not published sizes
-  snap <- snapshot_polls() |>
-    dplyr::filter(parts == 1) |>
-    dplyr::group_by(date, fyrirtaeki) |>
-    dplyr::summarise(n = sum(n), .groups = "drop")
-  sizes <- dplyr::bind_rows(
-    snap,
-    dplyr::filter(ordinary, n_source == "published") |> dplyr::select(date, fyrirtaeki, n = n_total),
-    dplyr::filter(pool_polls, !is.na(n)) |> dplyr::select(date, fyrirtaeki, n)
-  )
-  rates <- dplyr::bind_rows(
-    tibble::tibble(fyrirtaeki = ordinary$fyrirtaeki, date = ordinary$date, rr = vapply(ordinary_m, printed, 0, what = "rr")),
-    dplyr::select(pool_polls, fyrirtaeki, date, rr)
-  ) |> dplyr::filter(!is.na(rr))
+  pools <- size_pools(polls, facts)
+  sizes <- pools$sizes
+  rates <- pools$rates
   assumed <- dplyr::filter(polls, n_source == "assumed")
   expect_gt(nrow(assumed), 0)
   for (i in seq_len(nrow(assumed))) {
@@ -298,6 +310,27 @@ test_that("every published size is printed by a source the poll cites, and every
       stats::median(sizes$n[near(sizes)])
     }
     expect_equal(p$n_total, want, tolerance = 1e-9, info = p$poll_id)
+  }
+})
+
+# WHY: a size that depends on polls taken after a forecast day: a pool holding the snapshot's
+# polls of 2016, some taken after the forecast day of the three 2016 cells before the eve.
+test_that("no assumed size rests on a poll dated from 2016-01-01: the count each assumed poll's flags state is the count of its house's sizes, or response rates, within 730 days dated before 2016", {
+  skip_without_snapshot()
+  x <- read_older_polls()
+  pools <- size_pools(table_polls(x), source_facts())
+  expect_true(all(c(pools$sizes$date, pools$rates$date) < POOL_END))
+  assumed <- dplyr::filter(dplyr::distinct(x, poll_id, date, fyrirtaeki, n_source, flags), n_source == "assumed")
+  expect_gt(nrow(assumed), 0)
+  for (i in seq_len(nrow(assumed))) {
+    p <- assumed[i, ]
+    by_size <- regmatches(p$flags, regexec("n assumed: the median of ([0-9]+) published sizes within 730 days", p$flags))[[1]]
+    by_rate <- regmatches(p$flags, regexec("x the median response rate [0-9.]+% of ([0-9]+) polls within 730 days", p$flags))[[1]]
+    expect_true(xor(length(by_size) > 0, length(by_rate) > 0), label = p$poll_id)
+    pool <- if (length(by_size)) pools$sizes else pools$rates
+    stated <- as.integer(if (length(by_size)) by_size[2] else by_rate[2])
+    near <- pool$fyrirtaeki == p$fyrirtaeki & abs(as.numeric(pool$date - p$date)) <= POOL_DAYS
+    expect_identical(stated, sum(near), label = p$poll_id)
   }
 })
 

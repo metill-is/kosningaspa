@@ -15,7 +15,11 @@ copies the files in `SNAPSHOT_FILES` from the main checkout into `harness/snapsh
 checks them all. The 2016 cells, whose window opens on 2012-07-01, also read
 `harness/older_polls.csv`, the national polls of July 2012 to December 2015 that the snapshot
 lacks, in place of the snapshot rows its replacement polls name (`with_older_polls()` in
-`R/harness/availability.R`; `harness/sources/older_polls/README.md`).
+`R/harness/availability.R`; `harness/sources/older_polls/README.md`). A 2016 cell reads Annað as
+not reported in an admitted national poll that leaves blank a party which an admitted poll had
+reported on or before its date (`blank_party_polls()` in `R/harness/info_set.R`;
+`harness/sources/README.md`, Known data discrepancies), and takes its previous shares from the
+official 2013 result in `harness/truth/anchor_2013.csv`.
 
 To refresh it, delete `harness/snapshot/` by hand (`snapshot_inputs()` refuses an existing
 one), re-run it from the project root, and commit the new manifest:

@@ -56,6 +56,18 @@ window_start <- function(E) {
   out
 }
 
+#' Whether the cells of each window election read Annað as not reported in a poll that leaves
+#' an existing party blank (`blank_party_polls()`, `harness/sources/README.md`): TRUE for the
+#' first window election, 2016-10-29, and FALSE for every other one, whose cells read every
+#' poll's rows as they are.
+#' @param E a Date (or ISO string) vector of window elections; anything else is an error
+#' @return a logical vector
+#' @export
+blank_party_rule <- function(E) {
+  previous_election(E)
+  as.Date(E) == ELECTIONS[1]
+}
+
 #' The elections that close the epochs of one window election's window, for `epoch_of()`:
 #' the election before it (2013-04-27) and E itself for the first window election,
 #' 2016-10-29, and `ELECTIONS` for every other one.

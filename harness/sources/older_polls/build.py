@@ -31,7 +31,9 @@ GALLUP, MMR, FEL = "Gallup", "MMR", "Félagsvísindastofnun"
 FBL = "Fréttablaðið, Stöð 2 og Vísir"
 HOUSES = (GALLUP, MMR, FBL, FEL)
 PERIOD = ("2012-07-01", "2015-12-31")
-POOL_END = "2016-10-29"
+SIZES_END = "2016-10-29"
+# WHY: an assumed size rests on no poll taken after the forecast day of a 2016 cell (J08)
+POOL_END = "2016-01-01"
 POOL_DAYS = 730
 OFFSET_DAYS = 400
 CODES = ["D", "B", "S", "V", "P"]
@@ -372,20 +374,20 @@ def build():
         if any("P" in m["shares"] or "P" in m["qualified"] for m in p["members"]):
             p_first.setdefault(p["house"], p["date"])
 
-    # the size pool: one published size per distinct poll of the house
+    # the size pool: one published size per distinct poll of the house dated before POOL_END
     pool = collections.defaultdict(list)
     for s in sizes:
-        if s["date"] >= POOL_END:
-            fail("snapshot_sizes.csv holds a poll dated from %s" % POOL_END)
-        if s["parts"] != "1":
+        if s["date"] >= SIZES_END:
+            fail("snapshot_sizes.csv holds a poll dated from %s" % SIZES_END)
+        if s["parts"] != "1" or s["date"] >= POOL_END:
             continue
         pool[s["fyrirtaeki"]].append((s["date"], float(s["n_total"]), "snapshot %s" % s["date"]))
     for p in active:
-        if p["status"] in ("added", "pool") and p["n_source"] == "published":
+        if p["status"] in ("added", "pool") and p["n_source"] == "published" and p["date"] < POOL_END:
             pool[p["house"]].append((p["date"], p["n"], p["id"]))
     rates = collections.defaultdict(list)
     for p in active:
-        if p["status"] in ("added", "pool"):
+        if p["status"] in ("added", "pool") and p["date"] < POOL_END:
             rr = printed_rate(p)
             if rr:
                 rates[p["house"]].append((p["date"], rr))
@@ -483,7 +485,7 @@ def snapshot_sizes(out):
         fail("harness/snapshot/polling_data.csv is not the file the manifest names")
     groups = collections.OrderedDict()
     for r in csv.DictReader(io.StringIO(data.decode("utf-8"))):
-        if r["fyrirtaeki"] in HOUSES and r["date"] < POOL_END:
+        if r["fyrirtaeki"] in HOUSES and r["date"] < SIZES_END:
             groups.setdefault((r["date"], r["fyrirtaeki"]), []).append(r)
     rows = []
     for (date, house), rs in sorted(groups.items()):

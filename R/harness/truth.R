@@ -431,9 +431,10 @@ national_shares <- function(truth, election) {
 #'   renamed by `FUNDAMENTALS_RENAMED` (Framsókn as Framsóknarflokkurinn) and every other
 #'   label outside `POLL_PARTIES` (Björt framtíð) in Annað, otherwise
 #'   `national_shares(truth, previous_election(E))`; NA for a party with no list. The 2016
-#'   shares are not the official 2013 result in `harness/truth/anchor_2013.csv`, from which
-#'   the same cell's results and Kosning row come: Annað is 20.16% here against the
-#'   anchor's 20.04%. `tests/harness/test-anchors.R` checks the 2013 labels against the anchor
+#'   shares are not the official 2013 result in `harness/truth/anchor_2013.csv` (Annað is
+#'   20.16% here against the anchor's 20.04%), so `info_set()` gives a 2016 cell the anchor's
+#'   shares instead, and only a later cell's `prev_shares` row for 2016, which no arm reads,
+#'   comes from here. `tests/harness/test-anchors.R` checks the 2013 labels against the anchor
 #' @export
 prev_national_shares <- function(E, truth, fundamentals) {
   box::use(R / harness / constants[ELECTIONS, FUNDAMENTALS_RENAMED, POLL_PARTIES, previous_election])

@@ -1,10 +1,11 @@
 box::use(
   R / harness / anchors[fold_anchor],
   R / harness / availability[excluded_near, read_polling, with_older_polls],
-  R / harness / constants[ELECTION_HOUSE, KJORDAEMI, window_elections, window_start],
-  R / harness / info_set[cell_polls, info_set, read_inputs, validate_inputs],
+  R / harness / constants[blank_party_rule, ELECTION_HOUSE, KJORDAEMI, window_elections, window_start],
+  R / harness / info_set[blank_party_polls, cell_polls, info_set, read_inputs, validate_inputs],
   R / harness / older_polls[read_older_polls],
-  R / harness / tables[entry_table, valid_votes]
+  R / harness / tables[entry_table, valid_votes],
+  R / harness / truth[prev_national_shares]
 )
 E16 <- as.Date("2016-10-29")
 START16 <- as.Date("2012-07-01")
@@ -17,6 +18,29 @@ FRETT16 <- "Fr\u00e9ttabla\u00f0i\u00f0, St\u00f6\u00f0 2 og V\u00edsir"
 FEL16 <- "F\u00e9lagsv\u00edsindastofnun"
 inp <- if (snapshot_present()) read_inputs()
 cells16 <- if (snapshot_present()) lapply(DAYS16, \(F) info_set(E16, F, inp))
+# The national rows a 2016 cell reads before the blank-party rule: the snapshot's, with the n
+# corrections, and the older polls table's.
+raw16 <- if (snapshot_present()) with_older_polls(inp$polling, inp$older_polls)
+# The admitted polls whose Annad a 2016 cell reads as not reported, found from the raw rows on
+# 2026-11-12, by date: the f180, f47, f14 and eve cells read the first 2, 5, 10 and 13. `party`
+# is the blank party's POLL_PARTIES index: 5 Piratar, 6 Vidreisn, 7 Flokkur folksins.
+BLANK16 <- tibble::tribble(
+  ~date, ~house, ~party,
+  "2013-01-18", "MMR", 5L,
+  "2016-04-04", "MMR", 6L,
+  "2016-04-24", "MMR", 6L,
+  "2016-08-26", "MMR", 7L,
+  "2016-09-06", FRETT16, 7L,
+  "2016-09-16", "MMR", 7L,
+  "2016-09-23", "MMR", 7L,
+  "2016-09-26", FRETT16, 7L,
+  "2016-10-03", FRETT16, 7L,
+  "2016-10-10", FRETT16, 7L,
+  "2016-10-17", FRETT16, 7L,
+  "2016-10-24", FRETT16, 7L,
+  "2016-10-25", FRETT16, 7L
+)
+BLANK16_N <- c(2L, 5L, 10L, 13L)
 
 # Canonical text of a table or vector: column names and classes, then one line per row,
 # dates as ISO strings and doubles to 17 significant digits; its sha256 is over the bytes.
@@ -99,7 +123,7 @@ early_rows <- function(rows, parties) {
 }
 poll_key <- function(rows) paste(format(rows$date), rows$fyrirtaeki)
 
-test_that("each 2016 cell reads every poll of the older polls table with the table's counts, replacements included, the snapshot's other polls before 2016 with their own, no row of a replaced snapshot key and no poll twice (a misdated or doubled MMR row read beside its replacement, a table poll dropped, or a poll read twice)", {
+test_that("each 2016 cell reads every poll of the older polls table with the table's counts (but MMR 2013-01-18's Annad, read as not reported), replacements included, the snapshot's other polls before 2016 with their own, no row of a replaced snapshot key and no poll twice (a misdated or doubled MMR row read beside its replacement, a table poll dropped, or a poll read twice)", {
   skip_without_snapshot()
   raw <- read_polling()
   polls <- dplyr::distinct(older16, poll_id, date, fyrirtaeki, replaces)
@@ -115,7 +139,10 @@ test_that("each 2016 cell reads every poll of the older polls table with the tab
     expect_identical(anyDuplicated(got[c("date", "fyrirtaeki", "flokkur")]), 0L, label = lab)
     from_table <- poll_key(got) %in% poll_key(polls)
     expect_setequal(unique(poll_key(got)[from_table]), poll_key(polls))
-    expect_equal(got[from_table, ], early_rows(older16, x$parties), ignore_attr = TRUE, label = lab)
+    # WHY: MMR 2013-01-18 leaves blank Piratar, whom Gallup reported from 2012-12-13, so the cell reads its Annad as not reported.
+    want <- early_rows(older16, x$parties)
+    want$n[poll_key(want) == "2013-01-18 MMR" & want$flokkur == POLL_PARTIES[10]] <- 0
+    expect_equal(got[from_table, ], want, ignore_attr = TRUE, label = lab)
     expect_equal(got[!from_table, ], early_rows(snap, x$parties), ignore_attr = TRUE, label = lab)
     expect_false("2013-01-09 MMR" %in% poll_key(got), label = lab)
   }
@@ -186,6 +213,129 @@ test_that("a cell's national polls stop on a poll that lists a party twice (two 
   )
   expect_error(cell_polls(E16, DAYS16[1], nat, kd, av, START16), "national poll(s) listing a party twice: H 2013-05-16", fixed = TRUE)
   expect_identical(nrow(cell_polls(E16, DAYS16[1], nat[1:2, ], kd, av, START16)$polls_nat), 2L)
+})
+
+test_that("the blank-party rule on made-up rows: Annad is read as not reported in a poll that leaves blank a party an earlier admitted poll of another house reported, and nothing else changes; a poll before that day, one reporting the party, one with no Annad and one whose only earlier report was not public by F are untouched; with the rule off nothing changes; only 2016 cells take the rule (a remainder read as Annad alone while it holds an existing party's support)", {
+  D <- POLL_PARTIES[1]
+  C <- POLL_PARTIES[6]
+  A <- POLL_PARTIES[10]
+  poll <- function(date, house, flokkur, n) tibble::tibble(date = as.Date(date), fyrirtaeki = house, flokkur = flokkur, n = n)
+  nat <- rbind(
+    poll("2016-02-01", "H2", c(D, C, A), c(10, 2, 3)),
+    poll("2016-02-15", "H1", c(D, C, A), c(10, 0, 5)),
+    poll("2016-03-13", "H1", c(D, C, A), c(10, 3, 2)),
+    poll("2016-04-04", "H2", c(D, C, A), c(10, 0, 4)),
+    poll("2016-04-10", "H2", c(D, A), c(10, 4)),
+    poll("2016-04-15", "H1", c(D, C, A), c(10, 0, 0)),
+    poll("2016-04-20", "H2", c(D, C, A), c(10, 2, 3))
+  )
+  F <- DAYS16[1]
+  av <- dplyr::mutate(dplyr::distinct(nat, date, fyrirtaeki), level = "national", fieldwork_end = date + 1, available_from = date + 2, rule = "older_polls")
+  av$available_from[av$date == as.Date("2016-02-01")] <- F + 1
+  kd <- tibble::tibble(date = as.Date(character()), fyrirtaeki = character(), flokkur = character(), kjordaemi = character(), n = numeric())
+  admitted <- nat[nat$date != as.Date("2016-02-01"), ]
+  off <- cell_polls(E16, F, nat, kd, av, START16)
+  on <- cell_polls(E16, F, nat, kd, av, START16, blank_party_rule = TRUE)
+  expect_identical(paste(off$polls_nat$date, off$polls_nat$fyrirtaeki, off$polls_nat$flokkur), paste(admitted$date, admitted$fyrirtaeki, admitted$flokkur))
+  expect_equal(off$polls_nat$n, admitted$n)
+  want <- admitted$n
+  want[admitted$flokkur == A & paste(admitted$date, admitted$fyrirtaeki) %in% c("2016-04-04 H2", "2016-04-10 H2")] <- 0
+  expect_equal(on$polls_nat$n, want)
+  expect_identical(on$polls_nat[c("date", "fyrirtaeki", "flokkur", "available_from")], off$polls_nat[c("date", "fyrirtaeki", "flokkur", "available_from")])
+  expect_identical(on$parties, c(D, C, A))
+  expect_identical(on$parties, off$parties)
+  blank <- blank_party_polls(admitted)
+  expect_identical(paste(blank$date, blank$fyrirtaeki, blank$blank), paste(c("2016-04-04", "2016-04-10"), "H2", C))
+  expect_identical(nrow(blank_party_polls(admitted[0, ])), 0L)
+  expect_identical(blank_party_rule(ELECTIONS), c(TRUE, FALSE, FALSE, FALSE))
+  expect_error(blank_party_rule("2013-04-27"), "not a window election: 2013-04-27", fixed = TRUE)
+})
+
+# The oracle of the blank-party rule, written apart from blank_party_polls(): each admitted poll
+# with a positive Annad, and each party that some admitted poll of any house reported with a
+# positive count on or before its date and that it does not, as BLANK16's columns.
+blank_oracle <- function(adm) {
+  out <- list()
+  for (key in unique(paste(adm$date, adm$fyrirtaeki))) {
+    poll <- adm[paste(adm$date, adm$fyrirtaeki) == key, ]
+    if (!sum(poll$n[poll$flokkur == POLL_PARTIES[10]]) > 0) next
+    for (p in 1:9) {
+      seen <- adm$date[adm$flokkur == POLL_PARTIES[p] & adm$n > 0]
+      if (any(seen <= poll$date[1]) && !any(poll$n[poll$flokkur == POLL_PARTIES[p]] > 0)) {
+        out[[length(out) + 1]] <- tibble::tibble(date = format(poll$date[1]), house = poll$fyrirtaeki[1], party = p)
+      }
+    }
+  }
+  out <- dplyr::bind_rows(out)
+  out[order(out$date, out$house, out$party, method = "radix"), ]
+}
+
+# The raw national rows a 2016 cell admits on F, with availability.csv's available_from.
+admitted_raw <- function(F) {
+  av <- inp$availability[inp$availability$level == "national", c("date", "fyrirtaeki", "available_from")]
+  rows <- raw16[raw16$date >= START16 & raw16$fyrirtaeki != ELECTION_HOUSE, c("date", "fyrirtaeki", "flokkur", "n")]
+  rows <- dplyr::inner_join(rows, av, by = c("date", "fyrirtaeki"), relationship = "many-to-one")
+  rows[rows$available_from <= F, ]
+}
+
+test_that("each 2016 cell reads Annad as not reported in exactly the admitted polls that leave blank a party some admitted poll reported on or before their date, and every other count as the raw row's (the rule changing a poll it should not, or missing one)", {
+  skip_without_snapshot()
+  for (i in seq_along(cells16)) {
+    x <- cells16[[i]]
+    lab <- format(x$F)
+    want <- BLANK16[seq_len(BLANK16_N[i]), ]
+    adm <- admitted_raw(x$F)
+    expect_identical(blank_oracle(adm), want, label = lab)
+    got <- dplyr::left_join(x$polls_nat, adm[c("date", "fyrirtaeki", "flokkur", "n")],
+      by = c("date", "fyrirtaeki", "flokkur"), suffix = c("", "_raw"), relationship = "one-to-one"
+    )
+    expect_false(anyNA(got$n_raw), label = lab)
+    moved <- got[got$n != got$n_raw, ]
+    expect_identical(paste(format(moved$date), moved$fyrirtaeki, moved$flokkur, moved$n), paste(want$date, want$house, POLL_PARTIES[10], 0), label = lab)
+    expect_identical(nrow(dplyr::anti_join(adm[adm$n > 0 & adm$flokkur != POLL_PARTIES[10], ], x$polls_nat, by = c("date", "fyrirtaeki", "flokkur"))), 0L, label = lab)
+  }
+})
+
+test_that("validate_inputs() refuses a 2016 cell with a positive Annad beside a blank existing party, and passes a 2021 cell that holds the same raw 2016 row (a build path that skips the rule, or the rule reaching another election's cells)", {
+  skip_without_snapshot()
+  is_poll <- function(rows) rows$date == as.Date("2016-10-25") & rows$fyrirtaeki == FRETT16 & rows$flokkur == POLL_PARTIES[10]
+  raw <- raw16$n[is_poll(raw16)]
+  expect_length(raw, 1)
+  expect_gt(raw, 0)
+  x <- cells16[[4]]
+  expect_identical(x$polls_nat$n[is_poll(x$polls_nat)], 0)
+  x$polls_nat$n[is_poll(x$polls_nat)] <- raw
+  expect_error(validate_inputs(x), paste(POLL_PARTIES[10], "counted beside a blank party: national 2016-10-25", FRETT16), fixed = TRUE)
+  y <- info_set("2021-09-25", "2021-09-24", inp)
+  expect_equal(y$polls_nat$n[is_poll(y$polls_nat)], raw)
+  expect_true("2016-10-25" %in% format(blank_party_polls(y$polls_nat)$date))
+  expect_no_error(validate_inputs(y))
+})
+
+test_that("a 2016 cell's previous shares are the official 2013 result, each party's votes over the 189 023 valid votes of anchor_2013.csv and NA for a party with no list, not the fundamentals table's rounded shares, while a 2021 cell's are prev_national_shares() of each election as before (R0's newcomer check comparing the fundamentals table with itself, or a later cell's inputs moved)", {
+  skip_without_snapshot()
+  a <- readr::read_csv(root("harness", "truth", "anchor_2013.csv"),
+    col_types = readr::cols(election = "D", votes = "d", seats = "d", ran = "l", .default = "c"), progress = FALSE
+  )
+  expect_identical(sum(a$votes), 189023)
+  votes <- tapply(a$votes, a$flokkur, sum)
+  ran <- intersect(POLL_PARTIES, a$flokkur[a$ran])
+  want <- stats::setNames(rep(NA_real_, length(POLL_PARTIES)), POLL_PARTIES)
+  want[ran] <- votes[ran] / 189023
+  expect_identical(names(want)[is.na(want)], POLL_PARTIES[6:9])
+  expect_lt(abs(100 * want[[10]] - 20.04), 0.005)
+  fund <- prev_national_shares(E16, inp$truth, inp$fundamentals)
+  expect_lt(abs(100 * fund[[10]] - 20.16), 0.005)
+  for (x in cells16) {
+    s <- x$prev_shares
+    expect_identical(s$election, rep(E16, 10))
+    expect_identical(s$previous, rep(ANCHOR16, 10))
+    expect_identical(s$flokkur, POLL_PARTIES)
+    expect_equal(s$share, unname(want), label = format(x$F))
+  }
+  y <- info_set("2021-09-25", "2021-09-24", inp)
+  window <- ELECTIONS[ELECTIONS <= as.Date("2021-09-25")]
+  expect_identical(y$prev_shares$share, unlist(lapply(window, \(e) unname(prev_national_shares(e, inp$truth, inp$fundamentals)[POLL_PARTIES]))))
 })
 
 test_that("a 2016 cell takes its entry dates from the polls it reads and numbers epochs from 2013: the five older lists present from the window's first poll, Piratar entering with its first reported share in the older polls table, Vidreisn and Flokkur folksins in epoch 2, while a 2024 cell keeps the committed table (an entry date taken from the misdated snapshot row, epochs counted from the wrong elections, or every party a newcomer for want of a poll before the window)", {

@@ -246,11 +246,10 @@ fundamentals_rows <- function(info, party_order) {
 #'   `index_f` counts levels); a newcomer is not already a row of `y_f`; every party with a
 #'   previous share is a row of `y_f`; a newcomer had no votes at `previous_election(E)`
 #'   in `info$prev_shares`, so a fundamentals label missing from `FUNDAMENTALS_RENAMED`
-#'   cannot pass for one. Those shares are the official results at `previous_election(E)` for a cell with E from 2017 on; for
-#'   E = 2016-10-29 `prev_national_shares()` takes them from the same fundamentals rows,
-#'   relabelled the same way, so on a 2016 cell this check compares the fundamentals table
-#'   with itself, and `tests/harness/test-anchors.R` is what checks the 2013 labels against
-#'   the official anchor; `index_f` has a row per party; `mu_gamma_scale` has
+#'   cannot pass for one. Those shares are the official results at `previous_election(E)`:
+#'   `harness/truth/elections_official.csv` for a cell with E from 2017 on and the 2013
+#'   anchor, `harness/truth/anchor_2013.csv`, for E = 2016-10-29, so the check compares the
+#'   fundamentals table with the official result; `index_f` has a row per party; `mu_gamma_scale` has
 #'   P - 1 finite values in [0, 1]; `x_f`, `incumbent_f`, `incumbent_years`, `vnv` and
 #'   `growth` have the rows of `y_f` and D_f + 1 columns, as `index_f` has; the prediction
 #'   column's `index_f` names the party order (the S/B-swap guard); `n_parties_f[D_f + 1]`

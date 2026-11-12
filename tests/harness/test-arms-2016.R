@@ -1,7 +1,7 @@
 box::use(
   R / harness / anchors[anchor_national],
   R / harness / info_set[info_set, validate_inputs],
-  R / harness / r0[r0_stan_data, read_r0_config],
+  R / harness / r0[fundamentals_rows, r0_stan_data, read_r0_config],
   R / harness / runs[run_id],
   R / harness / tables[grid_dates],
   R / harness / v2[v2_stan_data],
@@ -142,6 +142,23 @@ test_that("R0 builds each 2016 day with the 2013 national result as one election
     expect_equal(d$mu_gamma_scale, as.numeric(!po[-1] %in% NEWCOMERS16), label = lab)
     expect_identical(b$meta$newcomers, intersect(NEWCOMERS16, x$parties), label = lab)
   }
+})
+
+test_that("each arm builds each 2016 day, R0 with Annad's previous share from the official 2013 result and its newcomer check reading those shares (R0's newcomer check comparing the fundamentals table with itself)", {
+  cells <- cells16()
+  nat <- anchor_national(v2_inputs()$anchor_2013)
+  annad <- POLL_PARTIES[10]
+  for (i in seq_along(cells)) {
+    x <- cells[[i]]
+    lab <- format(x$F)
+    b <- r0_16()[[i]]
+    fund <- fundamentals_rows(x, b$meta$party_order)
+    expect_equal(fund$voteshare_prior[fund$flokkur == annad & fund$date == E16], 100 * nat$share[nat$flokkur == annad], label = lab)
+    expect_setequal(v2_16()[[i]]$meta$party_order, b$meta$party_order)
+  }
+  x <- cells[[4]]
+  x$prev_shares$share[x$prev_shares$flokkur == NEWCOMERS16[1]] <- 0.01
+  expect_error(r0_stan_data(x, read_r0_config()), paste("a newcomer had votes at 2013-04-27:", NEWCOMERS16[1]), fixed = TRUE)
 })
 
 test_that("for every TARGETS cell outside 2016 the grid and the epochs both builders use are as recorded before the cell's own elections were read (an existing cell's walk or hedge moved)", {

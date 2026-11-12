@@ -228,17 +228,45 @@ keep_parties <- function(rows, parties, what) {
   rows[!drop, ]
 }
 
+#' The admitted national polls of a cell that leave an existing party blank while their
+#' Annað count is positive.
+#' @param rows national poll rows (date, fyrirtaeki, flokkur, n): a cell's admitted polls, no
+#'   `Kosning` row and each poll at most one row per party
+#' @return a tibble (date, fyrirtaeki, blank), one row per such poll, sorted by date and
+#'   fyrirtaeki. A party other than Annað exists from the date of its earliest positive count
+#'   in `rows`, in any house; a poll dated on or after that day leaves it blank when the poll
+#'   has no positive count for it (n = 0, or no row). `blank` names the poll's blank parties in
+#'   `POLL_PARTIES` order, separated by ", ". The poll's Annað, the remainder, holds their
+#'   support, so `cell_polls()` reads it as not reported where `blank_party_rule(E)` holds.
+#' @export
+blank_party_polls <- function(rows) {
+  box::use(R / harness / constants[POLL_PARTIES])
+  annad <- POLL_PARTIES[length(POLL_PARTIES)]
+  positive <- rows[which(rows$n > 0), c("date", "fyrirtaeki", "flokkur")]
+  named <- positive[positive$flokkur != annad, ]
+  named <- named[order(named$date, method = "radix"), ]
+  first <- tibble::tibble(flokkur = named$flokkur, from = named$date)[!duplicated(named$flokkur), ]
+  with_annad <- dplyr::distinct(positive[positive$flokkur == annad, ], date, fyrirtaeki)
+  blank <- dplyr::cross_join(with_annad, first)
+  blank <- dplyr::anti_join(blank[blank$from <= blank$date, ], positive, by = c("date", "fyrirtaeki", "flokkur"))
+  blank <- blank[order(blank$date, blank$fyrirtaeki, match(blank$flokkur, POLL_PARTIES), method = "radix"), ]
+  tibble::as_tibble(dplyr::summarise(blank, blank = paste(flokkur, collapse = ", "), .by = c(date, fyrirtaeki)))
+}
+
 #' The polls of one forecast cell.
 #' @param E the election (Date)
 #' @param F the forecast date (Date)
 #' @param polling,constituency national and kjördæmi poll rows, as `read_inputs()`
 #' @param availability a `poll_availability()` table
 #' @param window_start the first day of the cell's window, `window_start(E)`
+#' @param blank_party_rule TRUE to read Annað as not reported (n 0) in each admitted national
+#'   poll that `blank_party_polls()` of the admitted polls names, before `parties` is derived;
+#'   a cell takes `blank_party_rule(E)`. FALSE, the default, reads every row as it is
 #' @return `list(parties, polls_nat, polls_kd, kosning_nat)`:
 #'   - `parties`: the `POLL_PARTIES` (in that order) with n > 0 in an admitted national
 #'     poll: dated from `window_start`, not `Kosning`, `available_from <= F`;
 #'   - `polls_nat`: the rows of those polls for `parties`, a tibble (date, fyrirtaeki,
-#'     flokkur, n, available_from);
+#'     flokkur, n, available_from), with Annað's n 0 in the polls the rule above names;
 #'   - `polls_kd`: the rows of every admitted kjördæmi poll (not `Kosning`) for `parties`,
 #'     a tibble (date, fyrirtaeki, kjordaemi, flokkur, n, available_from);
 #'   - `kosning_nat`: the national `Kosning` rows dated from `window_start` and before E
@@ -249,7 +277,7 @@ keep_parties <- function(rows, parties, what) {
 #'   dated from `window_start` has no `availability` row, or if keeping only `parties`
 #'   would drop a national, kjördæmi or `Kosning` row with n > 0.
 #' @export
-cell_polls <- function(E, F, polling, constituency, availability, window_start = WINDOW_START) {
+cell_polls <- function(E, F, polling, constituency, availability, window_start = WINDOW_START, blank_party_rule = FALSE) {
   # WHY: the default argument is a promise, forced after this import.
   box::use(R / harness / constants[ELECTION_HOUSE, KJORDAEMI, POLL_PARTIES, WINDOW_START])
   with_availability <- function(rows, level) {
@@ -280,6 +308,12 @@ cell_polls <- function(E, F, polling, constituency, availability, window_start =
     constituency[constituency$date >= window_start & constituency$fyrirtaeki != ELECTION_HOUSE, ], "kjordaemi"
   )
   admitted <- nat[nat$fyrirtaeki != ELECTION_HOUSE & nat$available_from <= F, ]
+  if (isTRUE(blank_party_rule)) {
+    blank <- blank_party_polls(admitted)
+    unreported <- admitted$flokkur == POLL_PARTIES[length(POLL_PARTIES)] &
+      paste(admitted$date, admitted$fyrirtaeki) %in% paste(blank$date, blank$fyrirtaeki)
+    admitted$n[unreported] <- 0
+  }
   parties <- POLL_PARTIES[POLL_PARTIES %in% admitted$flokkur[admitted$n > 0]]
   list(
     parties = parties,
@@ -349,7 +383,9 @@ cell_economy <- function(E, F, release, econ) {
 #'   - `parties`, `polls_nat`, `polls_kd`, `kosning_nat`: as `cell_polls()` from
 #'     `window_start`, of the national polls with the n corrections applied and the older
 #'     polls table merged in (`with_older_polls()`, which changes nothing dated from
-#'     `WINDOW_START`, so only a 2016 cell reads it); for 2016-10-29, since the polling
+#'     `WINDOW_START`, so only a 2016 cell reads it), with `blank_party_rule(E)`, so a 2016
+#'     cell reads Annað as not reported in a poll that leaves an existing party blank
+#'     (`blank_party_polls()`); for 2016-10-29, since the polling
 #'     data hold no `Kosning` row for 2013, `kosning_nat` is one row per party of `parties`
 #'     built from `anchor_national()`: date 2013-04-27, house `Kosning`, n the party's 2013
 #'     votes (189 023 in all) and `available_from` the next day;
@@ -367,9 +403,11 @@ cell_economy <- function(E, F, release, econ) {
 #'   - `valid_votes_open`: `expected_valid_votes(truth, E)`; for 2016-10-29 `valid_votes()`
 #'     of the 2013 rows of `results`;
 #'   - `prev_shares`: a tibble (election, previous, flokkur, share), for each window
-#'     election up to and including E, `prev_national_shares()`: the national shares of
-#'     every `POLL_PARTIES` party at `previous`, the election before it (NA for a party
-#'     with no list);
+#'     election up to and including E, the national shares of every `POLL_PARTIES` party at
+#'     `previous`, the election before it (NA for a party with no list):
+#'     `prev_national_shares()`, except that for 2016-10-29 the rows of E are
+#'     `national_shares()` of the 2013 anchor, its votes over all 189 023 valid votes, as the
+#'     cell's results and `Kosning` row are;
 #'   - `entry`: the entry table's rows for `parties`: `read_inputs()`'s, whose epochs count
 #'     from `ELECTIONS`, or, where `elections` is not `ELECTIONS` (2016-10-29),
 #'     `entry_table()` of the national polls above with E's `window_start` and `elections`,
@@ -389,10 +427,12 @@ info_set <- function(E, F, inp = read_inputs()) {
     R / election_utils[layout_for],
     R / harness / anchors[anchor_national, fold_anchor],
     R / harness / availability[with_older_polls],
-    R / harness / constants[ELECTION_HOUSE, ELECTIONS, POLL_PARTIES, previous_election, window_elections, window_start],
+    R / harness / constants[
+      blank_party_rule, ELECTION_HOUSE, ELECTIONS, POLL_PARTIES, previous_election, window_elections, window_start
+    ],
     R / harness / fundamentals[fundamentals_inputs],
     R / harness / tables[coalition_event, entry_table, expected_valid_votes, valid_votes],
-    R / harness / truth[fold_truth, prev_national_shares]
+    R / harness / truth[fold_truth, national_shares, prev_national_shares]
   )
   E <- as.Date(E)
   F <- as.Date(F)
@@ -408,7 +448,7 @@ info_set <- function(E, F, inp = read_inputs()) {
   start <- window_start(E)
   elections <- window_elections(E)
   polling <- with_older_polls(inp$polling, inp$older_polls)
-  polls <- cell_polls(E, F, polling, inp$constituency, inp$availability, start)
+  polls <- cell_polls(E, F, polling, inp$constituency, inp$availability, start, blank_party_rule = blank_party_rule(E))
   parties <- polls$parties
 
   coalitions <- inp$coalitions[inp$coalitions$from <= F, ]
@@ -417,6 +457,7 @@ info_set <- function(E, F, inp = read_inputs()) {
   kosning_nat <- polls$kosning_nat
   results <- fold_truth(inp$truth)
   results <- results[results$election < E, ]
+  prev_anchor <- NULL
   # WHY: the truth file starts at 2016-10-29, so the election before it comes from the 2013 anchor.
   if (prev %in% inp$truth$election) {
     valid_votes_open <- expected_valid_votes(inp$truth, E)
@@ -436,13 +477,14 @@ info_set <- function(E, F, inp = read_inputs()) {
       available_from = nat$election + 1
     )
     kosning_nat <- dplyr::bind_rows(keep_parties(row, parties, "Kosning"), kosning_nat)
+    prev_anchor <- national_shares(inp$anchor_2013, prev)
   }
   # WHY: the committed entry table numbers epochs from ELECTIONS; another window numbers its own,
   # and the 2016 window, which no poll precedes, takes its first poll's parties as present at its start.
   entry <- if (identical(elections, ELECTIONS)) inp$entry else entry_table(polling, start, elections, first_poll_present = TRUE)
   window <- ELECTIONS[ELECTIONS <= E]
   prev_shares <- dplyr::bind_rows(lapply(seq_along(window), \(i) {
-    s <- prev_national_shares(window[i], inp$truth, inp$fundamentals)
+    s <- if (window[i] == E && !is.null(prev_anchor)) prev_anchor else prev_national_shares(window[i], inp$truth, inp$fundamentals)
     tibble::tibble(election = window[i], previous = previous_election(window[i]), flokkur = POLL_PARTIES, share = unname(s[POLL_PARTIES]))
   }))
   keys <- dplyr::bind_rows(
@@ -511,7 +553,10 @@ info_set <- function(E, F, inp = read_inputs()) {
 #'     a poll from before `window_start(E)` (whose availability is not recorded) dated
 #'     before F;
 #'   - "house with no admitted poll": a `houses` row, other than `ELECTION_HOUSE`, with
-#'     no `polls_nat` or `polls_kd` row.
+#'     no `polls_nat` or `polls_kd` row;
+#'   - "Annað counted beside a blank party": where `blank_party_rule(E)` holds, a `polls_nat`
+#'     poll that `blank_party_polls()` of `polls_nat` names, a positive Annað beside a blank
+#'     existing party.
 #'
 #'   Each message goes on, after ": ", to name the offending rows, `MAX_NAMED` (10) at
 #'   most and then the count: a poll as level, date and fyrirtaeki (a `kosning_nat` row
@@ -526,7 +571,7 @@ info_set <- function(E, F, inp = read_inputs()) {
 validate_inputs <- function(info) {
   box::use(
     R / harness / availability[fieldwork_overlaps],
-    R / harness / constants[ELECTION_HOUSE, window_elections, window_start],
+    R / harness / constants[blank_party_rule, ELECTION_HOUSE, window_elections, window_start],
     R / harness / tables[incumbents_at, pm_at]
   )
   E <- info$E
@@ -604,6 +649,10 @@ validate_inputs <- function(info) {
   ))
   houses <- info$houses$fyrirtaeki
   fail("house with no admitted poll", houses[!houses %in% c(ELECTION_HOUSE, polls$fyrirtaeki)])
+  if (blank_party_rule(E)) {
+    left <- blank_party_polls(nat)
+    fail("Anna\u00f0 counted beside a blank party", sprintf("national %s %s", format(left$date), left$fyrirtaeki))
+  }
 
   admitted <- dplyr::distinct(polls, level, date, fyrirtaeki, available_from)
   admitted <- admitted[order(match(admitted$level, POLL_LEVELS), admitted$date, admitted$fyrirtaeki, method = "radix"), ]
