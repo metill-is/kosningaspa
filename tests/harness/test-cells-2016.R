@@ -215,7 +215,7 @@ test_that("a cell's national polls stop on a poll that lists a party twice (two 
   expect_identical(nrow(cell_polls(E16, DAYS16[1], nat[1:2, ], kd, av, START16)$polls_nat), 2L)
 })
 
-test_that("the blank-party rule on made-up rows: Annad is read as not reported in a poll that leaves blank a party an earlier admitted poll of another house reported, and nothing else changes; a poll before that day, one reporting the party, one with no Annad and one whose only earlier report was not public by F are untouched; with the rule off nothing changes; only 2016 cells take the rule (a remainder read as Annad alone while it holds an existing party's support)", {
+test_that("the blank-party rule on made-up rows: Annad is read as not reported in a poll that leaves blank a party some admitted poll of any house, its own included, reported on or before its date, and nothing else changes; a poll before that day, one reporting the party, one with no Annad and one whose only earlier report was not public by F are untouched; with the rule off nothing changes; only 2016 cells take the rule (a remainder read as Annad alone while it holds an existing party's support)", {
   D <- POLL_PARTIES[1]
   C <- POLL_PARTIES[6]
   A <- POLL_PARTIES[10]
@@ -224,8 +224,13 @@ test_that("the blank-party rule on made-up rows: Annad is read as not reported i
     poll("2016-02-01", "H2", c(D, C, A), c(10, 2, 3)),
     poll("2016-02-15", "H1", c(D, C, A), c(10, 0, 5)),
     poll("2016-03-13", "H1", c(D, C, A), c(10, 3, 2)),
+    # WHY: taken on the day of the first admitted report of C; `<` for `<=` in the rule leaves its Annad.
+    poll("2016-03-13", "H3", c(D, C, A), c(10, 0, 6)),
     poll("2016-04-04", "H2", c(D, C, A), c(10, 0, 4)),
     poll("2016-04-10", "H2", c(D, A), c(10, 4)),
+    # WHY: the reporting house's own later poll, with no other house's report of C admitted before it;
+    # a rule that counts other houses' reports only leaves its Annad.
+    poll("2016-04-12", "H1", c(D, C, A), c(10, 0, 3)),
     poll("2016-04-15", "H1", c(D, C, A), c(10, 0, 0)),
     poll("2016-04-20", "H2", c(D, C, A), c(10, 2, 3))
   )
@@ -239,16 +244,36 @@ test_that("the blank-party rule on made-up rows: Annad is read as not reported i
   expect_identical(paste(off$polls_nat$date, off$polls_nat$fyrirtaeki, off$polls_nat$flokkur), paste(admitted$date, admitted$fyrirtaeki, admitted$flokkur))
   expect_equal(off$polls_nat$n, admitted$n)
   want <- admitted$n
-  want[admitted$flokkur == A & paste(admitted$date, admitted$fyrirtaeki) %in% c("2016-04-04 H2", "2016-04-10 H2")] <- 0
+  named <- c("2016-03-13 H3", "2016-04-04 H2", "2016-04-10 H2", "2016-04-12 H1")
+  want[admitted$flokkur == A & paste(admitted$date, admitted$fyrirtaeki) %in% named] <- 0
   expect_equal(on$polls_nat$n, want)
   expect_identical(on$polls_nat[c("date", "fyrirtaeki", "flokkur", "available_from")], off$polls_nat[c("date", "fyrirtaeki", "flokkur", "available_from")])
   expect_identical(on$parties, c(D, C, A))
   expect_identical(on$parties, off$parties)
   blank <- blank_party_polls(admitted)
-  expect_identical(paste(blank$date, blank$fyrirtaeki, blank$blank), paste(c("2016-04-04", "2016-04-10"), "H2", C))
+  expect_identical(paste(blank$date, blank$fyrirtaeki, blank$blank), paste(named, C))
   expect_identical(nrow(blank_party_polls(admitted[0, ])), 0L)
   expect_identical(blank_party_rule(ELECTIONS), c(TRUE, FALSE, FALSE, FALSE))
   expect_error(blank_party_rule("2013-04-27"), "not a window election: 2013-04-27", fixed = TRUE)
+})
+
+test_that("blank_party_polls() stops on a positive count that rounds to 0, which it would call reported while both arms, which round the counts, read it as blank (a party reported for the rule and blank for the arms, its poll's Annad kept)", {
+  poll <- function(date, house, flokkur, n) tibble::tibble(date = as.Date(date), fyrirtaeki = house, flokkur = flokkur, n = n)
+  rows <- rbind(
+    poll("2016-03-13", "H1", POLL_PARTIES[c(1, 6, 10)], c(10, 3, 2)),
+    poll("2016-04-04", "H2", POLL_PARTIES[c(1, 6, 10)], c(10, 0.5, 4))
+  )
+  expect_error(
+    blank_party_polls(rows),
+    paste("a positive count that rounds to 0, which the arms read as not reported: 2016-04-04 H2", POLL_PARTIES[6], "0.5"),
+    fixed = TRUE
+  )
+  rows$n[5] <- 0.3
+  expect_error(blank_party_polls(rows), "rounds to 0", fixed = TRUE)
+  rows$n[5] <- 0.6
+  expect_identical(nrow(blank_party_polls(rows)), 0L)
+  rows$n[5] <- 0
+  expect_identical(blank_party_polls(rows)$blank, POLL_PARTIES[6])
 })
 
 # The oracle of the blank-party rule, written apart from blank_party_polls(): each admitted poll
@@ -294,6 +319,39 @@ test_that("each 2016 cell reads Annad as not reported in exactly the admitted po
     expect_identical(paste(format(moved$date), moved$fyrirtaeki, moved$flokkur, moved$n), paste(want$date, want$house, POLL_PARTIES[10], 0), label = lab)
     expect_identical(nrow(dplyr::anti_join(adm[adm$n > 0 & adm$flokkur != POLL_PARTIES[10], ], x$polls_nat, by = c("date", "fyrirtaeki", "flokkur"))), 0L, label = lab)
   }
+})
+
+# WHY: the only real-data days on which a rule that decided existence from every poll of the
+# window would differ from one reading the admitted polls (checked on 2026-11-12 against the raw
+# rows and availability.csv for every buildable day of 2016).
+test_that("a 2016 cell decides that a party exists from the polls it admits: on 2016-08-30 and 08-31 it admits MMR 2016-08-26, which leaves Flokkur folksins blank, but not Gallup 2016-08-13, the first poll to report it, public from 2016-09-01, so it reads MMR's Annad as the data hold it and Flokkur folksins is not a party; from 2016-09-01 it reads that Annad as not reported (deciding that a party exists from polls not yet public on F)", {
+  skip_without_snapshot()
+  ff <- POLL_PARTIES[7]
+  annad <- POLL_PARTIES[10]
+  av <- inp$availability[inp$availability$level == "national", ]
+  available <- function(date, house) av$available_from[av$date == as.Date(date) & av$fyrirtaeki == house]
+  expect_identical(available("2016-08-26", "MMR"), as.Date("2016-08-30"))
+  expect_identical(available("2016-08-13", "Gallup"), as.Date("2016-09-01"))
+  reports <- raw16[raw16$flokkur == ff & raw16$n > 0 & raw16$fyrirtaeki != ELECTION_HOUSE, ]
+  first <- reports[order(reports$date, method = "radix"), ][1, ]
+  expect_identical(paste(format(first$date), first$fyrirtaeki), "2016-08-13 Gallup")
+  expect_equal(first$n, 3.1581197604790421, tolerance = 1e-12)
+  mmr <- raw16[raw16$date == as.Date("2016-08-26") & raw16$fyrirtaeki == "MMR", ]
+  expect_identical(mmr$n[mmr$flokkur == ff], 0)
+  expect_equal(mmr$n[mmr$flokkur == annad], 113.993993993994, tolerance = 1e-12)
+  read_on <- function(F) {
+    x <- info_set(E16, F, inp)
+    p <- x$polls_nat
+    list(annad = p$n[p$date == as.Date("2016-08-26") & p$fyrirtaeki == "MMR" & p$flokkur == annad], ff = ff %in% x$parties)
+  }
+  for (F in c("2016-08-30", "2016-08-31")) {
+    r <- read_on(F)
+    expect_identical(r$annad, mmr$n[mmr$flokkur == annad], label = F)
+    expect_false(r$ff, label = F)
+  }
+  r <- read_on("2016-09-01")
+  expect_identical(r$annad, 0)
+  expect_true(r$ff)
 })
 
 test_that("validate_inputs() refuses a 2016 cell with a positive Annad beside a blank existing party, and passes a 2021 cell that holds the same raw 2016 row (a build path that skips the rule, or the rule reaching another election's cells)", {
@@ -567,7 +625,7 @@ test_that("availability.csv keeps every row it held before the older polls but t
 # WHY: the oracle reads harness/availability.csv itself, not the code under test, as
 # tests/harness/test-sweep.R does for 2017, 2021 and 2024, whose oracle starts at WINDOW_START
 # and so cannot cover 2016.
-test_that("every day of the 2016 cycle from 2016-04-07 builds and validates, admits exactly the national polls of the 2016 window that availability.csv makes public by F, never drops a poll or party, and keeps its results and previous shares; from 2016-03-10 to 2016-04-06 it stops for want of a cabinet, and before that on the economy release (an availability row or window rule that admits a poll before it was public on a 2016 day other than the four target days)", {
+test_that("every day of the 2016 cycle from 2016-04-07 builds and validates, admits exactly the national polls of the 2016 window that availability.csv makes public by F, reads every count as the raw row holds it but the Annad of the polls the raw-row oracle names for that day, read as 0, never drops a poll or party, and keeps its results and previous shares; from 2016-03-10 to 2016-04-06 it stops for want of a cabinet, and before that on the economy release (an availability row or window rule that admits a poll before it was public, or the blank-party rule changing a poll it should not, on a 2016 day other than the four target days)", {
   skip_without_snapshot()
   skip_unless_slow()
   av <- readr::read_csv(
@@ -582,13 +640,27 @@ test_that("every day of the 2016 cycle from 2016-04-07 builds and validates, adm
     rows <- av[av$level == "national" & av$fyrirtaeki != ELECTION_HOUSE & av$date >= START16 & av$date < E16 & av$available_from <= F, ]
     setdiff(keys(rows), withheld)
   }
+  # The cell's counts that are not the raw row's, and the Annad rows, read as 0, of the polls the
+  # oracle names on F; each as "date house flokkur n".
+  moved <- function(x) {
+    got <- dplyr::left_join(x$polls_nat, admitted_raw(x$F)[c("date", "fyrirtaeki", "flokkur", "n")],
+      by = c("date", "fyrirtaeki", "flokkur"), suffix = c("", "_raw"), relationship = "one-to-one"
+    )
+    got <- got[is.na(got$n_raw) | got$n != got$n_raw, ]
+    paste(format(got$date), got$fyrirtaeki, got$flokkur, got$n)
+  }
+  named <- function(F) {
+    want <- blank_oracle(admitted_raw(F))
+    unique(paste(want$date, want$house, POLL_PARTIES[10], 0))
+  }
   attempt <- function(F) tryCatch(
     {
       x <- info_set(E16, F, inp)
       validate_inputs(x)
       list(
         nat = keys(x$polls_nat), kd = keys(x$polls_kd), parties = x$parties, fixed = list(x$results, x$prev_shares),
-        late = max(x$polls_nat$date) >= F || max(c(x$polls_nat$available_from, x$polls_kd$available_from)) > F
+        late = max(x$polls_nat$date) >= F || max(c(x$polls_nat$available_from, x$polls_kd$available_from)) > F,
+        moved = moved(x), named = named(F)
       )
     },
     error = conditionMessage
@@ -604,6 +676,9 @@ test_that("every day of the 2016 cycle from 2016-04-07 builds and validates, adm
   expect_false(any(vapply(good, `[[`, logical(1), "late")))
   same <- vapply(seq_along(good), \(j) identical(good[[j]]$nat, oracle(on[j])), logical(1))
   expect_true(all(same), label = paste("days whose polls are not the oracle's:", paste(format(on[!same]), collapse = " ")))
+  as_named <- vapply(good, \(g) identical(g$moved, g$named), logical(1))
+  expect_true(all(as_named), label = paste("days whose changed counts are not the named polls' Annad:", paste(format(on[!as_named]), collapse = " ")))
+  expect_identical(lengths(lapply(good[match(DAYS16, on)], `[[`, "named")), BLANK16_N)
   grows <- vapply(seq_along(good)[-1], \(j) {
     a <- good[[j - 1]]
     b <- good[[j]]

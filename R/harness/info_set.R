@@ -238,10 +238,23 @@ keep_parties <- function(rows, parties, what) {
 #'   has no positive count for it (n = 0, or no row). `blank` names the poll's blank parties in
 #'   `POLL_PARTIES` order, separated by ", ". The poll's Annað, the remainder, holds their
 #'   support, so `cell_polls()` reads it as not reported where `blank_party_rule(E)` holds.
+#'
+#'   An error if a row holds a positive count that rounds to 0 (n in (0, 0.5]): both arms
+#'   round the counts before they decide which parties a poll reports (`count_matrix()` in
+#'   `R/harness/v2.R`, production's `prepare_stan_data()`), so this function would call such a
+#'   party reported and the arms would read it as blank.
 #' @export
 blank_party_polls <- function(rows) {
   box::use(R / harness / constants[POLL_PARTIES])
   annad <- POLL_PARTIES[length(POLL_PARTIES)]
+  tiny <- which(rows$n > 0 & round(rows$n) == 0)
+  if (length(tiny)) {
+    stop(
+      "a positive count that rounds to 0, which the arms read as not reported: ",
+      paste(format(rows$date[tiny]), rows$fyrirtaeki[tiny], rows$flokkur[tiny], rows$n[tiny], collapse = "; "),
+      call. = FALSE
+    )
+  }
   positive <- rows[which(rows$n > 0), c("date", "fyrirtaeki", "flokkur")]
   named <- positive[positive$flokkur != annad, ]
   named <- named[order(named$date, method = "radix"), ]
@@ -556,7 +569,11 @@ info_set <- function(E, F, inp = read_inputs()) {
 #'     no `polls_nat` or `polls_kd` row;
 #'   - "Annað counted beside a blank party": where `blank_party_rule(E)` holds, a `polls_nat`
 #'     poll that `blank_party_polls()` of `polls_nat` names, a positive Annað beside a blank
-#'     existing party.
+#'     existing party. It catches a 2016 cell in which the rule was applied too little. It
+#'     cannot see one in which an Annað was set to 0 where the rule does not apply, nor one
+#'     that decided a party exists from polls not yet public on F, because a 0 the rule set
+#'     and a 0 the data hold look the same; `tests/harness/test-cells-2016.R` covers those
+#'     against the raw rows.
 #'
 #'   Each message goes on, after ": ", to name the offending rows, `MAX_NAMED` (10) at
 #'   most and then the count: a poll as level, date and fyrirtaeki (a `kosning_nat` row

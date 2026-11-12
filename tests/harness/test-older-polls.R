@@ -144,9 +144,9 @@ pool_date <- function(m) {
 table_polls <- function(x) dplyr::distinct(x, poll_id, date, fyrirtaeki, n_total, n_source, pins, replaces)
 
 # The published sizes and printed response rates the size rule (J08) pools, each a tibble
-# (fyrirtaeki, date, n or rr) dated before POOL_END: the snapshot's polls, the table's ordinary
+# (fyrirtaeki, date, n or rr) dated before `before`: the snapshot's polls, the table's ordinary
 # polls and the register's pool polls.
-size_pools <- function(polls, facts) {
+size_pools <- function(polls, facts, before = POOL_END) {
   register <- read_chr("polls.csv")
   pool_rows <- register[register$status == "pool", ]
   pool_m <- lapply(pool_rows$sources, members_of, facts = facts)
@@ -166,11 +166,11 @@ size_pools <- function(polls, facts) {
     snap,
     dplyr::filter(ordinary, n_source == "published") |> dplyr::select(date, fyrirtaeki, n = n_total),
     dplyr::filter(pool_polls, !is.na(n)) |> dplyr::select(date, fyrirtaeki, n)
-  ) |> dplyr::filter(date < POOL_END)
+  ) |> dplyr::filter(date < before)
   rates <- dplyr::bind_rows(
     tibble::tibble(fyrirtaeki = ordinary$fyrirtaeki, date = ordinary$date, rr = vapply(ordinary_m, printed, 0, what = "rr")),
     dplyr::select(pool_polls, fyrirtaeki, date, rr)
-  ) |> dplyr::filter(!is.na(rr), date < POOL_END)
+  ) |> dplyr::filter(!is.na(rr), date < before)
   list(sizes = sizes, rates = rates)
 }
 
@@ -315,23 +315,34 @@ test_that("every published size is printed by a source the poll cites, and every
 
 # WHY: a size that depends on polls taken after a forecast day: a pool holding the snapshot's
 # polls of 2016, some taken after the forecast day of the three 2016 cells before the eve.
-test_that("no assumed size rests on a poll dated from 2016-01-01: the count each assumed poll's flags state is the count of its house's sizes, or response rates, within 730 days dated before 2016", {
+test_that("no assumed size rests on a poll dated from 2016-01-01: the count each assumed poll's flags state is the count of its house's sizes, or response rates, within 730 days dated before 2016, and the same pool run to the 2016 election holds polls of 2016 that would change ten of those counts", {
   skip_without_snapshot()
   x <- read_older_polls()
   pools <- size_pools(table_polls(x), source_facts())
-  expect_true(all(c(pools$sizes$date, pools$rates$date) < POOL_END))
+  # WHY: the pool with no end before the 2016 election, as the builder pooled before J08 stated its
+  # end; if it held no poll of 2016, the counts below could not tell the two apart.
+  late <- size_pools(table_polls(x), source_facts(), before = as.Date("2016-10-29"))
+  expect_true(any(late$sizes$date >= POOL_END))
   assumed <- dplyr::filter(dplyr::distinct(x, poll_id, date, fyrirtaeki, n_source, flags), n_source == "assumed")
   expect_gt(nrow(assumed), 0)
+  moved <- character(0)
   for (i in seq_len(nrow(assumed))) {
     p <- assumed[i, ]
     by_size <- regmatches(p$flags, regexec("n assumed: the median of ([0-9]+) published sizes within 730 days", p$flags))[[1]]
     by_rate <- regmatches(p$flags, regexec("x the median response rate [0-9.]+% of ([0-9]+) polls within 730 days", p$flags))[[1]]
     expect_true(xor(length(by_size) > 0, length(by_rate) > 0), label = p$poll_id)
-    pool <- if (length(by_size)) pools$sizes else pools$rates
     stated <- as.integer(if (length(by_size)) by_size[2] else by_rate[2])
-    near <- pool$fyrirtaeki == p$fyrirtaeki & abs(as.numeric(pool$date - p$date)) <= POOL_DAYS
-    expect_identical(stated, sum(near), label = p$poll_id)
+    count <- function(pools) {
+      pool <- if (length(by_size)) pools$sizes else pools$rates
+      sum(pool$fyrirtaeki == p$fyrirtaeki & abs(as.numeric(pool$date - p$date)) <= POOL_DAYS)
+    }
+    expect_identical(stated, count(pools), label = p$poll_id)
+    if (count(late) != stated) moved <- c(moved, p$poll_id)
   }
+  expect_identical(sort(moved), paste0("M-", c(
+    "2014-02-13", "2014-04-19", "2014-05-20", "2014-10-18", "2015-01-26", "2015-02-16", "2015-03-15", "2015-04-05",
+    "2015-10-17", "2015-12-14"
+  )))
 })
 
 # WHY: a replacement poll given the size rule's assumed size instead of the count the snapshot

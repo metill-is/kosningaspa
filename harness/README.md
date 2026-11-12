@@ -18,8 +18,14 @@ lacks, in place of the snapshot rows its replacement polls name (`with_older_pol
 `R/harness/availability.R`; `harness/sources/older_polls/README.md`). A 2016 cell reads Annað as
 not reported in an admitted national poll that leaves blank a party which an admitted poll had
 reported on or before its date (`blank_party_polls()` in `R/harness/info_set.R`;
-`harness/sources/README.md`, Known data discrepancies), and takes its previous shares from the
-official 2013 result in `harness/truth/anchor_2013.csv`.
+`harness/sources/README.md`, Known data discrepancies). The official 2013 result in
+`harness/truth/anchor_2013.csv` gives such a cell its 2013 results and the kjördæmi valid votes it
+expects at the election, which both arms read, and its 2013 Kosning row, which R0 reads. Of the
+cell's 2013 shares, only `prev_shares` come from that file: R0 reads them in its check that a
+newcomer had no votes and in Annað's target row, whose previous share reaches no Stan field. The
+fundamentals predictors of both arms still read the fundamentals table's 2013 shares, which are
+rounded to a tenth of a point and sum to 100.2 (Annað 20.2 of that, 20.16%, against the official
+20.04%).
 
 To refresh it, delete `harness/snapshot/` by hand (`snapshot_inputs()` refuses an existing
 one), re-run it from the project root, and commit the new manifest:

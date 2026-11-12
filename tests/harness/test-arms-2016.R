@@ -1,9 +1,13 @@
 box::use(
   R / harness / anchors[anchor_national],
-  R / harness / info_set[info_set, validate_inputs],
+  R / harness / availability[with_older_polls],
+  R / harness / constants[FUNDAMENTALS_RENAMED],
+  R / harness / fundamentals[fundamentals_party],
+  R / harness / info_set[blank_party_polls, info_set, validate_inputs],
   R / harness / r0[fundamentals_rows, r0_stan_data, read_r0_config],
   R / harness / runs[run_id],
   R / harness / tables[grid_dates],
+  R / harness / truth[prev_national_shares],
   R / harness / v2[v2_stan_data],
   R / harness / v2_reference[v2_mutants]
 )
@@ -144,7 +148,7 @@ test_that("R0 builds each 2016 day with the 2013 national result as one election
   }
 })
 
-test_that("each arm builds each 2016 day, R0 with Annad's previous share from the official 2013 result and its newcomer check reading those shares (R0's newcomer check comparing the fundamentals table with itself)", {
+test_that("each arm builds each 2016 day, R0's Annad target row carrying Annad's share of the official 2013 result and R0's newcomer check reading the cell's prev_shares (an Annad row built from the fundamentals table's rounded shares, or a newcomer check that bypasses the cell's prev_shares)", {
   cells <- cells16()
   nat <- anchor_national(v2_inputs()$anchor_2013)
   annad <- POLL_PARTIES[10]
@@ -159,6 +163,89 @@ test_that("each arm builds each 2016 day, R0 with Annad's previous share from th
   x <- cells[[4]]
   x$prev_shares$share[x$prev_shares$flokkur == NEWCOMERS16[1]] <- 0.01
   expect_error(r0_stan_data(x, read_r0_config()), paste("a newcomer had votes at 2013-04-27:", NEWCOMERS16[1]), fixed = TRUE)
+})
+
+# WHY: as tests/harness/test-r0-inputs.R does on the 2024 eve, a label with no rename folds into
+# Annad, as Framsokn would without its FUNDAMENTALS_RENAMED entry; here the label is changed in the
+# table the cell is built from, so the cell's prev_shares are whatever info_set() takes for 2013.
+# Every row of the party is relabelled: with the 2013 row alone, fundamentals_inputs() refuses the
+# cell, the party's 2016 prior having no 2013 votes beside it.
+test_that("R0 refuses the 2016 eve cell built from a fundamentals table whose Framsoknarflokkurinn rows, 2013's among them, carry a label outside FUNDAMENTALS_RENAMED, because the cell's previous shares are the official 2013 result, while prev_national_shares() of the same table gives that party no previous share, so a check reading it could not see the fold (R0's newcomer check comparing the fundamentals table with itself)", {
+  inp <- v2_inputs()
+  party <- POLL_PARTIES[2]
+  label <- "Framsokn gamli"
+  expect_false(label %in% c(names(FUNDAMENTALS_RENAMED), POLL_PARTIES))
+  fund <- inp$fundamentals
+  hit <- fundamentals_party(fund$flokkur) == party
+  expect_true(any(hit & fund$date == ANCHOR16))
+  fund$flokkur[hit] <- label
+  expect_true(is.na(prev_national_shares(E16, inp$truth, fund)[[party]]))
+  expect_gt(prev_national_shares(E16, inp$truth, inp$fundamentals)[[party]], 0)
+  mislabelled <- inp
+  mislabelled$fundamentals <- fund
+  x <- info_set(E16, DAYS16[4], mislabelled)
+  expect_true(party %in% x$parties)
+  expect_false(party %in% x$fundamentals$S_f)
+  expect_gt(x$prev_shares$share[x$prev_shares$election == E16 & x$prev_shares$flokkur == party], 0)
+  expect_error(r0_stan_data(x, read_r0_config()), paste("R0 input: a newcomer had votes at 2013-04-27:", party), fixed = TRUE)
+})
+
+# The rows of each arm's national poll data, as "date house" keys: V2's in date and house order,
+# R0's from date_n and house_n, the 2013 Kosning row included.
+v2_keys <- function(x) {
+  k <- dplyr::distinct(x$polls_nat, date, fyrirtaeki)
+  k <- k[order(k$date, k$fyrirtaeki, method = "radix"), ]
+  paste(format(k$date), k$fyrirtaeki)
+}
+r0_keys <- function(x, b) {
+  dates <- sort(unique(c(x$kosning_nat$date, x$polls_nat$date)))
+  paste(format(dates[b$data$date_n]), b$meta$house_levels[b$data$house_n])
+}
+
+test_that("on each 2016 day both arms read Annad as not reported in each poll the rule names, a count of 0 outside the poll's reported parties, whose count is one lower than the parties the raw row reports, and as reported in every other poll whose Annad is positive (a builder that reads a 2016 cell's 0 for Annad as an observed count, or drops such a poll)", {
+  cells <- cells16()
+  inp <- v2_inputs()
+  raw <- with_older_polls(inp$polling, inp$older_polls)
+  annad <- POLL_PARTIES[10]
+  for (i in seq_along(cells)) {
+    x <- cells[[i]]
+    lab <- format(x$F)
+    adm <- dplyr::semi_join(raw, dplyr::distinct(x$polls_nat, date, fyrirtaeki), by = c("date", "fyrirtaeki"))
+    blank <- blank_party_polls(adm)
+    rule <- paste(format(blank$date), blank$fyrirtaeki)
+    expect_length(rule, c(2L, 5L, 10L, 13L)[i])
+    keys <- v2_keys(x)
+    v2 <- v2_16()[[i]]
+    r0 <- r0_16()[[i]]
+    arms <- list(
+      v2 = list(po = v2$meta$party_order, y = v2$data$y_nat, n_rep = v2$data$n_rep_nat, idx = v2$data$idx_nat, keys = keys),
+      r0 = list(po = r0$meta$party_order, y = r0$data$y_n, n_rep = r0$data$n_parties_n, idx = r0$data$party_index_n, keys = r0_keys(x, r0))
+    )
+    expect_identical(nrow(arms$v2$y), length(keys), label = lab)
+    expect_identical(nrow(arms$r0$y), length(keys) + 1L, label = lab)
+    for (key in keys) {
+      rows <- adm[paste(format(adm$date), adm$fyrirtaeki) == key, ]
+      reports <- intersect(x$parties, rows$flokkur[rows$n > 0])
+      if (!annad %in% reports) next
+      named <- key %in% rule
+      for (a in names(arms)) {
+        m <- arms[[a]]
+        j <- match(key, m$keys)
+        at <- paste(lab, a, key)
+        expect_false(is.na(j), label = at)
+        col <- match(annad, m$po)
+        idx <- as.integer(m$idx[j, ])
+        if (named) {
+          expect_identical(as.integer(m$y[j, col]), 0L, label = at)
+          expect_false(col %in% idx, label = at)
+          expect_identical(as.integer(m$n_rep[j]), length(m$po) - length(setdiff(m$po, reports)) - 1L, label = at)
+          expect_identical(sort(idx[idx > 0]), sort(match(setdiff(reports, annad), m$po)), label = at)
+        } else {
+          expect_true(col %in% idx, label = at)
+        }
+      }
+    }
+  }
 })
 
 test_that("for every TARGETS cell outside 2016 the grid and the epochs both builders use are as recorded before the cell's own elections were read (an existing cell's walk or hedge moved)", {
