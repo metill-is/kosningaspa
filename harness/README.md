@@ -267,6 +267,46 @@ repository unfrozen, it reads the result for every 2016, 2021 and 2024 cell and 
 reader that fails if it is called, and scores a 2021 cell with no freeze. The tests of a
 sealed freeze and decision run in temporary git repositories.
 
+## Adding a test election
+
+2016 became a scored election after the harness was built (merge c45454f). What that took is the
+list of what another election needs; each item names where its rule lives.
+
+- **The cells.** A row per forecast day in `TARGETS`, and the election's window and epochs in
+  `window_start()` and `window_elections()` (`R/harness/constants.R`). No existing cell may
+  change: `TARGET_DIGESTS` and `ADMITTED_DIGESTS` in `tests/harness/test-cells-2016.R` pin every
+  earlier cell's inputs, and the Stan data of each finished run must hash as its `meta.json`
+  records.
+- **The election before it.** Where the truth table does not hold it, its official result as an
+  anchor (`R/harness/anchors.R`, `harness/truth/README.md`), with the lists mapped to poll parties
+  by name (`harness/sources/lists_2013.csv`). The anchor gives the cell its previous results, the
+  valid votes it expects, R0's Kosning row and its previous shares.
+- **Polls the data lack.** A pinned table with a source and a judgement for every figure
+  (`harness/older_polls.csv`, built by `harness/sources/older_polls/build.py`; its README says
+  how), merged by `with_older_polls()`. Every poll needs a day from which it was public
+  (`harness/availability.csv`, rebuilt by `R/harness/build_phase0.R`;
+  `harness/sources/poll_publication.csv`).
+- **What a forecast day may know.** Economy figures first released by that day
+  (`harness/sources/economy_release.csv`), a cabinet in office on it
+  (`harness/sources/coalition_events.csv`: a 2016 cell can be built from 2016-04-07), each
+  party's entry date (`entry_table()` in `R/harness/tables.R`) and any reading rule of the
+  election (`blank_party_rule()`). `validate_inputs()` is the gate before every fit, and the slow
+  sweep in `tests/harness/test-cells-2016.R` builds every day of the cycle.
+- **The arms.** Both builders must take the cell (`tests/harness/test-arms-2016.R`). R0 scales
+  its walk only around the elections on production's own list (`R/stan_data.R`); the core marks
+  every election in its window.
+- **Scoring.** A party with no admitted poll on the forecast day is scored inside Annað
+  (`fold_parties()` in `R/harness/scorer.R`), and seat scores are marked not comparable where
+  Annað holds official seats (`tests/harness/test-score-2016.R`).
+- **Tests on master that list the target cells** (in `test-availability.R`, `test-freeze.R`,
+  `test-info-set.R`, `test-inputs.R` and `test-r0-inputs.R`) change only on the owner's yes
+  (`.claude/rules/process.md`).
+- **Fits and the record.** Add the runs to `harness/runs/test-elections.txt`, write down what you
+  expect before any score is opened, and record the reading in `harness/v2/decisions.md`. The
+  2017 cells stay locked (The freeze and the 2017 locks).
+
+The order that worked: inputs, arms, targets, scoring, fits; each stage reviewed before the next.
+
 ## Where the record is
 
 - `harness/v2/decisions.md`: each V2 step's verdict and commit, and the working model. The
