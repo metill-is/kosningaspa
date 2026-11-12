@@ -2,7 +2,7 @@
 
 The harness fits forecast models on past election cells and scores them against the results.
 It builds frozen, leak-checked inputs (official results, poll availability, fundamentals target
-rows and seat layouts) for the cells of the 2021 and 2024 elections and the held-out 2017
+rows and seat layouts) for the cells of the 2016, 2021 and 2024 elections and the held-out 2017
 cells, fits an arm on a cell, and scores two arms against each other. Code is in `R/harness/`
 (box modules and plain scripts), tests in `tests/harness/`, committed inputs and reports here.
 
@@ -12,7 +12,20 @@ The harness never reads the live `data/`. `snapshot_inputs(src_root)` (`R/harnes
 copies the files in `SNAPSHOT_FILES` from the main checkout into `harness/snapshot/`
 (gitignored) and writes `harness/snapshot_manifest.csv` (committed). Every read goes through
 `snapshot_file(name)`, which checks the file's sha256 against the manifest; `verify_snapshot()`
-checks them all.
+checks them all. The 2016 cells, whose window opens on 2012-07-01, also read
+`harness/older_polls.csv`, the national polls of July 2012 to December 2015 that the snapshot
+lacks, in place of the snapshot rows its replacement polls name (`with_older_polls()` in
+`R/harness/availability.R`; `harness/sources/older_polls/README.md`). A 2016 cell reads Annað as
+not reported in an admitted national poll that leaves blank a party which an admitted poll had
+reported on or before its date (`blank_party_polls()` in `R/harness/info_set.R`;
+`harness/sources/README.md`, Known data discrepancies). The official 2013 result in
+`harness/truth/anchor_2013.csv` gives such a cell its 2013 results and the kjördæmi valid votes it
+expects at the election, which both arms read, and its 2013 Kosning row, which R0 reads. Of the
+cell's 2013 shares, only `prev_shares` come from that file: R0 reads them in its check that a
+newcomer had no votes and in Annað's target row, whose previous share reaches no Stan field. The
+fundamentals predictors of both arms still read the fundamentals table's 2013 shares, which are
+rounded to a tenth of a point and sum to 100.2 (Annað 20.2 of that, 20.16%, against the official
+20.04%).
 
 To refresh it, delete `harness/snapshot/` by hand (`snapshot_inputs()` refuses an existing
 one), re-run it from the project root, and commit the new manifest:
@@ -23,9 +36,16 @@ box::use(R/harness/inputs[snapshot_inputs])
 snapshot_inputs("<path to the main checkout>")
 ```
 
-Then rebuild the generated tables, which reads the snapshot and rewrites
-`harness/truth/elections_official.csv`, `harness/availability.csv`,
-`harness/availability_report.md`, `harness/entry_table.csv` and
+Then rebuild the older polls table's extract of the snapshot, and the table, which reads it:
+
+```
+python3 -I harness/sources/older_polls/build.py --snapshot-sizes
+python3 -I harness/sources/older_polls/build.py
+```
+
+Then rebuild the generated tables, which reads the snapshot and `harness/older_polls.csv` and
+rewrites `harness/truth/elections_official.csv`, `harness/truth/anchor_2013.csv`,
+`harness/availability.csv`, `harness/availability_report.md`, `harness/entry_table.csv` and
 `harness/sources/seats_2021_official.csv`; on unchanged inputs `git status harness/` stays
 clean:
 
@@ -42,9 +62,11 @@ testthat edition 3, and a passing run prints each test file's seconds, slowest f
   `skip_without_snapshot()`. `tests/harness/test-generated.R` fails if a generated committed
   file is not a fresh build, and `tests/harness/test-escapes.R` enforces that harness R code
   writes non-ASCII characters as `\uXXXX` escapes.
-- **The slow suite** adds the tests that call `skip_unless_slow()`: the sweep of every forecast
-  day, the self-test's kjördæmi and seat scores, the R0 and V2 Stan tests and the cell
-  runner's test fits, which compile with CmdStan:
+- **The slow suite** adds the tests that call `skip_unless_slow()`: the sweeps of every forecast
+  day (the 2017, 2021 and 2024 cycles in `tests/harness/test-sweep.R`; the 2016 cycle in
+  `tests/harness/test-cells-2016.R`, from 2016-04-07, the first day a 2016 cell can be built,
+  since `harness/sources/coalition_events.csv` begins then), the self-test's kjördæmi and seat
+  scores, the R0 and V2 Stan tests and the cell runner's test fits, which compile with CmdStan:
   `HARNESS_SLOW=1 LC_ALL=en_US.UTF-8 Rscript tests/run.R`. `HARNESS_V2_STAN=<absolute path>`
   runs the V2 Stan tests (`tests/harness/test-v2-stan.R`) on a scratch copy of the Stan file.
 - **The live-data test** reads `data/polling_data.csv` and runs only with
@@ -73,7 +95,8 @@ checks its kind needs, and the wider suite waits for a published or frozen forec
 
 - *A change meant to improve forecasts:* fit the old and the new model once each on 2024 eve
   and 2021 f180 and score them (Scoring a comparison). The working model's run list is
-  `harness/runs/v2.txt`.
+  `harness/runs/v2.txt`; `harness/runs/test-elections.txt` holds both arms on every fitted
+  scored cell, 2016's included.
 - *Before a published forecast or the freeze:* the full slow suite, two seeds per arm and cell,
   and a recovery study, which has to be rebuilt for this model first (`R/harness/archive/README.md`).
 
@@ -151,6 +174,15 @@ spec's adoption rule with the tie rule. The tie rule's SE_diff is Monte Carlo er
 per-cell "better" or "worse" says that a difference is computed precisely, not that one model
 forecasts better.
 
+A party with votes at E but no admitted poll at F, so that the cell has none of it (Flokkur
+Fólksins at 2016-05-02), is scored as part of Annað on that cell: `fold_parties()` names it,
+reading the snapshot, and `cell_truth(..., fold =)` adds its votes and seats to Annað's; the
+report says so in that cell's section. A run
+that leaves out a party the cell does have is still refused. Where Annað holds official seats
+(2016: Björt framtíð's 4), no draw can give it them, so the report marks that cell's seat
+scores "(not comparable)" and leaves them out of criterion 4; the election-level reading is
+CRPS10 alone and does not change.
+
 To compare two commits rather than two arms, fit the old model in a worktree of its own with a
 copy of `harness/snapshot/` and its own `HARNESS_RESULTS`, passing the run list by absolute
 path: two fits of the same arm, cell and seed in one results root would retire each other to
@@ -160,7 +192,7 @@ Every arm fitted on a scored cell gets a row in `harness/trials.csv`: the arm, t
 first fitted, its config, the cells it has draws for, how it was conceived (`planned` before
 any forecast was scored, `after-scores`, or `sampler` for another form of the same posterior)
 and what it changes. The number of rows is the number of comparisons behind any choice, and an
-`after-scores` arm is exploratory on 2021 and 2024 until another election confirms it.
+`after-scores` arm is exploratory on 2016, 2021 and 2024 until another election confirms it.
 
 ## The freeze and the 2017 locks
 
@@ -171,8 +203,8 @@ result (`cell_truth()`) and the draws. With the default result reader, which rea
 this project's results, it refuses a `root` other than the project's, since the guard
 would otherwise check another repository's freeze.
 
-The guard refuses a cell that is not in `TARGETS` (check 1). A 2021 or 2024 cell passes it
-with no freeze: Brynjólfur decided on 5 November 2026 that the model is developed without
+The guard refuses a cell that is not in `TARGETS` (check 1). A 2016, 2021 or 2024 cell passes
+it with no freeze: Brynjólfur decided on 5 November 2026 that the model is developed without
 such locks, so no freeze file is read for those cells. A 2017 cell, the held-out confirmatory
 target, stops at the first of these failures:
 
@@ -216,6 +248,8 @@ What `score_cell()` returns, per cell:
   `meta.json`, with the majority probability of the coalition that formed after E
   (`formed_coalition()`, hindsight that only `score_cell()` reads). `seats` carries the
   batch SEs `se_seat_crps`, `se_seat_cov90` and `se_brier`.
+- `seats_not_comparable`, only for a cell whose result gives Annað official seats (2016):
+  why its seat scores, Brier score and `p_formed`, returned as usual, are not comparable.
 
 Every batch SE is over the same 16 blocks: the score is recomputed on each block's draws,
 and its SE is their standard deviation over √16. So the tie rule of spec §5.7 (a
@@ -228,8 +262,8 @@ fit: refit <run>" unless its parties are those `meta.json` recorded: the sha-ski
 not cover the event, so a reused run could otherwise be scored against an outdated one. It
 stops with "no list at E" if a party the run forecasts has a national result of 0, as a
 party with no list would, since the alr scores would take the log of that zero. With this
-repository unfrozen, it reads the result for every 2021 and 2024 cell and refuses every 2017
-one before any result is read; `tests/harness/test-scorer.R` checks both with a result
+repository unfrozen, it reads the result for every 2016, 2021 and 2024 cell and refuses every
+2017 one before any result is read; `tests/harness/test-scorer.R` checks both with a result
 reader that fails if it is called, and scores a 2021 cell with no freeze. The tests of a
 sealed freeze and decision run in temporary git repositories.
 
@@ -237,6 +271,8 @@ sealed freeze and decision run in temporary git repositories.
 
 - `harness/v2/decisions.md`: each V2 step's verdict and commit, and the working model. The
   switched file and its harness are at the tag `v2-switched-final`.
+- `harness/v2/scoring-2016-first-reading.md`: the first reading of 2016, on the data's own polls
+  with the window opening at the 2013 election, kept as a record.
 - `harness/archive/`: the frozen V2 step log (`steps.md`), this page as it stood before
   10 November 2026 (`README-2026-11-10.md`), the step and ablation configs (`configs/`), the
   old run lists (`runs/`) and the nine-switch model's reports (`v2/`: scoring, recovery and

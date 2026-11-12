@@ -9,7 +9,7 @@
 # The availability rules of each level, in the order they are tried, except `election`:
 # a national `Kosning` pseudo-poll (official results) always takes it, and no other row can.
 RULES <- list(
-  national = c("correction", "lokadagur", "wikipedia", "published", "house_max", "election"),
+  national = c("correction", "lokadagur", "wikipedia", "older_polls", "published", "house_max", "election"),
   kjordaemi = c("correction", "twin", "published", "house_max")
 )
 
@@ -48,6 +48,41 @@ read_polling <- function() {
     readr::cols(date = "D", fyrirtaeki = "c", flokkur = "c", n = "d", lokadagur = "c", p = "_"),
     keys = c("date", "fyrirtaeki", "flokkur", "n")
   )
+}
+
+#' The national polls with the older polls table (`harness/older_polls.csv`) merged in: the
+#' rows of each snapshot key a replacement poll names are dropped and the table's polls
+#' added (`harness/sources/older_polls/README.md`). Availability and `info_set()` read the
+#' polls through it. The table holds nothing dated from `WINDOW_START`, so only a window that
+#' opens before it, the 2016 cells', reads the difference.
+#' @param polling national poll rows (date, fyrirtaeki, flokkur, n, ...)
+#' @param older a `read_older_polls()` tibble
+#' @return `polling` without the rows of the replaced keys (each replacement's `replaces`
+#'   date and its house), followed by the table's rows (date, fyrirtaeki, flokkur, n; any
+#'   other column of `polling` NA). An error if the table holds a poll dated from
+#'   `WINDOW_START`, if two of its polls share a date and house, if a replaced key names no
+#'   poll of `polling`, or if a table poll has the date and house of a poll it does not
+#'   replace
+#' @export
+with_older_polls <- function(polling, older) {
+  box::use(R / harness / constants[WINDOW_START])
+  key <- function(date, house) paste(format(date), house)
+  late <- unique(older$poll_id[older$date >= WINDOW_START])
+  if (length(late)) stop("the older polls table holds polls dated from ", format(WINDOW_START), ": ", paste(late, collapse = ", "))
+  polls <- dplyr::distinct(older, poll_id, date, fyrirtaeki, replaces)
+  keys <- key(polls$date, polls$fyrirtaeki)
+  if (anyDuplicated(keys)) stop("older polls share a date and house: ", paste(unique(keys[duplicated(keys)]), collapse = "; "))
+  replaced <- unique(key(polls$replaces, polls$fyrirtaeki)[!is.na(polls$replaces)])
+  have <- key(polling$date, polling$fyrirtaeki)
+  # WHY: a snapshot refresh that corrected a replaced row would otherwise read its poll twice.
+  gone <- setdiff(replaced, have)
+  if (length(gone)) stop("replaced key(s) naming no poll: ", paste(gone, collapse = "; "))
+  kept <- polling[!have %in% replaced, ]
+  clash <- intersect(keys, key(kept$date, kept$fyrirtaeki))
+  if (length(clash)) {
+    stop("older poll(s) with the date and house of a poll they do not replace: ", paste(clash, collapse = "; "))
+  }
+  dplyr::bind_rows(kept, older[c("date", "fyrirtaeki", "flokkur", "n")])
 }
 
 #' The snapshot's kjördæmi polls, every row (`Kosning` rows included).
@@ -239,15 +274,23 @@ house_max_fieldwork <- function(spans) {
 }
 
 # Everything poll_availability() computes; write_availability() reports from the parts.
-availability_parts <- function(polling, constituency, sources_dir) {
+availability_parts <- function(polling, constituency, sources_dir, older = NULL) {
   box::use(
-    R / harness / constants[ELECTION_HOUSE, WINDOW_START],
+    R / harness / constants[ELECTION_HOUSE, ELECTIONS, window_start],
     dplyr[anti_join, arrange, bind_rows, case_when, filter, if_else, left_join, mutate, rename, select, transmute]
   )
   src <- read_sources(sources_dir)
-  # WHY: the window is cut before poll_list(), whose checks would otherwise reject
-  # pre-window rows such as the two MMR polls the data keys as one on 2013-05-16.
-  polls <- poll_list(filter(polling, date >= WINDOW_START), filter(constituency, date >= WINDOW_START)) |>
+  start <- min(window_start(ELECTIONS))
+  table <- tibble::tibble(
+    date = as.Date(character()), fyrirtaeki = character(), older_end = as.Date(character()),
+    older_published = as.Date(character())
+  )
+  if (!is.null(older)) {
+    polling <- with_older_polls(polling, older)
+    table <- dplyr::distinct(transmute(older, date, fyrirtaeki, older_end = fieldwork_end, older_published = published))
+  }
+  # WHY: rows before the earliest window start get no row at all.
+  polls <- poll_list(filter(polling, date >= start), filter(constituency, date >= start)) |>
     filter(!(level == "kjordaemi" & fyrirtaeki == ELECTION_HOUSE))
 
   # WHY: a Kosning row is always `election`, so a source row naming one would be ignored.
@@ -290,12 +333,15 @@ availability_parts <- function(polling, constituency, sources_dir) {
     join(source_rows(src$corrections, "national", "end", "corrected_end")) |>
     join(source_rows(src$publication, "national", "published", "published")) |>
     join(rename(matched, wikipedia_end = end) |> select(-start)) |>
+    join(table) |>
     mutate(
+      published = pmax(published, older_published, na.rm = TRUE),
       rule_order = case_when(
         fyrirtaeki == ELECTION_HOUSE ~ "election",
         !is.na(corrected_end) ~ "correction",
         !is.na(lokadagur) ~ "lokadagur",
         !is.na(wikipedia_end) ~ "wikipedia",
+        !is.na(older_end) ~ "older_polls",
         !is.na(published) ~ "published",
         .default = "house_max"
       ),
@@ -304,6 +350,7 @@ availability_parts <- function(polling, constituency, sources_dir) {
         rule_order == "correction" ~ corrected_end,
         rule_order == "lokadagur" ~ lokadagur,
         rule_order == "wikipedia" ~ wikipedia_end,
+        rule_order == "older_polls" ~ older_end,
         .default = as.Date(NA)
       ),
       order_from = case_when(
@@ -312,6 +359,7 @@ availability_parts <- function(polling, constituency, sources_dir) {
         rule_order == "lokadagur" ~ lokadagur + 1,
         rule_order == "published" ~ published,
         rule_order == "wikipedia" ~ wikipedia_end + 1,
+        rule_order == "older_polls" ~ older_end + 1,
         rule_order == "house_max" ~ date + max_days(fyrirtaeki) + 1
       ),
       available_from = pmax(order_from, published, na.rm = TRUE),
@@ -377,17 +425,24 @@ availability_parts <- function(polling, constituency, sources_dir) {
 #' @param constituency the snapshot's `constituency_data`
 #' @param sources_dir the directory holding the Wikipedia tables, the house map,
 #'   `fieldwork_corrections.csv` and `poll_publication.csv`
+#' @param older the older polls table (`read_older_polls()`), merged into `polling` by
+#'   `with_older_polls()`, or NULL for none. By default the table when `polling` is the
+#'   snapshot's, its default, so that `poll_availability()` is the table
+#'   `write_availability()` commits, and NULL for polls a caller passes
 #' @return a tibble (level, date, fyrirtaeki, fieldwork_end, available_from, rule): one row
-#'   per poll dated from `WINDOW_START`, plus the national `Kosning` rows, which are always
+#'   per poll dated from the earliest window start (`min(window_start(ELECTIONS))`,
+#'   2012-07-01; national polls read through `with_older_polls()` when `older` is given), plus
+#'   the national `Kosning` rows, which are always
 #'   `election` (`date` + 1). Any other poll first gets the date of the first rule of its
 #'   level that applies. National: `correction` (end + 1), `lokadagur` (+ 1), `wikipedia`
-#'   (matched end + 1), `published` (that day), `house_max` (`date` + the house's longest
-#'   Wikipedia fieldwork + 1), so `published` decides only where no fieldwork end is
-#'   known. Kjördæmi: `correction`, `twin` (the national poll with the same date and
-#'   house, whose `fieldwork_end` and `available_from` it takes), `published`,
-#'   `house_max`. Then floors apply: `available_from` is the latest of that date and the
-#'   poll's `published` date, and at kjördæmi level its twin's `available_from`. A floor
-#'   never lowers a date. `rule` names the rule whose date binds: the rule-order rule if
+#'   (matched end + 1), `older_polls` (the older polls table's `fieldwork_end` + 1),
+#'   `published` (that day), `house_max` (`date` + the house's longest Wikipedia fieldwork +
+#'   1), so `published` decides only where no fieldwork end is known. Kjördæmi:
+#'   `correction`, `twin` (the national poll with the same date and house, whose
+#'   `fieldwork_end` and `available_from` it takes), `published`, `house_max`. Then floors
+#'   apply: `available_from` is the latest of that date and the poll's `published` date (in
+#'   `poll_publication.csv`, or the older polls table's `published`), and at kjördæmi level
+#'   its twin's `available_from`. A floor never lowers a date. `rule` names the rule whose date binds: the rule-order rule if
 #'   no floor raises it, else `published`, or `twin` at kjördæmi level (`twin` on a tie).
 #'   `fieldwork_end` comes from the rule-order rule, and is NA where that rule gives none
 #'   (`published`, `house_max`). A Wikipedia match needs `MIN_SHARED_PARTIES` shared
@@ -397,10 +452,10 @@ availability_parts <- function(polling, constituency, sources_dir) {
 #'   would be available on or before `date`.
 #' @export
 poll_availability <- function(polling = read_polling(), constituency = read_constituency(),
-                              sources_dir = harness_path("sources")) {
+                              sources_dir = harness_path("sources"), older = if (missing(polling)) read_older_polls()) {
   # WHY: the default arguments are promises, forced after this import.
-  box::use(R / harness / constants[harness_path])
-  availability_parts(polling, constituency, sources_dir)$av
+  box::use(R / harness / constants[harness_path], R / harness / older_polls[read_older_polls])
+  availability_parts(polling, constituency, sources_dir, older)$av
 }
 
 #' Polls per rule.
@@ -507,12 +562,12 @@ availability_report <- function(parts) {
   c(
     "# Poll availability",
     "",
-    "Generated by `write_availability()` in `R/harness/availability.R` from the snapshot and `harness/sources/`; do not edit by hand. A forecast made on day F admits a poll iff `available_from <= F`. The first rule that applies gives a date (spec \u00a75.3 rule 1):",
+    "Generated by `write_availability()` in `R/harness/availability.R` from the snapshot, `harness/older_polls.csv` and `harness/sources/`; do not edit by hand. The national polls are the snapshot's with the older polls table merged in: the snapshot rows of the keys a replacement poll names are left out (`harness/sources/older_polls/README.md`). A forecast made on day F admits a poll iff `available_from <= F`. The first rule that applies gives a date (spec \u00a75.3 rule 1):",
     "",
-    "- National: `correction` (fieldwork end + 1), `lokadagur` (+ 1), `wikipedia` (matched fieldwork end + 1), `published` (that day), `house_max` (`date` + the house's longest fieldwork + 1). `Kosning` rows are `election` (`date` + 1).",
+    "- National: `correction` (fieldwork end + 1), `lokadagur` (+ 1), `wikipedia` (matched fieldwork end + 1), `older_polls` (the fieldwork end `harness/older_polls.csv` gives + 1), `published` (that day), `house_max` (`date` + the house's longest fieldwork + 1). `Kosning` rows are `election` (`date` + 1).",
     "- Kj\u00f6rd\u00e6mi: `correction`, `twin` (the national poll with the same date and house), `published`, `house_max`.",
     "",
-    "The first publication is a floor: `available_from` is the later of that date and the poll's `published` date in `poll_publication.csv`, and a kj\u00f6rd\u00e6mi poll is never available before its national twin. So a known fieldwork end always gives at least end + 1, and `published` decides alone only where no end is known. `rule` names the binding rule: `published` (or `twin`) where a floor raised the date. A publication before a poll's known fieldwork end stops the build.",
+    "The first publication is a floor: `available_from` is the later of that date and the poll's `published` date in `poll_publication.csv` (for a poll of `harness/older_polls.csv`, its own `published`), and a kj\u00f6rd\u00e6mi poll is never available before its national twin. So a known fieldwork end always gives at least end + 1, and `published` decides alone only where no end is known. `rule` names the binding rule: `published` (or `twin`) where a floor raised the date. A publication before a poll's known fieldwork end stops the build.",
     "",
     "## Polls per rule",
     "",
@@ -553,8 +608,8 @@ availability_report <- function(parts) {
 write_availability <- function(csv = harness_path("availability.csv"),
                                report = harness_path("availability_report.md")) {
   # WHY: the default arguments are promises, forced after this import.
-  box::use(R / harness / constants[harness_path])
-  parts <- availability_parts(read_polling(), read_constituency(), harness_path("sources"))
+  box::use(R / harness / constants[harness_path], R / harness / older_polls[read_older_polls])
+  parts <- availability_parts(read_polling(), read_constituency(), harness_path("sources"), read_older_polls())
   readr::write_csv(parts$av, csv)
   readr::write_lines(availability_report(parts), report)
   invisible(parts$av)

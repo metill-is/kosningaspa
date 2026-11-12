@@ -5,7 +5,9 @@
 # that builds offline, through its own writer and each after the files it reads:
 #   harness/sources/seats_2021_official.csv   harness/sources/althingi/seats_2021_official.R
 #   harness/truth/elections_official.csv      write_truth()
-#   harness/availability.csv and availability_report.md   write_availability()
+#   harness/truth/anchor_2013.csv             write_anchor_2013()
+#   harness/availability.csv and availability_report.md   write_availability(), which also reads
+#                                                         harness/older_polls.csv
 #   harness/entry_table.csv                   write_entry_table()
 # It then prints the polls per availability rule and each forecast cell's admitted polls.
 # It does not rebuild the Wikipedia fieldwork tables (their parser needs page revisions
@@ -17,10 +19,12 @@ if (!isTRUE(l10n_info()[["UTF-8"]])) stop("build_phase0.R needs a UTF-8 locale: 
 stopifnot("run from the project root (no R/harness/constants.R here)" = file.exists("R/harness/constants.R"))
 options(box.path = normalizePath("."), width = 120)
 box::use(
-  R / harness / availability[availability_counts, read_constituency, read_polling, write_availability],
-  R / harness / constants[ELECTION_HOUSE, TARGETS, WINDOW_START],
+  R / harness / anchors[write_anchor_2013],
+  R / harness / availability[availability_counts, read_constituency, read_polling, with_older_polls, write_availability],
+  R / harness / constants[ELECTION_HOUSE, ELECTIONS, TARGETS, window_start],
   R / harness / info_set[info_set, read_inputs, validate_inputs],
   R / harness / inputs[verify_snapshot],
+  R / harness / older_polls[read_older_polls],
   R / harness / tables[write_entry_table],
   R / harness / truth[write_truth]
 )
@@ -33,17 +37,22 @@ seats_script <- file.path("harness", "sources", "althingi", "seats_2021_official
 status <- system2(file.path(R.home("bin"), "Rscript"), shQuote(seats_script))
 if (!identical(as.integer(status), 0L)) stop(seats_script, " exited with status ", status)
 write_truth()
+write_anchor_2013()
 av <- write_availability()
 write_entry_table()
 cat(
   "Rewrote harness/sources/seats_2021_official.csv, harness/truth/elections_official.csv,",
+  "harness/truth/anchor_2013.csv,",
   "harness/availability.csv, harness/availability_report.md, harness/entry_table.csv\n"
 )
 
+# WHY: availability starts at the earliest window start and reads the older polls table, so the polls are counted the same way.
+start <- min(window_start(ELECTIONS))
+national <- with_older_polls(read_polling(), read_older_polls())
 polls <- dplyr::bind_rows(
-  national = dplyr::distinct(dplyr::filter(read_polling(), date >= WINDOW_START), date, fyrirtaeki),
+  national = dplyr::distinct(dplyr::filter(national, date >= start), date, fyrirtaeki),
   kjordaemi = dplyr::distinct(
-    dplyr::filter(read_constituency(), date >= WINDOW_START, fyrirtaeki != ELECTION_HOUSE), date, fyrirtaeki
+    dplyr::filter(read_constituency(), date >= start, fyrirtaeki != ELECTION_HOUSE), date, fyrirtaeki
   ),
   .id = "level"
 )
@@ -53,8 +62,8 @@ show(counts)
 per_level <- c(national = sum(polls$level == "national"), kjordaemi = sum(polls$level == "kjordaemi"))
 counted <- as.vector(tapply(counts$n, counts$level, sum)[names(per_level)])
 cat(sprintf(
-  "Counts sum to %d; the snapshot holds %d polls from %s (national %d, kjordaemi %d)\n",
-  sum(counts$n), nrow(polls), format(WINDOW_START), per_level[["national"]], per_level[["kjordaemi"]]
+  "Counts sum to %d; the snapshot and harness/older_polls.csv hold %d polls from %s (national %d, kjordaemi %d)\n",
+  sum(counts$n), nrow(polls), format(start), per_level[["national"]], per_level[["kjordaemi"]]
 ))
 stopifnot("the availability counts do not sum to the polls" = identical(counted, unname(per_level)))
 non_election <- av[av$rule != "election", ]

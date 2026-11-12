@@ -220,7 +220,8 @@ fundamentals_rows <- function(info, party_order) {
 #'     of each `y_k` row's date;
 #'   - `desired_weight`, `weight_time`: from `cfg`;
 #'   - `mu_gamma_scale`: for each party but Annað, 1/sqrt(n_e), 0 when n_e = 0, where n_e =
-#'     `epoch_of(E)` - the party's entry epoch;
+#'     `epoch_of(E, info$elections)` - the party's entry epoch, both counted from the cell's
+#'     window elections;
 #'   - the prediction column D_f + 1 of `x_f`, `index_f` and `n_parties_f`, and a zero row
 #'     of `y_f`, `x_f`, `incumbent_f`, `incumbent_years`, `vnv` and `growth` for each
 #'     newcomer (a party with no share at `previous_election(E)`), `P_f` grown to match.
@@ -240,12 +241,15 @@ fundamentals_rows <- function(info, party_order) {
 #'
 #'   An error, "R0 input: <check>", on any error of `r0_production_inputs()` or when a
 #'   check fails: the columns of `y_n` and `y_k` are the party order and P its length;
-#'   `house_n` and `house_k` lie in 1..H and house 1 is Kosning; every party has an entry
-#'   epoch at or before E's; the fundamentals levels are the rows of `y_f` (production's
+#'   `house_n` and `house_k` lie in 1..H and house 1 is Kosning; `info$elections` holds E;
+#'   every party has an entry epoch at or before E's; the fundamentals levels are the rows of `y_f` (production's
 #'   `index_f` counts levels); a newcomer is not already a row of `y_f`; every party with a
 #'   previous share is a row of `y_f`; a newcomer had no votes at `previous_election(E)`
-#'   (`info$prev_shares`, from the official results), so a fundamentals label missing from
-#'   `FUNDAMENTALS_RENAMED` cannot pass for one; `index_f` has a row per party; `mu_gamma_scale` has
+#'   in `info$prev_shares`, so a fundamentals label missing from `FUNDAMENTALS_RENAMED`
+#'   cannot pass for one. Those shares are the official results at `previous_election(E)`:
+#'   `harness/truth/elections_official.csv` for a cell with E from 2017 on and the 2013
+#'   anchor, `harness/truth/anchor_2013.csv`, for E = 2016-10-29, so the check compares the
+#'   fundamentals table with the official result; `index_f` has a row per party; `mu_gamma_scale` has
 #'   P - 1 finite values in [0, 1]; `x_f`, `incumbent_f`, `incumbent_years`, `vnv` and
 #'   `growth` have the rows of `y_f` and D_f + 1 columns, as `index_f` has; the prediction
 #'   column's `index_f` names the party order (the S/B-swap guard); `n_parties_f[D_f + 1]`
@@ -298,7 +302,10 @@ r0_stan_data <- function(info, cfg = read_r0_config()) {
   d$desired_weight <- cfg$desired_weight
   d$weight_time <- cfg$weight_time
 
-  n_e <- stats::setNames(epoch_of(info$E) - info$entry$entry_epoch[match(party_order, info$entry$flokkur)], party_order)
+  check(inherits(info$elections, "Date") && isTRUE(info$E %in% info$elections), "info$elections holds E")
+  n_e <- stats::setNames(
+    epoch_of(info$E, info$elections) - info$entry$entry_epoch[match(party_order, info$entry$flokkur)], party_order
+  )
   check(!anyNA(n_e) && all(n_e >= 0), "every party has an entry epoch at or before E's")
   scale <- 1 / sqrt(n_e[-1])
   scale[n_e[-1] == 0] <- 0

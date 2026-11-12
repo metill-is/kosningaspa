@@ -231,7 +231,7 @@ test_that("real snapshot: every national poll available in the 45 days before a 
     F <- TARGETS$F[i]
     nat[nat$available_from > F - 45 & nat$available_from <= F, c("date", "fyrirtaeki")]
   })))
-  expect_equal(nrow(near), 69)
+  expect_equal(nrow(near), 94)
   undated <- dplyr::anti_join(near, pub[pub$level == "national", ], by = c("date", "fyrirtaeki"))
   expect_identical(nrow(undated), 0L, info = paste("no publication row:", paste(format(undated$date), undated$fyrirtaeki, collapse = "; ")))
 })

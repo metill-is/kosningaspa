@@ -1,0 +1,98 @@
+row,house,date,cited,D,B,S,V,P,A,C,other
+1,Gallup,2016-10-28,http://www.ruv.is/frett/gallup-sjalfstaedisflokkurinn-langstaerstur,27.0,9.3,7.4,16.5,17.9,6.8,8.8,
+2,MMR,2016-10-28,http://mmr.is/frettir/birtar-nieurstoeeur/578-hreyfing-a-fylgi-flokka-liklegt-adh-kjoersokn-hafi-ahrif,24.7,11.4,6.1,16.2,20.5,6.7,8.9,5.5
+3,Háskóli Íslands,2016-10-27,http://www.mbl.is/frettir/kosning/2016/10/21/piratar_maelast_staerstir/,22.5,10.1,5.7,16.8,21.2,6.7,11.4,5.5
+4,Fréttablaðið / Stöð 2 / Vísir,2016-10-27,http://www.visir.is/mikid-flakk-a-kjosendum-a-sidustu-metrunum/article/2016161028882,27.3,9.9,5.7,16.4,18.4,6.3,10.5,5.5
+5,MMR,2016-10-26,http://mmr.is/fylgi-flokka-og-rikisstjornar,21.9,10.0,7.6,16.0,19.1,8.8,9.3,7.3
+6,Fréttablaðið / Stöð 2 / Vísir,2016-10-26,http://www.visir.is/sjalfstaedismenn-med-afgerandi-forystu/article/2016161029195,25.1,11.2,6.0,16.4,20.3,5.1,10.8,5.1
+7,Háskóli Íslands,2016-10-21,http://www.mbl.is/frettir/kosning/2016/10/21/piratar_maelast_staerstir/,21.1,9.1,6.5,18.6,22.6,6.0,8.8,7.3
+8,Fréttablaðið / Stöð 2 / Vísir,2016-10-18,https://web.archive.org/web/20161020043055/http://www.electograph.com/2016/10/iceland-october-2016-frettablai-poll-3.html,23.7,8.5,6.5,19.2,20.7,7.4,6.6,7.4
+9,MMR,2016-10-14,http://mmr.is/fylgi-flokka-og-rikisstjornar,21.4,9.2,9.0,14.5,19.6,8.2,10.2,7.9
+10,Háskóli Íslands,2016-10-14,https://web.archive.org/web/20161018190717/http://www.electograph.com/2016/10/iceland-october-2016-university-of.html,21.5,8.6,6.9,17.7,17.5,7.7,11.4,8.7
+11,Gallup,2016-10-14,https://web.archive.org/web/20161018190843/http://www.electograph.com/2016/10/iceland-october-2016-gallup-poll.html,22.6,9.8,7.1,14.5,18.3,7.7,12.4,7.6
+12,Fréttablaðið / Stöð 2 / Vísir,2016-10-12,https://web.archive.org/web/20161013000043/http://www.electograph.com/2016/10/iceland-october-2016-frettablai-poll-2.html,22.7,8.5,7.3,15.1,22.8,8.2,8.4,7.0
+13,Fréttablaðið / Stöð 2 / Vísir,2016-10-05,https://archive.today/20161026183500/http://www.electograph.com/2016/10/iceland-october-2016-frettablai-poll.html,25.9,11.4,8.8,12.6,19.2,6.9,6.9,8.3
+14,Gallup,2016-09-30,http://ruv.is/frett/thessir-yrdu-thingmenn-midad-vid-nyjustu-konnun,23.7,8.2,8.5,15.6,20.6,4.7,13.4,5.4
+15,Fréttablaðið / Stöð 2 / Vísir,2016-09-28,https://web.archive.org/web/20161002010152/http://www.electograph.com/2016/09/iceland-september-2016-frettablai-poll-2.html,34.6,12.6,5.9,12.9,19.9,3.6,7.3,3.2
+16,MMR,2016-09-26,http://www.mmr.is/fylgi-flokka-og-rikisstjornar,20.6,12.2,9.3,11.5,21.6,4.9,12.3,6.7
+17,MMR,2016-09-22,https://web.archive.org/web/20160923121821/http://www.electograph.com/2016/09/iceland-september-2016-mmr-poll.html,22.7,11.0,8.1,13.2,22.7,4.1,11.5,6.7
+18,Gallup,2016-09-16,https://web.archive.org/web/20160920062726/http://www.electograph.com/2016/09/iceland-september-2016-gallup-poll.html,25.5,9.4,8.8,13.5,23.1,2.9,12.2,4.6
+19,Fréttablaðið / Stöð 2 / Vísir,2016-09-08,https://web.archive.org/web/20160911011644/http://www.electograph.com/2016/09/iceland-september-2016-frettablai-poll.html,28.2,10.7,7.5,12.7,29.5,2.0,6.7,2.7
+20,Gallup,2016-09-06,https://web.archive.org/web/20160910123237/http://www.electograph.com/2016/09/iceland-august-2016-gallup-poll.html,26.3,9.0,8.3,16.2,25.8,2.9,10.6,0.9
+21,MMR,2016-08-30,http://mmr.is/frettir/birtar-nieurstoeeur/559-sjalfstaedisflokkurinn-og-piratar-staerstir,24.6,10.6,9.1,12.4,22.4,4.5,8.8,7.6
+22,Gallup,2016-07-29,https://web.archive.org/web/20160802055323/http://www.electograph.com/2016/07/iceland-july-2016-gallup-poll.html,26.2,9.9,8.0,16.8,25.3,4.2,9.0,0.6
+23,MMR,2016-07-25,https://web.archive.org/web/20160727125608/http://www.electograph.com/2016/07/iceland-july-2016-mmr-poll-2.html,24.0,8.3,8.4,12.9,26.8,3.9,9.4,6.3
+24,MMR,2016-07-07,http://mmr.is/fylgi-flokka-og-rikisstjornar,25.3,6.4,10.9,18.0,24.3,2.9,6.7,5.4
+25,Gallup,2016-06-29,https://web.archive.org/web/20160710212938/http://www.electograph.com/2016/07/iceland-june-2016-gallup-poll.html,25.1,10.0,8.2,15.2,27.9,3.4,9.4,0.8
+26,Háskóli Íslands,2016-06-24,http://ruv.is/frett/vidreisn-upp-fyrir-framsokn-og-samfylkingu,19.7,9.5,9.0,17.0,28.0,4.5,9.7,2.6
+27,Háskóli Íslands,2016-06-14,http://www.mbl.is/frettir/innlent/2016/06/14/piratar_maelast_staerstir,22.7,11.1,7.6,15.9,29.9,2.9,9.1,0.8
+28,Háskóli Íslands,2016-06-04,http://www.dv.is/frettir/2016/6/4/piratar-framsokn-og-vidreisn-baeta-vid-sig-adrir-flokkar-tapa-fylgi,23.9,11.8,7.2,16.5,28.3,3.8,7.9,0.6
+29,Gallup,2016-06-01,https://web.archive.org/web/20160610002432/http://www.electograph.com/2016/06/iceland-may-2016-gallup-poll.html,28.5,10.2,7.7,16.8,27.4,4.0,4.3,1.1
+30,Fréttablaðið / Stöð 2 / Vísir,2016-05-27,https://web.archive.org/web/20160626173427/http://www.electograph.com/2016/05/iceland-may-2016-frettablai-sto-2-visir_27.html,31.5,7.3,6.1,18.1,28.7,2.5,,5.8
+31,Háskóli Íslands,2016-05-17,http://kjarninn.is/frettir/2016-05-17-sjalfstaedisflokkur-og-piratar-med-meirihluta/,28.2,8.2,8.9,18.9,25.8,4.8,3.5,1.7
+32,MMR,2016-05-13,https://web.archive.org/web/20160516230631/http://www.electograph.com/2016/05/iceland-may-2016-mmr-poll.html,26.3,10.4,7.5,15.8,31.0,4.9,,2.5
+33,Fréttablaðið,2016-05-12,https://web.archive.org/web/20160519173640/http://www.electograph.com/2016/05/iceland-may-2016-frettablai-sto-2-visir_12.html,31.1,6.5,7.4,19.8,30.3,3.1,,1.8
+34,Fréttablaðið,2016-05-06,https://web.archive.org/web/20160519173642/http://www.electograph.com/2016/05/iceland-may-2016-frettablai-sto-2-visir.html,29.9,8.3,8.4,14.0,31.8,4.0,,3.6
+35,MMR,2016-05-03,https://web.archive.org/web/20160506042836/http://www.electograph.com/2016/05/iceland-april-2016-mmr-poll-2.html,27.8,11.2,9.7,14.0,28.9,3.4,,5.0
+36,Gallup,2016-04-30,http://icelandmonitor.mbl.is/news/politics_and_society/2016/05/03/icelanders_rewarding_panama_parties_says_pirate/,27.0,10.5,8.3,18.4,26.6,5.2,3.5,0.5
+37,Gallup,2016-04-13,https://web.archive.org/web/20160414183152/http://www.electograph.com/2016/04/iceland-april-2016-gallup-poll-2.html,26.7,6.9,9.0,19.8,29.3,5.0,2.7,0.6
+38,Háskóli Íslands,2016-04-08,https://web.archive.org/web/20160410131855/http://www.electograph.com/2016/04/iceland-april-2016-university-of.html,23.3,12.9,9.5,14.7,30.9,4.8,,3.9
+39,Maskína,2016-04-08,https://web.archive.org/web/20160410131856/http://www.electograph.com/2016/04/iceland-april-2016-maskina-poll.html,21.3,9.4,7.2,20.0,34.2,5.2,,2.7
+40,Gallup,2016-04-07,https://web.archive.org/web/20160407144023/http://www.electograph.com/2016/04/iceland-april-2016-gallup-poll.html,21.9,10.8,7.6,16.7,32.4,5.6,3.3,1.7
+41,MMR,2016-04-06,https://web.archive.org/web/20160406140218/http://www.electograph.com/2016/04/iceland-april-2016-mmr-poll.html,22.5,8.7,9.9,12.8,36.7,5.8,,3.6
+42,Fréttablaðið,2016-04-05,https://web.archive.org/web/20160406133334/http://www.electograph.com/2016/04/iceland-april-2016-frettablai-sto-2.html,21.6,7.9,10.2,11.2,43.0,3.8,,2.3
+43,Háskóli Íslands,2016-04-05,https://web.archive.org/web/20160410131857/http://www.electograph.com/2016/04/iceland-april-2016-university-of-iceland.html,18.8,10.0,8.1,14.9,39.4,4.4,,4.4
+44,Gallup,2016-03-31,https://web.archive.org/web/20160405181342/http://www.electograph.com/2016/04/iceland-march-2016-gallup-poll.html,23.2,12.0,9.5,11.0,36.1,3.2,2.1,2.9
+45,MMR,2016-03-18,http://mmr.is/frettir/birtar-nieurstoeeur/531-framsoknarflokkurinn-med-naest-minnst-fylgi,22.9,12.4,9.2,9.3,38.3,4.2,,3.4
+46,Fréttablaðið,2016-03-09,https://web.archive.org/web/20160314081948/http://www.electograph.com/2016/03/iceland-march-2016-frettablai-sto-2.html,27.6,12.8,8.2,8.4,38.1,1.8,,3.1
+47,MMR,2016-03-02,https://web.archive.org/web/20160312082554/http://www.electograph.com/2016/03/iceland-march-2016-mmr-poll.html,23.4,12.8,7.8,7.8,37.0,4.2,,7
+48,Gallup,2016-03-02,http://www.gallup.is/#/fylgi/,23.7,11.0,9.7,10.8,35.9,3.3,,5.6
+49,Gallup,2016-02-02,https://web.archive.org/web/20160206132036/http://www.electograph.com/2016/02/iceland-january-2016-gallup-poll.html,24.4,12.0,9.2,10.8,35.3,3.6,,4.7
+50,MMR,2016-02-02,http://mmr.is/frettir/birtar-nieurstoeeur/525-piratar-36-rikisstjornarflokkarnir-33,21.1,12.2,9.4,11.0,35.6,4.4,,5.9
+51,Fréttablaðið,2016-01-30,https://web.archive.org/web/20160214094119/http://www.electograph.com/2016/01/iceland-january-2016-frettablaisto-2.html,23.2,10.2,9.9,9.6,41.8,1.6,,3.7
+52,Gallup,2016-01-02,https://web.archive.org/web/20160103211853/http://www.electograph.com/2016/01/iceland-december-2015-gallup-poll.html,25.2,12.0,10.4,10.2,33.1,4.2,,4.9
+53,MMR,2015-12-18,https://archive.today/20160129141939/http://www.electograph.com/2016/01/iceland-december-2015-mmr-poll-2.html,20.6,11.5,12.9,11.4,34.9,5.3,,3.4
+54,Gallup,2015-12-04,https://web.archive.org/web/20151207005016/http://www.electograph.com/2015/12/iceland-november-2015-gallup-poll.html,24.8,12.0,10.1,11.4,32.9,3.9,,4.9
+55,MMR,2015-11-16,https://web.archive.org/web/20151119134534/http://www.electograph.com/2015/11/iceland-november-2015-mmr-poll.html,23.7,10.8,10.5,9.9,35.3,4.6,,5.2
+56,Gallup,2015-11-04,https://web.archive.org/web/20151124081629/http://www.electograph.com/2015/11/iceland-october-2015-gallup-poll.html,24.6,9.6,10.6,11.1,35.5,4.6,,4.4
+57,MMR,2015-10-21,https://web.archive.org/web/20160207135544/http://www.electograph.com/2015/10/iceland-october-2015-mmr-poll.html,21.7,10.4,11.3,11.8,34.2,6.5,,4.1
+58,Gallup,2015-10-02,https://web.archive.org/web/20151005004253/http://www.electograph.com/2015/10/iceland-september-2015-gallup-poll.html,24.4,10.1,10.1,10.6,34.6,5.6,,4.6
+59,MMR,2015-09-03,https://web.archive.org/web/20150911195501/http://www.electograph.com/2015/09/iceland-september-2015-mmr-poll.html,25.3,11.4,10.6,9.6,33.0,5.8,,4.3
+60,Gallup,2015-09-01,https://web.archive.org/web/20150904020322/http://www.electograph.com/2015/09/iceland-august-2015-gallup-poll.html,21.7,11.1,9.3,11.8,35.9,4.4,,5.8
+61,Gallup,2015-08-07,https://web.archive.org/web/20150810230435/http://www.electograph.com/2015/08/iceland-july-2015-gallup-poll.html,24.0,12.4,12.2,8.9,32.3,5.0,,5.2
+62,MMR,2015-08-04,https://web.archive.org/web/20150809065154/http://www.electograph.com/2015/08/iceland-july-2015-mmr-poll.html,23.1,12.2,9.6,10.2,35.0,4.4,,5.5
+63,MMR,2015-06-30,http://kjarninn.is/2015/07/samfylkingin-maelist-med-minnsta-fylgi-sitt-i-sogunni-piratar-med-thridjungsfylgi/,23.8,10.6,9.3,12.0,33.2,5.6,,5.5
+64,Rúv,2015-06-29,http://kjarninn.is/2015/07/framsokn-og-sjalfstaedisflokkur-baeta-vid-sig-piratar-enn-langstaerstir/,24.5,11.3,11.4,10.3,32.0,6.4,,4.1
+65,MMR,2015-06-25,http://kjarninn.is/2015/06/ny-skodanakonnun-mmr-piratar-enn-langstaerstir-framsokn-dalar/,23.3,10.0,11.6,10.5,32.4,6.8,,5.4
+66,FBL,2015-06-19,http://www.visir.is/thingflokkum-myndi-faekka-um-einn/article/2015706199947,29.5,8.5,11.1,7.3,37.5,3.3,,2.8
+67,MMR,2015-06-16,http://mmr.is/frettir/birtar-nieurstoeeur/477-piratar-maelast-medh-34-5-fylgi,21.2,11.3,11.8,11.1,34.5,6.7,,3.5
+68,Gallup,2015-06-01,http://ruv.is/frett/piratar-maelast-med-24-thingmenn,23.0,8.9,12.4,9.8,34.1,7.4,,4.3
+69,MMR,2015-05-26,http://kjarninn.is/2015/05/piratar-baeta-vid-sig-fylgi-framsoknarflokkur-maelist-med-86-prosent/,23.1,8.6,13.1,10.4,32.7,6.3,,5.6
+70,MMR,2015-05-04,http://kjarninn.is/2015/05/piratar-langstaerstir-samkvaemt-nyrri-konnun/,21.9,10.8,10.7,10.8,32.0,8.3,,5.5
+71,Gallup,2015-04-30,https://web.archive.org/web/20150411042842/http://www.electograph.com/2015/04/iceland-march-2015-gallup-poll.html,22.9,10.1,14.1,10.6,30.1,7.8,,4.4
+72,Gallup,2015-03-30,https://web.archive.org/web/20150411042842/http://www.electograph.com/2015/04/iceland-march-2015-gallup-poll.html,25.0,10.8,15.8,10.1,21.7,10.9,,5.7
+73,Kjarninn,2015-03-26,http://kjarninn.is/2015/03/kosningaspain-maelir-pirata-naest-staersta/,24.8,11.0,16.1,10.2,23.6,10.1,,4.2
+74,MMR,2015-03-21,http://kjarninn.is/2015/03/piratar-med-taeplega-30-prosent-fylgi-myndu-fa-19-thingmenn/,23.4,11.6,16.3,9.0,29.1,9.0,,1.7
+75,MMR,2015-03-18,http://mmr.is/frettir/birtar-nieurstoeeur/460-piratar-maelast-medh-mest-fylgi-allra-flokka-a-islandi,23.4,11.0,15.5,10.8,23.9,10.3,,5.1
+76,Fréttablaðið,2015-03-11,http://kjarninn.is/2015/03/piratar-naest-staersti-stjornmalaflokkurinn-framsokn-missir-fylgi/,28.0,10.1,16.1,10.4,21.9,9.2,,4.3
+77,Rúv,2015-03-02,http://www.ruv.is/frett/piratar-thridji-staersti-flokkurinn?fb_action_ids=10205116084517990&fb_action_types=og.likes,26.1,11.0,17.1,11.2,15.2,13.3,,6.1
+78,MMR,2015-02-19,http://www.mmr.is/frettir/birtar-nieurstoeeur/456-studhningur-vidh-rikisstjornina-36-4,25.5,13.1,14.5,12.9,12.8,15.0,,6.2
+79,Gallup,2015-02-03,https://web.archive.org/web/20150402131344/http://www.capacent.is/frettir/nr/2088,27.0,13.0,18.0,11.0,12.0,13.0,,6.0
+80,MMR,2015-01-14,https://web.archive.org/web/20160405181553/http://eyjan.pressan.is/frettir/2015/01/26/konnun-mmr-badir-stjornarflokkarnir-tapa-fylgi/,27.3,9.4,15.9,11.9,12.8,16.9,,5.8
+81,Mbl,2014-12-16,http://www.mbl.is/english/politics_and_society/2014/12/19/the_conservatives_gaining_ground/,29.0,11.0,16.1,11.6,11.4,16.2,,4.7
+82,Fréttablaðið,2014-11-17,http://www.visir.is/sjalfstaedisflokkurinn-myndi-baeta-vid-sig-thremur-althingismonnum/article/2014711179971,32.9,12.8,19.2,13.1,9.2,12.5,,
+83,MMR,2014-11-04,http://www.mmr.is/frettir/birtar-nieurstoeeur/430-studhningur-vidh-rikisstjornina-33-0,23.6,12.3,16.1,10.7,11.3,18.6,,7.4
+84,Gallup,2014-10-03,https://web.archive.org/web/20150402112302/http://www.capacent.is/frettir/nr/1982,27.0,12.0,19.0,13.0,7.0,16.0,,
+85,MMR,2014-09-08,http://www.mmr.is/frettir/birtar-nieurstoeeur/420-fylgi-sjalfstaedhisflokksins-28-2,28.2,11.3,16.9,10.4,9.2,17.8,,6.2
+86,MMR,2014-08-28,http://www.mmr.is/frettir/birtar-nieurstoeeur/413-fylgi-flokka-og-studhningur-vidh-rikisstjornina-i-juli,26.6,9.6,20.3,9.6,10.3,17.6,,6.0
+87,MMR,2014-07-31,http://www.mmr.is/frettir/birtar-nieurstoeeur/413-fylgi-flokka-og-studhningur-vidh-rikisstjornina-i-juli,24.1,11.8,17.0,11.6,9.6,19.2,,6.7
+88,MMR,2014-06-24,http://www.mmr.is/frettir/birtar-nieurstoeeur/408-fylgi-flokka-og-studhningur-vidh-rikisstjornina-i-juni,25.0,11.4,16.5,11.4,8.3,21.8,,5.6
+89,MMR,2014-05-13,https://web.archive.org/web/20150414134701/http://www.electograph.com/2014/05/iceland-may-2014-mmr.html,22.1,12.3,16.4,11.6,9.6,19.4,,8.6
+90,MMR,2014-05-02,https://web.archive.org/web/20150414134701/http://www.electograph.com/2014/05/iceland-may-2014-mmr.html,25.1,14.1,17.4,11.7,9.0,15.5,,7.2
+91,MMR,2014-04-14,https://web.archive.org/web/20150227041138/http://www.electograph.com/2014/04/iceland-march-2014-mmr.html,23.9,14.4,15.1,11.5,11.0,17.1,,7.0
+92,MMR,2014-03-03,https://web.archive.org/web/20150413223553/http://www.electograph.com/2014/03/iceland-february-2014-mmr.html,29.0,14.6,14.0,10.4,9.3,16.4,,5.6
+93,RÚV,2014-02-27,http://www.xn--rv-rka.is/frett/stjornarflokkarnir-tapa-fylgi,23.7,15.3,16.8,13.0,9.8,15.8,,5.6
+94,Capacent,2014-02-01,https://web.archive.org/web/20150414110336/http://www.electograph.com/2014/02/iceland-january-2014-capacent.html,26.9,18.3,14.9,12.7,8.1,14.2,,
+95,MMR,2014-01-22,https://web.archive.org/web/20150414110336/http://www.electograph.com/2014/02/iceland-january-2014-capacent.html,26.3,17.0,17.1,11.0,6.9,15.9,,5.6
+96,Capacent,2013-12-24,https://web.archive.org/web/20150414110336/http://www.electograph.com/2014/02/iceland-january-2014-capacent.html,25.3,16.4,15.1,13.3,10.7,13.1,,
+97,MMR,2013-11-30,https://web.archive.org/web/20150414110336/http://www.electograph.com/2014/02/iceland-january-2014-capacent.html,26.8,15.0,13.8,12.6,9.0,15.2,,

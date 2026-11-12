@@ -96,9 +96,9 @@ test_that("target_cell returns the TARGETS row of a forecast cell", {
   expect_true(target_cell(as.Date(E17), as.Date(F17))$confirmatory)
 })
 
-test_that("the guard passes every 2021 and 2024 cell with no freeze, a broken one or a committed one", {
+test_that("the guard passes every 2016, 2021 and 2024 cell with no freeze, a broken one or a committed one", {
   # WHY: Brynjólfur, 5 Nov 2026: no arbitrary locks while the model is developed; only 2017 stays held out.
-  expect_setequal(format(unique(TARGETS$E[!TARGETS$confirmatory])), c("2021-09-25", "2024-11-30"))
+  expect_setequal(format(unique(TARGETS$E[!TARGETS$confirmatory])), c("2016-10-29", "2021-09-25", "2024-11-30"))
   none <- withr::local_tempdir()
   broken <- frozen_root()
   cat("edited\n", file = file.path(broken, "harness", "FREEZE.md"), append = TRUE)
@@ -116,7 +116,7 @@ test_that("1: a cell outside TARGETS is refused before any freeze file is looked
     fixed = TRUE
   )
   fr <- frozen_root()
-  expect_error(freeze_guard("2016-10-29", "2016-10-28", fr), "not a forecast cell: E = 2016-10-29, F = 2016-10-28",
+  expect_error(freeze_guard("2016-10-29", "2016-10-27", fr), "not a forecast cell: E = 2016-10-29, F = 2016-10-27",
     fixed = TRUE
   )
   expect_error(freeze_guard(F24, E24, fr), "not a forecast cell")

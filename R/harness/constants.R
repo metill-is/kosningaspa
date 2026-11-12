@@ -43,17 +43,56 @@ previous_election <- function(E) {
   c(as.Date("2013-04-27"), ELECTIONS)[i]
 }
 
+#' First day of each window election's polling window: 2012-07-01 for the first window
+#' election, 2016-10-29, about ten months before the election before it (2013-04-27), as
+#' `WINDOW_START` is for its first election, and `WINDOW_START` for every other one.
+#' @param E a Date (or ISO string) vector of window elections; anything else is an error
+#' @return a Date vector
+#' @export
+window_start <- function(E) {
+  prev <- previous_election(E)
+  out <- rep(WINDOW_START, length(prev))
+  out[as.Date(E) == ELECTIONS[1]] <- as.Date("2012-07-01")
+  out
+}
+
+#' Whether the cells of each window election read Annað as not reported in a poll that leaves
+#' an existing party blank (`blank_party_polls()`, `harness/sources/README.md`): TRUE for the
+#' first window election, 2016-10-29, and FALSE for every other one, whose cells read every
+#' poll's rows as they are.
+#' @param E a Date (or ISO string) vector of window elections; anything else is an error
+#' @return a logical vector
+#' @export
+blank_party_rule <- function(E) {
+  previous_election(E)
+  as.Date(E) == ELECTIONS[1]
+}
+
+#' The elections that close the epochs of one window election's window, for `epoch_of()`:
+#' the election before it (2013-04-27) and E itself for the first window election,
+#' 2016-10-29, and `ELECTIONS` for every other one.
+#' @param E one window election (Date or ISO string); anything else is an error
+#' @return a Date vector
+#' @export
+window_elections <- function(E) {
+  if (length(E) != 1) stop("window_elections: E must be one date")
+  prev <- previous_election(E)
+  E <- as.Date(E)
+  if (E == ELECTIONS[1]) c(prev, E) else ELECTIONS
+}
+
 #' Forecast cells: election E, forecast date F, horizon tag and whether the cell is the
 #' held-out confirmatory 2017 target.
 #' @export
 TARGETS <- tibble::tibble(
-  E = as.Date(rep(c("2017-10-28", "2021-09-25", "2024-11-30"), c(2, 4, 4))),
+  E = as.Date(rep(c("2016-10-29", "2017-10-28", "2021-09-25", "2024-11-30"), c(4, 2, 4, 4))),
   F = as.Date(c(
+    "2016-05-02", "2016-09-12", "2016-10-15", "2016-10-28",
     "2017-10-14", "2017-10-27",
     "2021-03-29", "2021-08-09", "2021-09-11", "2021-09-24",
     "2024-06-03", "2024-10-14", "2024-11-16", "2024-11-29"
   )),
-  tag = c("f14", "eve", rep(c("f180", "f47", "f14", "eve"), 2)),
+  tag = c("f180", "f47", "f14", "eve", "f14", "eve", rep(c("f180", "f47", "f14", "eve"), 2)),
   confirmatory = E == as.Date("2017-10-28")
 )
 

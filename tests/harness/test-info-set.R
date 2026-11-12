@@ -80,11 +80,24 @@ test_that("a leak message names the offending rows", {
   x <- ok; x$polls_nat$available_from <- x$F + 1
   expect_error(validate_inputs(x), "\\.\\.\\. \\(279 in all\\)$")
 })
-test_that("the 2017 cells have nine parties and the others all ten", {
+test_that("the 2016 cells have the parties their admitted polls name, the 2017 cells nine and the others all ten", {
   skip_without_snapshot()
+  # WHY: no 2016 poll names Miðflokkurinn or Sósíalistaflokkurinn, and the first admitted poll naming Flokkur Fólksins is Gallup 2016-08-13, published on 1 Sep 2016.
+  in_2016 <- list(
+    "2016-05-02" = setdiff(POLL_PARTIES, c("Flokkur Fólksins", "Miðflokkurinn", "Sósíalistaflokkurinn")),
+    "2016-09-12" = setdiff(POLL_PARTIES, c("Miðflokkurinn", "Sósíalistaflokkurinn")),
+    "2016-10-15" = setdiff(POLL_PARTIES, c("Miðflokkurinn", "Sósíalistaflokkurinn")),
+    "2016-10-28" = setdiff(POLL_PARTIES, c("Miðflokkurinn", "Sósíalistaflokkurinn"))
+  )
   for (i in seq_len(nrow(TARGETS))) {
     x <- info_set(TARGETS$E[i], TARGETS$F[i], inp)
-    expected <- if (TARGETS$confirmatory[i]) setdiff(POLL_PARTIES, "Sósíalistaflokkurinn") else POLL_PARTIES
+    expected <- if (TARGETS$E[i] == as.Date("2016-10-29")) {
+      in_2016[[format(TARGETS$F[i])]]
+    } else if (TARGETS$confirmatory[i]) {
+      setdiff(POLL_PARTIES, "Sósíalistaflokkurinn")
+    } else {
+      POLL_PARTIES
+    }
     expect_identical(x$parties, expected, label = paste(TARGETS$E[i], TARGETS$F[i]))
     expect_true(all(x$polls_nat$flokkur %in% x$parties) && all(x$polls_kd$flokkur %in% x$parties))
   }
@@ -372,7 +385,7 @@ test_that("info_set() stops on a release table that disagrees with the snapshot 
 test_that("the economy release table is read strictly", {
   x <- read_economy_release()
   expect_identical(names(x), c("election", "covariate", "period", "value", "first_release", "source", "note"))
-  expect_identical(paste(x$election, x$covariate), paste(rep(ELECTIONS[-1], each = 2), c("vnv", "growth")))
+  expect_identical(paste(x$election, x$covariate), paste(rep(ELECTIONS, each = 2), c("vnv", "growth")))
   header <- "election,covariate,period,value,first_release,source,note"
   bad <- withr::local_tempfile(fileext = ".csv")
   readr::write_lines(c(header, "2021-09-25,growth,2020,-7.8,,s,n"), bad)
