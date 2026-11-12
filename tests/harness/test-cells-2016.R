@@ -305,7 +305,7 @@ test_that("each 2016 cell admits, by house, only polls first published by F, wit
   )
   pub <- pub[pub$level == "national", c("date", "fyrirtaeki", "published")]
   # WHY: the snapshot's polls plus the table's (Felagsvisindastofnun 7, Frettabladid 17, Gallup 13, MMR 40)
-  # less the four replaced snapshot keys in the window, all MMR.
+  # less the five replaced snapshot keys in the window, all MMR.
   houses <- c(FEL16, FRETT16, "Gallup", "MMR")
   admitted <- list(
     stats::setNames(c(7L, 17L, 51L, 65L), houses),
@@ -412,4 +412,61 @@ test_that("availability.csv keeps every row it held before the older polls but t
   expect_identical(t$rule[known], rule[known])
   expect_identical(t$rule[!known], rep("house_max", 2))
   expect_true(all(t$available_from > t$date & t$available_from < as.Date("2016-01-01")))
+})
+
+# WHY: the oracle reads harness/availability.csv itself, not the code under test, as
+# tests/harness/test-sweep.R does for 2017, 2021 and 2024, whose oracle starts at WINDOW_START
+# and so cannot cover 2016.
+test_that("every day of the 2016 cycle from 2016-04-07 builds and validates, admits exactly the national polls of the 2016 window that availability.csv makes public by F, never drops a poll or party, and keeps its results and previous shares; from 2016-03-10 to 2016-04-06 it stops for want of a cabinet, and before that on the economy release (an availability row or window rule that admits a poll before it was public on a 2016 day other than the four target days)", {
+  skip_without_snapshot()
+  skip_unless_slow()
+  av <- readr::read_csv(
+    root("harness", "availability.csv"),
+    col_types = readr::cols(date = "D", fieldwork_end = "D", available_from = "D", .default = "c"),
+    progress = FALSE
+  )
+  keys <- function(rows) sort(unique(paste(rows$date, rows$fyrirtaeki)), method = "radix")
+  withheld <- setdiff(REPLACED16, poll_key(dplyr::distinct(older16, date, fyrirtaeki)))
+  expect_identical(withheld, "2013-01-09 MMR")
+  oracle <- function(F) {
+    rows <- av[av$level == "national" & av$fyrirtaeki != ELECTION_HOUSE & av$date >= START16 & av$date < E16 & av$available_from <= F, ]
+    setdiff(keys(rows), withheld)
+  }
+  attempt <- function(F) tryCatch(
+    {
+      x <- info_set(E16, F, inp)
+      validate_inputs(x)
+      list(
+        nat = keys(x$polls_nat), kd = keys(x$polls_kd), parties = x$parties, fixed = list(x$results, x$prev_shares),
+        late = max(x$polls_nat$date) >= F || max(c(x$polls_nat$available_from, x$polls_kd$available_from)) > F
+      )
+    },
+    error = conditionMessage
+  )
+  days <- seq(as.Date("2016-04-07"), E16 - 1, by = "day")
+  expect_length(days, 205)
+  expect_true(all(DAYS16 %in% days))
+  res <- lapply(days, attempt)
+  ok <- vapply(res, is.list, logical(1))
+  expect_true(all(ok), label = paste("days that do not build:", paste(format(days[!ok]), collapse = " ")))
+  good <- res[ok]
+  on <- days[ok]
+  expect_false(any(vapply(good, `[[`, logical(1), "late")))
+  same <- vapply(seq_along(good), \(j) identical(good[[j]]$nat, oracle(on[j])), logical(1))
+  expect_true(all(same), label = paste("days whose polls are not the oracle's:", paste(format(on[!same]), collapse = " ")))
+  grows <- vapply(seq_along(good)[-1], \(j) {
+    a <- good[[j - 1]]
+    b <- good[[j]]
+    all(a$nat %in% b$nat) && all(a$kd %in% b$kd) && all(a$parties %in% b$parties)
+  }, logical(1))
+  expect_true(all(grows), label = paste("days that drop a poll or party:", paste(format(on[-1][!grows]), collapse = " ")))
+  expect_true(all(vapply(good[-1], \(g) identical(g$fixed, good[[1]]$fixed), logical(1))))
+
+  cabinet <- seq(as.Date("2016-03-10"), as.Date("2016-04-06"), by = "day")
+  expect_length(cabinet, 28)
+  expect_identical(vapply(cabinet, attempt, ""), paste("no cabinet in office on", format(cabinet)))
+  economy <- c(ANCHOR16 + 1, seq(as.Date("2016-03-01"), as.Date("2016-03-09"), by = "day"))
+  msg <- vapply(economy, attempt, "")
+  expect_true(all(grepl("is before the first release of economy covariate(s) of E = 2016-10-29: ", msg, fixed = TRUE)))
+  expect_true(all(grepl("growth (2015, first released 2016-03-10)", msg, fixed = TRUE)))
 })

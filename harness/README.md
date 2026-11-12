@@ -52,9 +52,11 @@ testthat edition 3, and a passing run prints each test file's seconds, slowest f
   `skip_without_snapshot()`. `tests/harness/test-generated.R` fails if a generated committed
   file is not a fresh build, and `tests/harness/test-escapes.R` enforces that harness R code
   writes non-ASCII characters as `\uXXXX` escapes.
-- **The slow suite** adds the tests that call `skip_unless_slow()`: the sweep of every forecast
-  day, the self-test's kjördæmi and seat scores, the R0 and V2 Stan tests and the cell
-  runner's test fits, which compile with CmdStan:
+- **The slow suite** adds the tests that call `skip_unless_slow()`: the sweeps of every forecast
+  day (the 2017, 2021 and 2024 cycles in `tests/harness/test-sweep.R`; the 2016 cycle in
+  `tests/harness/test-cells-2016.R`, from 2016-04-07, the first day a 2016 cell can be built,
+  since `harness/sources/coalition_events.csv` begins then), the self-test's kjördæmi and seat
+  scores, the R0 and V2 Stan tests and the cell runner's test fits, which compile with CmdStan:
   `HARNESS_SLOW=1 LC_ALL=en_US.UTF-8 Rscript tests/run.R`. `HARNESS_V2_STAN=<absolute path>`
   runs the V2 Stan tests (`tests/harness/test-v2-stan.R`) on a scratch copy of the Stan file.
 - **The live-data test** reads `data/polling_data.csv` and runs only with
@@ -152,7 +154,8 @@ forecasts better.
 
 A party with votes at E but no admitted poll at F, so that the cell has none of it (Flokkur
 Fólksins at 2016-05-02), is scored as part of Annað on that cell: `fold_parties()` names it,
-reading the snapshot, and `cell_truth(..., fold =)` adds its votes and seats to Annað's. A run
+reading the snapshot, and `cell_truth(..., fold =)` adds its votes and seats to Annað's; the
+report says so in that cell's section. A run
 that leaves out a party the cell does have is still refused. Where Annað holds official seats
 (2016: Björt framtíð's 4), no draw can give it them, so the report marks that cell's seat
 scores "(not comparable)" and leaves them out of criterion 4; the election-level reading is
@@ -246,6 +249,8 @@ sealed freeze and decision run in temporary git repositories.
 
 - `harness/v2/decisions.md`: each V2 step's verdict and commit, and the working model. The
   switched file and its harness are at the tag `v2-switched-final`.
+- `harness/v2/scoring-2016-first-reading.md`: the first reading of 2016, on the data's own polls
+  with the window opening at the 2013 election, kept as a record.
 - `harness/archive/`: the frozen V2 step log (`steps.md`), this page as it stood before
   10 November 2026 (`README-2026-11-10.md`), the step and ablation configs (`configs/`), the
   old run lists (`runs/`) and the nine-switch model's reports (`v2/`: scoring, recovery and

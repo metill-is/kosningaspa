@@ -426,11 +426,14 @@ national_shares <- function(truth, election) {
 #' @param truth a `build_truth()` table
 #' @param fundamentals the fundamentals table (`fundamentals_data.csv`); used for
 #'   E = 2016-10-29, whose previous election (2013) is outside `truth`
-#' @return a numeric vector named by `POLL_PARTIES`; for 2016-10-29 the 2013 shares over
-#'   their sum, labels renamed by `FUNDAMENTALS_RENAMED` (Framsókn as
-#'   Framsóknarflokkurinn) and every other label outside `POLL_PARTIES` (Björt framtíð)
-#'   in Annað, otherwise `national_shares(truth, previous_election(E))`; NA for a party
-#'   with no list
+#' @return a numeric vector named by `POLL_PARTIES`; for 2016-10-29 the fundamentals
+#'   table's 2013 shares, rounded to a tenth of a point, over their sum (100.2), labels
+#'   renamed by `FUNDAMENTALS_RENAMED` (Framsókn as Framsóknarflokkurinn) and every other
+#'   label outside `POLL_PARTIES` (Björt framtíð) in Annað, otherwise
+#'   `national_shares(truth, previous_election(E))`; NA for a party with no list. The 2016
+#'   shares are not the official 2013 result in `harness/truth/anchor_2013.csv`, from which
+#'   the same cell's results and Kosning row come: Annað is 20.16% here against the
+#'   anchor's 20.04%. `tests/harness/test-anchors.R` checks the 2013 labels against the anchor
 #' @export
 prev_national_shares <- function(E, truth, fundamentals) {
   box::use(R / harness / constants[ELECTIONS, FUNDAMENTALS_RENAMED, POLL_PARTIES, previous_election])

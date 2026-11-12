@@ -1,7 +1,10 @@
 # The information set of one forecast cell (spec §5.3, §7 D4): everything a forecast of
 # election E made on day F may use, read once from the snapshot and harness/sources/, and
 # validate_inputs(), the leak check every arm's inputs pass. info_set() is the single gate
-# through which an arm gets its inputs.
+# through which an arm gets its inputs. A cell can be built for an F after the previous
+# election and before E, on or after the first release of each economy covariate of E, with a
+# cabinet in office on F in harness/sources/coalition_events.csv, which begins on 2016-04-07:
+# so a 2016 cell needs F on or after 2016-04-07, later than its economy releases.
 
 POLL_LEVELS <- c("national", "kjordaemi")
 # The economy covariates of a fundamentals target row, in the order of info_set()$economy.
@@ -325,11 +328,14 @@ cell_economy <- function(E, F, release, econ) {
 #' day F may use.
 #' @param E a window election (Date or ISO string)
 #' @param F the forecast date: any date after the election before E
-#'   (`previous_election(E)`) and before E, not only a `TARGETS` one, and on or after the
+#'   (`previous_election(E)`) and before E, not only a `TARGETS` one, on or after the
 #'   day Hagstofa first published each economy covariate of E's target rows
-#'   (`harness/sources/economy_release.csv`); anything else is an error, naming the
-#'   covariates first released after F, so no cell sees a result or an economy figure
-#'   that was not public at F. At an F outside `TARGETS` the poll bound is weaker:
+#'   (`harness/sources/economy_release.csv`), and with a cabinet in office on F in
+#'   `harness/sources/coalition_events.csv`, which begins on 2016-04-07 (so a cell of
+#'   E = 2016-10-29 needs F on or after that day); anything else is an error, naming the
+#'   covariates first released after F or the day with no cabinet in office, so no cell
+#'   sees a result or an economy figure that was not public at F. At an F outside
+#'   `TARGETS` the poll bound is weaker:
 #'   `poll_publication.csv` is complete only for the national polls a `TARGETS` F admits
 #'   with `available_from` in (F - 45, F], so any other poll is admitted from its rule
 #'   date (a known fieldwork end + 1, or the fallback), which can precede its

@@ -1,11 +1,12 @@
 # Scoring a 2016 cell: Flokkur Folksins, which had no admitted poll at 2016-05-02, folded into
-# Annad for that cell, and the 2016 seat scores, which Annad's official seats make not comparable.
+# Annad for that cell, and the 2016 seat scores, which Annad's official seats make not comparable;
+# and how the report prints a cell's MAE8, fold and seat errors.
 box::use(
   R / harness / truth[cell_truth, read_truth],
   R / harness / scorer[score_cell, fold_parties],
-  R / harness / score_report[adoption_criteria],
+  R / harness / score_report[adoption_criteria, cell_section, mae_row],
   R / harness / tables[read_coalitions, coalition_event, formed_coalition],
-  R / harness / scores[wide_draws, kd_to_nat, national_scores, seat_draws, seat_scores],
+  R / harness / scores[wide_draws, kd_to_nat, national_scores, seat_draws, seat_scores, NAMED8],
   R / harness / runs[run_id],
   R / election_utils[layout_for]
 )
@@ -223,4 +224,119 @@ test_that("the report marks a 2016 cell's seat rows not comparable and leaves th
   expect_identical(s24, section(readLines(file.path(results, "only24.md"), encoding = "UTF-8"), "## 2024, eve"))
   expect_false(any(grepl("not comparable", c(s24, text[startsWith(text, "| 2024 eve |")]), fixed = TRUE)))
   expect_length(grep("^4\\. No regional loss: .*; seat CRPS per party -?[0-9.]+ \\((tie|better|worse)\\), at most 0.05 worse or a tie: (yes|no)\\.$", s24), 1)
+})
+
+# score_cell() of a made-up run of `arm` on the cell (E, F) forecasting `parties`, scored once per suite run.
+scored <- function(E, F, parties, arm) {
+  skip_without_snapshot()
+  cached(paste("score16", E, F, arm, length(parties)), score_cell(fake_run(E, F, parties, arm), root = root()))
+}
+
+# The sections of three made-up cells, built once per suite run: 2016-05-02 with both arms on the
+# seven parties, the same cell with V2 on eight, and 2024 eve with both arms on every party.
+sections <- function() {
+  r0_16 <- scored(E16, "2016-05-02", SEVEN, "r0")
+  v2_16 <- scored(E16, "2016-05-02", SEVEN, "v2")
+  v2_16_8 <- scored(E16, "2016-05-02", EIGHT, "v2")
+  r0_24 <- scored(E24, "2024-11-29", POLL_PARTIES, "r0")
+  v2_24 <- scored(E24, "2024-11-29", POLL_PARTIES, "v2")
+  cached("score16_sections", list(
+    f180 = cell_section(v2_16$cell, "r0", "v2", r0_16, v2_16),
+    mixed = cell_section(v2_16_8$cell, "r0", "v2", r0_16, v2_16_8),
+    eve24 = cell_section(v2_24$cell, "r0", "v2", r0_24, v2_24)
+  ))
+}
+
+# The MAE8 row of a cell section.
+mae8_row <- function(lines) {
+  r <- lines[startsWith(lines, "| MAE8, pp ")]
+  stopifnot(length(r) == 1)
+  r
+}
+
+test_that("each cell's MAE8 row gives the number of named parties its mean runs over, the named parties each run forecasts: 6 on the seven-party 2016-05-02 cell, 7 with Flokkur F\u00f3lksins, 8 in 2024, and each arm's number where they differ (a row that claims the eight named parties on a cell that scores fewer)", {
+  r0_16 <- scored(E16, "2016-05-02", SEVEN, "r0")
+  v2_16_8 <- scored(E16, "2016-05-02", EIGHT, "v2")
+  r0_24 <- scored(E24, "2024-11-29", POLL_PARTIES, "r0")
+  for (s in list(r0_16, v2_16_8, r0_24)) {
+    named <- s$per_party$flokkur %in% NAMED8
+    nat <- s$national[s$national$reading == "kd_aggregate", ]
+    expect_equal(nat$mae8, 100 * mean(s$per_party$abs_err[named]))
+  }
+  expect_identical(vapply(list(r0_16, v2_16_8, r0_24), \(s) sum(s$per_party$flokkur %in% NAMED8), 0L), c(6L, 7L, 8L))
+  expect_true(startsWith(mae8_row(sections()$f180), "| MAE8, pp (over the 6 named parties scored) |"))
+  expect_true(startsWith(mae8_row(sections()$eve24), "| MAE8, pp (over the 8 named parties scored) |"))
+  expect_true(startsWith(mae8_row(sections()$mixed), "| MAE8, pp (over the named parties scored: 6 for r0, 7 for v2) |"))
+})
+
+test_that("a cell section names the parties scored inside Anna\u00f0 in one sentence just before the seat note, names the arm when only one arm folds, and says nothing on a cell with no fold (Anna\u00f0's 2016-05-02 result, which holds Flokkur F\u00f3lksins's votes, shown with no word of it)", {
+  tail <- paste0(" is scored inside ", ANNAD, ", having had no admitted poll by F, so ", ANNAD, "'s result includes its share.")
+  s <- sections()$f180
+  at <- which(s == paste0("On this cell ", FF, tail))
+  expect_length(at, 1)
+  expect_length(grep("scored inside", s, fixed = TRUE), 1)
+  expect_identical(s[at + 1], "")
+  expect_true(startsWith(s[at + 2], "Seat scores not comparable on this cell: "))
+  expect_identical(grep("scored inside", sections()$mixed, fixed = TRUE, value = TRUE), paste0("On this cell, in r0's scores, ", FF, tail))
+  expect_false(any(grepl("scored inside", sections()$eve24, fixed = TRUE)))
+})
+
+test_that("a summed seat error prints with one decimal where it is not whole, so the printed values subtract to the printed difference, in the cell table and the MAE table, marked on a 2016 cell (12.5, 13 and their difference 0.5 printed as 12, 13 and 0)", {
+  r0_24 <- scored(E24, "2024-11-29", POLL_PARTIES, "r0")
+  v2_24 <- scored(E24, "2024-11-29", POLL_PARTIES, "v2")
+  seat_row <- function(r0, v2) {
+    grep("^\\| Seat absolute error", cell_section(v2$cell, "r0", "v2", r0, v2), value = TRUE)
+  }
+  cases <- list(
+    list(c(12.5, 13), c("12.5", "13", "0.5")), list(c(12.5, 15), c("12.5", "15", "2.5")),
+    list(c(12, 15), c("12", "15", "3")), list(c(13, 12.5), c("13", "12.5", "-0.5"))
+  )
+  for (case in cases) {
+    r0_24$seats$seat_abs_err <- case[[1]][1]
+    v2_24$seats$seat_abs_err <- case[[1]][2]
+    shown <- case[[2]]
+    expect_identical(
+      seat_row(r0_24, v2_24),
+      paste0("| Seat absolute error, summed over parties | ", shown[1], " | ", shown[2], " | ", shown[3], " |  | reported |")
+    )
+    expect_true(endsWith(mae_row("2024 eve", r0_24, v2_24), paste0("| ", shown[1], " | ", shown[2], " |")))
+  }
+  r0_16 <- scored(E16, "2016-05-02", SEVEN, "r0")
+  v2_16 <- scored(E16, "2016-05-02", SEVEN, "v2")
+  r0_16$seats$seat_abs_err <- 20.5
+  v2_16$seats$seat_abs_err <- 21
+  expect_identical(
+    seat_row(r0_16, v2_16),
+    "| Seat absolute error, summed over parties (not comparable) | 20.5 | 21 | 0.5 |  | not comparable |"
+  )
+  expect_true(endsWith(mae_row("2016 f180", r0_16, v2_16), "| 20.5 (not comparable) | 21 (not comparable) |"))
+})
+
+test_that("the report's MAE paragraph gives no fixed number of named parties and each cell's MAE8 row gives its own, the 2016-05-02 section says Flokkur F\u00f3lksins is scored inside Anna\u00f0, and the report cites a README paragraph that exists (MAE8 described as over the eight named parties on a cell that scores six, a fold left unsaid, or a citation of a renamed section)", {
+  skip_without_snapshot()
+  results <- withr::local_tempdir()
+  for (arm in c("r0", "v2")) {
+    fake_run(E16, "2016-05-02", SEVEN, arm, results)
+    fake_run(E24, "2024-11-29", POLL_PARTIES, arm, results)
+  }
+  runs <- c("A r0 2016-10-29 2016-05-02 1101", "B v2 2016-10-29 2016-05-02 1101", "A r0 2024-11-30 2024-11-29 1101", "B v2 2024-11-30 2024-11-29 1101")
+  writeLines(runs, file.path(results, "runs.txt"))
+  out <- report(results, file.path(results, "runs.txt"), file.path(results, "runs.md"))
+  expect_null(attr(out, "status"))
+  text <- readLines(file.path(results, "runs.md"), encoding = "UTF-8")
+  mae <- section(text, "## MAE")
+  para <- paste(mae[2:(which(startsWith(mae, "| Cell |")) - 1)], collapse = " ")
+  expect_false(grepl("over the eight named parties", para, fixed = TRUE))
+  expect_match(para, "the number of parties can differ from cell to cell; the MAE8 row of each cell's section gives it.", fixed = TRUE)
+  s16 <- section(text, "## 2016, f180")
+  expect_true(startsWith(mae8_row(s16), "| MAE8, pp (over the 6 named parties scored) |"))
+  expect_true(startsWith(mae8_row(section(text, "## 2024, eve")), "| MAE8, pp (over the 8 named parties scored) |"))
+  expect_length(grep(paste0("On this cell ", FF, " is scored inside ", ANNAD), s16, fixed = TRUE), 1)
+  expect_false(any(grepl("scored inside", section(text, "## 2024, eve"), fixed = TRUE)))
+  expect_length(grep("(`harness/README.md`, Tests: the lean check for a model change)", text, fixed = TRUE), 1)
+  readme <- readLines(root("harness", "README.md"), encoding = "UTF-8")
+  tests_at <- which(readme == "## Tests")
+  expect_length(tests_at, 1)
+  next_at <- min(which(startsWith(readme, "## ") & seq_along(readme) > tests_at))
+  expect_length(grep("^\\*\\*The lean check for a model change\\*\\*", readme[tests_at:next_at]), 1)
 })

@@ -1,9 +1,9 @@
 # Scores: v2 against r0
 
 Written by `R/harness/score_report.R` from `score_cell()` on each run, against the official results.
-The lean reading (`harness/README.md`, Checking a model change): one run per arm per cell. SE_diff is
-the two runs' batch-means SEs alone, with no seed-to-seed spread, and the spec's adoption rule (section
-5.7), written for two decision cells and two seeds per election, is read on each cell alone. A
+The lean reading (`harness/README.md`, Tests: the lean check for a model change): one run per arm per
+cell. SE_diff is the two runs' batch-means SEs alone, with no seed-to-seed spread, and the spec's adoption
+rule (section 5.7), written for two decision cells and two seeds per election, is read on each cell alone. A
 difference under 2 × SE_diff is a tie, and ties satisfy criteria 2 and 4 but are not "lower".
 SE_diff is Monte Carlo error only; the election-level reading below sets each difference against the noise
 of the election's outcome, and is the reading to rank the two arms by.
@@ -57,11 +57,13 @@ Over the 3 elections: mean -0.086 pp, outcome noise 0.205 pp, ratio -0.42: indis
 
 ## MAE
 
-The mean absolute error of each model's median vote share against the result, in points. MAE8 is over the
-eight named parties (Annað and Sósíalistaflokkurinn left out, as in the project's earlier backtests), with
-the Monte Carlo SE of the medians; MAE over all parties includes them. Kjördæmi MAE is over the named
-parties' kjördæmi cells; seat error is the sum over parties of |median seats − seats won|. MAE is
-reported, not part of the adoption rule (spec section 5.6).
+The mean absolute error of each model's median vote share against the result, in points. MAE8 is over
+those of the eight named parties (Annað and Sósíalistaflokkurinn left out, as in the project's earlier
+backtests) that the cell scores, with the Monte Carlo SE of the medians. A named party with no list at the
+election, or one scored inside Annað, is left out, so the number of parties can differ from cell to cell;
+the MAE8 row of each cell's section gives it. MAE over all parties is over every party the cell scores. Kjördæmi MAE
+is over the named parties' kjördæmi cells; seat error is the sum over parties of |median seats
+− seats won|, a whole number or a half. MAE is reported, not part of the adoption rule (spec section 5.6).
 
 | Cell | r0: MAE8, pp (SE) | v2: MAE8, pp (SE) | v2 − r0 | Reading | r0: MAE, all parties | v2: MAE, all parties | r0: kjördæmi MAE | v2: kjördæmi MAE | r0: seat error | v2: seat error |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -69,7 +71,7 @@ reported, not part of the adoption rule (spec section 5.6).
 | 2016 f47 | 3.33 (0.03) | 2.26 (0.03) | -1.07 | better | 3.39 | 2.14 | 3.29 | 2.55 | 22 (not comparable) | 14 (not comparable) |
 | 2016 f14 | 2.13 (0.02) | 1.98 (0.02) | -0.15 | better | 2.04 | 2.49 | 2.52 | 2.67 | 15 (not comparable) | 14 (not comparable) |
 | 2016 eve | 1.96 (0.03) | 1.56 (0.02) | -0.40 | better | 1.81 | 1.81 | 2.45 | 2.30 | 20 (not comparable) | 13 (not comparable) |
-| 2021 f180 | 2.08 (0.05) | 2.11 (0.02) | 0.03 | tie | 2.00 | 1.71 | 2.66 | 2.39 | 12 | 13 |
+| 2021 f180 | 2.08 (0.05) | 2.11 (0.02) | 0.03 | tie | 2.00 | 1.71 | 2.66 | 2.39 | 12.5 | 13 |
 | 2021 eve | 1.53 (0.01) | 1.28 (0.01) | -0.25 | better | 1.63 | 1.19 | 1.81 | 1.34 | 9 | 11 |
 | 2024 eve | 1.18 (0.01) | 1.33 (0.01) | 0.15 | worse | 1.02 | 1.15 | 1.59 | 1.51 | 7 | 8 |
 
@@ -80,7 +82,7 @@ reported, not part of the adoption rule (spec section 5.6).
 | CRPS10, pp (co-primary) | 2.422 (0.017) | 2.364 (0.015) | -0.058 | 0.023 | better |
 | mDSS (co-primary) | -1.21 (0.31) | 4.19 (0.60) | 5.40 | 0.67 | worse |
 | d² (p: 0.126, 0.019) | 9.96 (0.28) | 15.11 (0.63) | 5.15 | 0.69 | worse |
-| MAE8, pp (the eight named parties) | 2.934 (0.043) | 2.411 (0.029) | -0.523 | 0.052 | better |
+| MAE8, pp (over the 6 named parties scored) | 2.934 (0.043) | 2.411 (0.029) | -0.523 | 0.052 | better |
 | MAE over all parties, pp | 3.563 | 2.577 | -0.986 |  | reported |
 | IS90 | 16.76 (0.43) | 23.89 (0.65) | 7.13 | 0.78 | worse |
 | National 50% coverage (higher is better) | 3 of 7 (0.16) | 4 of 7 (0.00) | 1 | 0.16 | reported |
@@ -100,6 +102,8 @@ National parties: 7 (r0), 7 (v2). The gap between each run's two national readin
 2. No loss of accuracy: CRPS10 v2 − r0 = -0.058 pp (SE_diff 0.023, better), at most 0.05 pp worse or a tie: yes.
 3. Better distribution: mDSS v2 − r0 = 5.40 (SE_diff 0.67, worse), lower beyond a tie or r0 failing the gate: no.
 4. No regional loss: kjördæmi CRPS -0.138 pp (better), at most 0.1 worse or a tie; seat CRPS per party left out, not comparable: yes.
+
+On this cell Flokkur Fólksins is scored inside Annað, having had no admitted poll by F, so Annað's result includes its share.
 
 Seat scores not comparable on this cell: Annað holds 4 official seats at E, which no draw gives it, since every draw allocates the seats with Annað ineligible. They are reported, marked, and left out of criterion 4.
 
@@ -125,7 +129,7 @@ Of the 7 parties both arms forecast, v2's median is closer to the result on 5 an
 | CRPS10, pp (co-primary) | 2.116 (0.018) | 1.778 (0.013) | -0.338 | 0.022 | better |
 | mDSS (co-primary) | 1.46 (0.32) | 5.34 (0.49) | 3.88 | 0.59 | worse |
 | d² (p: 0.055, 0.025) | 13.81 (0.37) | 16.03 (0.53) | 2.21 | 0.65 | worse |
-| MAE8, pp (the eight named parties) | 3.334 (0.028) | 2.263 (0.029) | -1.071 | 0.040 | better |
+| MAE8, pp (over the 7 named parties scored) | 3.334 (0.028) | 2.263 (0.029) | -1.071 | 0.040 | better |
 | MAE over all parties, pp | 3.387 | 2.141 | -1.246 |  | reported |
 | IS90 | 12.31 (0.09) | 22.30 (0.25) | 10.00 | 0.27 | worse |
 | National 50% coverage (higher is better) | 2 of 8 (0.12) | 6 of 8 (0.00) | 4 | 0.12 | reported |
@@ -171,7 +175,7 @@ Of the 8 parties both arms forecast, v2's median is closer to the result on 5 an
 | CRPS10, pp (co-primary) | 1.562 (0.011) | 1.906 (0.009) | 0.344 | 0.015 | worse |
 | mDSS (co-primary) | -6.33 (0.28) | -3.13 (0.43) | 3.19 | 0.51 | worse |
 | d² (p: 0.181, 0.111) | 10.14 (0.32) | 11.69 (0.47) | 1.55 | 0.57 | worse |
-| MAE8, pp (the eight named parties) | 2.130 (0.022) | 1.981 (0.024) | -0.149 | 0.033 | better |
+| MAE8, pp (over the 7 named parties scored) | 2.130 (0.022) | 1.981 (0.024) | -0.149 | 0.033 | better |
 | MAE over all parties, pp | 2.040 | 2.488 | 0.448 |  | reported |
 | IS90 | 15.96 (0.40) | 14.89 (0.32) | -1.08 | 0.51 | better |
 | National 50% coverage (higher is better) | 6 of 8 (0.00) | 4 of 8 (0.18) | -2 | 0.18 | reported |
@@ -217,7 +221,7 @@ Of the 8 parties both arms forecast, v2's median is closer to the result on 4 an
 | CRPS10, pp (co-primary) | 1.453 (0.009) | 1.386 (0.009) | -0.067 | 0.013 | better |
 | mDSS (co-primary) | -8.23 (0.45) | -8.18 (0.20) | 0.06 | 0.50 | tie |
 | d² (p: 0.071, 0.079) | 13.04 (0.49) | 12.72 (0.20) | -0.32 | 0.53 | tie |
-| MAE8, pp (the eight named parties) | 1.957 (0.030) | 1.561 (0.019) | -0.396 | 0.036 | better |
+| MAE8, pp (over the 7 named parties scored) | 1.957 (0.030) | 1.561 (0.019) | -0.396 | 0.036 | better |
 | MAE over all parties, pp | 1.813 | 1.815 | 0.002 |  | reported |
 | IS90 | 16.81 (0.18) | 13.04 (0.19) | -3.77 | 0.27 | better |
 | National 50% coverage (higher is better) | 4 of 8 (0.16) | 4 of 8 (0.19) | 0 | 0.25 | reported |
@@ -262,7 +266,7 @@ Of the 8 parties both arms forecast, v2's median is closer to the result on 6 an
 | CRPS10, pp (co-primary) | 1.507 (0.018) | 1.351 (0.010) | -0.157 | 0.021 | better |
 | mDSS (co-primary) | -6.82 (0.37) | -9.44 (0.19) | -2.62 | 0.42 | better |
 | d² (p: 0.855, 0.913) | 4.75 (0.41) | 3.98 (0.20) | -0.77 | 0.46 | tie |
-| MAE8, pp (the eight named parties) | 2.080 (0.048) | 2.109 (0.019) | 0.029 | 0.052 | tie |
+| MAE8, pp (over the 8 named parties scored) | 2.080 (0.048) | 2.109 (0.019) | 0.029 | 0.052 | tie |
 | MAE over all parties, pp | 2.004 | 1.715 | -0.289 |  | reported |
 | IS90 | 13.00 (0.31) | 12.25 (0.37) | -0.75 | 0.49 | tie |
 | National 50% coverage (higher is better) | 6 of 10 (0.27) | 8 of 10 (0.26) | 2 | 0.37 | reported |
@@ -271,7 +275,7 @@ Of the 8 parties both arms forecast, v2's median is closer to the result on 6 an
 | Kjördæmi 90% coverage (higher is better) | 57 of 60 (0.27) | 57 of 60 (0.20) | 0 | 0.34 | reported |
 | Kjördæmi MAE over the named cells, pp | 2.657 | 2.390 | -0.267 |  | reported |
 | Seat CRPS per party | 1.115 (0.012) | 1.124 (0.010) | 0.009 | 0.016 | tie |
-| Seat absolute error, summed over parties | 12 | 13 | 0 |  | reported |
+| Seat absolute error, summed over parties | 12.5 | 13 | 0.5 |  | reported |
 | Seat 90% coverage (higher is better) | 10 of 10 (0.12) | 9 of 10 (0.13) | -1 | 0.18 | reported |
 | Brier score of the incumbents' majority | 0.183 (0.010) | 0.244 (0.010) | 0.060 | 0.014 | worse |
 | P(majority for the coalition that formed), report only (higher is better) | 0.572 | 0.506 | -0.066 |  | reported |
@@ -308,7 +312,7 @@ Of the 10 parties both arms forecast, v2's median is closer to the result on 7 a
 | CRPS10, pp (co-primary) | 1.080 (0.015) | 0.779 (0.005) | -0.300 | 0.016 | better |
 | mDSS (co-primary) | -4.51 (1.27) | -21.68 (0.40) | -17.18 | 1.33 | better |
 | d² (p: 0.002, 0.535) | 26.27 (1.33) | 7.99 (0.46) | -18.28 | 1.40 | better |
-| MAE8, pp (the eight named parties) | 1.534 (0.014) | 1.284 (0.014) | -0.250 | 0.020 | better |
+| MAE8, pp (over the 8 named parties scored) | 1.534 (0.014) | 1.284 (0.014) | -0.250 | 0.020 | better |
 | MAE over all parties, pp | 1.632 | 1.187 | -0.445 |  | reported |
 | IS90 | 6.93 (0.16) | 5.08 (0.10) | -1.86 | 0.19 | better |
 | National 50% coverage (higher is better) | 0 of 10 (0.19) | 3 of 10 (0.15) | 3 | 0.25 | reported |
@@ -353,7 +357,7 @@ Of the 10 parties both arms forecast, v2's median is closer to the result on 7 a
 | CRPS10, pp (co-primary) | 0.848 (0.007) | 0.850 (0.005) | 0.002 | 0.009 | tie |
 | mDSS (co-primary) | 8.74 (2.74) | -7.33 (0.85) | -16.07 | 2.86 | better |
 | d² (p: 0.000, 0.005) | 42.19 (2.76) | 23.78 (0.86) | -18.40 | 2.89 | better |
-| MAE8, pp (the eight named parties) | 1.180 (0.013) | 1.326 (0.009) | 0.146 | 0.016 | worse |
+| MAE8, pp (over the 8 named parties scored) | 1.180 (0.013) | 1.326 (0.009) | 0.146 | 0.016 | worse |
 | MAE over all parties, pp | 1.021 | 1.149 | 0.128 |  | reported |
 | IS90 | 7.56 (0.19) | 6.89 (0.17) | -0.67 | 0.25 | better |
 | National 50% coverage (higher is better) | 4 of 10 (0.16) | 4 of 10 (0.12) | 0 | 0.20 | reported |

@@ -94,6 +94,26 @@ test_that("V2 builds each 2016 day with 2013 as its one closed election after th
   expect_identical(lengths(lapply(cells, `[[`, "parties")), c(7L, 8L, 8L, 8L))
 })
 
+test_that("V2 marks as campaign every step of each 2016 grid that lies inside the 47 days before the 2013 election or before E, and no other: 18 steps covering 47 days before 2013 (a builder that takes the elections from the global list, which lacks 2013, leaving the 2013 campaign unmarked)", {
+  cells <- cells16()
+  for (i in seq_along(cells)) {
+    x <- cells[[i]]
+    d <- v2_16()[[i]]$data
+    lab <- format(x$F)
+    expect_equal(d$campaign_days, 47, label = lab)
+    g <- grid_dates(x, d$campaign_days)
+    start <- g[-length(g)]
+    end <- g[-1]
+    inside <- function(election) start >= election - 47 & end <= election
+    want <- as.integer(inside(ANCHOR16) | inside(E16))
+    marked <- as.integer(c(d$campaign))
+    expect_identical(marked, want, label = lab)
+    in2013 <- marked == 1L & end <= ANCHOR16
+    expect_identical(sum(in2013), 18L, label = lab)
+    expect_equal(sum(as.numeric(end - start)[in2013]), 47, label = lab)
+  }
+})
+
 test_that("R0 builds each 2016 day with the 2013 national result as one election row of 189 023 votes after the window's first 40 polls, and one closed election for the older parties (a 2016 cell fitted with no anchor at all, or with no poll before it)", {
   cells <- cells16()
   nat <- anchor_national(v2_inputs()$anchor_2013)
