@@ -3,28 +3,34 @@
 #   LC_ALL=en_US.UTF-8 Rscript R/harness/fit_cell.R <arm> <E> <F> <seed> <iter_warmup> <iter_sampling>
 #
 # It fits one arm (R/harness/arms.R) on one cell, in results_root()/<run_id> (HARNESS_RESULTS
-# overrides results/harness):
+# overrides results/harness). The arm <base>-w<ref_seed> is a warm run (R/harness/warm.R).
 #   0. stops on a 2017 cell before the freeze (forecast_free(); spec section 5.7, Decision 9),
 #      before anything is built or written;
 #   1. builds the cell's Stan data from info_set(E, F), after validate_inputs();
 #   2. computes the expected meta, with the sha256 of the freshly built data and of the config
-#      as its reader returns it;
+#      as its reader returns it. A warm run's reference is checked first (warm_reference():
+#      the same cell's current standard run of <base> at ref_seed, with its warm-start record),
+#      and its expected meta has WARM_BURN_IN for iter_warmup, whatever the command line says;
 #   3. prints "SKIP <id> (meta.json matches)" and exits 0 if a finished run matches it; a run
 #      directory that does not, or has no meta.json, goes to _stale/ with
 #      "STALE <id> <mismatched keys>" (or "STALE <id> (no meta.json)");
 #   4. freezes the Stan data and the inputs meta, read-only, in inputs/;
 #   5. fits with SAMPLER, the seed and the iterations, and the config's adapt_delta when it
-#      sets one (CmdStan's default otherwise), the CmdStan CSVs in cmdstan/;
+#      sets one (CmdStan's default otherwise), the CmdStan CSVs in cmdstan/ at SIG_FIGS. A warm
+#      run starts each chain at the reference's last draw with its step size and inverse
+#      metric, adaptation off;
 #   6. stops, with no meta.json, unless the fit has 4 chains of iter_sampling draws and the
-#      Stan file and the frozen data still hash as expected;
+#      Stan file and the frozen data still hash as expected, and, for a warm run, unless each
+#      chain sampled at the reference's step size and inverse metric;
 #   7. extracts the parquets (the arm's variables), then
 #      summarises the diagnostics over the parameters present in the fit (a zero-size one is
 #      not in the CSVs) and the scored quantities, writes key_diagnostics.csv (the scored
 #      quantities, the param_draws columns and lp__, whose R-hat the stop rule of
-#      R/harness/compare_runs.R reads) and applies the gate;
-#   8. writes meta.json last (with the adapt_delta the fit ran at), read-only
-#      with the other outputs, so that its presence means the run is complete; prints the DIAG
-#      line and "DONE <dir>"; deletes
+#      R/harness/compare_runs.R reads) and applies the gate; a standard run then writes its
+#      warm-start record, read-only, in warm_start/;
+#   8. writes meta.json last (with the adapt_delta the fit ran at, SIG_FIGS and each chain's
+#      warmup and sampling seconds), read-only with the other outputs, so that its presence
+#      means the run is complete; prints the DIAG line and "DONE <dir>"; deletes
 #      the CmdStan CSVs, unless HARNESS_KEEP_CMDSTAN is 1 (for a test that reads them back).
 # The diagnostics thresholds are for the long fits behind a published forecast; a short
 # development fit that misses them is flagged, not failed.
@@ -40,7 +46,8 @@ box::use(
     SAMPLER, run_id, run_dir, sha256_file, stan_data_sha, write_frozen_inputs, expected_meta, meta_mismatch,
     retire_run, measure_draws, run_provenance, chain_sampler, summarise_diagnostics, diagnostics_gate, diag_line
   ],
-  R / harness / scores[kd_to_nat]
+  R / harness / scores[kd_to_nat],
+  R / harness / warm[WARM_BURN_IN, SIG_FIGS, warm_reference, warm_mismatch, write_warm_start]
 )
 
 #' The builder's meta as JSON values: a Date as an ISO string, a named vector as an object,
@@ -93,7 +100,18 @@ cfg <- a$read_config(a$config)
 built <- a$build(info, cfg)
 
 data_sha <- stan_data_sha(built$data)
-expected <- expected_meta(name, numbers[1], numbers[2], numbers[3], a$stan_file, a$config, data_sha, config = cfg)
+iter_warmup <- if (is.null(a$warm)) numbers[2] else WARM_BURN_IN
+expected <- expected_meta(name, numbers[1], iter_warmup, numbers[3], a$stan_file, a$config, data_sha, config = cfg)
+ref <- NULL
+if (!is.null(a$warm)) {
+  parameters <- names(cmdstanr::cmdstan_model(a$stan_file, compile = FALSE)$variables()$parameters)
+  ref <- warm_reference(a$warm$base, E, F, a$warm$ref_seed, expected, parameters)
+  expected <- expected_meta(
+    name, numbers[1], WARM_BURN_IN, numbers[3], a$stan_file, a$config, data_sha,
+    config = cfg, warm = list(from = ref$id, sha256 = ref$sha256)
+  )
+  cat(sprintf("warm run from %s: %d burn-in iterations with adaptation off; iter_warmup %s is not used\n", ref$id, WARM_BURN_IN, args[5]))
+}
 
 dir <- run_dir(id)
 meta_path <- file.path(dir, "meta.json")
@@ -125,10 +143,13 @@ cmdstan_dir <- file.path(dir, "cmdstan")
 dir.create(cmdstan_dir)
 data_json <- file.path(dir, "inputs", "stan_data.json")
 start <- Sys.time()
+warm <- !is.null(ref)
 fit <- model$sample(
   data = data_json, seed = expected$seed, chains = SAMPLER$chains, parallel_chains = SAMPLER$parallel_chains,
-  init = SAMPLER$init, max_treedepth = SAMPLER$max_treedepth, iter_warmup = expected$iter_warmup,
-  iter_sampling = expected$iter_sampling, adapt_delta = cfg[["adapt_delta"]], refresh = 50, output_dir = cmdstan_dir
+  init = if (warm) ref$inits else SAMPLER$init, max_treedepth = SAMPLER$max_treedepth, iter_warmup = expected$iter_warmup,
+  iter_sampling = expected$iter_sampling, adapt_delta = cfg[["adapt_delta"]], adapt_engaged = !warm,
+  metric = if (warm) "diag_e", inv_metric = if (warm) ref$inv_metric, step_size = if (warm) ref$step_size,
+  sig_figs = SIG_FIGS, refresh = 50, output_dir = cmdstan_dir
 )
 minutes <- as.numeric(difftime(Sys.time(), start, units = "mins"))
 
@@ -139,6 +160,10 @@ if (!all(fit$return_codes() == 0) || posterior::nchains(lp) != SAMPLER$chains ||
 }
 if (!identical(sha256_file(a$stan_file), expected$stan_sha256)) stop("the Stan file changed during the fit; no meta.json written")
 if (!identical(sha256_file(data_json), expected$data_sha256)) stop("the frozen Stan data changed during the fit; no meta.json written")
+if (warm) {
+  off <- warm_mismatch(ref, fit$metadata()$id, fit$sampler_diagnostics(), fit$inv_metric(matrix = FALSE))
+  if (length(off)) stop("the warm fit did not sample with its reference's adaptation: ", paste(off, collapse = "; "), "; no meta.json written")
+}
 
 paths <- a$extract(fit$draws(variables = a$variables, format = "draws_df"), built$meta, dir)
 scored <- scored_draws(arrow::read_parquet(paths[["eday_kjordaemi"]]))
@@ -153,12 +178,14 @@ key <- rbind(measure_draws(scored), measure_draws(posterior::as_draws_df(arrow::
 key_path <- file.path(dir, "key_diagnostics.csv")
 readr::write_csv(key[c("variable", "rhat", "ess_bulk", "ess_tail")], key_path)
 gate <- diagnostics_gate(d)
+# WHY: a warm run's CSV header repeats its reference's adaptation, so its record would be a copy.
+if (!warm) write_warm_start(fit, model, params, dir)
 
 meta <- c(
   cell, expected, built_meta,
   list(
-    minutes = minutes, adapt_delta = fit$metadata()$adapt_delta, diagnostics = d,
-    gate = list(pass = gate$pass, reasons = I(gate$reasons))
+    minutes = minutes, chain_seconds = fit$time()$chains[c("chain_id", "warmup", "sampling")], sig_figs = SIG_FIGS,
+    adapt_delta = fit$metadata()$adapt_delta, diagnostics = d, gate = list(pass = gate$pass, reasons = I(gate$reasons))
   ),
   provenance
 )

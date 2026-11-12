@@ -119,6 +119,18 @@ signal it stops both lanes; a fit already running finishes on its own. `DRY_RUN=
 run exits 0, 1 when a run fails, 2 on a bad command line or run list, 143 or 130 on a signal.
 Start a long queue with `nohup` from a normal shell so that it outlives the session.
 
+**A warm run.** The arm `<base>-w<ref_seed>`, say `v2-w2702`, is a warm run of `<base>`
+(`R/harness/warm.R`): it starts each chain from the step size, inverse metric and last draw
+that the same cell's seed-`<ref_seed>` run of `<base>` left in its `warm_start/`, and samples
+after 100 burn-in iterations with adaptation off, whatever `iter_warmup` the command line gives.
+The reference must be a current standard run of the same model on the same data. Only a run
+fitted since standard runs began writing `warm_start/` holds a record: retire an older one by
+hand or fit a new seed. List the reference before its warm run in the same lane; both can share
+a run list at `400 400`. An unfinished, stale or warm reference, one with no record, or one at
+the warm run's own seed is refused before the model is compiled or sampled. The warm run
+records the sha256 of its reference's `adaptation.json`, so refitting the reference makes the
+warm run `STALE`, and it is refitted from the new record.
+
 ## Scoring a comparison
 
 `score_cell(run_dir)` (`R/harness/scorer.R`) scores one finished run against the result. To

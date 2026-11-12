@@ -134,14 +134,18 @@ config_sha <- function(config) {
 #' @param data_sha the sha256 of the run's Stan data JSON (`write_frozen_inputs()`)
 #' @param config the config as the arm's reader returns it; by default the file as
 #'   `jsonlite::read_json()` parses it
+#' @param warm for a warm run (R/harness/warm.R), `list(from, sha256)`: its reference's run id
+#'   and the sha256 of the reference's `warm_start/adaptation.json`; NULL for a standard run
 #' @return a named list: `stan_sha256`, `config_sha256` (`config_sha(config)`), `data_sha256`,
 #'   `seed`, `iter_warmup`, `iter_sampling` (integers), `chains`, `max_treedepth`, `init` (from
-#'   `SAMPLER`) and `extract_version` (`EXTRACT_VERSION`). Its attribute `"also_accepted"`,
-#'   `list(config_sha256 = <sha256 of the file's raw text>)`, is the hash runs recorded before
-#'   `config_sha()`, which `meta_mismatch()` accepts too
+#'   `SAMPLER`) and `extract_version` (`EXTRACT_VERSION`). With `warm`, `init` is `"warm"` and
+#'   `warm_from`, `warm_from_sha256` and `adapt_engaged` (FALSE) follow, so a refitted reference
+#'   makes its warm run stale while a standard run's meta needs no warm key. Its attribute
+#'   `"also_accepted"`, `list(config_sha256 = <sha256 of the file's raw text>)`, is the hash
+#'   runs recorded before `config_sha()`, which `meta_mismatch()` accepts too
 #' @export
 expected_meta <- function(arm, seed, iter_warmup, iter_sampling, stan_file, config_file, data_sha,
-                          config = jsonlite::read_json(config_file)) {
+                          config = jsonlite::read_json(config_file), warm = NULL) {
   as_arm(arm)
   if (!is.character(data_sha) || length(data_sha) != 1 || !grepl("^[0-9a-f]{64}$", data_sha)) {
     stop("data_sha must be one sha256 (64 lowercase hex characters)")
@@ -158,6 +162,15 @@ expected_meta <- function(arm, seed, iter_warmup, iter_sampling, stan_file, conf
     init = SAMPLER$init,
     extract_version = EXTRACT_VERSION
   )
+  if (!is.null(warm)) {
+    ok <- is.list(warm) && is.character(warm$from) && length(warm$from) == 1 && !is.na(warm$from) &&
+      is.character(warm$sha256) && length(warm$sha256) == 1 && grepl("^[0-9a-f]{64}$", warm$sha256)
+    if (!ok) stop("warm must be list(from = <run id>, sha256 = <64 lowercase hex characters>)")
+    e$init <- "warm"
+    e$warm_from <- warm$from
+    e$warm_from_sha256 <- warm$sha256
+    e$adapt_engaged <- FALSE
+  }
   # WHY: a run finished before config_sha() recorded the raw file's sha; it stays fresh.
   attr(e, "also_accepted") <- list(config_sha256 = sha256_file(config_file))
   e

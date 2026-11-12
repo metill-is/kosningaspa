@@ -21,3 +21,4 @@ x-ns-nn,2026-11-08,"scratch, outside the repository",2024 eve; 2021 eve; 2021 f1
 x-r0,2026-11-08,"scratch, outside the repository",2024 eve; 2024 f14; 2021 eve; 2021 f14; 2021 f180,after-scores,x-r0w with the 2024 model hedge on the bias in the forecast
 x-r0w,2026-11-08,"scratch, outside the repository; arm v2 (harness/configs/v2.json) since 10 Nov 2026",2024 eve; 2021 eve; 2021 f180,after-scores,"x-r1 with the walk step leaving an election scaled by the campaign multiplier; the working model, refitted as arm v2 with identical draws"
 x-r1,2026-11-08,"scratch, outside the repository",2024 eve; 2021 eve; 2021 f180,after-scores,"constant bias; epoch walk, shock, delta walk, post window and newcomer pool off"
+v2-w2702,2026-11-11,harness/configs/v2.json (a warm run: R/harness/warm.R),2021 f180,sampler,v2 started from its seed-2702 run's adaptation and last draws (same posterior)
