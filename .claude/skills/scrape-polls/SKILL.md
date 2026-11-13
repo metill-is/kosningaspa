@@ -77,6 +77,8 @@ Four reliable sources. Use whichever is freshest:
 
 4. **The downstream article on RÚV (`ruv.is/frettir/innlent/...`), Vísir (`visir.is/g/...`), or mbl.is (`mbl.is/frettir/innlent/...`).** Useful when the firm's own publication is delayed or you only have an indirect lead. Article bodies sometimes disclose `svarendur` and field period directly; when paywalled, per-party percentages can still be cross-checked via search snippets.
 
+**Kjördæmi breakdowns of the Þjóðarpúls never appear in RÚV's own articles.** RÚV passes them to sunnlenska.is (Suður, `?s=Gallup&feed=rss2`), Austurfrétt (Norðaustur, Joomla finder; take values by replaying each Datawrapper chart's `metadata.data.changes`, never its stale `dataset.csv`) and bb.is (Norðvestur). Details: Metill vault `Knowledge/Data Sources/Polls.md`, section Kjördæmi-level polls.
+
 `R/scrape_polls.R` has no scraper: its rvest scrapers for the RÚV and Vísir tag pages, which lazy-load through JavaScript, returned nothing and were removed. Discovery is the channels above; `update_post_election_polls(scrape = TRUE)` now stops with an error.
 
 ## Procedure
