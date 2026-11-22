@@ -40,6 +40,10 @@ polling_data <- read_polling_watch_data(start = as.Date("2016-01-01"))
 # The post-election polls this fit saw, written beside its draws below: the platform
 # export reads its poll points from that copy, since the live CSV may gain polls first.
 polls_csv <- read_file_raw(here("data", "post_election_polls.csv"))
+# The earlier polls and results, kept beside the draws too: a later check that rebuilds
+# this fit's inputs (the INLA shadow fit, from 22 November 2026) reads them from the folder,
+# since the live CSV may be corrected after the fit.
+pre_election_csv <- read_file_raw(here("data", "polling_data.csv"))
 
 cat(
   "Date range:", as.character(min(polling_data$date)),
@@ -113,6 +117,7 @@ dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
 # the first fit's draws, and a failure before its own draws left a folder that looks complete
 unlink(here(output_dir, "polling_watch_draws.parquet"))
 write_file(polls_csv, here(output_dir, "post_election_polls.csv"))
+write_file(pre_election_csv, here(output_dir, "polling_data.csv"))
 
 # Convergence summary beside the draws (written before them: the platform takes the
 # draws parquet as the sign of a finished fit), for the publish gate in
