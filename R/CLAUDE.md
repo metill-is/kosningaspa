@@ -4,7 +4,7 @@ Modules load with `box::use(R/<module>[...])` from the project root; each export
 
 ## Entry points
 
-- Fylgisvakt: `R/fit_polling_watch.R`, headless, run by hand after a poll ingest; writes data/<date>/, which metill-platform's scripts/regenerate_kosningaspa.py exports.
+- Fylgisvakt: `R/fit_polling_watch.R`, headless, run by hand after a poll ingest; writes data/<date>/, with copies of the two polls files it read, which metill-platform's scripts/regenerate_kosningaspa.py exports.
 - 2024 forecast: `R/fit_polling_and_fundamentals_kjordaemi_model.R`, interactive (line by line, never `Rscript`).
 - Seats: `R/predict_seats.R`, built on `R/election_utils.R`.
 
